@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import PermissionsManagement from '@/components/admin/PermissionsManagement';
 export default function AdminPanel() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -35,7 +37,6 @@ export default function AdminPanel() {
   const [showExtendTrialModal, setShowExtendTrialModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
 
   const [inviteData, setInviteData] = useState({
     email: '',
@@ -83,17 +84,35 @@ export default function AdminPanel() {
 
   const loadData = async () => {
     try {
-      const currentUserData = await base44.auth.me();
-      setCurrentUser(currentUserData);
-
-      if (currentUserData.role !== 'admin' && currentUserData.role !== 'system_admin') {
-        window.location.href = '/';
+      if (currentUser?.role !== 'admin' && currentUser?.role !== 'system_admin') {
+        navigate('/');
         return;
       }
 
-      const userData = await base44.entities.User.list('-created_date', 1000);
-      setUsers(userData);
-      setFilteredUsers(userData);
+      // Demo users for local authentication
+      const demoUsers = [
+        {
+          id: '1',
+          email: 'admin@genixerp.com',
+          full_name: 'System Administrator',
+          role: 'admin',
+          subscription_status: 'active',
+          subscription_plan: 'enterprise',
+          created_date: new Date().toISOString()
+        },
+        {
+          id: '2',
+          email: 'user@genixerp.com',
+          full_name: 'Demo User',
+          role: 'user',
+          subscription_status: 'trial',
+          subscription_plan: 'free_trial',
+          trial_end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          created_date: new Date().toISOString()
+        }
+      ];
+      setUsers(demoUsers);
+      setFilteredUsers(demoUsers);
     } catch (error) {
       console.error('Error loading data:', error);
     }

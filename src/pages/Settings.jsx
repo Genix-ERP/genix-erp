@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Bell, LogOut, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/components/contexts/AuthContext";
 
 import ProfileSettings from "@/components/settings/ProfileSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
@@ -15,17 +15,13 @@ import { useTranslation } from "@/components/utils/translations";
 export default function Settings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to logout?')) {
       setIsLoggingOut(true);
-      try {
-        await base44.auth.logout();
-      } catch (error) {
-        console.error('Error logging out:', error);
-        setIsLoggingOut(false);
-      }
+      logout();
     }
   };
 

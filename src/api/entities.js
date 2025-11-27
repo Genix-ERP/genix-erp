@@ -70,8 +70,3 @@ export const Payroll = base44.entities.Payroll;
 export const Contract = base44.entities.Contract;
 
 export const RolePermission = base44.entities.RolePermission;
-
-
-
-// auth sdk:
-export const User = base44.auth;

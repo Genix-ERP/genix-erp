@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Bell, BellRing, Trash2, CheckCheck } from "lucide-react";
@@ -9,58 +9,48 @@ import { useTranslation } from "@/components/utils/translations";
 export default function NotificationSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user: currentUser } = useAuth();
 
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchNotifications = async () => {
     setIsLoading(true);
-    try {
-      const currentUser = await base44.auth.me();
-      const userNotifications = await base44.entities.Notification.filter({ user_id: currentUser.id }, "-created_date", 50);
-      setNotifications(userNotifications);
-    } catch (error) {
-      console.error("Failed to fetch notifications", error);
-    }
+    // Demo notifications
+    const demoNotifications = [
+      {
+        id: '1',
+        title: 'Welcome to Genix ERP',
+        message: 'Your account has been created successfully.',
+        is_read: false,
+        created_date: new Date().toISOString()
+      },
+      {
+        id: '2',
+        title: 'System Update',
+        message: 'New features have been added to the dashboard.',
+        is_read: true,
+        created_date: new Date(Date.now() - 86400000).toISOString()
+      }
+    ];
+    setNotifications(demoNotifications);
     setIsLoading(false);
   };
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+  }, [currentUser]);
 
   const handleMarkAsRead = async (id) => {
-    const originalNotifications = [...notifications];
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    try {
-      await base44.entities.Notification.update(id, { is_read: true });
-    } catch (error) {
-      console.error("Failed to mark as read", error);
-      setNotifications(originalNotifications);
-    }
   };
 
   const handleMarkAllAsRead = async () => {
-    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
-    if(unreadIds.length === 0) return;
-
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    try {
-      await Promise.all(unreadIds.map(id => base44.entities.Notification.update(id, { is_read: true })));
-    } catch (error) {
-      console.error("Failed to mark all as read", error);
-      fetchNotifications();
-    }
   };
 
   const handleDelete = async (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
-    try {
-      await base44.entities.Notification.delete(id);
-    } catch (error) {
-      console.error("Failed to delete notification", error);
-      fetchNotifications();
-    }
   };
 
   return (

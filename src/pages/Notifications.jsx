@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from "react";
 import { Notification } from "@/api/entities";
-import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/components/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +24,7 @@ import { cn } from "@/lib/utils";
 export default function Notifications() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user: currentUser } = useAuth();
 
   const [notifications, setNotifications] = useState([]);
   const [filteredNotifications, setFilteredNotifications] = useState([]);
@@ -34,7 +34,7 @@ export default function Notifications() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     filterNotifications();
@@ -43,14 +43,13 @@ export default function Notifications() {
   const loadNotifications = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await base44.auth.me();
       const allNotifications = await Notification.list("-created_date", 100);
-      
+
       // Filter notifications for current user or system-wide
       const userNotifications = allNotifications.filter(
-        n => n.user_id === currentUser.id || n.user_id === "system"
+        n => n.user_id === currentUser?.id || n.user_id === "system"
       );
-      
+
       setNotifications(userNotifications);
     } catch (error) {
       console.error("Failed to load notifications:", error);

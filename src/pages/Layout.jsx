@@ -3,14 +3,14 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { 
-  LayoutDashboard, 
-  Package, 
-  Users, 
+import {
+  LayoutDashboard,
+  Package,
+  Users,
   DollarSign,
   Briefcase,
   Grid3x3,
-  Zap, 
+  Zap,
   Settings,
   Bell,
   Search,
@@ -22,7 +22,8 @@ import {
   Monitor,
   Receipt,
   FileText,
-  Shield
+  Shield,
+  LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ import LanguageSelector from "@/components/ui/language-selector";
 import { LanguageProvider, useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useTranslation } from "@/components/utils/translations";
-import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/components/contexts/AuthContext";
 
 function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
@@ -54,20 +55,7 @@ function LayoutContent({ children, currentPageName }) {
   const { t } = useTranslation(language);
   const { installedApps, isAppInstalled } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [currentUser, setCurrentUser] = React.useState(null);
-
-  React.useEffect(() => {
-    loadCurrentUser();
-  }, []);
-
-  const loadCurrentUser = async () => {
-    try {
-      const user = await base44.auth.me();
-      setCurrentUser(user);
-    } catch (error) {
-      console.error('Error loading user:', error);
-    }
-  };
+  const { user: currentUser, logout } = useAuth();
 
   // Map app IDs to navigation items
   const appNavigationMap = {
@@ -343,6 +331,15 @@ function LayoutContent({ children, currentPageName }) {
                   {currentUser?.role === 'admin' ? 'Administrator' : 'User'}
                 </p>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={logout}
+                className="hover:bg-red-50 hover:text-red-600 rounded-full transition-all duration-200"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
           </SidebarFooter>
         </Sidebar>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,8 @@ import { useTranslation } from "@/components/utils/translations";
 export default function ProfileSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user: currentUser } = useAuth();
 
-  const [user, setUser] = useState(null);
   const [formData, setFormData] = useState({
     full_name: '',
     title: '',
@@ -27,26 +27,18 @@ export default function ProfileSettings() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      setIsLoading(true);
-      try {
-        const currentUser = await base44.auth.me();
-        setUser(currentUser);
-        setFormData({
-          full_name: currentUser.full_name || '',
-          email: currentUser.email || '',
-          title: currentUser.title || '',
-          phone_number: currentUser.phone_number || '',
-          bio: currentUser.bio || '',
-          profile_picture_url: currentUser.profile_picture_url || ''
-        });
-      } catch (error) {
-        console.error("Failed to fetch user", error);
-      }
+    if (currentUser) {
+      setFormData({
+        full_name: currentUser.full_name || '',
+        email: currentUser.email || '',
+        title: currentUser.title || '',
+        phone_number: currentUser.phone_number || '',
+        bio: currentUser.bio || '',
+        profile_picture_url: currentUser.profile_picture_url || ''
+      });
       setIsLoading(false);
-    };
-    fetchUser();
-  }, []);
+    }
+  }, [currentUser]);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -58,26 +50,19 @@ export default function ProfileSettings() {
     if (!file) return;
 
     setIsUploading(true);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      setFormData(prev => ({ ...prev, profile_picture_url: file_url }));
-    } catch (error) {
-      console.error("Failed to upload file", error);
-    }
+    // For demo purposes, create a local URL
+    const localUrl = URL.createObjectURL(file);
+    setFormData(prev => ({ ...prev, profile_picture_url: localUrl }));
     setIsUploading(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    try {
-      const { email, ...updateData } = formData;
-      await base44.auth.updateMe(updateData);
-      alert('Profile updated successfully!');
-    } catch (error) {
-      console.error("Failed to update profile", error);
-      alert('Failed to update profile');
-    }
+    // For demo purposes, just show success message
+    // In production, this would update the user data
+    await new Promise(resolve => setTimeout(resolve, 500));
+    alert('Profile updated successfully! (Demo mode)');
     setIsSaving(false);
   };
 
