@@ -1,0 +1,399 @@
+
+
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { 
+  LayoutDashboard, 
+  Package, 
+  Users, 
+  DollarSign,
+  Briefcase,
+  Grid3x3,
+  Zap, 
+  Settings,
+  Bell,
+  Search,
+  Bot,
+  Menu,
+  X,
+  ShoppingCart,
+  ShoppingBag,
+  Monitor,
+  Receipt,
+  FileText,
+  Shield
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar
+} from "@/components/ui/sidebar";
+import LanguageSelector from "@/components/ui/language-selector";
+import { LanguageProvider, useLanguage } from "@/components/contexts/LanguageContext";
+import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
+import { useTranslation } from "@/components/utils/translations";
+import { base44 } from "@/api/base44Client";
+
+function LayoutContent({ children, currentPageName }) {
+  const location = useLocation();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { installedApps, isAppInstalled } = useInstalledApps();
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [currentUser, setCurrentUser] = React.useState(null);
+
+  React.useEffect(() => {
+    loadCurrentUser();
+  }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await base44.auth.me();
+      setCurrentUser(user);
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  };
+
+  // Map app IDs to navigation items
+  const appNavigationMap = {
+    'inventory': {
+      title: t("inventory"),
+      url: createPageUrl("Inventory"),
+      icon: Package,
+      badge: "3"
+    },
+    'crm': {
+      title: t("crm"),
+      url: createPageUrl("Customers"),
+      icon: Users,
+      badge: null
+    },
+    'finance': {
+      title: t("financials"),
+      url: createPageUrl("Financials"),
+      icon: DollarSign,
+      badge: null
+    },
+    'hr': {
+      title: t("hr"),
+      url: createPageUrl("HR"),
+      icon: Briefcase,
+      badge: null
+    },
+    'manufacturing': {
+      title: "Manufacturing",
+      url: createPageUrl("Manufacturing"),
+      icon: Zap,
+      badge: null
+    },
+    'procurement': {
+      title: "Procurement",
+      url: createPageUrl("Procurement"),
+      icon: ShoppingCart,
+      badge: null
+    },
+    'projects': {
+      title: "Projects",
+      url: createPageUrl("Projects"),
+      icon: Briefcase,
+      badge: null
+    },
+    'sales_orders': {
+      title: "Sales Orders",
+      url: createPageUrl("SalesOrders"),
+      icon: ShoppingBag,
+      badge: null
+    },
+    'assets': {
+      title: "Assets",
+      url: createPageUrl("Assets"),
+      icon: Monitor,
+      badge: null
+    },
+    'expenses': {
+      title: "Expenses",
+      url: createPageUrl("Expenses"),
+      icon: Receipt,
+      badge: null
+    },
+    'payroll': {
+      title: "Payroll",
+      url: createPageUrl("Payroll"),
+      icon: DollarSign,
+      badge: null
+    },
+    'contracts': {
+      title: "Contracts",
+      url: createPageUrl("Contracts"),
+      icon: FileText,
+      badge: null
+    }
+  };
+
+  // Always visible core items
+  const coreNavigationItems = [
+    {
+      title: t("dashboard"),
+      url: createPageUrl("Dashboard"),
+      icon: LayoutDashboard,
+      badge: null
+    },
+    {
+      title: t("ai_assistant"),
+      url: createPageUrl("AIAssistant"),
+      icon: Bot,
+      badge: "New"
+    },
+    {
+      title: t("workflows"),
+      url: createPageUrl("Workflows"),
+      icon: Zap,
+      badge: null
+    },
+    {
+      title: t("apps"),
+      url: createPageUrl("Apps"),
+      icon: Grid3x3,
+      badge: null
+    },
+    {
+      title: t("settings"),
+      url: createPageUrl("Settings"),
+      icon: Settings,
+      badge: null
+    }
+  ];
+
+  // Build dynamic navigation based on installed apps
+  const getNavigationItems = () => {
+    const dynamicItems = [];
+    
+    // Add Dashboard first
+    dynamicItems.push(coreNavigationItems[0]);
+
+    // Add installed app modules
+    Object.keys(appNavigationMap).forEach(appId => {
+      if (isAppInstalled(appId)) {
+        dynamicItems.push(appNavigationMap[appId]);
+      }
+    });
+
+    // Add remaining core items (AI Assistant, Workflows, Apps, Settings)
+    dynamicItems.push(...coreNavigationItems.slice(1));
+
+    // Add Admin Panel if user is admin
+    if (currentUser?.role === 'admin' || currentUser?.role === 'system_admin') {
+      dynamicItems.push({
+        title: t("admin_panel"),
+        url: createPageUrl("AdminPanel"),
+        icon: Shield,
+        badge: "Admin"
+      });
+    }
+
+    return dynamicItems;
+  };
+
+  const navigationItems = getNavigationItems();
+
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-slate-100">
+        <style>
+          {`
+            :root {
+              --genix-navy: #0B1426;
+              --genix-blue: #0EA5E9;
+              --genix-light-blue: #E0F2FE;
+              --genix-purple: #8B5CF6;
+              --genix-green: #10B981;
+              --genix-orange: #F59E0B;
+            }
+            .genix-logo-transparent {
+              mix-blend-mode: multiply;
+              filter: brightness(1.1) contrast(1.05);
+            }
+          `}
+        </style>
+        
+        <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
+          <SidebarHeader className="border-b border-slate-200/60 px-4 py-3">
+            <div className="flex flex-col gap-2">
+              <img 
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png" 
+                alt="Genix Logo" 
+                className="h-36 w-auto object-contain genix-logo-transparent -mt-2"
+              />
+              <div className="flex items-center gap-2">
+                <div className="h-[1px] flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-transparent opacity-30"></div>
+                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-slate-400 whitespace-nowrap">
+                  AI-Powered ERP
+                </span>
+                <div className="h-[1px] flex-1 bg-gradient-to-l from-[var(--genix-blue)] to-transparent opacity-30"></div>
+              </div>
+            </div>
+          </SidebarHeader>
+          
+          <SidebarContent className="p-4">
+            <div className="mb-6 hidden md:block">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder={t("search") + " " + t("ask_anything").toLowerCase()}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 bg-slate-50/80 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)] h-9 text-sm"
+                />
+              </div>
+            </div>
+
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-1">
+                {t("core_modules") || "Core Modules"}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu className="space-y-1">
+                  {navigationItems.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton 
+                        asChild 
+                        className={`relative group hover:bg-[var(--genix-light-blue)]/50 hover:text-[var(--genix-blue)] transition-all duration-200 rounded-xl mb-1 h-11 ${
+                          location.pathname === item.url ? 'bg-gradient-to-r from-[var(--genix-blue)]/10 to-[var(--genix-purple)]/10 text-[var(--genix-blue)] shadow-sm border-l-2 border-[var(--genix-blue)]' : ''
+                        }`}
+                      >
+                        <Link to={item.url} className="flex items-center justify-between px-3 py-3">
+                          <div className="flex items-center gap-3">
+                            <item.icon className="w-5 h-5" />
+                            <span className="font-medium text-sm">{item.title}</span>
+                          </div>
+                          {item.badge && (
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-[10px] px-2 py-0 h-5 border ${
+                                item.badge === "New" 
+                                  ? "bg-[var(--genix-green)]/10 text-[var(--genix-green)] border-[var(--genix-green)]/20"
+                                  : item.badge === "Admin"
+                                  ? "bg-[var(--genix-purple)]/10 text-[var(--genix-purple)] border-[var(--genix-purple)]/20"
+                                  : "bg-[var(--genix-orange)]/10 text-[var(--genix-orange)] border-[var(--genix-orange)]/20"
+                              }`}
+                            >
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup className="mt-8 hidden md:block">
+              <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-2">
+                {t("ai_insights") || "AI Insights"}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <div className="px-3 py-4 bg-gradient-to-br from-[var(--genix-blue)]/5 via-[var(--genix-purple)]/5 to-[var(--genix-blue)]/5 rounded-xl border border-[var(--genix-blue)]/10">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-[var(--genix-green)] rounded-full animate-pulse"></div>
+                      <span className="text-slate-600 text-xs">{t("revenue")} trending +12%</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-[var(--genix-orange)] rounded-full"></div>
+                      <span className="text-slate-600 text-xs">3 {t("low_stock_items").toLowerCase()}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="w-2 h-2 bg-[var(--genix-blue)] rounded-full"></div>
+                      <span className="text-slate-600 text-xs">5 {t("workflows").toLowerCase()} automated</span>
+                    </div>
+                  </div>
+                </div>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+
+          <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block">
+            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl hover:shadow-md transition-shadow duration-200">
+              <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-semibold text-sm">
+                  {currentUser?.full_name?.charAt(0) || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-slate-900 truncate">
+                  {currentUser?.full_name || 'User'}
+                </p>
+                <p className="text-[10px] text-slate-500 truncate">
+                  {currentUser?.role === 'admin' ? 'Administrator' : 'User'}
+                </p>
+              </div>
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+
+        <main className="flex-1 flex flex-col min-w-0">
+          <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <SidebarTrigger className="md:hidden hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
+                <div className="hidden md:block">
+                  <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
+                    {currentPageName === 'AdminPanel' ? t('admin_panel') : (t(currentPageName?.toLowerCase()) || t("dashboard"))}
+                  </h1>
+                  <p className="text-slate-500 text-xs md:text-sm mt-0.5 hidden lg:block">
+                    {t("welcome_to_ai_erp") || "Welcome to your AI-powered ERP"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 md:gap-3">
+                <LanguageSelector />
+                <Link to={createPageUrl("Notifications")}>
+                  <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
+                    <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                  </Button>
+                </Link>
+                <Link to={createPageUrl("Settings")} className="hidden md:inline-block">
+                  <Button variant="ghost" size="icon" className="hover:bg-slate-100 rounded-full transition-all duration-200">
+                    <Settings className="w-4 h-4 md:w-5 md:h-5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-auto">
+            {children}
+          </div>
+        </main>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+export default function Layout({ children, currentPageName }) {
+  return (
+    <LanguageProvider>
+      <InstalledAppsProvider>
+        <LayoutContent children={children} currentPageName={currentPageName} />
+      </InstalledAppsProvider>
+    </LanguageProvider>
+  );
+}
+
