@@ -1,21 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell } from 'lucide-react';
+import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
+import { analyzeContracts } from '@/api/services/aiAnalytics';
 
 export default function Contracts() {
-  const [contracts, setContracts] = useState([]);
+  const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
+
+  // AI Analysis
+  const contractAnalysis = useMemo(() => analyzeContracts(contracts), [contracts]);
   const [filteredContracts, setFilteredContracts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedContract, setSelectedContract] = useState(null);
+  const [editContract, setEditContract] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newContract, setNewContract] = useState({
     contract_number: '',
@@ -30,11 +38,21 @@ export default function Contracts() {
   });
 
   useEffect(() => {
-    loadContracts();
-  }, []);
+    let filtered = contracts.map(contract => {
+      if (!contract.end_date) return contract;
 
-  useEffect(() => {
-    let filtered = contracts;
+      const today = new Date();
+      const endDate = new Date(contract.end_date);
+      const daysUntilExpiry = differenceInDays(endDate, today);
+
+      let status = contract.status;
+      if (daysUntilExpiry < 0 && status === 'active') {
+        status = 'expired';
+      }
+
+      return { ...contract, status, daysUntilExpiry };
+    });
+
     if (statusFilter !== 'all') {
       filtered = filtered.filter(c => c.status === statusFilter);
     }
@@ -48,35 +66,8 @@ export default function Contracts() {
     setFilteredContracts(filtered);
   }, [contracts, searchQuery, statusFilter]);
 
-  const loadContracts = async () => {
-    try {
-      const data = await base44.entities.Contract.list('-created_date', 100);
-      
-      // Update contract status based on dates
-      const updatedContracts = data.map(contract => {
-        if (!contract.end_date) return contract;
-        
-        const today = new Date();
-        const endDate = new Date(contract.end_date);
-        const daysUntilExpiry = differenceInDays(endDate, today);
-        
-        let status = contract.status;
-        if (daysUntilExpiry < 0 && status === 'active') {
-          status = 'expired';
-        }
-        
-        return { ...contract, status, daysUntilExpiry };
-      });
-      
-      setContracts(updatedContracts);
-      setFilteredContracts(updatedContracts);
-    } catch (error) {
-      console.error('Error loading contracts:', error);
-    }
-    setIsLoading(false);
-  };
-
   const handleCreateContract = async () => {
+    setIsSubmitting(true);
     try {
       const contractData = {
         ...newContract,
@@ -84,11 +75,10 @@ export default function Contracts() {
         contract_value: parseFloat(newContract.contract_value),
         status: 'active'
       };
-      
-      await base44.entities.Contract.create(contractData);
+
+      await createContract(contractData);
       setShowCreateModal(false);
-      loadContracts();
-      
+
       setNewContract({
         contract_number: '',
         contract_name: '',
@@ -102,16 +92,60 @@ export default function Contracts() {
       });
     } catch (error) {
       console.error('Error creating contract:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const updateContractStatus = async (contractId, newStatus) => {
+  const handleViewContract = (contract) => {
+    setSelectedContract(contract);
+    setShowViewModal(true);
+  };
+
+  const handleEditContract = (contract) => {
+    setEditContract({
+      ...contract,
+      contract_value: contract.contract_value || 0,
+      start_date: contract.start_date?.split('T')[0] || '',
+      end_date: contract.end_date?.split('T')[0] || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateContract = async () => {
+    if (!editContract) return;
+
+    setIsSubmitting(true);
     try {
-      await base44.entities.Contract.update(contractId, { status: newStatus });
-      loadContracts();
+      updateContract(editContract.id, {
+        contract_number: editContract.contract_number,
+        contract_name: editContract.contract_name,
+        contract_type: editContract.contract_type,
+        party_name: editContract.party_name,
+        start_date: editContract.start_date,
+        end_date: editContract.end_date,
+        contract_value: parseFloat(editContract.contract_value) || 0,
+        billing_cycle: editContract.billing_cycle,
+        auto_renew: editContract.auto_renew,
+        status: editContract.status
+      });
+      setShowEditModal(false);
+      setEditContract(null);
     } catch (error) {
       console.error('Error updating contract:', error);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleDeleteContract = (contractId) => {
+    if (window.confirm('Are you sure you want to delete this contract? This action cannot be undone.')) {
+      deleteContract(contractId);
+    }
+  };
+
+  const updateContractStatus = (contractId, newStatus) => {
+    updateContract(contractId, { status: newStatus });
   };
 
   const getStatusColor = (status) => {
@@ -138,15 +172,15 @@ export default function Contracts() {
 
   const metrics = {
     totalContracts: contracts.length,
-    activeContracts: contracts.filter(c => c.status === 'active').length,
-    totalValue: contracts.filter(c => c.status === 'active').reduce((sum, c) => sum + (c.contract_value || 0), 0),
-    expiringSoon: contracts.filter(c => c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30).length
+    activeContracts: filteredContracts.filter(c => c.status === 'active').length,
+    totalValue: filteredContracts.filter(c => c.status === 'active').reduce((sum, c) => sum + (c.contract_value || 0), 0),
+    expiringSoon: filteredContracts.filter(c => c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30).length
   };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-rose-600 to-pink-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -211,6 +245,53 @@ export default function Contracts() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(contractAnalysis.insights.length > 0 || contractAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-rose-50 to-pink-50 border-rose-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-rose-600" />
+                AI Contract Insights
+                <Badge className="bg-rose-100 text-rose-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {contractAnalysis.insights.slice(0, 3).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-rose-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-rose-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {contractAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {contractAnalysis.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-rose-100">
+                      <Lightbulb className="w-3 h-3 text-yellow-500" />
+                      <span className="text-slate-700">{rec.action}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Contracts List */}
         <Card className="bg-white/80 backdrop-blur-sm">
           <CardHeader className="border-b">
@@ -223,7 +304,7 @@ export default function Contracts() {
             <div className="flex gap-3 mt-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
+                <Input
                   placeholder="Search contracts..."
                   className="pl-9"
                   value={searchQuery}
@@ -274,7 +355,7 @@ export default function Contracts() {
                               </Badge>
                             )}
                           </div>
-                          
+
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                             <div>
                               <p className="text-slate-500">Contract #</p>
@@ -317,6 +398,15 @@ export default function Contracts() {
                         </div>
 
                         <div className="flex gap-2 ml-4">
+                          <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title="View Contract">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title="Edit Contract">
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract.id)} title="Delete Contract" className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                           {contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
                             <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'renewed')}>
                               Renew
@@ -344,7 +434,7 @@ export default function Contracts() {
               <DialogTitle>Create Contract</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">Contract Number</label>
@@ -456,15 +546,233 @@ export default function Contracts() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateContract} 
+                <Button
+                  onClick={handleCreateContract}
                   className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                  disabled={!newContract.contract_name || !newContract.party_name}
+                  disabled={!newContract.contract_name || !newContract.party_name || isSubmitting}
                 >
-                  Create Contract
+                  {isSubmitting ? 'Creating...' : 'Create Contract'}
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Contract Modal */}
+        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Contract Details</DialogTitle>
+            </DialogHeader>
+            {selectedContract && (
+              <div className="space-y-6 py-4">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold">{selectedContract.contract_name}</h3>
+                  <Badge className={getStatusColor(selectedContract.status)}>{selectedContract.status}</Badge>
+                  <Badge className={getTypeColor(selectedContract.contract_type)} variant="outline">
+                    {selectedContract.contract_type}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-slate-500">Contract Number</p>
+                      <p className="font-mono font-semibold">{selectedContract.contract_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Party Name</p>
+                      <p className="font-medium">{selectedContract.party_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Contract Value</p>
+                      <p className="text-xl font-bold text-rose-600">${(selectedContract.contract_value || 0).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Billing Cycle</p>
+                      <p className="font-medium capitalize">{selectedContract.billing_cycle}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-slate-500">Start Date</p>
+                      <p className="font-medium">
+                        {selectedContract.start_date ? format(new Date(selectedContract.start_date), 'MMM dd, yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">End Date</p>
+                      <p className="font-medium">
+                        {selectedContract.end_date ? format(new Date(selectedContract.end_date), 'MMM dd, yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500">Auto-Renewal</p>
+                      <p className="font-medium">{selectedContract.auto_renew ? 'Enabled' : 'Disabled'}</p>
+                    </div>
+                    {selectedContract.daysUntilExpiry !== undefined && selectedContract.daysUntilExpiry >= 0 && (
+                      <div>
+                        <p className="text-sm text-slate-500">Days Until Expiry</p>
+                        <p className={`font-bold ${selectedContract.daysUntilExpiry <= 30 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {selectedContract.daysUntilExpiry} days
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button variant="outline" onClick={() => setShowViewModal(false)} className="flex-1">
+                    Close
+                  </Button>
+                  <Button
+                    onClick={() => { setShowViewModal(false); handleEditContract(selectedContract); }}
+                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
+                  >
+                    Edit Contract
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Contract Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Contract</DialogTitle>
+            </DialogHeader>
+            {editContract && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Contract Number</label>
+                    <Input
+                      value={editContract.contract_number}
+                      onChange={(e) => setEditContract({...editContract, contract_number: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Contract Type *</label>
+                    <Select value={editContract.contract_type} onValueChange={(value) => setEditContract({...editContract, contract_type: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="customer">Customer</SelectItem>
+                        <SelectItem value="vendor">Vendor</SelectItem>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="partner">Partner</SelectItem>
+                        <SelectItem value="lease">Lease</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Contract Name *</label>
+                  <Input
+                    value={editContract.contract_name}
+                    onChange={(e) => setEditContract({...editContract, contract_name: e.target.value})}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Party Name *</label>
+                  <Input
+                    value={editContract.party_name}
+                    onChange={(e) => setEditContract({...editContract, party_name: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Start Date</label>
+                    <Input
+                      type="date"
+                      value={editContract.start_date}
+                      onChange={(e) => setEditContract({...editContract, start_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">End Date</label>
+                    <Input
+                      type="date"
+                      value={editContract.end_date}
+                      onChange={(e) => setEditContract({...editContract, end_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Contract Value</label>
+                    <Input
+                      type="number"
+                      value={editContract.contract_value}
+                      onChange={(e) => setEditContract({...editContract, contract_value: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Billing Cycle</label>
+                    <Select value={editContract.billing_cycle} onValueChange={(value) => setEditContract({...editContract, billing_cycle: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="annually">Annually</SelectItem>
+                        <SelectItem value="one_time">One Time</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <Select value={editContract.status || 'active'} onValueChange={(value) => setEditContract({...editContract, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="terminated">Terminated</SelectItem>
+                      <SelectItem value="renewed">Renewed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit_auto_renew"
+                    checked={editContract.auto_renew}
+                    onChange={(e) => setEditContract({...editContract, auto_renew: e.target.checked})}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="edit_auto_renew" className="text-sm font-medium">
+                    Enable auto-renewal
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditContract(null); }} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdateContract}
+                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
+                    disabled={!editContract.contract_name || !editContract.party_name || isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { QualityCheck } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ export default function QualityControl() {
 
   const loadQualityChecks = async () => {
     try {
-      const data = await base44.entities.QualityCheck.list('-created_date', 50);
+      const data = await QualityCheck.list('-created_date');
       setQualityChecks(data);
     } catch (error) {
       console.error('Error loading quality checks:', error);

@@ -1,7 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Customer, Lead, Opportunity, CallLog } from "@/api/entities";
-import { InvokeLLM } from "@/api/integrations";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,131 +11,63 @@ import {
   TrendingUp,
   Phone,
   Mail,
-  DollarSign,
-  Target,
-  Brain,
   UserPlus,
-  Building
+  Building,
+  Target,
+  Trash2,
+  Brain,
+  AlertTriangle,
+  CheckCircle,
+  DollarSign,
+  Lightbulb
 } from "lucide-react";
+import { analyzeCRM } from "@/api/services/aiAnalytics";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import CustomerForm from "@/components/customers/CustomerForm";
 import CustomerMetrics from "@/components/customers/CustomerMetrics";
-import CustomerInsights from "@/components/customers/CustomerInsights";
 import DragDropKanban from "@/components/crm/DragDropKanban";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCustomers } from "@/components/contexts/CustomersContext";
 
 export default function Customers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const {
+    customers,
+    leads,
+    opportunities,
+    isLoading,
+    createCustomer,
+    updateCustomer,
+    deleteCustomer,
+    updateOpportunity
+  } = useCustomers();
 
-  const [customers, setCustomers] = useState([]);
-  const [leads, setLeads] = useState([]);
-  const [opportunities, setOpportunities] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [industryFilter, setIndustryFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [insights, setInsights] = useState(null);
   const [activeTab, setActiveTab] = useState("customers");
-  const [isLoading, setIsLoading] = useState(true);
+  const [customerToDelete, setCustomerToDelete] = useState(null);
 
-  const loadCustomers = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await Customer.list("-created_date");
-      setCustomers(data);
-    } catch (error) {
-      console.error("Error loading customers:", error);
-    }
-    setIsLoading(false);
-  }, []);
-
-  const loadLeads = useCallback(async () => {
-    try {
-      const data = await Lead.list("-created_date", 50);
-      setLeads(data);
-    } catch (error) {
-      console.error("Error loading leads:", error);
-    }
-  }, []);
-
-  const loadOpportunities = useCallback(async () => {
-    try {
-      const data = await Opportunity.list("-created_date", 50);
-      console.log('Loaded opportunities:', data);
-      setOpportunities(data);
-    } catch (error) {
-      console.error("Error loading opportunities:", error);
-    }
-  }, []);
-
-  const generateInsights = useCallback(async () => {
-    try {
-      const customerData = await Customer.list();
-      const leadData = await Lead.list();
-      const oppData = await Opportunity.list();
-
-      const totalRevenue = customerData.reduce((sum, c) => sum + (c.monthly_value || 0), 0) * 12;
-      const conversionRate = leadData.length > 0 ? (customerData.length / leadData.length * 100) : 0;
-      const avgDealSize = oppData.length > 0 ? oppData.reduce((sum, o) => sum + (o.expected_value || 0), 0) / oppData.length : 0;
-
-      const result = await InvokeLLM({
-        prompt: `You are the CRM AI of Genix. Analyze this sales and customer data:
-
-        Customer Data:
-        - Total customers: ${customerData.length}
-        - Active customers: ${customerData.filter(c => c.status === 'active').length}
-        - Total annual revenue: $${totalRevenue.toLocaleString()}
-        - Industry breakdown: ${JSON.stringify(customerData.reduce((acc, c) => { acc[c.industry] = (acc[c.industry] || 0) + 1; return acc; }, {}))}
-
-        Lead & Sales Data:
-        - Total leads: ${leadData.length}
-        - Qualified leads: ${leadData.filter(l => l.status === 'qualified').length}
-        - Conversion rate: ${conversionRate.toFixed(1)}%
-        - Active opportunities: ${oppData.filter(o => !['closed_won', 'closed_lost'].includes(o.stage)).length}
-        - Average deal size: $${avgDealSize.toLocaleString()}
-
-        Provide 3 strategic CRM insights focusing on:
-        1. Customer retention and expansion opportunities
-        2. Lead qualification and conversion optimization
-        3. Sales pipeline health and forecasting accuracy`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  recommendation: { type: "string" },
-                  impact: { type: "string" },
-                  priority: { type: "string", enum: ["high", "medium", "low"] }
-                }
-              }
-            }
-          }
-        }
-      });
-      setInsights(result.insights);
-    } catch (error) {
-      console.error("Error generating insights:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadCustomers();
-    loadLeads();
-    loadOpportunities();
-    generateInsights();
-  }, [loadCustomers, loadLeads, loadOpportunities, generateInsights]);
+  // AI Analysis
+  const crmAnalysis = useMemo(() => analyzeCRM(customers, leads, opportunities), [customers, leads, opportunities]);
 
   useEffect(() => {
     let filtered = customers;
@@ -161,26 +91,19 @@ export default function Customers() {
     setFilteredCustomers(filtered);
   }, [customers, searchQuery, statusFilter, industryFilter]);
 
-  const handleSave = async (customerData) => {
-    try {
-      if (editingCustomer) {
-        await Customer.update(editingCustomer.id, customerData);
-      } else {
-        await Customer.create(customerData);
-      }
-      loadCustomers();
-      setShowForm(false);
-      setEditingCustomer(null);
-    } catch (error) {
-      console.error("Error saving customer:", error);
+  const handleSave = (customerData) => {
+    if (editingCustomer) {
+      updateCustomer(editingCustomer.id, customerData);
+    } else {
+      createCustomer(customerData);
     }
+    setShowForm(false);
+    setEditingCustomer(null);
   };
 
   const handleOpportunityUpdate = (updatedOpportunity) => {
     console.log('Opportunity updated:', updatedOpportunity);
-    setOpportunities(prev =>
-      prev.map(opp => opp.id === updatedOpportunity.id ? updatedOpportunity : opp)
-    );
+    updateOpportunity(updatedOpportunity.id, updatedOpportunity);
   };
 
   const getStatusColor = (status) => {
@@ -220,6 +143,91 @@ export default function Customers() {
 
         {/* Metrics */}
         <CustomerMetrics customers={customers} leads={leads} opportunities={opportunities} language={language} />
+
+        {/* AI Insights Panel */}
+        {(crmAnalysis.insights.length > 0 || crmAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-indigo-600" />
+                AI CRM Insights
+                <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Key Metrics */}
+                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Monthly Recurring</p>
+                      <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.totalMRR.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <Target className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Pipeline Value</p>
+                      <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.pipelineValue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Insights */}
+                {crmAnalysis.insights.slice(0, 2).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' || insight.type === 'negative' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recommendations */}
+              {crmAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-medium text-slate-900 text-sm mb-2">AI Recommendations</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {crmAnalysis.recommendations.map((rec, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
+                            <span className={`w-2 h-2 rounded-full ${
+                              rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
+                            }`} />
+                            <span className="text-slate-700">{rec.action}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -364,16 +372,26 @@ export default function Customers() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingCustomer(customer);
-                                setShowForm(true);
-                              }}
-                            >
-                              {t('edit')}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingCustomer(customer);
+                                  setShowForm(true);
+                                }}
+                              >
+                                {t('edit')}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200"
+                                onClick={() => setCustomerToDelete(customer)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -469,10 +487,41 @@ export default function Customers() {
           />
         )}
 
-        {/* AI Insights - Moved to bottom */}
-        {insights && insights.length > 0 && (
-          <CustomerInsights insights={insights} language={language} />
-        )}
+        {/* Delete Confirmation Modal */}
+        <AlertDialog open={!!customerToDelete} onOpenChange={(open) => !open && setCustomerToDelete(null)}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader className="text-center sm:text-center">
+              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+                Delete Customer
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-600 mt-2">
+                Are you sure you want to delete <span className="font-semibold text-slate-900">{customerToDelete?.company_name}</span>?
+                This action cannot be undone and all associated data will be permanently removed.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+              <AlertDialogCancel
+                onClick={() => setCustomerToDelete(null)}
+                className="flex-1 sm:flex-none"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+                onClick={() => {
+                  deleteCustomer(customerToDelete.id);
+                  setCustomerToDelete(null);
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Customer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

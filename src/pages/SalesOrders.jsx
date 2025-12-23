@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
+import { useCustomers } from '@/components/contexts/CustomersContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,18 +8,21 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck, Brain } from 'lucide-react';
+import { Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck, Brain, AlertTriangle, CheckCircle, Target, Lightbulb } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { analyzeSales } from '@/api/services/aiAnalytics';
 
 export default function SalesOrders() {
-  const [orders, setOrders] = useState([]);
+  const { salesOrders, createSalesOrder, updateSalesOrder, isLoading } = useModules();
+  const { customers } = useCustomers();
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [aiInsights, setAiInsights] = useState(null);
+
+  // AI Analysis
+  const salesAnalysis = useMemo(() => analyzeSales(salesOrders, customers), [salesOrders, customers]);
 
   const [newOrder, setNewOrder] = useState({
     order_number: '',
@@ -32,12 +36,7 @@ export default function SalesOrders() {
   });
 
   useEffect(() => {
-    loadOrders();
-    generateAIInsights();
-  }, []);
-
-  useEffect(() => {
-    let filtered = orders;
+    let filtered = salesOrders;
     if (statusFilter !== 'all') {
       filtered = filtered.filter(o => o.status === statusFilter);
     }
@@ -48,90 +47,35 @@ export default function SalesOrders() {
       );
     }
     setFilteredOrders(filtered);
-  }, [orders, searchQuery, statusFilter]);
+  }, [salesOrders, searchQuery, statusFilter]);
 
-  const loadOrders = async () => {
-    try {
-      const data = await base44.entities.SalesOrder.list('-created_date', 100);
-      setOrders(data);
-      setFilteredOrders(data);
-    } catch (error) {
-      console.error('Error loading sales orders:', error);
-    }
-    setIsLoading(false);
+  const handleCreateOrder = () => {
+    const total = parseFloat(newOrder.subtotal) + parseFloat(newOrder.tax_amount) + parseFloat(newOrder.shipping_cost);
+    createSalesOrder({
+      ...newOrder,
+      order_number: newOrder.order_number || `SO-${Date.now()}`,
+      subtotal: parseFloat(newOrder.subtotal),
+      tax_amount: parseFloat(newOrder.tax_amount),
+      shipping_cost: parseFloat(newOrder.shipping_cost),
+      total_amount: total,
+      status: 'quotation',
+      payment_status: 'unpaid'
+    });
+    setShowCreateModal(false);
+    setNewOrder({
+      order_number: '',
+      customer_name: '',
+      order_date: new Date().toISOString().split('T')[0],
+      delivery_date: '',
+      subtotal: 0,
+      tax_amount: 0,
+      shipping_cost: 0,
+      total_amount: 0
+    });
   };
 
-  const generateAIInsights = async () => {
-    try {
-      const insights = await base44.integrations.Core.InvokeLLM({
-        prompt: `As a sales analyst, provide insights on:
-1. Sales performance optimization
-2. Customer buying patterns
-3. Revenue growth opportunities
-4. Fulfillment efficiency improvements`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  impact: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      setAiInsights(insights.insights);
-    } catch (error) {
-      console.error('Error generating insights:', error);
-    }
-  };
-
-  const handleCreateOrder = async () => {
-    try {
-      const total = parseFloat(newOrder.subtotal) + parseFloat(newOrder.tax_amount) + parseFloat(newOrder.shipping_cost);
-      const orderData = {
-        ...newOrder,
-        order_number: newOrder.order_number || `SO-${Date.now()}`,
-        subtotal: parseFloat(newOrder.subtotal),
-        tax_amount: parseFloat(newOrder.tax_amount),
-        shipping_cost: parseFloat(newOrder.shipping_cost),
-        total_amount: total,
-        status: 'quotation',
-        payment_status: 'unpaid'
-      };
-      
-      await base44.entities.SalesOrder.create(orderData);
-      setShowCreateModal(false);
-      loadOrders();
-      
-      setNewOrder({
-        order_number: '',
-        customer_name: '',
-        order_date: new Date().toISOString().split('T')[0],
-        delivery_date: '',
-        subtotal: 0,
-        tax_amount: 0,
-        shipping_cost: 0,
-        total_amount: 0
-      });
-    } catch (error) {
-      console.error('Error creating order:', error);
-    }
-  };
-
-  const updateOrderStatus = async (orderId, newStatus) => {
-    try {
-      await base44.entities.SalesOrder.update(orderId, { status: newStatus });
-      loadOrders();
-    } catch (error) {
-      console.error('Error updating order:', error);
-    }
+  const handleUpdateStatus = (orderId, newStatus) => {
+    updateSalesOrder(orderId, { status: newStatus });
   };
 
   const getStatusColor = (status) => {
@@ -147,14 +91,14 @@ export default function SalesOrders() {
   };
 
   const metrics = {
-    totalOrders: orders.length,
-    totalRevenue: orders.reduce((sum, o) => sum + (o.total_amount || 0), 0),
-    activeOrders: orders.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length,
-    avgOrderValue: orders.length > 0 ? orders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / orders.length : 0
+    totalOrders: salesOrders.length,
+    totalRevenue: salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0),
+    activeOrders: salesOrders.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length,
+    avgOrderValue: salesOrders.length > 0 ? salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / salesOrders.length : 0
   };
 
   const salesData = {};
-  orders.forEach(o => {
+  salesOrders.forEach(o => {
     const month = new Date(o.order_date).toLocaleDateString('en-US', { month: 'short' });
     salesData[month] = (salesData[month] || 0) + (o.total_amount || 0);
   });
@@ -163,7 +107,7 @@ export default function SalesOrders() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -228,8 +172,84 @@ export default function SalesOrders() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(salesAnalysis.insights.length > 0 || salesAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-emerald-600" />
+                AI Sales Insights
+                <Badge className="bg-emerald-100 text-emerald-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Insights */}
+                {salesAnalysis.insights.slice(0, 2).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-1">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-emerald-600 mt-2">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Top Customer */}
+                {salesAnalysis.topCustomers.length > 0 && (
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
+                    <div className="flex items-start gap-3">
+                      <Target className="w-5 h-5 text-purple-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">Top Customer</h4>
+                        <p className="text-xs text-slate-600 mt-1">{salesAnalysis.topCustomers[0].name}</p>
+                        <p className="text-lg font-bold text-purple-600 mt-2">
+                          ${salesAnalysis.topCustomers[0].revenue.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommendation */}
+                {salesAnalysis.recommendations.length > 0 && (
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100 md:col-span-2 lg:col-span-3">
+                    <div className="flex items-start gap-3">
+                      <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="font-medium text-slate-900 text-sm">AI Recommendation</h4>
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {salesAnalysis.recommendations.slice(0, 3).map((rec, index) => (
+                            <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1">
+                              <span className={`w-2 h-2 rounded-full ${
+                                rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
+                              }`} />
+                              <span className="text-slate-700">{rec.action}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Sales Trend */}
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -262,7 +282,7 @@ export default function SalesOrders() {
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
+                  <Input
                     placeholder="Search orders..."
                     className="pl-9"
                     value={searchQuery}
@@ -323,17 +343,17 @@ export default function SalesOrders() {
                           <TableCell>
                             <div className="flex gap-1">
                               {order.status === 'quotation' && (
-                                <Button size="sm" variant="ghost" onClick={() => updateOrderStatus(order.id, 'confirmed')}>
+                                <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')}>
                                   Confirm
                                 </Button>
                               )}
                               {order.status === 'confirmed' && (
-                                <Button size="sm" variant="ghost" onClick={() => updateOrderStatus(order.id, 'processing')}>
+                                <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')}>
                                   Process
                                 </Button>
                               )}
                               {order.status === 'processing' && (
-                                <Button size="sm" variant="ghost" onClick={() => updateOrderStatus(order.id, 'shipped')}>
+                                <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'shipped')}>
                                   <Truck className="w-4 h-4" />
                                 </Button>
                               )}
@@ -348,31 +368,6 @@ export default function SalesOrders() {
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights */}
-        {aiInsights && aiInsights.length > 0 && (
-          <div>
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Brain className="w-6 h-6 text-green-600" />
-              AI Sales Insights
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {aiInsights.map((insight, i) => (
-                <Card key={i} className="bg-white/80 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-base">{insight.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p className="text-sm text-slate-600">{insight.description}</p>
-                    <div className="p-2 bg-green-50 rounded text-xs">
-                      <strong>Impact:</strong> {insight.impact}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Create Order Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -465,8 +460,8 @@ export default function SalesOrders() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateOrder} 
+                <Button
+                  onClick={handleCreateOrder}
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
                   disabled={!newOrder.customer_name || !newOrder.subtotal}
                 >

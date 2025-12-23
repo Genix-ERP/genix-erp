@@ -1,5 +1,6 @@
 import Layout from "./Layout.jsx";
 import Login from "./Login";
+import Register from "./Register";
 import Dashboard from "./Dashboard";
 import AIAssistant from "./AIAssistant";
 import Inventory from "./Inventory";
@@ -19,6 +20,8 @@ import Assets from "./Assets";
 import Expenses from "./Expenses";
 import Payroll from "./Payroll";
 import Contracts from "./Contracts";
+import Companies from "./Companies";
+import AddCompany from "./AddCompany";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
@@ -43,6 +46,8 @@ const PAGES = {
     Expenses: Expenses,
     Payroll: Payroll,
     Contracts: Contracts,
+    Companies: Companies,
+    AddCompany: AddCompany,
 }
 
 function _getCurrentPage(url) {
@@ -85,6 +90,7 @@ function PagesContent() {
     return (
         <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route
                 path="/*"
                 element={
@@ -111,6 +117,8 @@ function PagesContent() {
                                 <Route path="/Expenses" element={<Expenses />} />
                                 <Route path="/Payroll" element={<Payroll />} />
                                 <Route path="/Contracts" element={<Contracts />} />
+                                <Route path="/Companies" element={<Companies />} />
+                                <Route path="/AddCompany" element={<AddCompany />} />
                             </Routes>
                         </Layout>
                     </ProtectedRoute>

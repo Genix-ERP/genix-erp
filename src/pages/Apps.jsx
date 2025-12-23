@@ -1,6 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
-import { InstalledApp } from '@/api/entities';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -227,7 +226,7 @@ const AppCard = ({ app, isInstalled, onAction, isLoading }) => {
 export default function Apps() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { installedApps, isLoading: appsLoading, refreshInstalledApps, isAppInstalled } = useInstalledApps();
+  const { isLoading: appsLoading, isAppInstalled, installApp, uninstallApp } = useInstalledApps();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingAppId, setLoadingAppId] = useState(null);
@@ -236,24 +235,19 @@ export default function Apps() {
     setLoadingAppId(app.id);
     try {
       if (action === 'install') {
-        await InstalledApp.create({
+        installApp({
           app_id: app.id,
           app_name: app.name,
-          version: app.version,
-          installed_date: new Date().toISOString(),
-          status: 'active'
+          version: app.version
         });
       } else if (action === 'uninstall') {
-        const installedApp = installedApps.find(ia => ia.app_id === app.id);
-        if (installedApp) {
-          await InstalledApp.delete(installedApp.id);
-        }
+        uninstallApp(app.id);
       }
-      refreshInstalledApps();
     } catch (error) {
       console.error(`Error ${action}ing app:`, error);
+    } finally {
+      setLoadingAppId(null);
     }
-    setLoadingAppId(null);
   };
 
   const filteredApps = appsList.filter(app =>

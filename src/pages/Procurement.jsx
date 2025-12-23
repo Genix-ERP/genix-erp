@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,18 +7,23 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, ShoppingCart, TrendingUp, AlertCircle, CheckCircle, Truck, Brain } from 'lucide-react';
+import { Plus, Search, ShoppingCart, TrendingUp, AlertCircle, CheckCircle, Truck, Brain, AlertTriangle, Target, Lightbulb, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { analyzeProcurement } from '@/api/services/aiAnalytics';
 
 export default function Procurement() {
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const { purchaseOrders, createPurchaseOrder, updatePurchaseOrder, isLoading } = useModules();
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [aiInsights, setAiInsights] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editPO, setEditPO] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // AI Analysis
+  const procurementAnalysis = useMemo(() => analyzeProcurement(purchaseOrders), [purchaseOrders]);
 
   const [newPO, setNewPO] = useState({
     po_number: '',
@@ -28,11 +33,6 @@ export default function Procurement() {
     total_amount: 0,
     payment_terms: 'net_30'
   });
-
-  useEffect(() => {
-    loadPurchaseOrders();
-    generateAIInsights();
-  }, []);
 
   useEffect(() => {
     let filtered = purchaseOrders;
@@ -48,63 +48,22 @@ export default function Procurement() {
     setFilteredOrders(filtered);
   }, [purchaseOrders, searchQuery, statusFilter]);
 
-  const loadPurchaseOrders = async () => {
-    try {
-      const data = await base44.entities.PurchaseOrder.list('-created_date', 100);
-      setPurchaseOrders(data);
-      setFilteredOrders(data);
-    } catch (error) {
-      console.error('Error loading purchase orders:', error);
-    }
-    setIsLoading(false);
-  };
-
-  const generateAIInsights = async () => {
-    try {
-      const insights = await base44.integrations.Core.InvokeLLM({
-        prompt: `As a procurement analyst, provide insights on:
-1. Vendor performance optimization
-2. Cost reduction opportunities
-3. Supply chain risk mitigation
-4. Procurement process improvements`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  impact: { type: "string" },
-                  action: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      setAiInsights(insights.insights);
-    } catch (error) {
-      console.error('Error generating insights:', error);
-    }
-  };
-
   const handleCreatePO = async () => {
+    if (!newPO.vendor_name || !newPO.total_amount) return;
+
+    setIsSubmitting(true);
     try {
       const poData = {
         ...newPO,
         po_number: newPO.po_number || `PO-${Date.now()}`,
-        total_amount: parseFloat(newPO.total_amount),
+        total_amount: parseFloat(newPO.total_amount) || 0,
         status: 'draft',
         ai_price_validation: true
       };
-      
-      await base44.entities.PurchaseOrder.create(poData);
+
+      await createPurchaseOrder(poData);
       setShowCreateModal(false);
-      loadPurchaseOrders();
-      
+
       setNewPO({
         po_number: '',
         vendor_name: '',
@@ -115,20 +74,51 @@ export default function Procurement() {
       });
     } catch (error) {
       console.error('Error creating PO:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const updatePOStatus = async (poId, newStatus) => {
+  const handleEditPO = (po, e) => {
+    e.stopPropagation();
+    setEditPO({
+      ...po,
+      total_amount: po.total_amount || 0
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePO = async () => {
+    if (!editPO || !editPO.vendor_name) return;
+
+    setIsSubmitting(true);
     try {
-      const updates = { status: newStatus };
-      if (newStatus === 'received') {
-        updates.actual_delivery_date = new Date().toISOString().split('T')[0];
-      }
-      await base44.entities.PurchaseOrder.update(poId, updates);
-      loadPurchaseOrders();
+      const updates = {
+        po_number: editPO.po_number,
+        vendor_name: editPO.vendor_name,
+        order_date: editPO.order_date,
+        expected_delivery_date: editPO.expected_delivery_date,
+        total_amount: parseFloat(editPO.total_amount) || 0,
+        payment_terms: editPO.payment_terms,
+        status: editPO.status
+      };
+
+      updatePurchaseOrder(editPO.id, updates);
+      setShowEditModal(false);
+      setEditPO(null);
     } catch (error) {
       console.error('Error updating PO:', error);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const updatePOStatus = (poId, newStatus) => {
+    const updates = { status: newStatus };
+    if (newStatus === 'received') {
+      updates.actual_delivery_date = new Date().toISOString().split('T')[0];
+    }
+    updatePurchaseOrder(poId, updates);
   };
 
   const getStatusColor = (status) => {
@@ -161,7 +151,7 @@ export default function Procurement() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -226,8 +216,57 @@ export default function Procurement() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(procurementAnalysis.insights.length > 0 || procurementAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-indigo-600" />
+                AI Procurement Insights
+                <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {procurementAnalysis.insights.slice(0, 2).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {procurementAnalysis.recommendations.length > 0 && (
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
+                    <div className="flex items-start gap-3">
+                      <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">AI Recommendation</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{procurementAnalysis.recommendations[0].action}</p>
+                        <p className="text-xs text-slate-500 mt-1">{procurementAnalysis.recommendations[0].description}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Vendor Spend Chart */}
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -260,7 +299,7 @@ export default function Procurement() {
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
+                  <Input
                     placeholder="Search POs..."
                     className="pl-9"
                     value={searchQuery}
@@ -323,6 +362,19 @@ export default function Procurement() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title="Edit PO">
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              {po.status === 'draft' && (
+                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'sent')}>
+                                  Send
+                                </Button>
+                              )}
+                              {po.status === 'sent' && (
+                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
+                                  Confirm
+                                </Button>
+                              )}
                               {po.status === 'confirmed' && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
                                   <Truck className="w-4 h-4" />
@@ -339,34 +391,6 @@ export default function Procurement() {
             </CardContent>
           </Card>
         </div>
-
-        {/* AI Insights */}
-        {aiInsights && aiInsights.length > 0 && (
-          <div>
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Brain className="w-6 h-6 text-purple-600" />
-              AI Procurement Insights
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {aiInsights.map((insight, i) => (
-                <Card key={i} className="bg-white/80 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-base">{insight.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p className="text-sm text-slate-600">{insight.description}</p>
-                    <div className="p-2 bg-purple-50 rounded text-xs">
-                      <strong>Impact:</strong> {insight.impact}
-                    </div>
-                    <div className="p-2 bg-blue-50 rounded text-xs">
-                      <strong>Action:</strong> {insight.action}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Create PO Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -446,15 +470,122 @@ export default function Procurement() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreatePO} 
+                <Button
+                  onClick={handleCreatePO}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                  disabled={!newPO.vendor_name || !newPO.total_amount}
+                  disabled={!newPO.vendor_name || !newPO.total_amount || isSubmitting}
                 >
-                  Create PO
+                  {isSubmitting ? 'Creating...' : 'Create PO'}
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit PO Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Purchase Order</DialogTitle>
+            </DialogHeader>
+            {editPO && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">PO Number</label>
+                    <Input
+                      value={editPO.po_number}
+                      onChange={(e) => setEditPO({...editPO, po_number: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Vendor *</label>
+                    <Input
+                      placeholder="Vendor name"
+                      value={editPO.vendor_name}
+                      onChange={(e) => setEditPO({...editPO, vendor_name: e.target.value})}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Order Date *</label>
+                    <Input
+                      type="date"
+                      value={editPO.order_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditPO({...editPO, order_date: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Expected Delivery</label>
+                    <Input
+                      type="date"
+                      value={editPO.expected_delivery_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditPO({...editPO, expected_delivery_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Total Amount *</label>
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={editPO.total_amount}
+                      onChange={(e) => setEditPO({...editPO, total_amount: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Payment Terms</label>
+                    <Select value={editPO.payment_terms || 'net_30'} onValueChange={(value) => setEditPO({...editPO, payment_terms: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="net_30">Net 30</SelectItem>
+                        <SelectItem value="net_60">Net 60</SelectItem>
+                        <SelectItem value="net_90">Net 90</SelectItem>
+                        <SelectItem value="due_on_receipt">Due on Receipt</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <Select value={editPO.status || 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="sent">Sent</SelectItem>
+                      <SelectItem value="confirmed">Confirmed</SelectItem>
+                      <SelectItem value="received">Received</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditPO(null); }} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdatePO}
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
+                    disabled={!editPO.vendor_name || isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

@@ -1,0 +1,71 @@
+import apiClient from '../client';
+
+export const aiService = {
+  // Get AI capabilities
+  async getCapabilities() {
+    const response = await apiClient.get('/ai/capabilities');
+    return response.data.data;
+  },
+
+  // Chat with AI
+  async chat(message, conversationId = null, context = {}) {
+    const response = await apiClient.post('/ai/chat', {
+      message,
+      conversation_id: conversationId,
+      context,
+    });
+    return response.data.data;
+  },
+
+  // Conversations
+  async listConversations(params = {}) {
+    const response = await apiClient.get('/ai/conversations', { params });
+    return response.data.data;
+  },
+
+  async createConversation(data = {}) {
+    const response = await apiClient.post('/ai/conversations', data);
+    return response.data.data;
+  },
+
+  async getConversation(id) {
+    const response = await apiClient.get(`/ai/conversations/${id}`);
+    return response.data.data;
+  },
+
+  async deleteConversation(id) {
+    await apiClient.delete(`/ai/conversations/${id}`);
+  },
+
+  async addMessage(conversationId, data) {
+    const response = await apiClient.post(`/ai/conversations/${conversationId}/messages`, data);
+    return response.data.data;
+  },
+
+  // Prompts
+  async listPrompts(params = {}) {
+    const response = await apiClient.get('/ai/prompts', { params });
+    return response.data.data;
+  },
+
+  async createPrompt(data) {
+    const response = await apiClient.post('/ai/prompts', data);
+    return response.data.data;
+  },
+
+  async getPrompt(id) {
+    const response = await apiClient.get(`/ai/prompts/${id}`);
+    return response.data.data;
+  },
+
+  async updatePrompt(id, data) {
+    const response = await apiClient.put(`/ai/prompts/${id}`, data);
+    return response.data.data;
+  },
+
+  async deletePrompt(id) {
+    await apiClient.delete(`/ai/prompts/${id}`);
+  },
+};
+
+export default aiService;

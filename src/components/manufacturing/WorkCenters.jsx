@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { WorkCenter } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ export default function WorkCenters() {
 
   const loadWorkCenters = async () => {
     try {
-      const data = await base44.entities.WorkCenter.list();
+      const data = await WorkCenter.list();
       setWorkCenters(data);
     } catch (error) {
       console.error('Error loading work centers:', error);
@@ -53,7 +53,7 @@ export default function WorkCenters() {
         oee_score: 85 // Default OEE
       };
       
-      await base44.entities.WorkCenter.create(wcData);
+      await WorkCenter.create(wcData);
       setShowCreateModal(false);
       loadWorkCenters();
       resetForm();

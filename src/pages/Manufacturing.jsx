@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,11 +14,13 @@ import {
   CheckCircle,
   Clock,
   Zap,
-  Brain
+  Brain,
+  CalendarDays
 } from 'lucide-react';
 
 import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
 import ProductionOrders from '@/components/manufacturing/ProductionOrders';
+import ProductionSchedule from '@/components/manufacturing/ProductionSchedule';
 import BOMManagement from '@/components/manufacturing/BOMManagement';
 import WorkCenters from '@/components/manufacturing/WorkCenters';
 import QualityControl from '@/components/manufacturing/QualityControl';
@@ -58,7 +60,7 @@ export default function Manufacturing() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">Dashboard</span>
@@ -66,6 +68,10 @@ export default function Manufacturing() {
             <TabsTrigger value="production" className="flex items-center gap-2">
               <Factory className="w-4 h-4" />
               <span className="hidden sm:inline">Production</span>
+            </TabsTrigger>
+            <TabsTrigger value="schedule" className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" />
+              <span className="hidden sm:inline">Schedule</span>
             </TabsTrigger>
             <TabsTrigger value="bom" className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4" />
@@ -91,6 +97,10 @@ export default function Manufacturing() {
 
           <TabsContent value="production" className="mt-6">
             <ProductionOrders />
+          </TabsContent>
+
+          <TabsContent value="schedule" className="mt-6">
+            <ProductionSchedule />
           </TabsContent>
 
           <TabsContent value="bom" className="mt-6">

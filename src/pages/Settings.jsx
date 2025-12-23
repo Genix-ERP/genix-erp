@@ -1,6 +1,7 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Bell, LogOut, Lock } from "lucide-react";
+import { User, Bell, LogOut, Lock, Crown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/contexts/AuthContext";
@@ -8,6 +9,7 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import ProfileSettings from "@/components/settings/ProfileSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
 import ChangePasswordSettings from "@/components/settings/ChangePasswordSettings";
+import SubscriptionSettings from "@/components/settings/SubscriptionSettings";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -16,6 +18,8 @@ export default function Settings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { logout } = useAuth();
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get('tab') || 'profile';
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   const handleLogout = async () => {
@@ -33,11 +37,15 @@ export default function Settings() {
           <p className="text-slate-600 mt-2">{t('settings_subtitle')}</p>
         </div>
 
-        <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue={defaultTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile">
               <User className="w-4 h-4 mr-2" />
               {t('profile')}
+            </TabsTrigger>
+            <TabsTrigger value="subscription">
+              <Crown className="w-4 h-4 mr-2" />
+              Obuna
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="w-4 h-4 mr-2" />
@@ -50,6 +58,9 @@ export default function Settings() {
           </TabsList>
           <TabsContent value="profile" className="mt-6">
             <ProfileSettings />
+          </TabsContent>
+          <TabsContent value="subscription" className="mt-6">
+            <SubscriptionSettings />
           </TabsContent>
           <TabsContent value="notifications" className="mt-6">
             <NotificationSettings />

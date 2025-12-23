@@ -1,17 +1,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
-import { InventoryItem, StockMovement } from "@/api/entities";
-import { InvokeLLM } from "@/api/integrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Package, 
-  Search, 
-  Plus, 
-  AlertTriangle, 
+import ReactMarkdown from 'react-markdown';
+import {
+  Package,
+  Search,
+  Plus,
+  AlertTriangle,
   TrendingUp,
   Filter,
   Download,
@@ -36,13 +35,20 @@ import ReorderOptimizer from "@/components/inventory/ReorderOptimizer";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useInventory } from "@/components/contexts/InventoryContext";
+import { analyzeInventory } from "@/api/services/aiAnalytics";
 
 export default function Inventory() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const {
+    items,
+    stockMovements,
+    isLoading,
+    createItem,
+    updateItem
+  } = useInventory();
 
-  const [items, setItems] = useState([]);
-  const [stockMovements, setStockMovements] = useState([]);
   const [filteredItems, setFilteredItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -52,149 +58,62 @@ export default function Inventory() {
   const [editingItem, setEditingItem] = useState(null);
   const [insights, setInsights] = useState(null);
   const [compliance, setCompliance] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [aiQuery, setAiQuery] = useState("");
   const [aiResponse, setAiResponse] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  const loadInventory = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await InventoryItem.list("-last_movement_date");
-      setItems(data);
-    } catch (error) {
-      console.error("Error loading inventory:", error);
-    }
-    setIsLoading(false);
-  }, []);
+  // Generate AI-powered insights based on current data
+  const generateInsights = useCallback(() => {
+    const analysis = analyzeInventory(items, stockMovements);
 
-  const loadStockMovements = useCallback(async () => {
-    try {
-      const data = await StockMovement.list("-movement_date", 100);
-      setStockMovements(data);
-    } catch (error) {
-      console.error("Error loading stock movements:", error);
-    }
-  }, []);
+    // Convert AI analytics insights to the expected format
+    const aiInsights = analysis.insights.map(insight => ({
+      title: insight.title,
+      description: insight.description,
+      recommendation: insight.items ? `Items: ${insight.items.slice(0, 3).join(', ')}${insight.items.length > 3 ? '...' : ''}` : 'Review and take action',
+      financial_impact: insight.metric || 'See details',
+      priority: insight.priority,
+      action_required: insight.type === 'warning' || insight.type === 'negative' ? 'Immediate action required' : 'Monitor regularly'
+    }));
 
-  const calculateInventoryTurnover = useCallback((inventory, movements) => {
-    const totalCOGS = movements
-      .filter(m => m.movement_type === 'outbound' && m.cogs_calculated)
-      .reduce((sum, m) => sum + (m.cogs_calculated || 0), 0);
-    
-    const avgInventoryValue = inventory.reduce((sum, item) => sum + (item.current_stock * item.unit_cost), 0) / inventory.length;
-    
-    return avgInventoryValue > 0 ? (totalCOGS / avgInventoryValue).toFixed(1) : 0;
-  }, []);
+    // Add recommendations as insights
+    const recInsights = analysis.recommendations.map(rec => ({
+      title: rec.action,
+      description: rec.description,
+      recommendation: rec.action,
+      financial_impact: `Impact: ${rec.impact}`,
+      priority: rec.impact === 'high' ? 'high' : 'medium',
+      action_required: rec.action
+    }));
 
-  const generateInsights = useCallback(async () => {
-    try {
-      const inventoryData = await InventoryItem.list();
-      const movementData = await StockMovement.list("-movement_date", 50);
-      
-      const lowStockCount = inventoryData.filter(item => item.current_stock <= item.reorder_level).length;
-      const deadStockCount = inventoryData.filter(item => item.status === "dead_stock").length;
-      const totalValue = inventoryData.reduce((sum, item) => sum + (item.current_stock * item.unit_cost), 0);
-      const avgTurnover = calculateInventoryTurnover(inventoryData, movementData);
+    setInsights([...aiInsights, ...recInsights].slice(0, 6));
+  }, [items, stockMovements]);
 
-      const insightsResult = await InvokeLLM({
-        prompt: `You are the Inventory & Supply Chain AI of Genix. Analyze this advanced inventory data and provide actionable FIFO-compliant insights:
+  // Generate static compliance check
+  const checkCompliance = useCallback(() => {
+    const fifoCount = items.filter(i => i.costing_method === 'fifo').length;
+    const wacCount = items.filter(i => i.costing_method === 'weighted_average').length;
+    const lifoCount = items.filter(i => i.costing_method === 'lifo').length;
 
-        Inventory Overview:
-        - Total items: ${inventoryData.length}
-        - Low stock items: ${lowStockCount} (need reordering)
-        - Dead stock items: ${deadStockCount} (not moving)
-        - Total inventory value: $${totalValue.toLocaleString()}
-        - Average inventory turnover: ${avgTurnover}x per year
-        
-        Costing Methods in Use:
-        - FIFO items: ${inventoryData.filter(i => i.costing_method === 'fifo').length}
-        - Weighted Average items: ${inventoryData.filter(i => i.costing_method === 'weighted_average').length}
-        - LIFO items: ${inventoryData.filter(i => i.costing_method === 'lifo').length}
+    const hasLifo = lifoCount > 0;
 
-        Provide 4 strategic insights focusing on:
-        1. FIFO optimization and COGS accuracy
-        2. Reorder timing and safety stock levels based on sales velocity and lead times.
-        3. Dead stock elimination strategies and financial impact.
-        4. Compliance risks (e.g., LIFO under IFRS).
-        
-        Each insight must be actionable and include estimated financial impact.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  recommendation: { type: "string" },
-                  financial_impact: { type: "string" },
-                  priority: { type: "string", enum: ["high", "medium", "low"] },
-                  action_required: { type: "string" }
-                }
-              }
-            }
-          }
+    setCompliance({
+      compliance_status: hasLifo ? "partially_compliant" : "compliant",
+      standard_detected: hasLifo ? "US_GAAP" : "IFRS",
+      issues: hasLifo ? [
+        {
+          issue: "LIFO costing method detected",
+          severity: "warning",
+          solution: "Consider switching to FIFO or Weighted Average for IFRS compliance"
         }
-      });
-      setInsights(insightsResult.insights);
-    } catch (error) {
-      console.error("Error generating insights:", error);
-    }
-  }, [calculateInventoryTurnover]);
-
-  const checkCompliance = useCallback(async () => {
-    try {
-      const inventoryData = await InventoryItem.list();
-      const movementData = await StockMovement.list("-movement_date", 100);
-
-      const complianceCheckResult = await InvokeLLM({
-        prompt: `Analyze inventory compliance status:
-
-        Current Setup:
-        - Total inventory items: ${inventoryData.length}
-        - FIFO items: ${inventoryData.filter(i => i.costing_method === 'fifo').length}
-        - WAC items: ${inventoryData.filter(i => i.costing_method === 'weighted_average').length}
-        - LIFO items: ${inventoryData.filter(i => i.costing_method === 'lifo').length}
-        
-        Check for:
-        1. IFRS compliance (FIFO/WAC only, no LIFO)
-        2. US GAAP compliance (all methods allowed)
-        3. Proper cost flow assumptions
-        4. Audit trail completeness
-        5. Expiry tracking for perishables
-
-        Provide compliance status and recommendations.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            compliance_status: { type: "string", enum: ["compliant", "partially_compliant", "non_compliant"] },
-            standard_detected: { type: "string", enum: ["IFRS", "US_GAAP", "MIXED"] },
-            issues: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  issue: { type: "string" },
-                  severity: { type: "string", enum: ["critical", "warning", "info"] },
-                  solution: { type: "string" }
-                }
-              }
-            },
-            recommendations: {
-              type: "array",
-              items: { type: "string" }
-            }
-          }
-        }
-      });
-      setCompliance(complianceCheckResult);
-    } catch (error) {
-      console.error("Error checking compliance:", error);
-    }
-  }, []);
+      ] : [],
+      recommendations: [
+        "Regular inventory audits recommended",
+        "Maintain proper documentation for all stock movements",
+        "Review costing methods annually"
+      ]
+    });
+  }, [items]);
 
   const filterItems = useCallback(() => {
     let filtered = items;
@@ -223,56 +142,64 @@ export default function Inventory() {
   }, [items, searchQuery, categoryFilter, statusFilter, costingFilter]);
 
   useEffect(() => {
-    loadInventory();
-    loadStockMovements();
-    generateInsights();
-    checkCompliance();
-  }, [loadInventory, loadStockMovements, generateInsights, checkCompliance]);
+    if (items.length > 0) {
+      generateInsights();
+      checkCompliance();
+    }
+  }, [items, generateInsights, checkCompliance]);
 
   useEffect(() => {
     filterItems();
   }, [filterItems]);
 
-  const handleAIQuery = async () => {
+  const handleAIQuery = () => {
     if (!aiQuery.trim()) return;
 
-    try {
-      const response = await InvokeLLM({
-        prompt: `You are the Inventory & Supply Chain AI of Genix. A user is asking a question about inventory.
-        User Query: "${aiQuery}"
-        
-        Your Mission: Answer the query by analyzing real-time data, forecasting demand, and optimizing replenishment. Adhere to costing rules (default FIFO). Explain any recommendations in simple business terms with financial impact.
-        
-        Current Inventory Context:
-        - Total SKUs: ${items.length}
-        - Items needing reorder (below reorder level): ${items.filter(i => i.current_stock <= i.reorder_level).length}
-        - Items expiring in 90 days: ${items.filter(i => i.expiration_date && new Date(i.expiration_date) < new Date(Date.now() + 90*24*60*60*1000)).length}
-        - Potential dead stock (no movement in 180 days): ${items.filter(i => i.status === 'dead_stock').length}
-        
-        Provide a structured, actionable response.`,
-        add_context_from_internet: false
-      });
+    const query = aiQuery.toLowerCase();
+    const analysis = analyzeInventory(items, stockMovements);
+    let response = "";
 
-      setAiResponse(response);
-    } catch (error) {
-      console.error("Error processing AI query:", error);
-      setAiResponse("Sorry, I encountered an error processing your request. Please try again.");
+    const lowStockItems = items.filter(i => i.current_stock <= (i.reorder_level || 10));
+    const deadStockItems = items.filter(i => i.status === 'dead_stock');
+    const totalValue = items.reduce((sum, item) => sum + (item.current_stock * (item.unit_cost || 0)), 0);
+
+    if (query.includes('low stock') || query.includes('reorder') || query.includes('out of stock')) {
+      response = `**Low Stock Analysis**\n\nYou have **${lowStockItems.length}** items below reorder level:\n\n${lowStockItems.length > 0 ? lowStockItems.map(i => `- **${i.name}** (${i.sku})\n  Current: ${i.current_stock} units | Reorder at: ${i.reorder_level}`).join('\n\n') : 'All items are adequately stocked!'}\n\n**AI Recommendation:** ${lowStockItems.length > 0 ? 'Generate purchase orders for these items to avoid stockouts. Estimated stockout cost: $' + (lowStockItems.length * 500).toLocaleString() : 'Continue monitoring stock levels.'}`;
+    } else if (query.includes('dead stock') || query.includes('not moving') || query.includes('slow')) {
+      const deadValue = deadStockItems.reduce((sum, i) => sum + (i.current_stock * (i.unit_cost || 0)), 0);
+      response = `**Dead Stock Analysis**\n\nYou have **${deadStockItems.length}** items classified as dead stock:\n\n${deadStockItems.length > 0 ? deadStockItems.map(i => `- **${i.name}** (${i.sku})\n  Value: $${(i.current_stock * (i.unit_cost || 0)).toLocaleString()}`).join('\n\n') : 'No dead stock detected - great inventory management!'}\n\n**Tied-up Capital:** $${deadValue.toLocaleString()}\n\n**AI Recommendation:** ${deadStockItems.length > 0 ? 'Consider liquidation sales, promotional bundles, or donation for tax benefits.' : 'Keep monitoring slow-moving items.'}`;
+    } else if (query.includes('value') || query.includes('total') || query.includes('worth')) {
+      const categories = [...new Set(items.map(i => i.category || 'uncategorized'))];
+      response = `**Inventory Valuation Report**\n\n**Total Value:** $${totalValue.toLocaleString()}\n**Total SKUs:** ${items.length}\n**Total Units:** ${items.reduce((sum, i) => sum + i.current_stock, 0).toLocaleString()}\n\n**By Category:**\n${categories.map(cat => {
+        const catItems = items.filter(i => (i.category || 'uncategorized') === cat);
+        const catValue = catItems.reduce((sum, i) => sum + (i.current_stock * (i.unit_cost || 0)), 0);
+        return `- **${cat}:** $${catValue.toLocaleString()} (${catItems.length} items)`;
+      }).join('\n')}\n\n**AI Insight:** ${analysis.insights.length > 0 ? analysis.insights[0].description : 'Inventory levels are optimal.'}`;
+    } else if (query.includes('abc') || query.includes('classification') || query.includes('priority')) {
+      const aItems = items.filter(i => i.abc_classification === 'A');
+      const bItems = items.filter(i => i.abc_classification === 'B');
+      const cItems = items.filter(i => !i.abc_classification || i.abc_classification === 'C');
+      response = `**ABC Classification Analysis**\n\n**A Items (High Priority):** ${aItems.length} items\n- High-value, fast-moving\n- Require close monitoring\n\n**B Items (Medium Priority):** ${bItems.length} items\n- Moderate value and velocity\n- Regular review needed\n\n**C Items (Low Priority):** ${cItems.length} items\n- Lower value, slower moving\n- Periodic review sufficient\n\n**AI Recommendation:** Focus reorder optimization on A-class items for maximum impact on revenue.`;
+    } else if (query.includes('expir') || query.includes('expire') || query.includes('shelf life')) {
+      const expiringItems = items.filter(i => i.expiration_date && new Date(i.expiration_date) < new Date(Date.now() + 30*24*60*60*1000));
+      response = `**Expiration Alert**\n\n**Items expiring within 30 days:** ${expiringItems.length}\n\n${expiringItems.length > 0 ? expiringItems.map(i => `- **${i.name}** - Expires: ${new Date(i.expiration_date).toLocaleDateString()}`).join('\n') : 'No items expiring soon!'}\n\n**AI Recommendation:** ${expiringItems.length > 0 ? 'Consider promotional pricing or bundle deals to move these items before expiration.' : 'Continue regular expiration monitoring.'}`;
+    } else if (query.includes('recommend') || query.includes('suggest') || query.includes('what should')) {
+      response = `**AI Recommendations**\n\n${analysis.recommendations.map((rec, i) => `${i + 1}. **${rec.action}**\n   ${rec.description}\n   Impact: ${rec.impact}`).join('\n\n')}\n\n**Priority Actions:**\n${analysis.insights.filter(i => i.priority === 'high').map(i => `- ${i.title}: ${i.description}`).join('\n') || '- No critical issues detected'}`;
+    } else {
+      response = `**Inventory Intelligence Report**\n\n**Quick Stats:**\n- Total SKUs: ${items.length}\n- Total Value: $${totalValue.toLocaleString()}\n- Low Stock Items: ${lowStockItems.length}\n- Dead Stock Items: ${deadStockItems.length}\n\n**Key Insights:**\n${analysis.insights.slice(0, 3).map(i => `- **${i.title}:** ${i.description}`).join('\n')}\n\n**Try asking about:**\n- "Show me low stock items"\n- "What's my total inventory value?"\n- "ABC classification analysis"\n- "Items expiring soon"\n- "What do you recommend?"`;
     }
+
+    setAiResponse(response);
   };
 
-  const handleSave = async (itemData) => {
-    try {
-      if (editingItem) {
-        await InventoryItem.update(editingItem.id, itemData);
-      } else {
-        await InventoryItem.create(itemData);
-      }
-      loadInventory();
-      setShowForm(false);
-      setEditingItem(null);
-    } catch (error) {
-      console.error("Error saving item:", error);
+  const handleSave = (itemData) => {
+    if (editingItem) {
+      updateItem(editingItem.id, itemData);
+    } else {
+      createItem(itemData);
     }
+    setShowForm(false);
+    setEditingItem(null);
   };
 
   const getStatusColor = (status) => {
@@ -368,11 +295,13 @@ export default function Inventory() {
             </div>
             {aiResponse && (
               <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-3">
                   <Brain className="w-4 h-4 text-[var(--genix-purple)]" />
                   <span className="font-medium text-slate-700">AI Analysis:</span>
                 </div>
-                <p className="text-slate-600 whitespace-pre-wrap">{aiResponse}</p>
+                <div className="prose prose-sm max-w-none text-slate-600">
+                  <ReactMarkdown>{aiResponse}</ReactMarkdown>
+                </div>
               </div>
             )}
           </CardContent>
@@ -487,6 +416,7 @@ export default function Inventory() {
                     <SelectContent>
                       <SelectItem value="all">All Categories</SelectItem>
                       <SelectItem value="electronics">Electronics</SelectItem>
+                      <SelectItem value="office">Office</SelectItem>
                       <SelectItem value="apparel">Apparel</SelectItem>
                       <SelectItem value="food">Food</SelectItem>
                       <SelectItem value="pharmaceutical">Pharmaceutical</SelectItem>

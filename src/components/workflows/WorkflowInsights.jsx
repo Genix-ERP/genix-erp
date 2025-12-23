@@ -2,7 +2,6 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Brain, Zap, TrendingUp, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { base44 } from '@/api/base44Client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 
@@ -27,16 +26,6 @@ export default function WorkflowInsights({ insights }) {
         </div>
         <Badge className="bg-[var(--genix-purple)]/10 text-[var(--genix-purple)] border-[var(--genix-purple)]/20">
           AI Insights
-        </Badge>
-        <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-          <a 
-            href={base44.agents.getWhatsAppConnectURL('workflow_manager')} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center gap-1"
-          >
-            💬 WhatsApp Agent
-          </a>
         </Badge>
       </div>
       
