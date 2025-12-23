@@ -36,9 +36,10 @@ const DEMO_USERS = [
 ];
 
 // Check if backend is available
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 const checkBackendAvailable = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/v1/info', {
+    const response = await fetch(`${API_BASE_URL}/info`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
