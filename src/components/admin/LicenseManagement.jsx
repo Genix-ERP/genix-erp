@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { License } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export default function LicenseManagement({ onUpdate }) {
 
   const loadLicenses = async () => {
     try {
-      const data = await base44.entities.License.list('-created_date');
+      const data = await License.list('-created_date');
       setLicenses(data);
     } catch (error) {
       console.error("Error loading licenses:", error);
@@ -46,7 +46,7 @@ export default function LicenseManagement({ onUpdate }) {
   const generateLicense = async () => {
     try {
       const licenseKey = `GENIX-${Date.now()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-      await base44.entities.License.create({
+      await License.create({
         company_id: "default",
         license_key: licenseKey,
         license_type: "user",

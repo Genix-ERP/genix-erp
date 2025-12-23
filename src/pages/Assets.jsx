@@ -1,23 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain } from 'lucide-react';
+import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { analyzeAssets } from '@/api/services/aiAnalytics';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Assets() {
-  const [assets, setAssets] = useState([]);
+  const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
+
+  // AI Analysis
+  const assetAnalysis = useMemo(() => analyzeAssets(rawAssets), [rawAssets]);
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editAsset, setEditAsset] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newAsset, setNewAsset] = useState({
     asset_name: '',
@@ -29,9 +35,20 @@ export default function Assets() {
     depreciation_method: 'straight_line'
   });
 
-  useEffect(() => {
-    loadAssets();
-  }, []);
+  // Calculate depreciation for all assets
+  const assets = rawAssets.map(asset => {
+    const purchaseDate = new Date(asset.purchase_date);
+    const yearsElapsed = (new Date() - purchaseDate) / (1000 * 60 * 60 * 24 * 365);
+    const annualDepreciation = (asset.purchase_cost - (asset.salvage_value || 0)) / asset.useful_life_years;
+    const accumulated = Math.min(annualDepreciation * yearsElapsed, asset.purchase_cost - (asset.salvage_value || 0));
+    const currentValue = asset.purchase_cost - accumulated;
+
+    return {
+      ...asset,
+      accumulated_depreciation: accumulated,
+      current_value: currentValue
+    };
+  });
 
   useEffect(() => {
     let filtered = assets;
@@ -47,36 +64,10 @@ export default function Assets() {
     setFilteredAssets(filtered);
   }, [assets, searchQuery, categoryFilter]);
 
-  const loadAssets = async () => {
-    try {
-      const data = await base44.entities.FixedAsset.list('-created_date', 100);
-      
-      // Calculate depreciation
-      const assetsWithDepreciation = data.map(asset => {
-        const purchaseDate = new Date(asset.purchase_date);
-        const yearsElapsed = (new Date() - purchaseDate) / (1000 * 60 * 60 * 24 * 365);
-        const annualDepreciation = (asset.purchase_cost - (asset.salvage_value || 0)) / asset.useful_life_years;
-        const accumulated = Math.min(annualDepreciation * yearsElapsed, asset.purchase_cost - (asset.salvage_value || 0));
-        const currentValue = asset.purchase_cost - accumulated;
-        
-        return {
-          ...asset,
-          accumulated_depreciation: accumulated,
-          current_value: currentValue
-        };
-      });
-      
-      setAssets(assetsWithDepreciation);
-      setFilteredAssets(assetsWithDepreciation);
-    } catch (error) {
-      console.error('Error loading assets:', error);
-    }
-    setIsLoading(false);
-  };
-
   const handleCreateAsset = async () => {
+    setIsSubmitting(true);
     try {
-      const assetData = {
+      await createAsset({
         ...newAsset,
         asset_code: newAsset.asset_code || `AST-${Date.now()}`,
         purchase_cost: parseFloat(newAsset.purchase_cost),
@@ -84,12 +75,8 @@ export default function Assets() {
         current_value: parseFloat(newAsset.purchase_cost),
         accumulated_depreciation: 0,
         status: 'active'
-      };
-      
-      await base44.entities.FixedAsset.create(assetData);
+      });
       setShowCreateModal(false);
-      loadAssets();
-      
       setNewAsset({
         asset_name: '',
         asset_code: '',
@@ -101,6 +88,44 @@ export default function Assets() {
       });
     } catch (error) {
       console.error('Error creating asset:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditAsset = (asset) => {
+    setEditAsset({
+      ...asset,
+      purchase_cost: asset.purchase_cost || 0,
+      useful_life_years: asset.useful_life_years || 5
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateAsset = async () => {
+    if (!editAsset) return;
+
+    setIsSubmitting(true);
+    try {
+      updateAsset(editAsset.id, {
+        asset_name: editAsset.asset_name,
+        asset_code: editAsset.asset_code,
+        asset_category: editAsset.asset_category,
+        purchase_date: editAsset.purchase_date,
+        purchase_cost: parseFloat(editAsset.purchase_cost) || 0,
+        useful_life_years: parseInt(editAsset.useful_life_years) || 5,
+        depreciation_method: editAsset.depreciation_method,
+        status: editAsset.status,
+        salvage_value: parseFloat(editAsset.salvage_value) || 0,
+        location: editAsset.location,
+        next_maintenance_date: editAsset.next_maintenance_date
+      });
+      setShowEditModal(false);
+      setEditAsset(null);
+    } catch (error) {
+      console.error('Error updating asset:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -195,8 +220,55 @@ export default function Assets() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(assetAnalysis.insights.length > 0 || assetAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-orange-600" />
+                AI Asset Insights
+                <Badge className="bg-orange-100 text-orange-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {assetAnalysis.insights.slice(0, 3).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-orange-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-orange-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {assetAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {assetAnalysis.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-orange-100">
+                      <Lightbulb className="w-3 h-3 text-yellow-500" />
+                      <span className="text-slate-700">{rec.action}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Category Distribution */}
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -286,7 +358,7 @@ export default function Assets() {
                               <Badge variant="outline">{asset.asset_category}</Badge>
                             </div>
                             <p className="text-sm text-slate-500 mb-3">{asset.asset_code}</p>
-                            
+
                             <div className="grid grid-cols-4 gap-4 text-sm">
                               <div>
                                 <p className="text-slate-500">Purchase Cost</p>
@@ -313,6 +385,9 @@ export default function Assets() {
                               </div>
                             )}
                           </div>
+                          <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title="Edit Asset">
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -418,15 +493,160 @@ export default function Assets() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateAsset} 
+                <Button
+                  onClick={handleCreateAsset}
                   className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
-                  disabled={!newAsset.asset_name || !newAsset.purchase_cost}
+                  disabled={!newAsset.asset_name || !newAsset.purchase_cost || isSubmitting}
                 >
-                  Add Asset
+                  {isSubmitting ? 'Adding...' : 'Add Asset'}
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Asset Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Asset</DialogTitle>
+            </DialogHeader>
+            {editAsset && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Asset Name *</label>
+                    <Input
+                      value={editAsset.asset_name}
+                      onChange={(e) => setEditAsset({...editAsset, asset_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Asset Code</label>
+                    <Input
+                      value={editAsset.asset_code}
+                      onChange={(e) => setEditAsset({...editAsset, asset_code: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Category</label>
+                    <Select value={editAsset.asset_category || 'equipment'} onValueChange={(value) => setEditAsset({...editAsset, asset_category: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="machinery">Machinery</SelectItem>
+                        <SelectItem value="equipment">Equipment</SelectItem>
+                        <SelectItem value="vehicles">Vehicles</SelectItem>
+                        <SelectItem value="buildings">Buildings</SelectItem>
+                        <SelectItem value="furniture">Furniture</SelectItem>
+                        <SelectItem value="computers">Computers</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Status</label>
+                    <Select value={editAsset.status || 'active'} onValueChange={(value) => setEditAsset({...editAsset, status: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="under_maintenance">Under Maintenance</SelectItem>
+                        <SelectItem value="retired">Retired</SelectItem>
+                        <SelectItem value="disposed">Disposed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Purchase Date</label>
+                    <Input
+                      type="date"
+                      value={editAsset.purchase_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditAsset({...editAsset, purchase_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Next Maintenance Date</label>
+                    <Input
+                      type="date"
+                      value={editAsset.next_maintenance_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditAsset({...editAsset, next_maintenance_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Purchase Cost</label>
+                    <Input
+                      type="number"
+                      value={editAsset.purchase_cost}
+                      onChange={(e) => setEditAsset({...editAsset, purchase_cost: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Salvage Value</label>
+                    <Input
+                      type="number"
+                      value={editAsset.salvage_value || 0}
+                      onChange={(e) => setEditAsset({...editAsset, salvage_value: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Useful Life (years)</label>
+                    <Input
+                      type="number"
+                      value={editAsset.useful_life_years}
+                      onChange={(e) => setEditAsset({...editAsset, useful_life_years: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Depreciation Method</label>
+                    <Select value={editAsset.depreciation_method || 'straight_line'} onValueChange={(value) => setEditAsset({...editAsset, depreciation_method: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="straight_line">Straight Line</SelectItem>
+                        <SelectItem value="declining_balance">Declining Balance</SelectItem>
+                        <SelectItem value="units_of_production">Units of Production</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Location</label>
+                    <Input
+                      placeholder="e.g., Main Office, Warehouse A"
+                      value={editAsset.location || ''}
+                      onChange={(e) => setEditAsset({...editAsset, location: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditAsset(null); }} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdateAsset}
+                    className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                    disabled={!editAsset.asset_name || isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

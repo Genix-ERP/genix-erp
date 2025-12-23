@@ -1,72 +1,205 @@
-import { base44 } from './base44Client';
+// Entity wrappers that use Go backend API services
+// These provide a similar interface to the old base44 entities
 
+import { hrService } from './services/hr';
+import apiClient from './client';
 
-export const Customer = base44.entities.Customer;
+// Generic entity wrapper for endpoints that follow REST conventions
+const createGenericEntity = (endpoint) => ({
+  async list(sortOrder = '') {
+    try {
+      const params = {};
+      if (sortOrder) {
+        if (sortOrder.startsWith('-')) {
+          params.sort_by = sortOrder.substring(1);
+          params.sort_order = 'DESC';
+        } else {
+          params.sort_by = sortOrder;
+          params.sort_order = 'ASC';
+        }
+      }
+      const response = await apiClient.get(endpoint, { params });
+      return response.data.data || [];
+    } catch (error) {
+      console.error(`Error listing ${endpoint}:`, error);
+      return [];
+    }
+  },
+  async filter(filters = {}) {
+    try {
+      const response = await apiClient.get(endpoint, { params: filters });
+      return response.data.data || [];
+    } catch (error) {
+      console.error(`Error filtering ${endpoint}:`, error);
+      return [];
+    }
+  },
+  async get(id) {
+    try {
+      const response = await apiClient.get(`${endpoint}/${id}`);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error getting ${endpoint}/${id}:`, error);
+      return null;
+    }
+  },
+  async create(data) {
+    const response = await apiClient.post(endpoint, data);
+    return response.data.data;
+  },
+  async update(id, data) {
+    const response = await apiClient.put(`${endpoint}/${id}`, data);
+    return response.data.data;
+  },
+  async delete(id) {
+    await apiClient.delete(`${endpoint}/${id}`);
+  }
+});
 
-export const InventoryItem = base44.entities.InventoryItem;
+// Generate unique ID with random suffix to prevent duplicates
+const generateUniqueId = (prefix = '') => {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 9);
+  return prefix ? `${prefix}_${timestamp}_${random}` : `${timestamp}_${random}`;
+};
 
-export const FinancialTransaction = base44.entities.FinancialTransaction;
+// Local storage entity for features that don't have backend endpoints yet
+const createLocalEntity = (storageKey) => ({
+  async list() {
+    try {
+      const data = localStorage.getItem(storageKey);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+  async filter(filters = {}) {
+    const items = await this.list();
+    return items.filter(item => {
+      for (const [key, value] of Object.entries(filters)) {
+        if (item[key] !== value) return false;
+      }
+      return true;
+    });
+  },
+  async get(id) {
+    const items = await this.list();
+    return items.find(item => item.id === id) || null;
+  },
+  async create(data) {
+    const items = await this.list();
+    const newItem = { ...data, id: data.id || generateUniqueId(), created_at: new Date().toISOString() };
+    items.push(newItem);
+    localStorage.setItem(storageKey, JSON.stringify(items));
+    return newItem;
+  },
+  async update(id, data) {
+    const items = await this.list();
+    const index = items.findIndex(item => item.id === id);
+    if (index !== -1) {
+      items[index] = { ...items[index], ...data, updated_at: new Date().toISOString() };
+      localStorage.setItem(storageKey, JSON.stringify(items));
+      return items[index];
+    }
+    throw new Error('Item not found');
+  },
+  async delete(id) {
+    const items = await this.list();
+    const filtered = items.filter(item => item.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(filtered));
+  }
+});
 
-export const Workflow = base44.entities.Workflow;
+// CRM / Contacts - use Go backend
+export const Customer = createGenericEntity('/contacts');
+export const Lead = createLocalEntity('genix_leads');
+export const Opportunity = createLocalEntity('genix_opportunities');
+export const CallLog = createLocalEntity('genix_call_logs');
+export const CommunicationLog = createLocalEntity('genix_communication_logs');
 
-export const StockMovement = base44.entities.StockMovement;
+// Inventory - use Go backend
+export const InventoryItem = createGenericEntity('/inventory');
+export const StockMovement = createLocalEntity('genix_stock_movements');
 
-export const Employee = base44.entities.Employee;
+// HR - use Go backend
+export const Employee = {
+  async list(sortOrder = '') {
+    try {
+      const params = {};
+      if (sortOrder) {
+        if (sortOrder.startsWith('-')) {
+          params.sort_by = sortOrder.substring(1);
+          params.sort_order = 'DESC';
+        } else {
+          params.sort_by = sortOrder;
+          params.sort_order = 'ASC';
+        }
+      }
+      return await hrService.listEmployees(params);
+    } catch (error) {
+      console.error('Error listing employees:', error);
+      return [];
+    }
+  },
+  async get(id) {
+    return await hrService.getEmployee(id);
+  },
+  async create(data) {
+    return await hrService.createEmployee(data);
+  },
+  async update(id, data) {
+    return await hrService.updateEmployee(id, data);
+  },
+  async delete(id) {
+    return await hrService.deleteEmployee(id);
+  }
+};
 
-export const Lead = base44.entities.Lead;
+// Finance - use Go backend where available
+export const FinancialTransaction = createLocalEntity('genix_financial_transactions');
+export const ChartOfAccounts = createGenericEntity('/accounts');
+export const JournalEntry = createGenericEntity('/journal-entries');
+export const JournalLine = createLocalEntity('genix_journal_lines');
+export const Invoice = createGenericEntity('/sales-invoices');
+export const BankAccount = createLocalEntity('genix_bank_accounts');
+export const FixedAsset = createLocalEntity('genix_fixed_assets');
+export const TaxConfiguration = createGenericEntity('/tax-rates');
 
-export const Opportunity = base44.entities.Opportunity;
+// Sales - use Go backend
+export const SalesOrder = createGenericEntity('/sales-orders');
 
-export const CallLog = base44.entities.CallLog;
+// Purchase - use Go backend
+export const PurchaseOrder = createGenericEntity('/purchase-orders');
 
-export const CommunicationLog = base44.entities.CommunicationLog;
+// Workflows - local storage for now
+export const Workflow = createLocalEntity('genix_workflows');
 
-export const Notification = base44.entities.Notification;
+// Notifications - use Go backend
+export const Notification = createGenericEntity('/notifications');
 
-export const ChartOfAccounts = base44.entities.ChartOfAccounts;
+// Company / Admin - local storage for now
+export const Company = createLocalEntity('genix_companies');
+export const InstalledApp = createLocalEntity('genix_installed_apps');
+export const Subscription = createLocalEntity('genix_subscriptions');
+export const License = createLocalEntity('genix_licenses');
+export const RolePermission = createGenericEntity('/permissions');
 
-export const JournalEntry = base44.entities.JournalEntry;
+// Manufacturing - local storage for now
+export const BillOfMaterials = createLocalEntity('genix_bom');
+export const WorkCenter = createLocalEntity('genix_work_centers');
+export const ProductionOrder = createLocalEntity('genix_production_orders');
+export const WorkOrder = createLocalEntity('genix_work_orders');
+export const QualityCheck = createLocalEntity('genix_quality_checks');
 
-export const JournalLine = base44.entities.JournalLine;
+// Projects - local storage for now
+export const Project = createLocalEntity('genix_projects');
+export const Task = createLocalEntity('genix_tasks');
 
-export const Invoice = base44.entities.Invoice;
+// Expenses - local storage for now
+export const ExpenseClaim = createLocalEntity('genix_expense_claims');
 
-export const BankAccount = base44.entities.BankAccount;
+// Payroll - local storage for now
+export const Payroll = createLocalEntity('genix_payroll');
 
-export const FixedAsset = base44.entities.FixedAsset;
-
-export const TaxConfiguration = base44.entities.TaxConfiguration;
-
-export const Company = base44.entities.Company;
-
-export const InstalledApp = base44.entities.InstalledApp;
-
-export const Subscription = base44.entities.Subscription;
-
-export const License = base44.entities.License;
-
-export const BillOfMaterials = base44.entities.BillOfMaterials;
-
-export const WorkCenter = base44.entities.WorkCenter;
-
-export const ProductionOrder = base44.entities.ProductionOrder;
-
-export const WorkOrder = base44.entities.WorkOrder;
-
-export const QualityCheck = base44.entities.QualityCheck;
-
-export const PurchaseOrder = base44.entities.PurchaseOrder;
-
-export const Project = base44.entities.Project;
-
-export const Task = base44.entities.Task;
-
-export const SalesOrder = base44.entities.SalesOrder;
-
-export const ExpenseClaim = base44.entities.ExpenseClaim;
-
-export const Payroll = base44.entities.Payroll;
-
-export const Contract = base44.entities.Contract;
-
-export const RolePermission = base44.entities.RolePermission;
+// Contracts - local storage for now
+export const Contract = createLocalEntity('genix_contracts');

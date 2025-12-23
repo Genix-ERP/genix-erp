@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { InventoryItem, ProductionOrder, BillOfMaterials } from '@/api/entities';
+import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,33 +9,43 @@ import { Zap, Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react
 export default function MRPPlanning() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [mrpResults, setMrpResults] = useState(null);
+  const [error, setError] = useState(null);
 
   const generateMRPPlan = async () => {
     setIsGenerating(true);
+    setError(null);
     try {
-      // Get inventory and production data
+      // Get inventory and production data - handle errors gracefully
       const [inventory, orders, boms] = await Promise.all([
-        base44.entities.InventoryItem.list(),
-        base44.entities.ProductionOrder.list(),
-        base44.entities.BillOfMaterials.list()
+        InventoryItem.list().catch(() => []),
+        ProductionOrder.list().catch(() => []),
+        BillOfMaterials.list().catch(() => [])
       ]);
 
+      // Build more detailed prompt with actual data
+      const inventoryDetails = inventory.slice(0, 10).map(i =>
+        `${i.name || i.product_name}: ${i.quantity_on_hand || 0} units`
+      ).join(', ');
+
+      const ordersDetails = orders.filter(o => o.status === 'in_progress' || o.status === 'confirmed')
+        .slice(0, 5).map(o => `${o.product_name}: ${o.quantity_to_produce} units`).join(', ');
+
       // Use AI to generate MRP recommendations
-      const plan = await base44.integrations.Core.InvokeLLM({
+      const plan = await InvokeLLM({
         prompt: `As a manufacturing planning AI, analyze this data and create an MRP (Material Requirements Planning) plan:
 
-Inventory Items: ${inventory.length} items with varying stock levels
-Active Production Orders: ${orders.filter(o => o.status === 'in_progress').length}
+Inventory Summary: ${inventory.length} items. Sample: ${inventoryDetails || 'No inventory items'}
+Active/Confirmed Production Orders: ${orders.filter(o => o.status === 'in_progress' || o.status === 'confirmed').length}. Sample: ${ordersDetails || 'No active orders'}
 Available BOMs: ${boms.length}
 
-Provide:
-1. Materials to procure (what, when, how much)
-2. Production schedule recommendations
-3. Bottleneck identification
-4. Lead time optimization suggestions
-5. Risk assessment and mitigation
+Based on this data, provide a realistic MRP plan with:
+1. Materials to procure (what, when, how much) - based on inventory levels and production needs
+2. Production schedule recommendations - when to start/complete production orders
+3. Bottleneck identification - potential constraints or issues
+4. Lead time optimization suggestions - how to improve delivery times
 
-Format as actionable recommendations with priorities.`,
+Return a JSON object with arrays for: procurement_needs, production_schedule, bottlenecks, optimization_tips.
+Each array should have 2-4 realistic items.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -89,9 +100,16 @@ Format as actionable recommendations with priorities.`,
         }
       });
 
-      setMrpResults(plan);
+      // Check if we got valid results
+      if (plan && (plan.procurement_needs?.length > 0 || plan.production_schedule?.length > 0 ||
+          plan.bottlenecks?.length > 0 || plan.optimization_tips?.length > 0)) {
+        setMrpResults(plan);
+      } else {
+        setError('AI returned empty results. Please ensure you have inventory, production orders, or BOMs in the system.');
+      }
     } catch (error) {
       console.error('Error generating MRP plan:', error);
+      setError('Failed to generate MRP plan. Please check your connection and try again.');
     }
     setIsGenerating(false);
   };
@@ -133,6 +151,18 @@ Format as actionable recommendations with priorities.`,
         </CardHeader>
       </Card>
 
+      {/* Error Display */}
+      {error && (
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-red-700">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {!mrpResults ? (
         <Card className="bg-white/80 backdrop-blur-sm">
           <CardContent className="text-center py-16">
@@ -141,7 +171,7 @@ Format as actionable recommendations with priorities.`,
             </div>
             <h3 className="text-lg font-semibold text-slate-900 mb-2">No MRP Plan Generated Yet</h3>
             <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-              Click "Generate MRP Plan" to get AI-powered recommendations for material procurement, 
+              Click "Generate MRP Plan" to get AI-powered recommendations for material procurement,
               production scheduling, and optimization opportunities.
             </p>
           </CardContent>

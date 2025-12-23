@@ -44,10 +44,23 @@ import {
   useSidebar
 } from "@/components/ui/sidebar";
 import LanguageSelector from "@/components/ui/language-selector";
+import CompanySwitcher from "@/components/ui/company-switcher";
 import { LanguageProvider, useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
+import { CustomersProvider } from "@/components/contexts/CustomersContext";
+import { VendorsProvider } from "@/components/contexts/VendorsContext";
+import { InventoryProvider } from "@/components/contexts/InventoryContext";
+import { FinancialsProvider } from "@/components/contexts/FinancialsContext";
+import { ModulesProvider } from "@/components/contexts/ModulesContext";
+import { AIProvider } from "@/components/contexts/AIContext";
+import { SubscriptionProvider } from "@/components/contexts/SubscriptionContext";
+import { CompanyProvider } from "@/components/contexts/CompanyContext";
+import { RolesProvider } from "@/components/contexts/RolesContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
+import { useInventory } from "@/components/contexts/InventoryContext";
+import { useModules } from "@/components/contexts/ModulesContext";
+import { useFinancials } from "@/components/contexts/FinancialsContext";
 
 function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
@@ -55,7 +68,31 @@ function LayoutContent({ children, currentPageName }) {
   const { t } = useTranslation(language);
   const { installedApps, isAppInstalled } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
-  const { user: currentUser, logout } = useAuth();
+  const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
+
+  // Get data for dynamic AI insights
+  const { items: inventory } = useInventory();
+  const { salesOrders } = useModules();
+  const { financialTransactions } = useFinancials();
+
+  // Calculate dynamic insights
+  const dynamicInsights = React.useMemo(() => {
+    const lowStockCount = inventory.filter(i => i.current_stock <= (i.reorder_level || 10)).length;
+
+    const monthlyRevenue = {};
+    financialTransactions.filter(t => t.transaction_type === 'income').forEach(t => {
+      const month = new Date(t.date).toLocaleString('default', { month: 'short' });
+      monthlyRevenue[month] = (monthlyRevenue[month] || 0) + t.amount;
+    });
+    const months = Object.keys(monthlyRevenue);
+    const lastMonth = monthlyRevenue[months[months.length - 1]] || 0;
+    const prevMonth = monthlyRevenue[months[months.length - 2]] || 0;
+    const revenueGrowth = prevMonth > 0 ? ((lastMonth - prevMonth) / prevMonth * 100).toFixed(0) : 0;
+
+    const activeOrders = salesOrders.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length;
+
+    return { lowStockCount, revenueGrowth, activeOrders };
+  }, [inventory, financialTransactions, salesOrders]);
 
   // Map app IDs to navigation items
   const appNavigationMap = {
@@ -184,8 +221,8 @@ function LayoutContent({ children, currentPageName }) {
     // Add remaining core items (AI Assistant, Workflows, Apps, Settings)
     dynamicItems.push(...coreNavigationItems.slice(1));
 
-    // Add Admin Panel if user is admin
-    if (currentUser?.role === 'admin' || currentUser?.role === 'system_admin') {
+    // Add Admin Panel if user is site admin
+    if (isSiteAdmin()) {
       dynamicItems.push({
         title: t("admin_panel"),
         url: createPageUrl("AdminPanel"),
@@ -222,9 +259,9 @@ function LayoutContent({ children, currentPageName }) {
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
           <SidebarHeader className="border-b border-slate-200/60 px-4 py-3">
             <div className="flex flex-col gap-2">
-              <img 
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png" 
-                alt="Genix Logo" 
+              <img
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+                alt="Genix Logo"
                 className="h-36 w-auto object-contain genix-logo-transparent -mt-2"
               />
               <div className="flex items-center gap-2">
@@ -233,6 +270,10 @@ function LayoutContent({ children, currentPageName }) {
                   AI-Powered ERP
                 </span>
                 <div className="h-[1px] flex-1 bg-gradient-to-l from-[var(--genix-blue)] to-transparent opacity-30"></div>
+              </div>
+              {/* Company Switcher */}
+              <div className="mt-2 border-t border-slate-200/60 pt-3">
+                <CompanySwitcher />
               </div>
             </div>
           </SidebarHeader>
@@ -299,16 +340,25 @@ function LayoutContent({ children, currentPageName }) {
                 <div className="px-3 py-4 bg-gradient-to-br from-[var(--genix-blue)]/5 via-[var(--genix-purple)]/5 to-[var(--genix-blue)]/5 rounded-xl border border-[var(--genix-blue)]/10">
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm">
-                      <div className="w-2 h-2 bg-[var(--genix-green)] rounded-full animate-pulse"></div>
-                      <span className="text-slate-600 text-xs">{t("revenue")} trending +12%</span>
+                      <div className={`w-2 h-2 ${dynamicInsights.revenueGrowth >= 0 ? 'bg-[var(--genix-green)]' : 'bg-red-500'} rounded-full animate-pulse`}></div>
+                      <span className="text-slate-600 text-xs">
+                        {t("revenue")} {dynamicInsights.revenueGrowth >= 0 ? '+' : ''}{dynamicInsights.revenueGrowth}%
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <div className="w-2 h-2 bg-[var(--genix-orange)] rounded-full"></div>
-                      <span className="text-slate-600 text-xs">3 {t("low_stock_items").toLowerCase()}</span>
+                      <div className={`w-2 h-2 ${dynamicInsights.lowStockCount > 0 ? 'bg-[var(--genix-orange)]' : 'bg-[var(--genix-green)]'} rounded-full`}></div>
+                      <span className="text-slate-600 text-xs">
+                        {dynamicInsights.lowStockCount > 0
+                          ? `${dynamicInsights.lowStockCount} ${t("low_stock_items").toLowerCase()}`
+                          : 'Stock levels OK'
+                        }
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <div className="w-2 h-2 bg-[var(--genix-blue)] rounded-full"></div>
-                      <span className="text-slate-600 text-xs">5 {t("workflows").toLowerCase()} automated</span>
+                      <span className="text-slate-600 text-xs">
+                        {dynamicInsights.activeOrders} active orders
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -328,7 +378,7 @@ function LayoutContent({ children, currentPageName }) {
                   {currentUser?.full_name || 'User'}
                 </p>
                 <p className="text-[10px] text-slate-500 truncate">
-                  {currentUser?.role === 'admin' ? 'Administrator' : 'User'}
+                  {isSiteAdmin() ? 'Sayt Administratori' : isOwner() ? 'Egasi' : 'Foydalanuvchi'}
                 </p>
               </div>
               <Button
@@ -387,9 +437,27 @@ function LayoutContent({ children, currentPageName }) {
 export default function Layout({ children, currentPageName }) {
   return (
     <LanguageProvider>
-      <InstalledAppsProvider>
-        <LayoutContent children={children} currentPageName={currentPageName} />
-      </InstalledAppsProvider>
+      <SubscriptionProvider>
+        <CompanyProvider>
+          <RolesProvider>
+            <InstalledAppsProvider>
+              <CustomersProvider>
+                <VendorsProvider>
+                  <InventoryProvider>
+                  <FinancialsProvider>
+                    <ModulesProvider>
+                      <AIProvider>
+                        <LayoutContent children={children} currentPageName={currentPageName} />
+                      </AIProvider>
+                    </ModulesProvider>
+                  </FinancialsProvider>
+                </InventoryProvider>
+                </VendorsProvider>
+              </CustomersProvider>
+            </InstalledAppsProvider>
+          </RolesProvider>
+        </CompanyProvider>
+      </SubscriptionProvider>
     </LanguageProvider>
   );
 }

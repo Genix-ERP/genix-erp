@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,166 +6,96 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useFinancials } from '@/components/contexts/FinancialsContext';
 
 export default function AccountsPayable() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  
-  const [bills, setBills] = useState([]);
+  const {
+    vendorBills,
+    createVendorBill,
+    updateVendorBill,
+    isLoading
+  } = useFinancials();
+
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newBill, setNewBill] = useState({
+    partner_id: '',
+    invoice_number: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    due_date: '',
+    total_amount: 0,
+    tax_amount: 0,
+    subtotal: 0
+  });
 
   useEffect(() => {
-    loadBills();
-  }, []);
+    setFilteredBills(vendorBills);
+  }, [vendorBills]);
 
   useEffect(() => {
-    let filtered = bills;
-    
+    let filtered = vendorBills;
+
     if (statusFilter !== 'all') {
       filtered = filtered.filter(b => b.status === statusFilter);
     }
-    
+
     if (searchQuery) {
       filtered = filtered.filter(b =>
         b.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.partner_id?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     setFilteredBills(filtered);
-  }, [bills, searchQuery, statusFilter]);
+  }, [vendorBills, searchQuery, statusFilter]);
 
-  const loadBills = async () => {
-    try {
-      const data = await base44.entities.Invoice.filter({ invoice_type: 'vendor_bill' }, '-created_date', 100);
-      setBills(data);
-      setFilteredBills(data);
-    } catch (error) {
-      console.error('Error loading vendor bills:', error);
-    }
-    setIsLoading(false);
+  const handleCreateBill = () => {
+    const billData = {
+      partner_id: newBill.partner_id,
+      invoice_date: newBill.invoice_date,
+      due_date: newBill.due_date,
+      total_amount: parseFloat(newBill.total_amount) || 0,
+      tax_amount: parseFloat(newBill.tax_amount) || 0,
+      subtotal: parseFloat(newBill.subtotal) || 0,
+      amount_due: parseFloat(newBill.total_amount) || 0,
+      amount_paid: 0,
+      status: 'draft',
+      three_way_match_status: 'pending'
+    };
+
+    createVendorBill(billData);
+    setShowCreateModal(false);
+    setNewBill({
+      partner_id: '',
+      invoice_number: '',
+      invoice_date: new Date().toISOString().split('T')[0],
+      due_date: '',
+      total_amount: 0,
+      tax_amount: 0,
+      subtotal: 0
+    });
   };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setUploadedFile(file);
-    setIsProcessing(true);
-
-    try {
-      // Upload file
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-
-      // Extract data using AI
-      const extractedData = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: "object",
-          properties: {
-            invoice_number: { type: "string" },
-            vendor_name: { type: "string" },
-            invoice_date: { type: "string" },
-            due_date: { type: "string" },
-            total_amount: { type: "number" },
-            tax_amount: { type: "number" },
-            subtotal: { type: "number" },
-            line_items: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  description: { type: "string" },
-                  quantity: { type: "number" },
-                  unit_price: { type: "number" },
-                  amount: { type: "number" }
-                }
-              }
-            }
-          }
-        }
-      });
-
-      if (extractedData.status === 'success') {
-        // Calculate fraud score using AI
-        const fraudAnalysis = await base44.integrations.Core.InvokeLLM({
-          prompt: `Analyze this vendor invoice for potential fraud or anomalies:
-Invoice: ${JSON.stringify(extractedData.output)}
-Provide a fraud risk score (0-1) and flag any suspicious patterns.`,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              fraud_score: { type: "number" },
-              risk_level: { type: "string" },
-              suspicious_patterns: { type: "array", items: { type: "string" } },
-              recommendations: { type: "string" }
-            }
-          }
-        });
-
-        // Create invoice record
-        const invoiceData = {
-          invoice_type: 'vendor_bill',
-          invoice_number: extractedData.output.invoice_number || `BILL-${Date.now()}`,
-          partner_id: extractedData.output.vendor_name || 'Unknown Vendor',
-          company_id: 'default',
-          invoice_date: extractedData.output.invoice_date || new Date().toISOString().split('T')[0],
-          due_date: extractedData.output.due_date,
-          total_amount: extractedData.output.total_amount || 0,
-          tax_amount: extractedData.output.tax_amount || 0,
-          subtotal: extractedData.output.subtotal || 0,
-          amount_due: extractedData.output.total_amount || 0,
-          status: 'draft',
-          ai_extracted: true,
-          ai_confidence: 0.95,
-          ai_fraud_score: fraudAnalysis.fraud_score,
-          document_url: file_url,
-          three_way_match_status: 'pending'
-        };
-
-        await base44.entities.Invoice.create(invoiceData);
-        
-        setShowUploadModal(false);
-        setUploadedFile(null);
-        loadBills();
-      }
-    } catch (error) {
-      console.error('Error processing invoice:', error);
-    }
-    setIsProcessing(false);
+  const approveBill = (billId) => {
+    updateVendorBill(billId, { status: 'confirmed' });
   };
 
-  const approveBill = async (billId) => {
-    try {
-      await base44.entities.Invoice.update(billId, { status: 'confirmed' });
-      loadBills();
-    } catch (error) {
-      console.error('Error approving bill:', error);
-    }
-  };
-
-  const payBill = async (billId) => {
-    try {
-      const bill = bills.find(b => b.id === billId);
-      await base44.entities.Invoice.update(billId, {
-        status: 'paid',
-        amount_paid: bill.total_amount,
-        amount_due: 0
-      });
-      loadBills();
-    } catch (error) {
-      console.error('Error paying bill:', error);
-    }
+  const payBill = (billId) => {
+    const bill = vendorBills.find(b => b.id === billId);
+    updateVendorBill(billId, {
+      status: 'paid',
+      amount_paid: bill.total_amount,
+      amount_due: 0
+    });
   };
 
   const getStatusColor = (status) => {
@@ -192,18 +121,18 @@ Provide a fraud risk score (0-1) and flag any suspicious patterns.`,
 
   // Calculate metrics
   const metrics = {
-    totalPayable: bills.reduce((sum, b) => sum + (b.amount_due || 0), 0),
-    overdueBills: bills.filter(b => {
+    totalPayable: vendorBills.reduce((sum, b) => sum + (b.amount_due || 0), 0),
+    overdueBills: vendorBills.filter(b => {
       if (!b.due_date || b.status === 'paid') return false;
       return new Date(b.due_date) < new Date();
     }).length,
-    pendingApproval: bills.filter(b => b.status === 'draft').length,
-    aiExtracted: bills.filter(b => b.ai_extracted).length
+    pendingApproval: vendorBills.filter(b => b.status === 'draft').length,
+    aiExtracted: vendorBills.filter(b => b.ai_extracted).length
   };
 
   return (
     <div className="space-y-6">
-      
+
       {/* Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
@@ -261,15 +190,20 @@ Provide a fraud risk score (0-1) and flag any suspicious patterns.`,
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-bold">{t('vendor_bills')}</CardTitle>
-              <Button onClick={() => setShowUploadModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                <Upload className="w-4 h-4 mr-2" /> {t('upload_invoice')}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowUploadModal(true)}>
+                  <Upload className="w-4 h-4 mr-2" /> {t('upload_invoice')}
+                </Button>
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
+                </Button>
+              </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
+                <Input
                   placeholder={t('search_invoices')}
                   className="pl-9"
                   value={searchQuery}
@@ -301,6 +235,9 @@ Provide a fraud risk score (0-1) and flag any suspicious patterns.`,
             <div className="text-center py-16">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">{t('no_data')}</p>
+              <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
+                <Plus className="w-4 h-4 mr-2" /> Create First Bill
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -390,21 +327,116 @@ Provide a fraud risk score (0-1) and flag any suspicious patterns.`,
               <Input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg"
-                onChange={handleFileUpload}
-                disabled={isProcessing}
                 className="cursor-pointer"
               />
             </div>
-            
-            {isProcessing && (
-              <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg">
-                <div className="w-5 h-5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                <div>
-                  <p className="text-sm font-medium text-purple-900">Processing with AI...</p>
-                  <p className="text-xs text-purple-700">Extracting data and analyzing for fraud</p>
-                </div>
+
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> AI extraction will be available when connected to the backend.
+                For now, please use manual entry.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Bill Modal */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Vendor Bill</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Invoice Number (Optional)</label>
+                <Input
+                  placeholder="Auto-generated"
+                  value={newBill.invoice_number}
+                  onChange={(e) => setNewBill({...newBill, invoice_number: e.target.value})}
+                />
               </div>
-            )}
+              <div>
+                <label className="text-sm font-medium mb-1 block">Vendor *</label>
+                <Input
+                  placeholder="Vendor name"
+                  value={newBill.partner_id}
+                  onChange={(e) => setNewBill({...newBill, partner_id: e.target.value})}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Invoice Date *</label>
+                <Input
+                  type="date"
+                  value={newBill.invoice_date}
+                  onChange={(e) => setNewBill({...newBill, invoice_date: e.target.value})}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Due Date *</label>
+                <Input
+                  type="date"
+                  value={newBill.due_date}
+                  onChange={(e) => setNewBill({...newBill, due_date: e.target.value})}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Subtotal *</label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={newBill.subtotal}
+                  onChange={(e) => {
+                    const subtotal = parseFloat(e.target.value) || 0;
+                    const tax = subtotal * 0.1;
+                    setNewBill({...newBill, subtotal, tax_amount: tax, total_amount: subtotal + tax});
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Tax</label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={newBill.tax_amount}
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Total</label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={newBill.total_amount}
+                  disabled
+                  className="font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleCreateBill}
+                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                disabled={!newBill.partner_id || !newBill.due_date}
+              >
+                Create Bill
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,10 +1,36 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle } from "lucide-react";
-import { Opportunity } from "@/api/entities";
 import { useTranslation } from "@/components/utils/translations";
+
+// Portal component for dragging items
+const PortalAwareItem = ({ provided, snapshot, children }) => {
+  const usePortal = snapshot.isDragging;
+
+  const child = (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
+      style={{
+        ...provided.draggableProps.style,
+      }}
+      className={snapshot.isDragging ? 'ring-2 ring-blue-400 rounded-lg shadow-2xl' : ''}
+    >
+      {children}
+    </div>
+  );
+
+  if (!usePortal) {
+    return child;
+  }
+
+  // Render in portal when dragging
+  return ReactDOM.createPortal(child, document.body);
+};
 
 const stageConfig = [
   { 
@@ -158,45 +184,23 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
       )
     }));
 
-    try {
-      console.log('💾 Saving to database...');
-      
-      await Opportunity.update(opportunity.id, { 
-        stage: newStage 
-      });
-      
-      console.log('✅ Database update successful');
-      
-      if (onUpdateOpportunity) {
-        onUpdateOpportunity(updatedOpportunity);
-      }
-      
-      setKanbanState(prev => {
-        const newUpdatingIds = new Set(prev.updatingIds);
-        newUpdatingIds.delete(draggableId);
-        return {
-          ...prev,
-          updatingIds: newUpdatingIds,
-          error: null
-        };
-      });
-
-    } catch (error) {
-      console.error('❌ Database update failed:', error);
-      
-      setKanbanState(prev => {
-        const newUpdatingIds = new Set(prev.updatingIds);
-        newUpdatingIds.delete(draggableId);
-        return {
-          ...prev,
-          opportunities: prev.opportunities.map(opp => 
-            String(opp.id) === String(draggableId) ? opportunity : opp
-          ),
-          updatingIds: newUpdatingIds,
-          error: `Failed to update ${opportunity.name}: ${error.message}`
-        };
-      });
+    // Update via callback (which updates localStorage context)
+    if (onUpdateOpportunity) {
+      onUpdateOpportunity(updatedOpportunity);
     }
+
+    // Clear updating state
+    setKanbanState(prev => {
+      const newUpdatingIds = new Set(prev.updatingIds);
+      newUpdatingIds.delete(draggableId);
+      return {
+        ...prev,
+        updatingIds: newUpdatingIds,
+        error: null
+      };
+    });
+
+    console.log('✅ Update successful');
   }, [kanbanState.opportunities, onUpdateOpportunity]);
 
   const OpportunityCard = useCallback(({ opportunity, stage, isUpdating }) => (
@@ -310,12 +314,12 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
             onDragStart={handleDragStart} 
             onDragEnd={handleDragEnd}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+            <div className="flex gap-4 overflow-x-auto pb-4">
               {stages.map((stage) => {
                 const { opportunities: stageOpps, count, value } = stageData[stage.id] || { opportunities: [], count: 0, value: 0 };
-                
+
                 return (
-                  <div key={stage.id} className="flex flex-col min-w-0">
+                  <div key={stage.id} className="flex flex-col min-w-[280px] w-[280px] flex-shrink-0">
                     <div className={`${stage.bgClass} ${stage.borderClass} border-2 rounded-t-xl p-3 sm:p-4 shadow-sm`}>
                       <div className="flex items-center justify-between mb-2 gap-2">
                         <h3 className={`font-semibold ${stage.textClass} text-xs sm:text-sm truncate flex-1`}>
@@ -336,35 +340,30 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                         <div
                           ref={provided.innerRef}
                           {...provided.droppableProps}
-                          className={`space-y-3 min-h-[400px] p-3 rounded-b-xl transition-all duration-200 ${
-                            snapshot.isDraggingOver 
-                              ? `${stage.bgClass} border-2 border-dashed ${stage.borderClass} shadow-inner scale-[1.02]` 
-                              : 'bg-slate-50/50 border-2 border-transparent'
+                          className={`flex flex-col gap-3 min-h-[350px] p-3 rounded-b-xl transition-all duration-200 ${
+                            snapshot.isDraggingOver
+                              ? `${stage.bgClass} border-2 border-dashed ${stage.borderClass} shadow-inner`
+                              : 'bg-slate-50/50 border-2 border-slate-100'
                           }`}
                         >
                           {stageOpps.map((opp, index) => {
                             const isUpdating = kanbanState.updatingIds.has(String(opp.id));
                             
                             return (
-                              <Draggable 
+                              <Draggable
                                 key={String(opp.id)}
                                 draggableId={String(opp.id)}
                                 index={index}
                                 isDragDisabled={isUpdating}
                               >
                                 {(provided, snapshot) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className={`${snapshot.isDragging ? 'opacity-50 rotate-2 scale-105' : ''} transition-all duration-150`}
-                                  >
-                                    <OpportunityCard 
-                                      opportunity={opp} 
+                                  <PortalAwareItem provided={provided} snapshot={snapshot}>
+                                    <OpportunityCard
+                                      opportunity={opp}
                                       stage={stage}
                                       isUpdating={isUpdating}
                                     />
-                                  </div>
+                                  </PortalAwareItem>
                                 )}
                               </Draggable>
                             );

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,18 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { analyzePayroll } from '@/api/services/aiAnalytics';
 
 export default function Payroll() {
-  const [payrolls, setPayrolls] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
+
+  // AI Analysis
+  const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees), [payrolls, employees]);
   const [filteredPayrolls, setFilteredPayrolls] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
@@ -31,10 +33,6 @@ export default function Payroll() {
     bonuses: 0,
     allowances: 0
   });
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   useEffect(() => {
     let filtered = payrolls;
@@ -50,41 +48,25 @@ export default function Payroll() {
     setFilteredPayrolls(filtered);
   }, [payrolls, searchQuery, statusFilter]);
 
-  const loadData = async () => {
-    try {
-      const [payrollData, empData] = await Promise.all([
-        base44.entities.Payroll.list('-created_date', 100),
-        base44.entities.Employee.list()
-      ]);
-      setPayrolls(payrollData);
-      setFilteredPayrolls(payrollData);
-      setEmployees(empData);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-    setIsLoading(false);
-  };
-
   const calculatePayroll = (data) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
-    const overtimePay = overtimeHours * (basicSalary / 160); // Assuming 160 hours/month
+    const overtimePay = overtimeHours * (basicSalary / 160);
     const bonuses = parseFloat(data.bonuses) || 0;
     const allowances = parseFloat(data.allowances) || 0;
-    
+
     const grossPay = basicSalary + overtimePay + bonuses + allowances;
-    
-    // Simple tax calculation (20% on amount over $3000)
+
     const taxableAmount = Math.max(0, grossPay - 3000);
     const taxDeduction = taxableAmount * 0.20;
-    
-    const socialSecurity = grossPay * 0.062; // 6.2%
-    const healthInsurance = 200; // Flat rate
+
+    const socialSecurity = grossPay * 0.062;
+    const healthInsurance = 200;
     const otherDeductions = 0;
-    
+
     const totalDeductions = taxDeduction + socialSecurity + healthInsurance + otherDeductions;
     const netPay = grossPay - totalDeductions;
-    
+
     return {
       overtime_pay: overtimePay,
       gross_pay: grossPay,
@@ -97,49 +79,82 @@ export default function Payroll() {
     };
   };
 
-  const handleCreatePayroll = async () => {
-    try {
-      const calculated = calculatePayroll(newPayroll);
-      
-      const payrollData = {
-        ...newPayroll,
-        payroll_number: newPayroll.payroll_number || `PAY-${Date.now()}`,
-        basic_salary: parseFloat(newPayroll.basic_salary),
-        overtime_hours: parseFloat(newPayroll.overtime_hours),
-        bonuses: parseFloat(newPayroll.bonuses),
-        allowances: parseFloat(newPayroll.allowances),
-        ...calculated,
-        status: 'calculated',
-        payment_method: 'bank_transfer'
-      };
-      
-      await base44.entities.Payroll.create(payrollData);
-      setShowCreateModal(false);
-      loadData();
-      
-      setNewPayroll({
-        payroll_number: '',
-        employee_name: '',
-        pay_period_start: '',
-        pay_period_end: '',
-        payment_date: '',
-        basic_salary: 0,
-        overtime_hours: 0,
-        bonuses: 0,
-        allowances: 0
-      });
-    } catch (error) {
-      console.error('Error creating payroll:', error);
-    }
+  const handleCreatePayroll = () => {
+    const calculated = calculatePayroll(newPayroll);
+
+    const payrollData = {
+      ...newPayroll,
+      payroll_number: newPayroll.payroll_number || `PAY-${Date.now()}`,
+      basic_salary: parseFloat(newPayroll.basic_salary),
+      overtime_hours: parseFloat(newPayroll.overtime_hours),
+      bonuses: parseFloat(newPayroll.bonuses),
+      allowances: parseFloat(newPayroll.allowances),
+      ...calculated,
+      status: 'calculated',
+      payment_method: 'bank_transfer'
+    };
+
+    createPayroll(payrollData);
+    setShowCreateModal(false);
+
+    setNewPayroll({
+      payroll_number: '',
+      employee_name: '',
+      pay_period_start: '',
+      pay_period_end: '',
+      payment_date: '',
+      basic_salary: 0,
+      overtime_hours: 0,
+      bonuses: 0,
+      allowances: 0
+    });
   };
 
-  const updatePayrollStatus = async (payrollId, newStatus) => {
-    try {
-      await base44.entities.Payroll.update(payrollId, { status: newStatus });
-      loadData();
-    } catch (error) {
-      console.error('Error updating payroll:', error);
-    }
+  const updatePayrollStatus = (payrollId, newStatus) => {
+    updatePayroll(payrollId, { status: newStatus });
+  };
+
+  const handleDownloadPayslip = (payroll) => {
+    // Generate CSV payslip content
+    const csvContent = [
+      ['PAYROLL SLIP'],
+      [''],
+      ['Payroll Number', payroll.payroll_number],
+      ['Employee', payroll.employee_name],
+      ['Pay Period Start', payroll.pay_period_start || 'N/A'],
+      ['Pay Period End', payroll.pay_period_end || 'N/A'],
+      ['Payment Date', payroll.payment_date || 'N/A'],
+      [''],
+      ['EARNINGS'],
+      ['Basic Salary', (payroll.basic_salary || 0).toFixed(2)],
+      ['Overtime Pay', (payroll.overtime_pay || 0).toFixed(2)],
+      ['Bonuses', (payroll.bonuses || 0).toFixed(2)],
+      ['Allowances', (payroll.allowances || 0).toFixed(2)],
+      ['GROSS PAY', (payroll.gross_pay || 0).toFixed(2)],
+      [''],
+      ['DEDUCTIONS'],
+      ['Tax', (payroll.tax_deduction || 0).toFixed(2)],
+      ['Social Security', (payroll.social_security || 0).toFixed(2)],
+      ['Health Insurance', (payroll.health_insurance || 0).toFixed(2)],
+      ['Other Deductions', (payroll.other_deductions || 0).toFixed(2)],
+      ['TOTAL DEDUCTIONS', (payroll.total_deductions || 0).toFixed(2)],
+      [''],
+      ['NET PAY', (payroll.net_pay || 0).toFixed(2)],
+      [''],
+      ['Status', payroll.status?.toUpperCase() || 'N/A'],
+      ['Generated', new Date().toLocaleString()]
+    ].map(row => row.join(',')).join('\n');
+
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payslip_${payroll.payroll_number}_${payroll.employee_name?.replace(/\s+/g, '_')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const getStatusColor = (status) => {
@@ -159,7 +174,6 @@ export default function Payroll() {
     pendingPayments: payrolls.filter(p => p.status === 'approved').length
   };
 
-  // Monthly payroll data
   const monthlyData = {};
   payrolls.forEach(p => {
     const month = p.pay_period_end ? new Date(p.pay_period_end).toLocaleDateString('en-US', { month: 'short' }) : 'Unknown';
@@ -170,7 +184,7 @@ export default function Payroll() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -235,8 +249,55 @@ export default function Payroll() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(payrollAnalysis.insights.length > 0 || payrollAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-purple-600" />
+                AI Payroll Insights
+                <Badge className="bg-purple-100 text-purple-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {payrollAnalysis.insights.slice(0, 3).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-purple-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-purple-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {payrollAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {payrollAnalysis.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100">
+                      <Lightbulb className="w-3 h-3 text-yellow-500" />
+                      <span className="text-slate-700">{rec.action}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Payroll Trend */}
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -269,7 +330,7 @@ export default function Payroll() {
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
+                  <Input
                     placeholder="Search payrolls..."
                     className="pl-9"
                     value={searchQuery}
@@ -321,8 +382,8 @@ export default function Payroll() {
                           <TableCell className="font-mono text-sm">{payroll.payroll_number}</TableCell>
                           <TableCell className="font-medium">{payroll.employee_name}</TableCell>
                           <TableCell className="text-sm">
-                            {payroll.pay_period_start && payroll.pay_period_end ? 
-                              `${format(new Date(payroll.pay_period_start), 'MMM dd')} - ${format(new Date(payroll.pay_period_end), 'MMM dd')}` 
+                            {payroll.pay_period_start && payroll.pay_period_end ?
+                              `${format(new Date(payroll.pay_period_start), 'MMM dd')} - ${format(new Date(payroll.pay_period_end), 'MMM dd')}`
                               : '-'}
                           </TableCell>
                           <TableCell className="font-semibold">${(payroll.gross_pay || 0).toLocaleString()}</TableCell>
@@ -342,7 +403,7 @@ export default function Payroll() {
                                   Pay
                                 </Button>
                               )}
-                              <Button size="sm" variant="ghost">
+                              <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title="Download Payslip">
                                 <Download className="w-4 h-4" />
                               </Button>
                             </div>
@@ -364,7 +425,7 @@ export default function Payroll() {
               <DialogTitle>Process Payroll</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">Payroll Number</label>
@@ -486,8 +547,8 @@ export default function Payroll() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreatePayroll} 
+                <Button
+                  onClick={handleCreatePayroll}
                   className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
                   disabled={!newPayroll.employee_name || !newPayroll.basic_salary}
                 >

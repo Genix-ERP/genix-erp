@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { BillOfMaterials } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,11 @@ export default function BOMManagement() {
   const [filteredBoms, setFilteredBoms] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedBom, setSelectedBom] = useState(null);
+  const [editBom, setEditBom] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newBom, setNewBom] = useState({
     bom_reference: '',
@@ -52,7 +55,7 @@ export default function BOMManagement() {
 
   const loadBoms = async () => {
     try {
-      const data = await base44.entities.BillOfMaterials.list('-created_date', 100);
+      const data = await BillOfMaterials.list('-created_date');
       setBoms(data);
       setFilteredBoms(data);
     } catch (error) {
@@ -74,7 +77,7 @@ export default function BOMManagement() {
         total_cost: total_material_cost + total_operation_cost
       };
       
-      await base44.entities.BillOfMaterials.create(bomData);
+      await BillOfMaterials.create(bomData);
       setShowCreateModal(false);
       loadBoms();
       resetForm();
@@ -102,6 +105,72 @@ export default function BOMManagement() {
   const removeComponent = (index) => {
     const updated = newBom.components.filter((_, i) => i !== index);
     setNewBom({ ...newBom, components: updated });
+  };
+
+  const [editComponent, setEditComponent] = useState({
+    component_name: '',
+    component_code: '',
+    quantity: 0,
+    unit: 'pcs',
+    cost: 0
+  });
+
+  const handleEditBom = (bom, e) => {
+    e.stopPropagation();
+    setEditBom({
+      ...bom,
+      components: bom.components || [],
+      operations: bom.operations || []
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateBom = async () => {
+    if (!editBom) return;
+
+    setIsSubmitting(true);
+    try {
+      const total_material_cost = editBom.components.reduce((sum, c) => sum + (c.cost * c.quantity), 0);
+      const total_operation_cost = editBom.operations.reduce((sum, op) => sum + ((op.duration_minutes / 60) * op.cost_per_hour), 0);
+
+      const bomData = {
+        ...editBom,
+        total_material_cost,
+        total_operation_cost,
+        total_cost: total_material_cost + total_operation_cost
+      };
+
+      await BillOfMaterials.update(editBom.id, bomData);
+      setShowEditModal(false);
+      setEditBom(null);
+      loadBoms();
+    } catch (error) {
+      console.error('Error updating BOM:', error);
+      alert('Failed to update BOM: ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const addEditComponent = () => {
+    if (editComponent.component_name && editComponent.quantity > 0) {
+      setEditBom({
+        ...editBom,
+        components: [...editBom.components, {...editComponent}]
+      });
+      setEditComponent({
+        component_name: '',
+        component_code: '',
+        quantity: 0,
+        unit: 'pcs',
+        cost: 0
+      });
+    }
+  };
+
+  const removeEditComponent = (index) => {
+    const updated = editBom.components.filter((_, i) => i !== index);
+    setEditBom({ ...editBom, components: updated });
   };
 
   const resetForm = () => {
@@ -204,7 +273,9 @@ export default function BOMManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost"><Edit className="w-4 h-4" /></Button>
+                          <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -351,6 +422,149 @@ export default function BOMManagement() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit BOM Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Bill of Materials</DialogTitle>
+          </DialogHeader>
+          {editBom && (
+            <div className="space-y-6 py-4">
+
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900">Product Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">BOM Reference</label>
+                    <Input
+                      value={editBom.bom_reference}
+                      onChange={(e) => setEditBom({...editBom, bom_reference: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Status</label>
+                    <select
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={editBom.status}
+                      onChange={(e) => setEditBom({...editBom, status: e.target.value})}
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="active">Active</option>
+                      <option value="obsolete">Obsolete</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Product Name *</label>
+                    <Input
+                      value={editBom.product_name}
+                      onChange={(e) => setEditBom({...editBom, product_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Product Code *</label>
+                    <Input
+                      value={editBom.product_code}
+                      onChange={(e) => setEditBom({...editBom, product_code: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Components */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900">Components / Materials</h3>
+
+                {/* Add Component Form */}
+                <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                  <div className="grid grid-cols-5 gap-3">
+                    <Input
+                      placeholder="Component name"
+                      value={editComponent.component_name}
+                      onChange={(e) => setEditComponent({...editComponent, component_name: e.target.value})}
+                    />
+                    <Input
+                      placeholder="Code"
+                      value={editComponent.component_code}
+                      onChange={(e) => setEditComponent({...editComponent, component_code: e.target.value})}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Quantity"
+                      value={editComponent.quantity}
+                      onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value)})}
+                    />
+                    <Input
+                      placeholder="Unit"
+                      value={editComponent.unit}
+                      onChange={(e) => setEditComponent({...editComponent, unit: e.target.value})}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Cost"
+                      value={editComponent.cost}
+                      onChange={(e) => setEditComponent({...editComponent, cost: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                  <Button onClick={addEditComponent} size="sm" className="w-full">
+                    <Plus className="w-4 h-4 mr-2" /> Add Component
+                  </Button>
+                </div>
+
+                {/* Components List */}
+                {editBom.components.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>Component</TableHead>
+                          <TableHead>Code</TableHead>
+                          <TableHead>Qty</TableHead>
+                          <TableHead>Unit</TableHead>
+                          <TableHead>Cost</TableHead>
+                          <TableHead>Total</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {editBom.components.map((comp, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{comp.component_name}</TableCell>
+                            <TableCell>{comp.component_code}</TableCell>
+                            <TableCell>{comp.quantity}</TableCell>
+                            <TableCell>{comp.unit}</TableCell>
+                            <TableCell>${comp.cost}</TableCell>
+                            <TableCell className="font-semibold">${(comp.quantity * comp.cost).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" onClick={() => removeEditComponent(index)}>
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => { setShowEditModal(false); setEditBom(null); }} className="flex-1">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateBom}
+                  className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
+                  disabled={isSubmitting || !editBom.product_name || !editBom.product_code}
+                >
+                  {isSubmitting ? 'Saving...' : 'Update BOM'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { ProductionOrder } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +51,7 @@ export default function ProductionOrders() {
 
   const loadOrders = async () => {
     try {
-      const data = await base44.entities.ProductionOrder.list('-created_date', 100);
+      const data = await ProductionOrder.list('-created_date');
       setOrders(data);
       setFilteredOrders(data);
     } catch (error) {
@@ -69,7 +69,7 @@ export default function ProductionOrders() {
         status: 'confirmed'
       };
       
-      await base44.entities.ProductionOrder.create(orderData);
+      await ProductionOrder.create(orderData);
       setShowCreateModal(false);
       loadOrders();
       
@@ -104,7 +104,7 @@ export default function ProductionOrders() {
         updates.completion_percentage = 100;
       }
       
-      await base44.entities.ProductionOrder.update(orderId, updates);
+      await ProductionOrder.update(orderId, updates);
       loadOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
