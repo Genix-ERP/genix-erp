@@ -1,28 +1,63 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { hrService } from "@/api/services/hr";
+import { aiService } from "@/api/services/ai";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Users, 
-  Search, 
-  Plus, 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Users,
+  Search,
+  Plus,
   TrendingUp,
   TrendingDown,
   UserCheck,
   UserX,
   Briefcase,
-  Brain
+  Brain,
+  Eye,
+  Pencil,
+  Trash2,
+  MoreHorizontal,
+  Mail,
+  Phone,
+  Calendar,
+  DollarSign,
+  Shield,
+  Check,
+  X as XIcon
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useModules } from "@/components/contexts/ModulesContext";
+import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 
 export default function HR() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { coreModules, appModules, getEmployeePermissions, setEmployeePermissions } = useModules();
+  const { isAppInstalled } = useInstalledApps();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -30,60 +65,383 @@ export default function HR() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [insights, setInsights] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAssessingRisk, setIsAssessingRisk] = useState(false);
+  const [newEmployee, setNewEmployee] = useState({
+    full_name: '',
+    email: '',
+    phone: '',
+    job_title: '',
+    department: 'engineering',
+    hire_date: new Date().toISOString().split('T')[0],
+    salary: '',
+    status: 'active',
+    performance_score: 3,
+    turnover_risk: 'low'
+  });
+
+  // AI-based turnover risk assessment
+  const assessTurnoverRisk = useCallback(async (employeesList) => {
+    if (!employeesList || employeesList.length === 0) return employeesList;
+
+    setIsAssessingRisk(true);
+    try {
+      const employeeData = employeesList.map(emp => ({
+        id: emp.id,
+        full_name: emp.full_name,
+        department: emp.department,
+        hire_date: emp.hire_date,
+        performance_score: emp.performance_score,
+        salary: emp.salary,
+        status: emp.status,
+        tenure_months: Math.floor((new Date() - new Date(emp.hire_date)) / (1000 * 60 * 60 * 24 * 30))
+      }));
+
+      const prompt = `As an HR AI analyst, assess the turnover risk for each employee based on their data.
+
+Employee Data:
+${JSON.stringify(employeeData, null, 2)}
+
+Risk Factors to Consider:
+- Low performance score (1-2) = higher risk
+- Very short tenure (<6 months) or medium tenure (1-2 years) = higher risk (new hires adjusting or employees seeking growth)
+- Long tenure (>5 years) with low performance = medium risk
+- High performers with long tenure = low risk
+- Department patterns (some departments may have higher turnover)
+
+Return a JSON object with employee IDs and their assessed risk levels:
+{ "assessments": [{ "id": "employee-uuid", "risk": "low|medium|high", "reason": "brief reason" }] }
+
+Only return the JSON, no other text.`;
+
+      const result = await aiService.chat(prompt, null, { type: 'hr_risk_assessment' });
+
+      let assessments = [];
+      if (result?.assessments) {
+        assessments = result.assessments;
+      } else if (typeof result?.message === 'string') {
+        try {
+          // Try to extract JSON from the response
+          const jsonMatch = result.message.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.assessments) {
+              assessments = parsed.assessments;
+            }
+          }
+        } catch (e) {
+          console.log("Could not parse AI risk assessment response");
+        }
+      }
+
+      // Update employees with AI-assessed risk
+      if (assessments.length > 0) {
+        const updatedEmployees = employeesList.map(emp => {
+          const assessment = assessments.find(a => a.id === emp.id);
+          if (assessment) {
+            return { ...emp, turnover_risk: assessment.risk, risk_reason: assessment.reason };
+          }
+          return emp;
+        });
+        return updatedEmployees;
+      }
+
+      return employeesList;
+    } catch (error) {
+      console.error("Error assessing turnover risk:", error);
+      return employeesList;
+    } finally {
+      setIsAssessingRisk(false);
+    }
+  }, []);
 
   const loadEmployees = useCallback(async () => {
     try {
-      const Employee = await import('@/api/entities').then(m => m.Employee);
-      const data = await Employee.list("-hire_date");
-      setEmployees(data);
+      const data = await hrService.listEmployees({ sort_by: 'hire_date', sort_order: 'DESC' });
+      // Map backend response to frontend format
+      const mapped = (data || []).map(emp => ({
+        id: emp.id,
+        full_name: emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        email: emp.email || '',
+        phone: emp.phone || '',
+        job_title: emp.job_title || '',
+        department: emp.department || 'other',
+        hire_date: emp.hire_date,
+        salary: emp.base_salary || 0,
+        status: emp.status || 'active',
+        performance_score: emp.performance_score || 3,
+        turnover_risk: emp.turnover_risk || 'low'
+      }));
+
+      // Run AI turnover risk assessment
+      const assessedEmployees = await assessTurnoverRisk(mapped);
+      setEmployees(assessedEmployees);
     } catch (error) {
       console.error("Error loading employees:", error);
     }
-  }, []);
+  }, [assessTurnoverRisk]);
 
   const generateInsights = useCallback(async () => {
     try {
-      const Employee = await import('@/api/entities').then(m => m.Employee);
-      const data = await Employee.list();
-      const highTurnoverRiskCount = data.filter(e => e.turnover_risk === 'high').length;
-      const avgPerformance = data.length > 0 ? data.reduce((sum, e) => sum + (e.performance_score || 0), 0) / data.length : 0;
+      // Use current employees state for insights
+      if (employees.length === 0) return;
 
-      const insightsResult = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are the HR AI of Genix. Analyze this workforce data and provide insights on retention, performance, and cost efficiency:
-        - Total Employees: ${data.length}
+      const highTurnoverRiskCount = employees.filter(e => e.turnover_risk === 'high').length;
+      const avgPerformance = employees.length > 0 ? employees.reduce((sum, e) => sum + (e.performance_score || 0), 0) / employees.length : 0;
+
+      const prompt = `You are the HR AI of Genix. Analyze this workforce data and provide insights on retention, performance, and cost efficiency:
+        - Total Employees: ${employees.length}
         - High Turnover Risks: ${highTurnoverRiskCount}
         - Average Performance Score: ${avgPerformance.toFixed(2)}/5
-        - Department breakdown: ${JSON.stringify(data.reduce((acc, e) => { acc[e.department] = (acc[e.department] || 0) + 1; return acc; }, {}))}
-        
-        Provide 3 actionable insights with clear recommendations.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            insights: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  recommendation: { type: "string" },
-                  priority: { type: "string", enum: ["high", "medium", "low"] }
-                }
-              }
-            }
+        - Department breakdown: ${JSON.stringify(employees.reduce((acc, e) => { acc[e.department] = (acc[e.department] || 0) + 1; return acc; }, {}))}
+
+        Provide 3 actionable insights with clear recommendations. Return as JSON with format: { "insights": [{ "title": "", "description": "", "recommendation": "", "priority": "high|medium|low" }] }`;
+
+      const insightsResult = await aiService.chat(prompt, null, { type: 'hr_analysis' });
+
+      // Parse the response - it may be a string or already parsed
+      if (insightsResult?.insights) {
+        setInsights(insightsResult.insights);
+      } else if (typeof insightsResult?.message === 'string') {
+        try {
+          const parsed = JSON.parse(insightsResult.message);
+          if (parsed.insights) {
+            setInsights(parsed.insights);
           }
+        } catch {
+          console.log("Could not parse AI response as JSON");
         }
-      });
-      setInsights(insightsResult.insights);
+      }
     } catch (error) {
       console.error("Error generating AI insights:", error);
     }
-  }, []);
+  }, [employees]);
+
+  const handleAddEmployee = async () => {
+    if (!newEmployee.full_name || !newEmployee.job_title) {
+      console.log("Validation failed: full_name or job_title is missing");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const employeeData = {
+        full_name: newEmployee.full_name,
+        email: newEmployee.email || '',
+        phone: newEmployee.phone || '',
+        job_title: newEmployee.job_title,
+        department: newEmployee.department,
+        hire_date: newEmployee.hire_date,
+        base_salary: parseFloat(newEmployee.salary) || 0,
+        status: newEmployee.status,
+        performance_score: parseFloat(newEmployee.performance_score) || 3,
+        turnover_risk: newEmployee.turnover_risk
+      };
+
+      console.log("Creating employee with data:", employeeData);
+      await hrService.createEmployee(employeeData);
+      console.log("Employee created successfully");
+
+      setShowAddModal(false);
+      setNewEmployee({
+        full_name: '',
+        email: '',
+        phone: '',
+        job_title: '',
+        department: 'engineering',
+        hire_date: new Date().toISOString().split('T')[0],
+        salary: '',
+        status: 'active',
+        performance_score: 3,
+        turnover_risk: 'low'
+      });
+      await loadEmployees();
+    } catch (error) {
+      console.error("Error adding employee:", error);
+      alert("Failed to add employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleViewEmployee = (employee) => {
+    setSelectedEmployee(employee);
+    setShowViewModal(true);
+  };
+
+  const handleEditEmployee = (employee) => {
+    setSelectedEmployee({
+      ...employee,
+      salary: employee.salary || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateEmployee = async () => {
+    if (!selectedEmployee) return;
+
+    setIsSubmitting(true);
+    try {
+      const employeeData = {
+        full_name: selectedEmployee.full_name,
+        email: selectedEmployee.email || '',
+        phone: selectedEmployee.phone || '',
+        job_title: selectedEmployee.job_title,
+        department: selectedEmployee.department,
+        hire_date: selectedEmployee.hire_date,
+        base_salary: parseFloat(selectedEmployee.salary) || 0,
+        status: selectedEmployee.status,
+        performance_score: parseFloat(selectedEmployee.performance_score) || 3,
+        turnover_risk: selectedEmployee.turnover_risk
+      };
+
+      await hrService.updateEmployee(selectedEmployee.id, employeeData);
+      setShowEditModal(false);
+      setSelectedEmployee(null);
+      await loadEmployees();
+    } catch (error) {
+      console.error("Error updating employee:", error);
+      alert("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteClick = (employee) => {
+    setSelectedEmployee(employee);
+    setShowDeleteDialog(true);
+  };
+
+  // Local state for editing permissions before saving
+  const [editingPermissions, setEditingPermissions] = useState({});
+  const [permissionsSaved, setPermissionsSaved] = useState(false);
+
+  const handleManagePermissions = (employee) => {
+    setSelectedEmployee(employee);
+    // Load current permissions into editing state
+    const currentPerms = getEmployeePermissions(employee.id);
+    setEditingPermissions(currentPerms);
+    setPermissionsSaved(false);
+    setShowPermissionsModal(true);
+  };
+
+  // Get available modules (only modules visible in sidebar)
+  const getAvailableModules = useCallback(() => {
+    const modules = [];
+
+    // Add core modules (always visible)
+    coreModules.forEach(m => {
+      if (!m.adminOnly) {
+        modules.push(m);
+      }
+    });
+
+    // Add installed app modules only
+    appModules.forEach(m => {
+      if (isAppInstalled(m.appId)) {
+        modules.push(m);
+      }
+    });
+
+    // Add admin panel at the end
+    const adminModule = coreModules.find(m => m.adminOnly);
+    if (adminModule) {
+      modules.push(adminModule);
+    }
+
+    return modules;
+  }, [coreModules, appModules, isAppInstalled]);
+
+  // Handle toggle for individual CRUD permission (local state only)
+  const handlePermissionToggle = (moduleId, permType) => {
+    setEditingPermissions(prev => {
+      const modulePerms = prev[moduleId] || { create: false, read: false, update: false, delete: false };
+      return {
+        ...prev,
+        [moduleId]: {
+          ...modulePerms,
+          [permType]: !modulePerms[permType]
+        }
+      };
+    });
+    setPermissionsSaved(false);
+  };
+
+  // Handle toggle for full module access (local state only)
+  const handleFullAccessToggle = (moduleId) => {
+    setEditingPermissions(prev => {
+      const modulePerms = prev[moduleId] || { create: false, read: false, update: false, delete: false };
+      const hasFullAccess = modulePerms.create && modulePerms.read && modulePerms.update && modulePerms.delete;
+      return {
+        ...prev,
+        [moduleId]: {
+          create: !hasFullAccess,
+          read: !hasFullAccess,
+          update: !hasFullAccess,
+          delete: !hasFullAccess
+        }
+      };
+    });
+    setPermissionsSaved(false);
+  };
+
+  // Save permissions
+  const handleSavePermissions = () => {
+    if (!selectedEmployee) return;
+    setEmployeePermissions(selectedEmployee.id, editingPermissions);
+    setPermissionsSaved(true);
+    setTimeout(() => setPermissionsSaved(false), 2000);
+  };
+
+  // Grant all permissions
+  const handleGrantAllPermissions = () => {
+    const allPerms = {};
+    getAvailableModules().forEach(m => {
+      allPerms[m.id] = { create: true, read: true, update: true, delete: true };
+    });
+    setEditingPermissions(allPerms);
+    setPermissionsSaved(false);
+  };
+
+  // Revoke all permissions
+  const handleRevokeAllPermissions = () => {
+    setEditingPermissions({});
+    setPermissionsSaved(false);
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!selectedEmployee) return;
+
+    setIsSubmitting(true);
+    try {
+      await hrService.deleteEmployee(selectedEmployee.id);
+      setShowDeleteDialog(false);
+      setSelectedEmployee(null);
+      await loadEmployees();
+    } catch (error) {
+      console.error("Error deleting employee:", error);
+      alert("Failed to delete employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     loadEmployees();
-    generateInsights();
-  }, [loadEmployees, generateInsights]);
+  }, [loadEmployees]);
+
+  // Generate insights when employees data changes
+  useEffect(() => {
+    if (employees.length > 0) {
+      generateInsights();
+    }
+  }, [employees.length]);
 
   useEffect(() => {
     let filtered = employees;
@@ -118,10 +476,21 @@ export default function HR() {
             <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('hr_title')}</h1>
             <p className="text-slate-600 mt-2">{t('hr_subtitle')}</p>
           </div>
-          <Button className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-            <Plus className="w-4 h-4 mr-2" />
-            {t('add_employee')}
-          </Button>
+          <div className="flex items-center gap-3">
+            {isAssessingRisk && (
+              <Badge className="bg-purple-100 text-purple-700 border-purple-200 animate-pulse">
+                <Brain className="w-3 h-3 mr-1" />
+                AI Assessing Risk...
+              </Badge>
+            )}
+            <Button
+              onClick={() => setShowAddModal(true)}
+              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('add_employee')}
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -174,6 +543,7 @@ export default function HR() {
                   <TableHead>{t('table_header_performance')}</TableHead>
                   <TableHead>{t('table_header_turnover_risk')}</TableHead>
                   <TableHead>{t('table_header_status')}</TableHead>
+                  <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -190,6 +560,36 @@ export default function HR() {
                     <TableCell>{e.performance_score}/5</TableCell>
                     <TableCell className={getRiskColor(e.turnover_risk)}>{t(e.turnover_risk)}</TableCell>
                     <TableCell><Badge>{t(e.status)}</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewEmployee(e)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            {t('view') || 'View Details'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditEmployee(e)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {t('edit') || 'Edit'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleManagePermissions(e)}>
+                            <Shield className="mr-2 h-4 w-4" />
+                            {t('manage_permissions') || 'Manage Permissions'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteClick(e)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {t('delete') || 'Delete'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -224,6 +624,595 @@ export default function HR() {
             </div>
           </div>
         )}
+
+        {/* Add Employee Modal */}
+        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('add_employee')}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>{t('full_name')} *</Label>
+                <Input
+                  value={newEmployee.full_name}
+                  onChange={e => setNewEmployee({...newEmployee, full_name: e.target.value})}
+                  placeholder={t('enter_full_name')}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('email')}</Label>
+                  <Input
+                    type="email"
+                    value={newEmployee.email}
+                    onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
+                    placeholder={t('enter_email')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('phone')}</Label>
+                  <Input
+                    value={newEmployee.phone}
+                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
+                    placeholder={t('enter_phone')}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('job_title')} *</Label>
+                <Input
+                  value={newEmployee.job_title}
+                  onChange={e => setNewEmployee({...newEmployee, job_title: e.target.value})}
+                  placeholder={t('enter_job_title')}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('department')}</Label>
+                  <Select
+                    value={newEmployee.department}
+                    onValueChange={value => setNewEmployee({...newEmployee, department: value})}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="engineering">{t('engineering')}</SelectItem>
+                      <SelectItem value="sales">{t('sales')}</SelectItem>
+                      <SelectItem value="marketing">{t('marketing')}</SelectItem>
+                      <SelectItem value="finance">{t('finance')}</SelectItem>
+                      <SelectItem value="operations">{t('operations')}</SelectItem>
+                      <SelectItem value="hr">{t('hr')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('hire_date')}</Label>
+                  <Input
+                    type="date"
+                    value={newEmployee.hire_date}
+                    onChange={e => setNewEmployee({...newEmployee, hire_date: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('salary')}</Label>
+                  <Input
+                    type="number"
+                    value={newEmployee.salary}
+                    onChange={e => setNewEmployee({...newEmployee, salary: e.target.value})}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('status')}</Label>
+                  <Select
+                    value={newEmployee.status}
+                    onValueChange={value => setNewEmployee({...newEmployee, status: value})}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">{t('active')}</SelectItem>
+                      <SelectItem value="on_leave">{t('on_leave')}</SelectItem>
+                      <SelectItem value="terminated">{t('terminated')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" onClick={() => setShowAddModal(false)}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleAddEmployee}
+                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  {isSubmitting ? t('saving') : t('add_employee')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Employee Modal */}
+        <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t('employee_details') || 'Employee Details'}</DialogTitle>
+            </DialogHeader>
+            {selectedEmployee && (
+              <div className="space-y-6 py-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                    {selectedEmployee.full_name?.charAt(0)?.toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold">{selectedEmployee.full_name}</h3>
+                    <p className="text-slate-500">{selectedEmployee.job_title}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Mail className="w-4 h-4" />
+                      {t('email') || 'Email'}
+                    </div>
+                    <p className="font-medium">{selectedEmployee.email || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Phone className="w-4 h-4" />
+                      {t('phone') || 'Phone'}
+                    </div>
+                    <p className="font-medium">{selectedEmployee.phone || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Briefcase className="w-4 h-4" />
+                      {t('department') || 'Department'}
+                    </div>
+                    <Badge variant="outline">{t(selectedEmployee.department)}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Calendar className="w-4 h-4" />
+                      {t('hire_date') || 'Hire Date'}
+                    </div>
+                    <p className="font-medium">{new Date(selectedEmployee.hire_date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <DollarSign className="w-4 h-4" />
+                      {t('salary') || 'Salary'}
+                    </div>
+                    <p className="font-medium">${parseFloat(selectedEmployee.salary || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <TrendingUp className="w-4 h-4" />
+                      {t('performance') || 'Performance'}
+                    </div>
+                    <p className="font-medium">{selectedEmployee.performance_score}/5</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-slate-500 text-sm">{t('status') || 'Status'}</div>
+                    <Badge>{t(selectedEmployee.status)}</Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Brain className="w-4 h-4" />
+                      {t('turnover_risk') || 'Turnover Risk'}
+                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200">AI</Badge>
+                    </div>
+                    <span className={`font-medium ${getRiskColor(selectedEmployee.turnover_risk)}`}>
+                      {t(selectedEmployee.turnover_risk)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* AI Risk Reason */}
+                {selectedEmployee.risk_reason && (
+                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                    <div className="flex items-center gap-2 text-purple-700 text-sm font-medium mb-1">
+                      <Brain className="w-4 h-4" />
+                      AI Risk Assessment
+                    </div>
+                    <p className="text-sm text-purple-600">{selectedEmployee.risk_reason}</p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button variant="outline" onClick={() => setShowViewModal(false)}>
+                    {t('close') || 'Close'}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      handleEditEmployee(selectedEmployee);
+                    }}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    {t('edit') || 'Edit'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Employee Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('edit_employee') || 'Edit Employee'}</DialogTitle>
+            </DialogHeader>
+            {selectedEmployee && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>{t('full_name')} *</Label>
+                  <Input
+                    value={selectedEmployee.full_name}
+                    onChange={e => setSelectedEmployee({...selectedEmployee, full_name: e.target.value})}
+                    placeholder={t('enter_full_name')}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('email')}</Label>
+                    <Input
+                      type="email"
+                      value={selectedEmployee.email}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, email: e.target.value})}
+                      placeholder={t('enter_email')}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('phone')}</Label>
+                    <Input
+                      value={selectedEmployee.phone}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: e.target.value})}
+                      placeholder={t('enter_phone')}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('job_title')} *</Label>
+                  <Input
+                    value={selectedEmployee.job_title}
+                    onChange={e => setSelectedEmployee({...selectedEmployee, job_title: e.target.value})}
+                    placeholder={t('enter_job_title')}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('department')}</Label>
+                    <Select
+                      value={selectedEmployee.department}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value})}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="engineering">{t('engineering')}</SelectItem>
+                        <SelectItem value="sales">{t('sales')}</SelectItem>
+                        <SelectItem value="marketing">{t('marketing')}</SelectItem>
+                        <SelectItem value="finance">{t('finance')}</SelectItem>
+                        <SelectItem value="operations">{t('operations')}</SelectItem>
+                        <SelectItem value="hr">{t('hr')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('hire_date')}</Label>
+                    <Input
+                      type="date"
+                      value={selectedEmployee.hire_date?.split('T')[0]}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, hire_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('salary')}</Label>
+                    <Input
+                      type="number"
+                      value={selectedEmployee.salary}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, salary: e.target.value})}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('status')}</Label>
+                    <Select
+                      value={selectedEmployee.status}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, status: value})}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">{t('active')}</SelectItem>
+                        <SelectItem value="on_leave">{t('on_leave')}</SelectItem>
+                        <SelectItem value="terminated">{t('terminated')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('performance_score') || 'Performance Score'}</Label>
+                    <Select
+                      value={String(selectedEmployee.performance_score)}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, performance_score: parseInt(value)})}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 - Poor</SelectItem>
+                        <SelectItem value="2">2 - Below Average</SelectItem>
+                        <SelectItem value="3">3 - Average</SelectItem>
+                        <SelectItem value="4">4 - Good</SelectItem>
+                        <SelectItem value="5">5 - Excellent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('turnover_risk') || 'Turnover Risk'}</Label>
+                    <Select
+                      value={selectedEmployee.turnover_risk}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, turnover_risk: value})}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">{t('low') || 'Low'}</SelectItem>
+                        <SelectItem value="medium">{t('medium') || 'Medium'}</SelectItem>
+                        <SelectItem value="high">{t('high') || 'High'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    onClick={handleUpdateEmployee}
+                    disabled={isSubmitting || !selectedEmployee.full_name || !selectedEmployee.job_title}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  >
+                    {isSubmitting ? t('saving') : (t('save_changes') || 'Save Changes')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('delete_employee') || 'Delete Employee'}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('delete_employee_confirm') || `Are you sure you want to delete ${selectedEmployee?.full_name}? This action cannot be undone.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSubmitting}>
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteEmployee}
+                disabled={isSubmitting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isSubmitting ? t('deleting') || 'Deleting...' : t('delete') || 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Permissions Management Modal */}
+        <Dialog open={showPermissionsModal} onOpenChange={setShowPermissionsModal}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader className="pb-4 border-b">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-purple)] to-[var(--genix-blue)] rounded-lg flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-xl">{t('manage_permissions') || 'Manage Permissions'}</span>
+                    <p className="text-sm font-normal text-slate-500 mt-0.5">{selectedEmployee?.full_name} - {selectedEmployee?.job_title}</p>
+                  </div>
+                </DialogTitle>
+              </div>
+            </DialogHeader>
+            {selectedEmployee && (
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Quick Actions Bar */}
+                <div className="flex items-center justify-between py-4 bg-gradient-to-r from-slate-50 to-white px-1">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGrantAllPermissions}
+                      className="text-green-600 border-green-200 hover:bg-green-50"
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      Grant All
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRevokeAllPermissions}
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      <XIcon className="w-4 h-4 mr-1" />
+                      Revoke All
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> Create</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> Read</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Update</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> Delete</span>
+                  </div>
+                </div>
+
+                {/* Permissions Table */}
+                <div className="flex-1 overflow-auto border rounded-xl shadow-sm">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-white z-10">
+                      <TableRow className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2">
+                        <TableHead className="font-semibold text-slate-700 py-4">{t('module') || 'Module'}</TableHead>
+                        <TableHead className="text-center w-28 font-semibold text-slate-700">Full Access</TableHead>
+                        <TableHead className="text-center w-16">
+                          <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 mx-auto flex items-center justify-center font-bold text-sm">C</div>
+                        </TableHead>
+                        <TableHead className="text-center w-16">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 mx-auto flex items-center justify-center font-bold text-sm">R</div>
+                        </TableHead>
+                        <TableHead className="text-center w-16">
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center font-bold text-sm">U</div>
+                        </TableHead>
+                        <TableHead className="text-center w-16">
+                          <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 mx-auto flex items-center justify-center font-bold text-sm">D</div>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {getAvailableModules().map((module, index) => {
+                        const perms = editingPermissions[module.id] || { create: false, read: false, update: false, delete: false };
+                        const hasFullAccess = perms.create && perms.read && perms.update && perms.delete;
+                        const hasAnyAccess = perms.create || perms.read || perms.update || perms.delete;
+
+                        return (
+                          <TableRow
+                            key={module.id}
+                            className={`transition-colors ${hasAnyAccess ? 'bg-green-50/30' : ''} ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-blue-50/50`}
+                          >
+                            <TableCell className="py-3">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                                  module.isCore ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                  {module.isCore ? <Shield className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </div>
+                                <div>
+                                  <span className="font-medium text-slate-800">{module.name}</span>
+                                  <Badge
+                                    variant="outline"
+                                    className={`ml-2 text-[10px] px-1.5 py-0 ${
+                                      module.isCore ? 'bg-purple-50 text-purple-600 border-purple-200' :
+                                      module.adminOnly ? 'bg-red-50 text-red-600 border-red-200' :
+                                      'bg-blue-50 text-blue-600 border-blue-200'
+                                    }`}
+                                  >
+                                    {module.isCore ? 'Core' : module.adminOnly ? 'Admin' : 'App'}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Switch
+                                checked={hasFullAccess}
+                                onCheckedChange={() => handleFullAccessToggle(module.id)}
+                                className="data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-green-500 data-[state=checked]:to-emerald-500"
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handlePermissionToggle(module.id, 'create')}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                                  perms.create
+                                    ? 'bg-green-500 text-white shadow-md shadow-green-200 scale-105'
+                                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                }`}
+                              >
+                                {perms.create ? <Check className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handlePermissionToggle(module.id, 'read')}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                                  perms.read
+                                    ? 'bg-blue-500 text-white shadow-md shadow-blue-200 scale-105'
+                                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                }`}
+                              >
+                                {perms.read ? <Check className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handlePermissionToggle(module.id, 'update')}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                                  perms.update
+                                    ? 'bg-amber-500 text-white shadow-md shadow-amber-200 scale-105'
+                                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                }`}
+                              >
+                                {perms.update ? <Check className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handlePermissionToggle(module.id, 'delete')}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                                  perms.delete
+                                    ? 'bg-red-500 text-white shadow-md shadow-red-200 scale-105'
+                                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                }`}
+                              >
+                                {perms.delete ? <Check className="w-4 h-4" /> : <XIcon className="w-4 h-4" />}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Footer with Save Button */}
+                <div className="flex items-center justify-between pt-4 mt-4 border-t bg-white">
+                  <p className="text-xs text-slate-500">
+                    {getAvailableModules().length} modules available
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {permissionsSaved && (
+                      <span className="text-sm text-green-600 flex items-center gap-1 animate-pulse">
+                        <Check className="w-4 h-4" /> Saved!
+                      </span>
+                    )}
+                    <Button variant="outline" onClick={() => setShowPermissionsModal(false)}>
+                      {t('cancel') || 'Cancel'}
+                    </Button>
+                    <Button
+                      onClick={handleSavePermissions}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 px-6"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {t('save_permissions') || 'Save Permissions'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

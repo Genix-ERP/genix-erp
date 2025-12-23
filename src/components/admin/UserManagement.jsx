@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import apiClient from "@/api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,8 @@ export default function UserManagement({ onUpdate }) {
 
   const loadUsers = async () => {
     try {
-      const data = await base44.entities.User.list('-created_date');
-      setUsers(data);
+      const response = await apiClient.get('/users');
+      setUsers(response.data.data || []);
     } catch (error) {
       console.error("Error loading users:", error);
     }
@@ -44,7 +44,7 @@ export default function UserManagement({ onUpdate }) {
   const handleToggleRole = async (user) => {
     try {
       const newRole = user.role === 'admin' ? 'user' : 'admin';
-      await base44.entities.User.update(user.id, { role: newRole });
+      await apiClient.put(`/users/${user.id}`, { role: newRole });
       loadUsers();
       if (onUpdate) onUpdate();
     } catch (error) {

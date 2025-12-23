@@ -1,21 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Briefcase, Clock, DollarSign, Users, TrendingUp, Brain, CheckCircle } from 'lucide-react';
+import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
+import { analyzeProjects } from '@/api/services/aiAnalytics';
+
+// Default statuses for Kanban
+const DEFAULT_STATUSES = [
+  { id: 'planning', label: 'Planning', color: 'bg-gray-100 text-gray-800' },
+  { id: 'active', label: 'Active', color: 'bg-green-100 text-green-800' },
+  { id: 'on_hold', label: 'On Hold', color: 'bg-yellow-100 text-yellow-800' },
+  { id: 'completed', label: 'Completed', color: 'bg-blue-100 text-blue-800' },
+  { id: 'cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' }
+];
 
 export default function Projects() {
-  const [projects, setProjects] = useState([]);
+  const { projects, createProject, updateProject, isLoading } = useModules();
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [editProject, setEditProject] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'kanban'
+
+  // Custom statuses stored in localStorage
+  const [customStatuses, setCustomStatuses] = useState(() => {
+    const saved = localStorage.getItem('genix_project_statuses');
+    return saved ? JSON.parse(saved) : DEFAULT_STATUSES;
+  });
+
+  const [newStatus, setNewStatus] = useState({ label: '', color: 'bg-blue-100 text-blue-800' });
+
+  // AI Analysis
+  const projectAnalysis = useMemo(() => analyzeProjects(projects), [projects]);
 
   const [newProject, setNewProject] = useState({
     project_name: '',
@@ -24,12 +49,9 @@ export default function Projects() {
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     budget: 0,
-    billing_type: 'time_material'
+    billing_type: 'time_material',
+    priority: 'medium'
   });
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
 
   useEffect(() => {
     let filtered = projects;
@@ -45,31 +67,24 @@ export default function Projects() {
     setFilteredProjects(filtered);
   }, [projects, searchQuery, statusFilter]);
 
-  const loadProjects = async () => {
-    try {
-      const data = await base44.entities.Project.list('-created_date', 100);
-      setProjects(data);
-      setFilteredProjects(data);
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    }
-    setIsLoading(false);
-  };
+  // Save custom statuses to localStorage
+  useEffect(() => {
+    localStorage.setItem('genix_project_statuses', JSON.stringify(customStatuses));
+  }, [customStatuses]);
 
   const handleCreateProject = async () => {
+    setIsSubmitting(true);
     try {
-      const projectData = {
+      await createProject({
         ...newProject,
         project_code: newProject.project_code || `PRJ-${Date.now()}`,
-        budget: parseFloat(newProject.budget),
+        budget: parseFloat(newProject.budget) || 0,
         status: 'planning',
-        progress_percentage: 0
-      };
-      
-      await base44.entities.Project.create(projectData);
+        progress_percentage: 0,
+        actual_cost: 0,
+        total_hours_logged: 0
+      });
       setShowCreateModal(false);
-      loadProjects();
-      
       setNewProject({
         project_name: '',
         project_code: '',
@@ -77,22 +92,100 @@ export default function Projects() {
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
         budget: 0,
-        billing_type: 'time_material'
+        billing_type: 'time_material',
+        priority: 'medium'
       });
     } catch (error) {
       console.error('Error creating project:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const handleEditProject = (project, e) => {
+    if (e) e.stopPropagation();
+    setEditProject({
+      ...project,
+      budget: project.budget || 0,
+      progress_percentage: project.progress_percentage || 0
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateProject = async () => {
+    if (!editProject) return;
+
+    setIsSubmitting(true);
+    try {
+      updateProject(editProject.id, {
+        project_name: editProject.project_name,
+        project_code: editProject.project_code,
+        client_name: editProject.client_name,
+        start_date: editProject.start_date,
+        end_date: editProject.end_date,
+        budget: parseFloat(editProject.budget) || 0,
+        billing_type: editProject.billing_type,
+        status: editProject.status,
+        priority: editProject.priority,
+        progress_percentage: parseInt(editProject.progress_percentage) || 0
+      });
+      setShowEditModal(false);
+      setEditProject(null);
+    } catch (error) {
+      console.error('Error updating project:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDragStart = (e, project) => {
+    e.dataTransfer.setData('projectId', project.id);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, newStatus) => {
+    e.preventDefault();
+    const projectId = e.dataTransfer.getData('projectId');
+    if (projectId) {
+      updateProject(projectId, { status: newStatus });
+    }
+  };
+
+  const addCustomStatus = () => {
+    if (newStatus.label.trim()) {
+      const statusId = newStatus.label.toLowerCase().replace(/\s+/g, '_');
+      if (!customStatuses.find(s => s.id === statusId)) {
+        setCustomStatuses([...customStatuses, {
+          id: statusId,
+          label: newStatus.label.trim(),
+          color: newStatus.color
+        }]);
+        setNewStatus({ label: '', color: 'bg-blue-100 text-blue-800' });
+      }
+    }
+  };
+
+  const removeCustomStatus = (statusId) => {
+    // Don't remove if there are projects with this status
+    const hasProjects = projects.some(p => p.status === statusId);
+    if (hasProjects) {
+      alert('Cannot remove status that has projects assigned to it.');
+      return;
+    }
+    setCustomStatuses(customStatuses.filter(s => s.id !== statusId));
+  };
+
   const getStatusColor = (status) => {
-    const colors = {
-      planning: 'bg-gray-100 text-gray-800',
-      active: 'bg-green-100 text-green-800',
-      on_hold: 'bg-yellow-100 text-yellow-800',
-      completed: 'bg-blue-100 text-blue-800',
-      cancelled: 'bg-red-100 text-red-800'
-    };
-    return colors[status] || colors.planning;
+    const found = customStatuses.find(s => s.id === status);
+    return found?.color || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusLabel = (status) => {
+    const found = customStatuses.find(s => s.id === status);
+    return found?.label || status;
   };
 
   const getPriorityColor = (priority) => {
@@ -105,6 +198,19 @@ export default function Projects() {
     return colors[priority] || colors.medium;
   };
 
+  const colorOptions = [
+    { value: 'bg-gray-100 text-gray-800', label: 'Gray' },
+    { value: 'bg-blue-100 text-blue-800', label: 'Blue' },
+    { value: 'bg-green-100 text-green-800', label: 'Green' },
+    { value: 'bg-yellow-100 text-yellow-800', label: 'Yellow' },
+    { value: 'bg-orange-100 text-orange-800', label: 'Orange' },
+    { value: 'bg-red-100 text-red-800', label: 'Red' },
+    { value: 'bg-purple-100 text-purple-800', label: 'Purple' },
+    { value: 'bg-pink-100 text-pink-800', label: 'Pink' },
+    { value: 'bg-indigo-100 text-indigo-800', label: 'Indigo' },
+    { value: 'bg-teal-100 text-teal-800', label: 'Teal' },
+  ];
+
   const metrics = {
     totalProjects: projects.length,
     activeProjects: projects.filter(p => p.status === 'active').length,
@@ -112,10 +218,98 @@ export default function Projects() {
     avgProgress: projects.length > 0 ? Math.round(projects.reduce((sum, p) => sum + (p.progress_percentage || 0), 0) / projects.length) : 0
   };
 
+  // Project Card Component
+  const ProjectCard = ({ project, draggable = false }) => (
+    <Card
+      className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : ''}`}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => handleDragStart(e, project) : undefined}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-lg text-slate-900 mb-1 truncate">{project.project_name}</h3>
+            <p className="text-sm text-slate-500">{project.client_name}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>
+            <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title="Edit Project">
+              <Edit2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-600">Progress</span>
+            <span className="font-semibold">{project.progress_percentage || 0}%</span>
+          </div>
+          <Progress value={project.progress_percentage || 0} className="h-2" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-slate-500 mb-1">Budget</p>
+            <p className="font-semibold">${(project.budget || 0).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-slate-500 mb-1">Spent</p>
+            <p className="font-semibold">${(project.actual_cost || 0).toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {project.priority && (
+            <Badge className={getPriorityColor(project.priority)} variant="outline">
+              {project.priority}
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs">
+            <Clock className="w-3 h-3 mr-1" />
+            {project.total_hours_logged || 0}h
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // Kanban Column Component
+  const KanbanColumn = ({ status }) => {
+    const columnProjects = filteredProjects.filter(p => p.status === status.id);
+
+    return (
+      <div
+        className="flex-shrink-0 w-80 bg-slate-100 rounded-lg p-4"
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, status.id)}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Badge className={status.color}>{status.label}</Badge>
+            <span className="text-sm text-slate-500">({columnProjects.length})</span>
+          </div>
+        </div>
+        <div className="space-y-3 min-h-[200px]">
+          {columnProjects.map(project => (
+            <div key={project.id} className="cursor-move">
+              <ProjectCard project={project} draggable={true} />
+            </div>
+          ))}
+          {columnProjects.length === 0 && (
+            <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-300 rounded-lg">
+              Drop projects here
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -180,37 +374,135 @@ export default function Projects() {
           </Card>
         </div>
 
-        {/* Projects List */}
+        {/* AI Insights Panel */}
+        {(projectAnalysis.insights.length > 0 || projectAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-blue-600" />
+                AI Project Insights
+                <Badge className="bg-blue-100 text-blue-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Total Spent</p>
+                      <p className="text-lg font-bold text-slate-900">${(projectAnalysis.metrics?.totalSpent || 0).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {projectAnalysis.insights.slice(0, 2).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' || insight.type === 'negative' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-blue-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {projectAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-medium text-slate-900 text-sm mb-2">AI Recommendations</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {projectAnalysis.recommendations.map((rec, index) => (
+                          <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
+                            <span className={`w-2 h-2 rounded-full ${
+                              rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
+                            }`} />
+                            <span className="text-slate-700">{rec.action}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Projects List/Kanban */}
         <Card className="bg-white/80 backdrop-blur-sm">
           <CardHeader className="border-b">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <CardTitle>Projects</CardTitle>
-              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600">
-                <Plus className="w-4 h-4 mr-2" /> New Project
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* View Toggle */}
+                <div className="flex items-center bg-slate-100 rounded-lg p-1">
+                  <Button
+                    size="sm"
+                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                    onClick={() => setViewMode('grid')}
+                    className="h-8"
+                  >
+                    <LayoutGrid className="w-4 h-4 mr-1" /> Grid
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                    onClick={() => setViewMode('kanban')}
+                    className="h-8"
+                  >
+                    <Columns className="w-4 h-4 mr-1" /> Kanban
+                  </Button>
+                </div>
+
+                {/* Status Settings */}
+                <Button variant="outline" size="sm" onClick={() => setShowStatusModal(true)}>
+                  <Settings className="w-4 h-4 mr-1" /> Statuses
+                </Button>
+
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600">
+                  <Plus className="w-4 h-4 mr-2" /> New Project
+                </Button>
+              </div>
             </div>
             <div className="flex gap-3 mt-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
+                <Input
                   placeholder="Search projects..."
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="on_hold">On Hold</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
+              {viewMode === 'grid' && (
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    {customStatuses.map(status => (
+                      <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-6">
@@ -218,58 +510,26 @@ export default function Projects() {
               <div className="flex items-center justify-center py-16">
                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : filteredProjects.length === 0 ? (
+            ) : filteredProjects.length === 0 && viewMode === 'grid' ? (
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500">No projects yet</p>
                 <Button onClick={() => setShowCreateModal(true)} className="mt-4">Create First Project</Button>
               </div>
+            ) : viewMode === 'kanban' ? (
+              /* Kanban View */
+              <div className="overflow-x-auto pb-4">
+                <div className="flex gap-4 min-w-max">
+                  {customStatuses.map(status => (
+                    <KanbanColumn key={status.id} status={status} />
+                  ))}
+                </div>
+              </div>
             ) : (
+              /* Grid View */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProjects.map((project) => (
-                  <Card key={project.id} className="bg-white border-slate-200 hover:shadow-lg transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-lg text-slate-900 mb-1 truncate">{project.project_name}</h3>
-                          <p className="text-sm text-slate-500">{project.client_name}</p>
-                        </div>
-                        <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-slate-600">Progress</span>
-                          <span className="font-semibold">{project.progress_percentage || 0}%</span>
-                        </div>
-                        <Progress value={project.progress_percentage || 0} className="h-2" />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-slate-500 mb-1">Budget</p>
-                          <p className="font-semibold">${(project.budget || 0).toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500 mb-1">Spent</p>
-                          <p className="font-semibold">${(project.actual_cost || 0).toLocaleString()}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {project.priority && (
-                          <Badge className={getPriorityColor(project.priority)} variant="outline">
-                            {project.priority}
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-xs">
-                          <Clock className="w-3 h-3 mr-1" />
-                          {project.total_hours_logged || 0}h
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <ProjectCard key={project.id} project={project} />
                 ))}
               </div>
             )}
@@ -333,7 +593,7 @@ export default function Projects() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">Budget *</label>
                   <Input
@@ -357,19 +617,236 @@ export default function Projects() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Priority</label>
+                  <Select value={newProject.priority} onValueChange={(value) => setNewProject({...newProject, priority: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateProject} 
+                <Button
+                  onClick={handleCreateProject}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600"
-                  disabled={!newProject.project_name || !newProject.client_name}
+                  disabled={!newProject.project_name || !newProject.client_name || isSubmitting}
                 >
-                  Create Project
+                  {isSubmitting ? 'Creating...' : 'Create Project'}
                 </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Project Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Project</DialogTitle>
+            </DialogHeader>
+            {editProject && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Project Name *</label>
+                    <Input
+                      value={editProject.project_name}
+                      onChange={(e) => setEditProject({...editProject, project_name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Project Code</label>
+                    <Input
+                      value={editProject.project_code}
+                      onChange={(e) => setEditProject({...editProject, project_code: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Client Name *</label>
+                  <Input
+                    value={editProject.client_name}
+                    onChange={(e) => setEditProject({...editProject, client_name: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Start Date</label>
+                    <Input
+                      type="date"
+                      value={editProject.start_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditProject({...editProject, start_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">End Date</label>
+                    <Input
+                      type="date"
+                      value={editProject.end_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditProject({...editProject, end_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Budget</label>
+                    <Input
+                      type="number"
+                      value={editProject.budget}
+                      onChange={(e) => setEditProject({...editProject, budget: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Billing Type</label>
+                    <Select value={editProject.billing_type || 'time_material'} onValueChange={(value) => setEditProject({...editProject, billing_type: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed_price">Fixed Price</SelectItem>
+                        <SelectItem value="time_material">Time & Material</SelectItem>
+                        <SelectItem value="milestone">Milestone</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Priority</label>
+                    <Select value={editProject.priority || 'medium'} onValueChange={(value) => setEditProject({...editProject, priority: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Status</label>
+                    <Select value={editProject.status || 'planning'} onValueChange={(value) => setEditProject({...editProject, status: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customStatuses.map(status => (
+                          <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Progress (%)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editProject.progress_percentage}
+                      onChange={(e) => setEditProject({...editProject, progress_percentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))})}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditProject(null); }} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdateProject}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600"
+                    disabled={!editProject.project_name || !editProject.client_name || isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Status Management Modal */}
+        <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Manage Project Statuses</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Add New Status */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-lg">
+                <h4 className="text-sm font-medium">Add New Status</h4>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Status name"
+                    value={newStatus.label}
+                    onChange={(e) => setNewStatus({...newStatus, label: e.target.value})}
+                    className="flex-1"
+                  />
+                  <Select value={newStatus.color} onValueChange={(value) => setNewStatus({...newStatus, color: value})}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {colorOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${opt.value.split(' ')[0]}`} />
+                            {opt.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={addCustomStatus} disabled={!newStatus.label.trim()}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Existing Statuses */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Current Statuses</h4>
+                {customStatuses.map((status, index) => (
+                  <div key={status.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <GripVertical className="w-4 h-4 text-slate-400" />
+                      <Badge className={status.color}>{status.label}</Badge>
+                      <span className="text-xs text-slate-500">
+                        ({projects.filter(p => p.status === status.id).length} projects)
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeCustomStatus(status.id)}
+                      disabled={projects.some(p => p.status === status.id)}
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button onClick={() => setShowStatusModal(false)}>Done</Button>
               </div>
             </div>
           </DialogContent>

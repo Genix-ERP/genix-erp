@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { RolePermission } from '@/api/entities';
+import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +72,7 @@ export default function PermissionsManagement() {
   const loadPermissions = async () => {
     setIsLoading(true);
     try {
-      const data = await base44.entities.RolePermission.filter({ role: selectedRole });
+      const data = await RolePermission.filter({ role: selectedRole });
       setPermissions(data);
     } catch (error) {
       console.error('Error loading permissions:', error);
@@ -95,7 +96,7 @@ export default function PermissionsManagement() {
 
   const updatePermission = async (entityName, field, value) => {
     const existing = permissions.find(p => p.entity_name === entityName);
-    
+
     try {
       const updateData = {
         role: selectedRole,
@@ -104,11 +105,11 @@ export default function PermissionsManagement() {
       };
 
       if (existing) {
-        await base44.entities.RolePermission.update(existing.id, { [field]: value });
+        await RolePermission.update(existing.id, { [field]: value });
       } else {
-        await base44.entities.RolePermission.create(updateData);
+        await RolePermission.create(updateData);
       }
-      
+
       await loadPermissions();
     } catch (error) {
       console.error('Error updating permission:', error);
@@ -117,14 +118,14 @@ export default function PermissionsManagement() {
 
   const applyTemplate = async (templateName) => {
     setIsSaving(true);
-    
+
     try {
       // AI-powered template application
-      const prompt = `Generate optimal permissions for role "${selectedRole}" using ${templateName} best practices. 
+      const prompt = `Generate optimal permissions for role "${selectedRole}" using ${templateName} best practices.
       Consider security, usability, and enterprise standards.
       Return JSON array with entity permissions.`;
-      
-      const response = await base44.integrations.Core.InvokeLLM({
+
+      const response = await InvokeLLM({
         prompt,
         response_json_schema: {
           type: "object",
@@ -152,15 +153,15 @@ export default function PermissionsManagement() {
       // Apply AI-recommended permissions
       for (const perm of response.permissions) {
         const existing = permissions.find(p => p.entity_name === perm.entity_name);
-        
+
         if (existing) {
-          await base44.entities.RolePermission.update(existing.id, {
+          await RolePermission.update(existing.id, {
             ...perm,
             template_source: templateName,
             ai_recommended: true
           });
         } else {
-          await base44.entities.RolePermission.create({
+          await RolePermission.create({
             role: selectedRole,
             ...perm,
             template_source: templateName,
@@ -170,30 +171,30 @@ export default function PermissionsManagement() {
       }
 
       await loadPermissions();
-      alert(`✅ ${PERMISSION_TEMPLATES[templateName].name} template applied successfully!`);
+      alert(`${PERMISSION_TEMPLATES[templateName].name} template applied successfully!`);
     } catch (error) {
       console.error('Error applying template:', error);
-      alert('❌ Failed to apply template');
+      alert('Failed to apply template');
     }
-    
+
     setIsSaving(false);
   };
 
   const generateAIRecommendations = async () => {
     setShowAIRecommendations(true);
-    
+
     try {
       const prompt = `Analyze current permissions for role "${selectedRole}" and suggest improvements based on:
       1. Security best practices (principle of least privilege)
       2. Common ERP patterns (Odoo, SAP, Oracle, Microsoft Dynamics)
       3. Role responsibilities and typical workflows
       4. Data segregation requirements
-      
+
       Current permissions: ${JSON.stringify(permissions)}
-      
+
       Provide specific recommendations with reasoning.`;
-      
-      const response = await base44.integrations.Core.InvokeLLM({
+
+      const response = await InvokeLLM({
         prompt,
         response_json_schema: {
           type: "object",
@@ -222,11 +223,11 @@ export default function PermissionsManagement() {
 
   const copyRolePermissions = async (fromRole) => {
     if (!confirm(`Copy permissions from ${fromRole} to ${selectedRole}?`)) return;
-    
+
     setIsSaving(true);
     try {
-      const sourcePermissions = await base44.entities.RolePermission.filter({ role: fromRole });
-      
+      const sourcePermissions = await RolePermission.filter({ role: fromRole });
+
       for (const perm of sourcePermissions) {
         const existing = permissions.find(p => p.entity_name === perm.entity_name);
         const permData = {
@@ -242,17 +243,17 @@ export default function PermissionsManagement() {
         };
 
         if (existing) {
-          await base44.entities.RolePermission.update(existing.id, permData);
+          await RolePermission.update(existing.id, permData);
         } else {
-          await base44.entities.RolePermission.create(permData);
+          await RolePermission.create(permData);
         }
       }
 
       await loadPermissions();
-      alert('✅ Permissions copied successfully!');
+      alert('Permissions copied successfully!');
     } catch (error) {
       console.error('Error copying permissions:', error);
-      alert('❌ Failed to copy permissions');
+      alert('Failed to copy permissions');
     }
     setIsSaving(false);
   };

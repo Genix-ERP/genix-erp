@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { Subscription, Company } from "@/api/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ export default function SubscriptionManagement({ onUpdate }) {
 
   const loadSubscriptions = async () => {
     try {
-      const data = await base44.entities.Subscription.list('-created_date');
+      const data = await Subscription.list('-created_date');
       setSubscriptions(data);
     } catch (error) {
       console.error("Error loading subscriptions:", error);
@@ -48,7 +48,7 @@ export default function SubscriptionManagement({ onUpdate }) {
 
   const loadCompanies = async () => {
     try {
-      const data = await base44.entities.Company.list();
+      const data = await Company.list();
       setCompanies(data);
     } catch (error) {
       console.error("Error loading companies:", error);
@@ -70,9 +70,9 @@ export default function SubscriptionManagement({ onUpdate }) {
     e.preventDefault();
     try {
       if (editingSubscription) {
-        await base44.entities.Subscription.update(editingSubscription.id, formData);
+        await Subscription.update(editingSubscription.id, formData);
       } else {
-        await base44.entities.Subscription.create(formData);
+        await Subscription.create(formData);
       }
       loadSubscriptions();
       setShowForm(false);

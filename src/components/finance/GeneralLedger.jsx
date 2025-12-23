@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,52 +10,45 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useFinancials } from "@/components/contexts/FinancialsContext";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const {
+    journalEntries,
+    createJournalEntry,
+    getJournalLines,
+    isLoading
+  } = useFinancials();
 
-  const [journalEntries, setJournalEntries] = useState([]);
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntry, setSelectedEntry] = useState(null);
-  const [journalLines, setJournalLines] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedJournalLines, setSelectedJournalLines] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [newEntry, setNewEntry] = useState({
     journal_number: '',
-    company_id: 'default', // Assuming a default company ID for new entries
-    posting_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+    company_id: 'default',
+    posting_date: new Date().toISOString().split('T')[0],
     description: '',
-    journal_type: 'manual', // Assuming 'manual' for new entries
-    status: 'draft', // New entries start as 'draft'
+    journal_type: 'manual',
+    status: 'draft',
     total_debit: 0,
     total_credit: 0,
-    currency: 'USD' // Assuming default currency USD
+    currency: 'USD'
   });
 
   useEffect(() => {
-    loadJournalEntries();
-  }, []);
+    setFilteredEntries(journalEntries);
+  }, [journalEntries]);
 
-  const loadJournalEntries = async () => {
-    try {
-      const entries = await base44.entities.JournalEntry.list("-posting_date", 100);
-      setJournalEntries(entries);
-      setFilteredEntries(entries);
-    } catch (error) {
-      console.error('Error loading journal entries:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
   useEffect(() => {
     let filtered = journalEntries;
     if (searchQuery) {
-      filtered = journalEntries.filter(entry => 
+      filtered = journalEntries.filter(entry =>
         entry.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         entry.journal_number?.toLowerCase().includes(searchQuery.toLowerCase())
       );
@@ -64,31 +56,23 @@ export default function GeneralLedger() {
     setFilteredEntries(filtered);
   }, [searchQuery, journalEntries]);
 
-  const handleSelectEntry = async (entry) => {
+  const handleSelectEntry = (entry) => {
     setSelectedEntry(entry);
-    try {
-      const lines = await base44.entities.JournalLine.filter({ journal_entry_id: entry.id });
-      setJournalLines(lines);
-    } catch (error) {
-      console.error('Error loading journal lines:', error);
-    }
+    const lines = getJournalLines(entry.id);
+    setSelectedJournalLines(lines);
   };
 
-  const handleCreateEntry = async () => {
+  const handleCreateEntry = () => {
     setIsSaving(true);
     try {
-      // Generate journal number if not provided
-      const journalNumber = newEntry.journal_number || `JE-${Date.now()}`;
-      
       const entryData = {
         ...newEntry,
-        journal_number: journalNumber,
         total_debit: parseFloat(newEntry.total_debit) || 0,
         total_credit: parseFloat(newEntry.total_credit) || 0
       };
 
-      await base44.entities.JournalEntry.create(entryData);
-      
+      createJournalEntry(entryData);
+
       // Reset form and close modal
       setNewEntry({
         journal_number: '',
@@ -101,9 +85,8 @@ export default function GeneralLedger() {
         total_credit: 0,
         currency: 'USD'
       });
-      
+
       setShowCreateModal(false);
-      loadJournalEntries(); // Refresh the list of journal entries
     } catch (error) {
       console.error('Error creating journal entry:', error);
     } finally {
@@ -302,8 +285,8 @@ export default function GeneralLedger() {
                     {t('journal_lines')}
                   </h4>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {journalLines.length > 0 ? (
-                      journalLines.map(line => (
+                    {selectedJournalLines.length > 0 ? (
+                      selectedJournalLines.map(line => (
                         <div key={line.id} className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                           <div className="flex justify-between items-start mb-2">
                             <p className="text-sm font-medium text-slate-700 flex-1 pr-2">{line.description}</p>

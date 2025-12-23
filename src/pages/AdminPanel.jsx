@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useSubscription } from '@/components/contexts/SubscriptionContext';
+import apiClient from '@/api/client';
+import { SendEmail } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Plus, Search, Shield, Users, Settings, Activity, AlertTriangle, CheckCircle, XCircle, 
+import {
+  Plus, Search, Shield, Users, Settings, Activity, AlertTriangle, CheckCircle, XCircle,
   Mail, Trash2, Ban, Clock, Gift, Calendar, CreditCard, UserX, UserCheck, AlertCircle,
-  DollarSign, Package, Briefcase
+  DollarSign, Package, Briefcase, Crown, Sparkles
 } from 'lucide-react';
 import { format, differenceInDays, addDays, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -24,6 +28,17 @@ export default function AdminPanel() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { user: currentUser } = useAuth();
+  const {
+    companyUsers,
+    subscription,
+    getPlanLimits,
+    canAddUser,
+    addUser: addCompanyUser,
+    updateUser: updateCompanyUser,
+    deleteUser: deleteCompanyUser,
+    toggleUserStatus,
+    changeUserRole
+  } = useSubscription();
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
@@ -89,35 +104,20 @@ export default function AdminPanel() {
         return;
       }
 
-      // Demo users for local authentication
-      const demoUsers = [
-        {
-          id: '1',
-          email: 'admin@genixerp.com',
-          full_name: 'System Administrator',
-          role: 'admin',
-          subscription_status: 'active',
-          subscription_plan: 'enterprise',
-          created_date: new Date().toISOString()
-        },
-        {
-          id: '2',
-          email: 'user@genixerp.com',
-          full_name: 'Demo User',
-          role: 'user',
-          subscription_status: 'trial',
-          subscription_plan: 'free_trial',
-          trial_end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-          created_date: new Date().toISOString()
-        }
-      ];
-      setUsers(demoUsers);
-      setFilteredUsers(demoUsers);
+      // Use companyUsers from SubscriptionContext
+      setUsers(companyUsers);
+      setFilteredUsers(companyUsers);
     } catch (error) {
       console.error('Error loading data:', error);
     }
     setIsLoading(false);
   };
+
+  // Sync users when companyUsers changes
+  useEffect(() => {
+    setUsers(companyUsers);
+    setFilteredUsers(companyUsers);
+  }, [companyUsers]);
 
   const handleInviteUser = async () => {
     if (!inviteData.email || !inviteData.full_name) {
@@ -125,207 +125,141 @@ export default function AdminPanel() {
       return;
     }
 
+    // Check if can add more users
+    if (!canAddUser()) {
+      const limits = getPlanLimits();
+      alert(`⚠️ Foydalanuvchi limiti tugadi!\n\nJoriy tarifingiz ${limits.maxUsers} ta foydalanuvchiga ruxsat beradi.\n\nKo'proq foydalanuvchi qo'shish uchun tarifingizni yangilang.`);
+      return;
+    }
+
     setIsSendingInvite(true);
-    
-    // Show instructions instead of sending email (since Base44 can't send to external users)
-    alert(`✅ User Invitation Prepared!
 
-📋 NEXT STEPS TO INVITE USER:
+    // Add user to company users
+    const result = addCompanyUser({
+      email: inviteData.email,
+      full_name: inviteData.full_name,
+      role: inviteData.role,
+      subscription_status: 'active',
+      subscription_plan: subscription?.plan || 'free_trial'
+    });
 
-1️⃣ **Create User in Base44 Dashboard:**
-   • Go to: Dashboard → Users → Add User
-   • Email: ${inviteData.email}
-   • Name: ${inviteData.full_name}
-   • Role: ${getRoleDisplayName(inviteData.role)}
-   • Set temporary password
+    if (result.success) {
+      alert(`✅ Foydalanuvchi qo'shildi!\n\nIsm: ${inviteData.full_name}\nEmail: ${inviteData.email}\nRol: ${getRoleDisplayName(inviteData.role)}\n\nFoydalanuvchi tizimga kirish uchun parol yaratishi kerak.`);
+      setShowInviteModal(false);
+      setInviteData({ email: '', full_name: '', role: 'user' });
+    } else {
+      alert(`❌ Xatolik: ${result.message}`);
+    }
 
-2️⃣ **Share Credentials Securely:**
-   • Send login details via your secure channel
-   • Login URL: ${window.location.origin}
-   • Email: ${inviteData.email}
-   • Temporary password: [you set this]
-
-3️⃣ **User Setup:**
-   • User logs in with temp password
-   • Goes to Settings → Security to change password
-   • Gets 14-day free trial automatically
-
-4️⃣ **Optional - Send Welcome Email:**
-   After user is created in Base44, you can send them a welcome email from Settings.
-
-Copy these instructions if needed!`);
-    
     setIsSendingInvite(false);
-    setShowInviteModal(false);
-    setInviteData({ email: '', full_name: '', role: 'user' });
   };
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
-    
+
     try {
-      await base44.entities.User.delete(selectedUser.id);
-      alert(`✅ User ${selectedUser.email} has been permanently deleted.`);
-      setShowDeleteModal(false);
-      setSelectedUser(null);
-      loadData();
+      const result = deleteCompanyUser(selectedUser.id);
+      if (result.success) {
+        alert(`✅ Foydalanuvchi ${selectedUser.email} o'chirildi.`);
+        setShowDeleteModal(false);
+        setSelectedUser(null);
+      } else {
+        alert(`❌ Xatolik: ${result.message || 'O\'chirishda xatolik'}`);
+      }
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert(`❌ Failed to delete user: ${error.message}`);
+      alert(`❌ Xatolik: ${error.message}`);
     }
   };
 
   const handleBlockUser = async () => {
     if (!selectedUser) return;
-    
-    const isBlocking = !selectedUser.is_blocked;
-    
+
+    const isBlocking = selectedUser.status !== 'blocked';
+
     try {
-      const updateData = {
-        is_blocked: isBlocking,
+      const result = updateCompanyUser(selectedUser.id, {
+        status: isBlocking ? 'blocked' : 'active',
         blocked_reason: isBlocking ? blockData.reason : null,
         blocked_date: isBlocking ? new Date().toISOString() : null
-      };
+      });
 
-      await base44.entities.User.update(selectedUser.id, updateData);
-
-      if (blockData.notify_user && isBlocking) {
-        await base44.integrations.Core.SendEmail({
-          from_name: 'Genix ERP Admin',
-          to: selectedUser.email,
-          subject: 'Your Genix ERP account has been suspended',
-          body: `
-Hello ${selectedUser.full_name},
-
-Your Genix ERP account has been temporarily suspended.
-
-Reason: ${blockData.reason || 'Administrative action'}
-
-If you believe this is an error, please contact your system administrator.
-
-Best regards,
-Genix ERP Team
-          `
-        });
+      if (result.success) {
+        alert(`✅ Foydalanuvchi ${selectedUser.email} ${isBlocking ? 'bloklandi' : 'blokdan chiqarildi'}.`);
+        setShowBlockModal(false);
+        setSelectedUser(null);
+        setBlockData({ reason: '', notify_user: true });
+      } else {
+        alert(`❌ Xatolik: ${result.message}`);
       }
-
-      alert(`✅ User ${selectedUser.email} has been ${isBlocking ? 'blocked' : 'unblocked'}.`);
-      setShowBlockModal(false);
-      setSelectedUser(null);
-      setBlockData({ reason: '', notify_user: true });
-      loadData();
     } catch (error) {
       console.error('Error updating user status:', error);
-      alert(`❌ Failed to update user: ${error.message}`);
+      alert(`❌ Xatolik: ${error.message}`);
     }
   };
 
   const handleExtendTrial = async () => {
     if (!selectedUser) return;
-    
+
     try {
-      const currentEndDate = selectedUser.trial_end_date 
+      const currentEndDate = selectedUser.trial_end_date
         ? parseISO(selectedUser.trial_end_date)
-        : addDays(new Date(), 14); // Default 14 days from now if no trial end date
-      
+        : addDays(new Date(), 14);
+
       const newEndDate = addDays(currentEndDate, parseInt(extendTrialData.days));
-      
-      await base44.entities.User.update(selectedUser.id, {
+
+      const result = updateCompanyUser(selectedUser.id, {
         trial_end_date: newEndDate.toISOString(),
         trial_start_date: selectedUser.trial_start_date || new Date().toISOString(),
         subscription_status: 'trial'
       });
 
-      await base44.integrations.Core.SendEmail({
-        from_name: 'Genix ERP Admin',
-        to: selectedUser.email,
-        subject: 'Your Genix ERP trial has been extended',
-        body: `
-Hello ${selectedUser.full_name},
-
-Great news! Your Genix ERP trial has been extended.
-
-Extension: ${extendTrialData.days} days
-New trial end date: ${format(newEndDate, 'MMMM dd, yyyy')}
-${extendTrialData.reason ? `\nReason: ${extendTrialData.reason}` : ''}
-
-Continue exploring all the powerful features of Genix ERP!
-
-Best regards,
-Genix ERP Team
-        `
-      });
-
-      alert(`✅ Trial extended by ${extendTrialData.days} days!\nNew end date: ${format(newEndDate, 'MMM dd, yyyy')}`);
-      setShowExtendTrialModal(false);
-      setSelectedUser(null);
-      setExtendTrialData({ days: 14, reason: '' });
-      loadData();
+      if (result.success) {
+        alert(`✅ Sinov muddati ${extendTrialData.days} kunga uzaytirildi!\nYangi tugash sanasi: ${format(newEndDate, 'MMM dd, yyyy')}`);
+        setShowExtendTrialModal(false);
+        setSelectedUser(null);
+        setExtendTrialData({ days: 14, reason: '' });
+      } else {
+        alert(`❌ Xatolik: ${result.message}`);
+      }
     } catch (error) {
       console.error('Error extending trial:', error);
-      alert(`❌ Failed to extend trial: ${error.message}`);
+      alert(`❌ Xatolik: ${error.message}`);
     }
   };
 
   const handleUpgradeSubscription = async () => {
     if (!selectedUser) return;
-    
+
     try {
       const startDate = new Date();
-      const endDate = addDays(startDate, upgradeData.duration * 30); // Approximate months to days
-      
-      await base44.entities.User.update(selectedUser.id, {
+      const endDate = addDays(startDate, upgradeData.duration * 30);
+
+      const result = updateCompanyUser(selectedUser.id, {
         subscription_status: 'active',
         subscription_plan: upgradeData.plan,
         subscription_start_date: startDate.toISOString(),
         subscription_end_date: endDate.toISOString(),
-        trial_end_date: null // Clear trial when activating subscription
+        trial_end_date: null
       });
 
-      await base44.integrations.Core.SendEmail({
-        from_name: 'Genix ERP Admin',
-        to: selectedUser.email,
-        subject: `Welcome to Genix ERP ${upgradeData.plan.charAt(0).toUpperCase() + upgradeData.plan.slice(1)} Plan!`,
-        body: `
-Hello ${selectedUser.full_name},
-
-Great news! Your Genix ERP account has been upgraded!
-
-Plan: ${upgradeData.plan.toUpperCase()}
-Status: Active
-Subscription End Date: ${format(endDate, 'MMMM dd, yyyy')}
-
-You now have full access to all ${upgradeData.plan} features!
-
-${upgradeData.plan === 'enterprise' ? `
-As an Enterprise customer, you enjoy:
-✅ Unlimited users
-✅ Advanced AI features
-✅ Priority support
-✅ Custom integrations
-✅ Dedicated account manager
-` : ''}
-
-Best regards,
-Genix ERP Team
-        `
-      });
-
-      alert(`✅ Subscription activated!\nPlan: ${upgradeData.plan.toUpperCase()}\nValid until: ${format(endDate, 'MMM dd, yyyy')}`);
-      setShowUpgradeModal(false);
-      setSelectedUser(null);
-      setUpgradeData({ plan: 'professional', duration: 12 });
-      loadData();
+      if (result.success) {
+        alert(`✅ Obuna faollashtirildi!\nTarif: ${upgradeData.plan.toUpperCase()}\nAmal qilish muddati: ${format(endDate, 'MMM dd, yyyy')}`);
+        setShowUpgradeModal(false);
+        setSelectedUser(null);
+        setUpgradeData({ plan: 'professional', duration: 12 });
+      } else {
+        alert(`❌ Xatolik: ${result.message}`);
+      }
     } catch (error) {
       console.error('Error upgrading subscription:', error);
-      alert(`❌ Failed to upgrade subscription: ${error.message}`);
+      alert(`❌ Xatolik: ${error.message}`);
     }
   };
 
   const updateUserRole = async (userId, newRole) => {
     try {
-      await base44.entities.User.update(userId, { role: newRole });
-      loadData();
+      changeUserRole(userId, newRole);
     } catch (error) {
       console.error('Error updating user role:', error);
     }

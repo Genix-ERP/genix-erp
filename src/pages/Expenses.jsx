@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,20 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain } from 'lucide-react';
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { analyzeExpenses } from '@/api/services/aiAnalytics';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Expenses() {
-  const [claims, setClaims] = useState([]);
+  const { expenses, createExpense, updateExpense, isLoading } = useModules();
+
+  // AI Analysis
+  const expenseAnalysis = useMemo(() => analyzeExpenses(expenses), [expenses]);
   const [filteredClaims, setFilteredClaims] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editClaim, setEditClaim] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newClaim, setNewClaim] = useState({
     claim_number: '',
@@ -32,11 +37,7 @@ export default function Expenses() {
   });
 
   useEffect(() => {
-    loadClaims();
-  }, []);
-
-  useEffect(() => {
-    let filtered = claims;
+    let filtered = expenses;
     if (statusFilter !== 'all') {
       filtered = filtered.filter(c => c.status === statusFilter);
     }
@@ -47,65 +48,10 @@ export default function Expenses() {
       );
     }
     setFilteredClaims(filtered);
-  }, [claims, searchQuery, statusFilter]);
-
-  const loadClaims = async () => {
-    try {
-      const data = await base44.entities.ExpenseClaim.list('-created_date', 100);
-      setClaims(data);
-      setFilteredClaims(data);
-    } catch (error) {
-      console.error('Error loading expense claims:', error);
-    }
-    setIsLoading(false);
-  };
-
-  const handleReceiptUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-
-      const extractedData = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: "object",
-          properties: {
-            merchant_name: { type: "string" },
-            date: { type: "string" },
-            total_amount: { type: "number" },
-            category: { type: "string" },
-            items: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  description: { type: "string" },
-                  amount: { type: "number" }
-                }
-              }
-            }
-          }
-        }
-      });
-
-      if (extractedData.status === 'success') {
-        setNewClaim({
-          ...newClaim,
-          expense_date: extractedData.output.date || newClaim.expense_date,
-          amount: extractedData.output.total_amount || 0,
-          description: extractedData.output.merchant_name || ''
-        });
-      }
-    } catch (error) {
-      console.error('Error processing receipt:', error);
-    }
-    setIsProcessing(false);
-  };
+  }, [expenses, searchQuery, statusFilter]);
 
   const handleCreateClaim = async () => {
+    setIsSubmitting(true);
     try {
       const claimData = {
         ...newClaim,
@@ -114,11 +60,10 @@ export default function Expenses() {
         status: 'draft',
         claim_date: new Date().toISOString().split('T')[0]
       };
-      
-      await base44.entities.ExpenseClaim.create(claimData);
+
+      await createExpense(claimData);
       setShowCreateModal(false);
-      loadClaims();
-      
+
       setNewClaim({
         claim_number: '',
         employee_name: '',
@@ -129,23 +74,51 @@ export default function Expenses() {
       });
     } catch (error) {
       console.error('Error creating claim:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const updateClaimStatus = async (claimId, newStatus) => {
+  const handleEditClaim = (claim) => {
+    setEditClaim({
+      ...claim,
+      amount: claim.amount || 0
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateClaim = async () => {
+    if (!editClaim) return;
+
+    setIsSubmitting(true);
     try {
-      const updates = { status: newStatus };
-      if (newStatus === 'approved') {
-        updates.approval_date = new Date().toISOString().split('T')[0];
-      }
-      if (newStatus === 'paid') {
-        updates.payment_date = new Date().toISOString().split('T')[0];
-      }
-      await base44.entities.ExpenseClaim.update(claimId, updates);
-      loadClaims();
+      updateExpense(editClaim.id, {
+        claim_number: editClaim.claim_number,
+        employee_name: editClaim.employee_name,
+        expense_date: editClaim.expense_date,
+        category: editClaim.category,
+        amount: parseFloat(editClaim.amount) || 0,
+        description: editClaim.description,
+        status: editClaim.status
+      });
+      setShowEditModal(false);
+      setEditClaim(null);
     } catch (error) {
       console.error('Error updating claim:', error);
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const updateClaimStatus = (claimId, newStatus) => {
+    const updates = { status: newStatus };
+    if (newStatus === 'approved') {
+      updates.approval_date = new Date().toISOString().split('T')[0];
+    }
+    if (newStatus === 'paid') {
+      updates.payment_date = new Date().toISOString().split('T')[0];
+    }
+    updateExpense(claimId, updates);
   };
 
   const getStatusColor = (status) => {
@@ -160,14 +133,14 @@ export default function Expenses() {
   };
 
   const metrics = {
-    totalClaims: claims.length,
-    totalAmount: claims.reduce((sum, c) => sum + (c.amount || 0), 0),
-    pendingApproval: claims.filter(c => c.status === 'submitted').length,
-    pendingPayment: claims.filter(c => c.status === 'approved').length
+    totalClaims: expenses.length,
+    totalAmount: expenses.reduce((sum, c) => sum + (c.amount || 0), 0),
+    pendingApproval: expenses.filter(c => c.status === 'submitted').length,
+    pendingPayment: expenses.filter(c => c.status === 'approved').length
   };
 
   const categoryData = {};
-  claims.forEach(c => {
+  expenses.forEach(c => {
     categoryData[c.category] = (categoryData[c.category] || 0) + (c.amount || 0);
   });
   const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
@@ -175,7 +148,7 @@ export default function Expenses() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div className="bg-gradient-to-r from-teal-600 to-cyan-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -240,8 +213,55 @@ export default function Expenses() {
           </Card>
         </div>
 
+        {/* AI Insights Panel */}
+        {(expenseAnalysis.insights.length > 0 || expenseAnalysis.recommendations.length > 0) && (
+          <Card className="bg-gradient-to-r from-teal-50 to-cyan-50 border-teal-200/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Brain className="w-5 h-5 text-teal-600" />
+                AI Expense Insights
+                <Badge className="bg-teal-100 text-teal-700 text-xs">Live</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {expenseAnalysis.insights.slice(0, 3).map((insight, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-teal-100">
+                    <div className="flex items-start gap-3">
+                      {insight.type === 'positive' ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                      ) : insight.type === 'warning' ? (
+                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      ) : (
+                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                        {insight.metric && (
+                          <p className="text-lg font-bold text-teal-600 mt-1">{insight.metric}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {expenseAnalysis.recommendations.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {expenseAnalysis.recommendations.map((rec, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-teal-100">
+                      <Lightbulb className="w-3 h-3 text-yellow-500" />
+                      <span className="text-slate-700">{rec.action}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Category Breakdown */}
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -249,24 +269,29 @@ export default function Expenses() {
                 <CardTitle>Expenses by Category</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
                     <Pie
                       data={chartData}
                       cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => entry.name}
-                      outerRadius={80}
+                      cy="45%"
+                      innerRadius={40}
+                      outerRadius={70}
                       fill="#8884d8"
                       dataKey="value"
+                      paddingAngle={2}
                     >
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Legend />
+                    <Legend
+                      layout="horizontal"
+                      align="center"
+                      verticalAlign="bottom"
+                      wrapperStyle={{ paddingTop: '10px' }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -285,7 +310,7 @@ export default function Expenses() {
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
+                  <Input
                     placeholder="Search claims..."
                     className="pl-9"
                     value={searchQuery}
@@ -348,6 +373,14 @@ export default function Expenses() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title="Edit Claim">
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              {claim.status === 'draft' && (
+                                <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'submitted')}>
+                                  Submit
+                                </Button>
+                              )}
                               {claim.status === 'submitted' && (
                                 <>
                                   <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'approved')}>
@@ -385,26 +418,6 @@ export default function Expenses() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              
-              {/* AI Receipt Upload */}
-              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
-                <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-                <p className="text-sm text-slate-600 mb-3">
-                  Upload receipt - AI will extract data automatically
-                </p>
-                <Input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={handleReceiptUpload}
-                  disabled={isProcessing}
-                />
-                {isProcessing && (
-                  <div className="mt-3 flex items-center justify-center gap-2 text-sm text-teal-600">
-                    <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-                    Processing receipt...
-                  </div>
-                )}
-              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -478,15 +491,117 @@ export default function Expenses() {
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateClaim} 
+                <Button
+                  onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
-                  disabled={!newClaim.employee_name || !newClaim.amount}
+                  disabled={!newClaim.employee_name || !newClaim.amount || isSubmitting}
                 >
-                  Submit Claim
+                  {isSubmitting ? 'Submitting...' : 'Submit Claim'}
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Claim Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Expense Claim</DialogTitle>
+            </DialogHeader>
+            {editClaim && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Claim Number</label>
+                    <Input
+                      value={editClaim.claim_number}
+                      onChange={(e) => setEditClaim({...editClaim, claim_number: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Employee Name *</label>
+                    <Input
+                      value={editClaim.employee_name}
+                      onChange={(e) => setEditClaim({...editClaim, employee_name: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Expense Date</label>
+                    <Input
+                      type="date"
+                      value={editClaim.expense_date?.split('T')[0] || ''}
+                      onChange={(e) => setEditClaim({...editClaim, expense_date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Category</label>
+                    <Select value={editClaim.category || 'travel'} onValueChange={(value) => setEditClaim({...editClaim, category: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="travel">Travel</SelectItem>
+                        <SelectItem value="meals">Meals</SelectItem>
+                        <SelectItem value="accommodation">Accommodation</SelectItem>
+                        <SelectItem value="transportation">Transportation</SelectItem>
+                        <SelectItem value="office_supplies">Office Supplies</SelectItem>
+                        <SelectItem value="training">Training</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Amount *</label>
+                    <Input
+                      type="number"
+                      value={editClaim.amount}
+                      onChange={(e) => setEditClaim({...editClaim, amount: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <Select value={editClaim.status || 'draft'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="submitted">Submitted</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Description</label>
+                  <Input
+                    value={editClaim.description || ''}
+                    onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditClaim(null); }} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdateClaim}
+                    className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
+                    disabled={!editClaim.employee_name || isSubmitting}
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

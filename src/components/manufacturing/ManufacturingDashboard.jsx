@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { ProductionOrder, WorkCenter, QualityCheck } from '@/api/entities';
+import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,9 +37,9 @@ export default function ManufacturingDashboard() {
   const loadDashboardData = async () => {
     try {
       const [orders, workCenters, qualityChecks] = await Promise.all([
-        base44.entities.ProductionOrder.list('-created_date', 50),
-        base44.entities.WorkCenter.list(),
-        base44.entities.QualityCheck.list('-created_date', 50)
+        ProductionOrder.list('-created_date'),
+        WorkCenter.list(),
+        QualityCheck.list('-created_date')
       ]);
 
       // Calculate metrics
@@ -87,12 +88,12 @@ export default function ManufacturingDashboard() {
 
   const generateAIInsights = async () => {
     try {
-      const insights = await base44.integrations.Core.InvokeLLM({
+      const insights = await InvokeLLM({
         prompt: `As a manufacturing AI analyst, provide 3 actionable insights for production optimization:
         1. Equipment efficiency and maintenance recommendations
         2. Production scheduling optimization opportunities
         3. Quality improvement suggestions
-        
+
         Each insight should include confidence level, impact assessment, and specific action.`,
         response_json_schema: {
           type: "object",
