@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { hrService, purchaseService, salesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 // Storage keys
 const EMPLOYEES_KEY = 'genix_employees';
@@ -13,9 +14,10 @@ const PAYROLLS_KEY = 'genix_payrolls';
 const CONTRACTS_KEY = 'genix_contracts';
 const PERMISSIONS_KEY = 'genix_employee_permissions';
 
-// Helper to get company-specific storage key
+// Helper to get company-specific storage key with demo prefix
 const getStorageKey = (baseKey, companyId) => {
-  return companyId ? `${baseKey}_${companyId}` : baseKey;
+  const prefix = isDemoMode() ? 'demo_' : '';
+  return companyId ? `${prefix}${baseKey}_${companyId}` : `${prefix}${baseKey}`;
 };
 
 // All available modules for permissions (matching sidebar structure)
@@ -47,17 +49,6 @@ const APP_MODULES = [
 const ALL_MODULES = [...CORE_MODULES, ...APP_MODULES];
 
 const ModulesContext = createContext();
-
-// Check if backend is available
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-const checkBackendAvailable = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/info`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
 
 // Sample data for each module
 const sampleEmployees = [
@@ -140,12 +131,16 @@ export function ModulesProvider({ children }) {
   const loadFromStorage = useCallback((key, setter, sampleData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(key, companyId);
+    const demoMode = isDemoMode();
     const stored = localStorage.getItem(storageKey);
     if (stored) {
       setter(JSON.parse(stored));
-    } else {
+    } else if (demoMode) {
       localStorage.setItem(storageKey, JSON.stringify(sampleData));
       setter(sampleData);
+    } else {
+      // Production mode - start with empty array
+      setter([]);
     }
   }, [activeCompany]);
 
@@ -155,8 +150,9 @@ export function ModulesProvider({ children }) {
 
     setIsLoading(true);
     try {
-      const isAvailable = await checkBackendAvailable();
+      const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
+      const demoMode = isDemoMode();
 
       if (isAvailable) {
         try {

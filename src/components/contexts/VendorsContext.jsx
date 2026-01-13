@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useCompany } from './CompanyContext';
+import { isDemoMode } from '@/config/dataMode';
 
 const VENDORS_STORAGE_KEY = 'genix_vendors';
 
 const VendorsContext = createContext();
 
-// Helper to get company-specific storage key
+// Helper to get company-specific storage key with demo prefix
 const getStorageKey = (baseKey, companyId) => {
-  return companyId ? `${baseKey}_${companyId}` : baseKey;
+  const prefix = isDemoMode() ? 'demo_' : '';
+  return companyId ? `${prefix}${baseKey}_${companyId}` : `${prefix}${baseKey}`;
 };
 
 // Sample vendors for demo purposes
@@ -87,18 +89,22 @@ export function VendorsProvider({ children }) {
   const loadFromLocalStorage = useCallback(() => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(VENDORS_STORAGE_KEY, companyId);
+    const demoMode = isDemoMode();
 
     const stored = localStorage.getItem(storageKey);
     if (stored) {
       setVendors(JSON.parse(stored));
-    } else {
-      // Initialize with sample vendors
+    } else if (demoMode) {
+      // Initialize with sample vendors only in demo mode
       const initialVendors = sampleVendors.map(v => ({
         ...v,
         company_id: companyId
       }));
       localStorage.setItem(storageKey, JSON.stringify(initialVendors));
       setVendors(initialVendors);
+    } else {
+      // Production mode - start with empty array
+      setVendors([]);
     }
   }, [activeCompany]);
 

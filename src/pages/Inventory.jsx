@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,15 @@ import {
   Calculator,
   Clock,
   Target,
-  Zap
+  Zap,
+  Warehouse,
+  ArrowRightLeft,
+  LayoutDashboard,
+  Box,
+  ShoppingCart,
+  Layers,
+  ClipboardList,
+  Printer
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,6 +39,12 @@ import COGSCalculator from "@/components/inventory/COGSCalculator";
 import StockMovementTracker from "@/components/inventory/StockMovementTracker";
 import CompliancePanel from "@/components/inventory/CompliancePanel";
 import ReorderOptimizer from "@/components/inventory/ReorderOptimizer";
+import Products from "@/components/inventory/Products";
+import Warehouses from "@/components/inventory/Warehouses";
+import InventoryManagement from "@/components/inventory/InventoryManagement";
+import LotTracking from "@/components/inventory/LotTracking";
+import StockCounting from "@/components/inventory/StockCounting";
+import PriceLabelPrinting from "@/components/inventory/PriceLabelPrinting";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -43,10 +56,13 @@ export default function Inventory() {
   const { t } = useTranslation(language);
   const {
     items,
+    products,
+    warehouses,
     stockMovements,
     isLoading,
     createItem,
-    updateItem
+    updateItem,
+    getInventorySummary
   } = useInventory();
 
   const [filteredItems, setFilteredItems] = useState([]);
@@ -60,7 +76,10 @@ export default function Inventory() {
   const [compliance, setCompliance] = useState(null);
   const [aiQuery, setAiQuery] = useState("");
   const [aiResponse, setAiResponse] = useState(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("dashboard");
+
+  // Get summary from context
+  const summary = getInventorySummary();
 
   // Generate AI-powered insights based on current data
   const generateInsights = useCallback(() => {
@@ -121,7 +140,7 @@ export default function Inventory() {
     if (searchQuery) {
       filtered = filtered.filter(item =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.supplier?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
@@ -224,13 +243,13 @@ export default function Inventory() {
   };
 
   const calculateMetrics = () => {
-    const totalValue = items.reduce((sum, item) => sum + (item.current_stock * item.unit_cost), 0);
-    const lowStockItems = items.filter(item => item.current_stock <= item.reorder_level);
+    const totalValue = items.reduce((sum, item) => sum + (item.current_stock * (item.unit_cost || item.cost_price || 0)), 0);
+    const lowStockItems = items.filter(item => item.current_stock <= (item.reorder_level || item.min_stock_level || 10));
     const deadStockItems = items.filter(item => item.status === 'dead_stock');
-    const expiringItems = items.filter(item => 
+    const expiringItems = items.filter(item =>
       item.expiration_date && new Date(item.expiration_date) < new Date(Date.now() + 30*24*60*60*1000)
     );
-    
+
     return {
       totalValue,
       lowStockCount: lowStockItems.length,
@@ -247,320 +266,255 @@ export default function Inventory() {
   const metrics = calculateMetrics();
 
   return (
-    <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
+    <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('inventory_title')}</h1>
-            <p className="text-slate-600 mt-2">{t('inventory_subtitle')}</p>
-            {compliance && (
-              <Badge className={`mt-2 ${compliance.compliance_status === 'compliant' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                {compliance.standard_detected} {compliance.compliance_status}
-              </Badge>
-            )}
-          </div>
-          <Button
-            onClick={() => {
-              setEditingItem(null);
-              setShowForm(true);
-            }}
-            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('add_item')}
-          </Button>
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-[var(--genix-navy)]">{t('inventory_title')}</h1>
+          <p className="text-sm md:text-base text-slate-600 mt-2">{t('inventory_subtitle')}</p>
         </div>
 
-        {/* AI Query Interface */}
-        <Card className="bg-gradient-to-r from-[var(--genix-blue)]/5 to-[var(--genix-purple)]/5 border-[var(--genix-blue)]/20">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-              <h3 className="font-semibold text-[var(--genix-navy)]">{t('inventory_ai_assistant')}</h3>
-            </div>
-            <div className="flex gap-3">
-              <Textarea
-                placeholder="Ask me anything about your inventory... e.g., 'Show me products expiring in 30 days' or 'Optimize safety stock for high-demand SKUs'"
-                value={aiQuery}
-                onChange={(e) => setAiQuery(e.target.value)}
-                className="flex-1"
-                rows={2}
-              />
-              <Button onClick={handleAIQuery} className="px-6">
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Ask AI
-              </Button>
-            </div>
-            {aiResponse && (
-              <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200">
-                <div className="flex items-center gap-2 mb-3">
-                  <Brain className="w-4 h-4 text-[var(--genix-purple)]" />
-                  <span className="font-medium text-slate-700">AI Analysis:</span>
-                </div>
-                <div className="prose prose-sm max-w-none text-slate-600">
-                  <ReactMarkdown>{aiResponse}</ReactMarkdown>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Advanced Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('total_value')}</p>
-                  <p className="text-lg font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-                </div>
-                <TrendingUp className="w-6 h-6 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('low_stock')}</p>
-                  <p className="text-lg font-bold text-orange-600">{metrics.lowStockCount}</p>
-                </div>
-                <AlertTriangle className="w-6 h-6 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('dead_stock')}</p>
-                  <p className="text-lg font-bold text-purple-600">{metrics.deadStockCount}</p>
-                </div>
-                <Package className="w-6 h-6 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('expiring_soon')}</p>
-                  <p className="text-lg font-bold text-red-600">{metrics.expiringCount}</p>
-                </div>
-                <Clock className="w-6 h-6 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('fifo_items')}</p>
-                  <p className="text-lg font-bold text-green-600">{metrics.fifoItems}</p>
-                </div>
-                <Target className="w-6 h-6 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-slate-500">{t('wac_items')}</p>
-                  <p className="text-lg font-bold text-blue-600">{metrics.wacItems}</p>
-                </div>
-                <BarChart3 className="w-6 h-6 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Compliance Panel */}
-        {compliance && <CompliancePanel compliance={compliance} />}
-
-        {/* Main Content Tabs */}
+        {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="movements">Stock Movements</TabsTrigger>
-            <TabsTrigger value="cogs">COGS Calculator</TabsTrigger>
-            <TabsTrigger value="reorder">Reorder Optimizer</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger
+              value="dashboard"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('dashboard')}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="products"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Package className="w-4 h-4" />
+              <span className="hidden sm:inline">Products</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="warehouses"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Warehouse className="w-4 h-4" />
+              <span className="hidden sm:inline">Warehouses</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="stock"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Box className="w-4 h-4" />
+              <span className="hidden sm:inline">Stock Management</span>
+              <span className="sm:hidden">Stock</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="cogs"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Calculator className="w-4 h-4" />
+              <span className="hidden sm:inline">COGS</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="reorder"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Target className="w-4 h-4" />
+              <span className="hidden sm:inline">Reorder</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="analytics"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Analytics</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="lots"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Layers className="w-4 h-4" />
+              <span className="hidden sm:inline">Partiyalar</span>
+              <span className="sm:hidden">Lots</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="counting"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">Inventarizatsiya</span>
+              <span className="sm:hidden">Count</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="labels"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">Yorliqlar</span>
+              <span className="sm:hidden">Print</span>
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Filters */}
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard" className="mt-6 space-y-6">
+            {/* AI Query Interface */}
+            <Card className="bg-gradient-to-r from-[var(--genix-blue)]/5 to-[var(--genix-purple)]/5 border-[var(--genix-blue)]/20">
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input
-                      placeholder="Search inventory..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="electronics">Electronics</SelectItem>
-                      <SelectItem value="office">Office</SelectItem>
-                      <SelectItem value="apparel">Apparel</SelectItem>
-                      <SelectItem value="food">Food</SelectItem>
-                      <SelectItem value="pharmaceutical">Pharmaceutical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="low_stock">Low Stock</SelectItem>
-                      <SelectItem value="dead_stock">Dead Stock</SelectItem>
-                      <SelectItem value="overstock">Overstock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={costingFilter} onValueChange={setCostingFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Costing Method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Methods</SelectItem>
-                      <SelectItem value="fifo">FIFO</SelectItem>
-                      <SelectItem value="weighted_average">Weighted Average</SelectItem>
-                      <SelectItem value="lifo">LIFO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" className="w-full">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
+                  <h3 className="font-semibold text-[var(--genix-navy)]">{t('inventory_ai_assistant')}</h3>
+                </div>
+                <div className="flex gap-3">
+                  <Textarea
+                    placeholder="Ask me anything about your inventory... e.g., 'Show me low stock items' or 'What's my total inventory value?'"
+                    value={aiQuery}
+                    onChange={(e) => setAiQuery(e.target.value)}
+                    className="flex-1"
+                    rows={2}
+                  />
+                  <Button onClick={handleAIQuery} className="px-6">
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Ask AI
                   </Button>
                 </div>
+                {aiResponse && (
+                  <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Brain className="w-4 h-4 text-[var(--genix-purple)]" />
+                      <span className="font-medium text-slate-700">AI Analysis:</span>
+                    </div>
+                    <div className="prose prose-sm max-w-none text-slate-600">
+                      <ReactMarkdown>{aiResponse}</ReactMarkdown>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Inventory Table */}
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-              <CardHeader>
-                <CardTitle>Inventory Items</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Stock</TableHead>
-                        <TableHead>Costing</TableHead>
-                        <TableHead>Value</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Velocity</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredItems.map((item) => (
-                        <TableRow key={item.id} className="hover:bg-slate-50/80">
-                          <TableCell>
-                            <div>
-                              <p className="font-medium text-slate-900">{item.name}</p>
-                              <p className="text-sm text-slate-500">{item.sku}</p>
-                              {item.expiration_date && new Date(item.expiration_date) < new Date(Date.now() + 30*24*60*60*1000) && (
-                                <Badge className="bg-red-100 text-red-800 text-xs mt-1">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  Expires Soon
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <span className="font-medium">{item.current_stock}</span>
-                              {item.current_stock <= item.reorder_level && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <AlertTriangle className="w-3 h-3 text-orange-500" />
-                                  <span className="text-xs text-orange-600">Reorder at {item.reorder_level}</span>
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getCostingMethodColor(item.costing_method)}>
-                              {item.costing_method?.toUpperCase() || 'FIFO'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>${(item.current_stock * item.unit_cost).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(item.status)}>
-                              {item.status.replace('_', ' ')}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              <div>{item.sales_velocity || 0} units/day</div>
-                              <div className="text-slate-500">ABC: ${item.abc_classification || 'C'}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingItem(item);
-                                setShowForm(true);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">{t('total_value')}</p>
+                      <p className="text-lg font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
+                    </div>
+                    <TrendingUp className="w-6 h-6 text-green-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">{t('low_stock')}</p>
+                      <p className="text-lg font-bold text-orange-600">{metrics.lowStockCount}</p>
+                    </div>
+                    <AlertTriangle className="w-6 h-6 text-orange-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Products</p>
+                      <p className="text-lg font-bold text-blue-600">{products?.length || 0}</p>
+                    </div>
+                    <Package className="w-6 h-6 text-blue-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Warehouses</p>
+                      <p className="text-lg font-bold text-purple-600">{warehouses?.length || 0}</p>
+                    </div>
+                    <Warehouse className="w-6 h-6 text-purple-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">{t('fifo_items')}</p>
+                      <p className="text-lg font-bold text-green-600">{metrics.fifoItems}</p>
+                    </div>
+                    <Target className="w-6 h-6 text-green-600" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">{t('wac_items')}</p>
+                      <p className="text-lg font-bold text-blue-600">{metrics.wacItems}</p>
+                    </div>
+                    <BarChart3 className="w-6 h-6 text-blue-600" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Compliance Panel */}
+            {compliance && <CompliancePanel compliance={compliance} />}
+
+            {/* AI Insights */}
+            {insights && <InventoryInsights insights={insights} />}
           </TabsContent>
 
-          <TabsContent value="movements">
-            <StockMovementTracker movements={stockMovements} items={items} />
+          {/* Products Tab */}
+          <TabsContent value="products" className="mt-6">
+            <Products />
           </TabsContent>
 
-          <TabsContent value="cogs">
+          {/* Warehouses Tab */}
+          <TabsContent value="warehouses" className="mt-6">
+            <Warehouses />
+          </TabsContent>
+
+          {/* Stock Management Tab */}
+          <TabsContent value="stock" className="mt-6">
+            <InventoryManagement />
+          </TabsContent>
+
+          {/* COGS Tab */}
+          <TabsContent value="cogs" className="mt-6">
             <COGSCalculator items={items} movements={stockMovements} />
           </TabsContent>
 
-          <TabsContent value="reorder">
+          {/* Reorder Tab */}
+          <TabsContent value="reorder" className="mt-6">
             <ReorderOptimizer items={items} movements={stockMovements} />
           </TabsContent>
 
-          <TabsContent value="analytics">
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
                 <CardHeader>
-                  <CardTitle>Inventory Turnover Analysis</CardTitle>
+                  <CardTitle>Stock Movements</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="text-center py-8">
-                      <BarChart3 className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                      <p className="text-slate-600">Advanced analytics coming soon</p>
-                    </div>
-                  </div>
+                  <StockMovementTracker movements={stockMovements} items={items} />
                 </CardContent>
               </Card>
 
@@ -576,24 +530,42 @@ export default function Inventory() {
                           {items.filter(i => i.abc_classification === 'A').length}
                         </div>
                         <div className="text-sm text-slate-600">A Items</div>
+                        <div className="text-xs text-slate-500">High Priority</div>
                       </div>
                       <div className="text-center p-4 bg-blue-50 rounded-lg">
                         <div className="text-2xl font-bold text-blue-600">
                           {items.filter(i => i.abc_classification === 'B').length}
                         </div>
                         <div className="text-sm text-slate-600">B Items</div>
+                        <div className="text-xs text-slate-500">Medium Priority</div>
                       </div>
                       <div className="text-center p-4 bg-slate-50 rounded-lg">
                         <div className="text-2xl font-bold text-slate-600">
                           {items.filter(i => i.abc_classification === 'C' || !i.abc_classification).length}
                         </div>
                         <div className="text-sm text-slate-600">C Items</div>
+                        <div className="text-xs text-slate-500">Low Priority</div>
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Lot Tracking Tab */}
+          <TabsContent value="lots" className="mt-6">
+            <LotTracking />
+          </TabsContent>
+
+          {/* Stock Counting Tab */}
+          <TabsContent value="counting" className="mt-6">
+            <StockCounting />
+          </TabsContent>
+
+          {/* Price Labels Tab */}
+          <TabsContent value="labels" className="mt-6">
+            <PriceLabelPrinting />
           </TabsContent>
         </Tabs>
 
@@ -608,9 +580,6 @@ export default function Inventory() {
             }}
           />
         )}
-        
-        {/* AI Insights - Moved to bottom */}
-        {insights && <InventoryInsights insights={insights} />}
       </div>
     </div>
   );

@@ -1,0 +1,775 @@
+import React, { useState, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Printer,
+  Search,
+  Package,
+  Plus,
+  Minus,
+  Trash2,
+  Eye,
+  QrCode,
+  Barcode,
+  Tag,
+  Settings,
+  Download,
+  RefreshCw,
+} from "lucide-react";
+
+import { useInventory } from "@/components/contexts/InventoryContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
+
+// Label template configurations
+const LABEL_TEMPLATES = {
+  small: {
+    name: "Kichik (30x20mm)",
+    width: 30,
+    height: 20,
+    fontSize: 8,
+    showBarcode: true,
+    showQR: false,
+    showPrice: true,
+    showName: true,
+    showSKU: true,
+  },
+  medium: {
+    name: "O'rtacha (50x30mm)",
+    width: 50,
+    height: 30,
+    fontSize: 10,
+    showBarcode: true,
+    showQR: false,
+    showPrice: true,
+    showName: true,
+    showSKU: true,
+  },
+  large: {
+    name: "Katta (70x40mm)",
+    width: 70,
+    height: 40,
+    fontSize: 12,
+    showBarcode: true,
+    showQR: true,
+    showPrice: true,
+    showName: true,
+    showSKU: true,
+  },
+  shelf: {
+    name: "Javon yorlig'i (100x50mm)",
+    width: 100,
+    height: 50,
+    fontSize: 14,
+    showBarcode: true,
+    showQR: true,
+    showPrice: true,
+    showName: true,
+    showSKU: true,
+  },
+};
+
+// Barcode generator (simplified SVG barcode)
+const generateBarcodeSVG = (code, width = 100, height = 30) => {
+  const bars = [];
+  let x = 0;
+  const barWidth = width / (code.length * 7 + 10);
+
+  // Simple Code39-like pattern
+  for (let i = 0; i < code.length; i++) {
+    const charCode = code.charCodeAt(i);
+    const pattern = (charCode % 2 === 0) ? "101101011" : "110100101";
+
+    for (let j = 0; j < pattern.length; j++) {
+      if (pattern[j] === "1") {
+        bars.push(`<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`);
+      }
+      x += barWidth;
+    }
+    x += barWidth; // gap between chars
+  }
+
+  return `<svg width="${width}" height="${height + 12}" xmlns="http://www.w3.org/2000/svg">
+    ${bars.join("")}
+    <text x="${width/2}" y="${height + 10}" text-anchor="middle" font-size="8" font-family="monospace">${code}</text>
+  </svg>`;
+};
+
+// QR Code generator (simplified pattern)
+const generateQRSVG = (data, size = 50) => {
+  const modules = 21; // QR code modules
+  const moduleSize = size / modules;
+  const rects = [];
+
+  // Generate pseudo-random pattern based on data
+  for (let row = 0; row < modules; row++) {
+    for (let col = 0; col < modules; col++) {
+      // Corner patterns (position detection)
+      const isCorner = (row < 7 && col < 7) ||
+                       (row < 7 && col >= modules - 7) ||
+                       (row >= modules - 7 && col < 7);
+
+      // Data modules (pseudo-random based on input)
+      const hash = (data.charCodeAt(row % data.length) + col * row) % 3;
+      const isData = !isCorner && hash === 0;
+
+      if (isCorner || isData) {
+        rects.push(`<rect x="${col * moduleSize}" y="${row * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`);
+      }
+    }
+  }
+
+  return `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${size}" height="${size}" fill="white"/>
+    ${rects.join("")}
+  </svg>`;
+};
+
+export default function PriceLabelPrinting() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { products, items } = useInventory();
+  const printRef = useRef(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("medium");
+  const [labelQueue, setLabelQueue] = useState([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customSettings, setCustomSettings] = useState({
+    showBarcode: true,
+    showQR: false,
+    showPrice: true,
+    showName: true,
+    showSKU: true,
+    showCategory: false,
+    showStock: false,
+    currency: "UZS",
+    priceFormat: "full", // full, rounded
+  });
+
+  // Get all products with inventory info
+  const allProducts = products.map(product => {
+    const inventory = items.find(item => item.product_id === product.id);
+    return {
+      ...product,
+      current_stock: inventory?.current_stock || 0,
+      sale_price: product.sale_price || product.unit_price || 0,
+    };
+  });
+
+  // Filter products by search
+  const filteredProducts = allProducts.filter(product =>
+    product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Add product to label queue
+  const addToQueue = (product, quantity = 1) => {
+    setLabelQueue(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        );
+      }
+      return [...prev, { product, quantity }];
+    });
+  };
+
+  // Remove from queue
+  const removeFromQueue = (productId) => {
+    setLabelQueue(prev => prev.filter(item => item.product.id !== productId));
+  };
+
+  // Update quantity in queue
+  const updateQuantity = (productId, quantity) => {
+    if (quantity <= 0) {
+      removeFromQueue(productId);
+      return;
+    }
+    setLabelQueue(prev =>
+      prev.map(item =>
+        item.product.id === productId
+          ? { ...item, quantity }
+          : item
+      )
+    );
+  };
+
+  // Clear queue
+  const clearQueue = () => {
+    setLabelQueue([]);
+  };
+
+  // Calculate total labels
+  const totalLabels = labelQueue.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Format price
+  const formatPrice = (price) => {
+    if (customSettings.priceFormat === "rounded") {
+      return Math.round(price).toLocaleString();
+    }
+    return price.toLocaleString();
+  };
+
+  // Print labels
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    const template = LABEL_TEMPLATES[selectedTemplate];
+
+    let labelsHTML = "";
+
+    labelQueue.forEach(({ product, quantity }) => {
+      for (let i = 0; i < quantity; i++) {
+        const barcode = product.barcode || product.sku || `P${product.id}`;
+
+        labelsHTML += `
+          <div class="label" style="
+            width: ${template.width}mm;
+            height: ${template.height}mm;
+            border: 1px dashed #ccc;
+            padding: 2mm;
+            margin: 1mm;
+            display: inline-block;
+            vertical-align: top;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+            font-size: ${template.fontSize}px;
+            overflow: hidden;
+          ">
+            ${customSettings.showName ? `<div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${product.name}</div>` : ""}
+            ${customSettings.showSKU ? `<div style="font-size: ${template.fontSize - 2}px; color: #666;">${barcode}</div>` : ""}
+            ${customSettings.showCategory && product.category ? `<div style="font-size: ${template.fontSize - 2}px; color: #888;">${product.category}</div>` : ""}
+            ${customSettings.showPrice ? `<div style="font-size: ${template.fontSize + 4}px; font-weight: bold; color: #000; margin-top: 2mm;">${formatPrice(product.sale_price)} ${customSettings.currency}</div>` : ""}
+            ${customSettings.showBarcode ? `<div style="margin-top: 2mm;">${generateBarcodeSVG(barcode, template.width * 2.5, 20)}</div>` : ""}
+            ${customSettings.showQR && template.showQR ? `<div style="position: absolute; right: 2mm; top: 2mm;">${generateQRSVG(barcode, 15)}</div>` : ""}
+          </div>
+        `;
+      }
+    });
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Narx yorliqlari - Genix ERP</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 5mm;
+          }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+          body {
+            font-family: Arial, sans-serif;
+            padding: 5mm;
+          }
+          .label {
+            page-break-inside: avoid;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="margin-bottom: 10px; padding: 10px; background: #f0f0f0;">
+          <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; cursor: pointer;">
+            Chop etish
+          </button>
+          <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px; cursor: pointer; margin-left: 10px;">
+            Yopish
+          </button>
+        </div>
+        ${labelsHTML}
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  };
+
+  // Label Preview Component
+  const LabelPreview = ({ product, template }) => {
+    const barcode = product.barcode || product.sku || `P${product.id}`;
+
+    return (
+      <div
+        className="border-2 border-dashed border-slate-300 rounded p-2 bg-white"
+        style={{
+          width: `${template.width * 2}px`,
+          minHeight: `${template.height * 2}px`,
+        }}
+      >
+        {customSettings.showName && (
+          <div className="font-bold text-xs truncate">{product.name}</div>
+        )}
+        {customSettings.showSKU && (
+          <div className="text-[10px] text-slate-500">{barcode}</div>
+        )}
+        {customSettings.showCategory && product.category && (
+          <div className="text-[10px] text-slate-400">{product.category}</div>
+        )}
+        {customSettings.showPrice && (
+          <div className="font-bold text-sm mt-1">
+            {formatPrice(product.sale_price)} {customSettings.currency}
+          </div>
+        )}
+        {customSettings.showBarcode && (
+          <div className="mt-1 flex justify-center">
+            <Barcode className="w-16 h-6 text-slate-700" />
+          </div>
+        )}
+        {customSettings.showQR && template.showQR && (
+          <div className="absolute top-1 right-1">
+            <QrCode className="w-4 h-4 text-slate-700" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--genix-navy)]">
+            Narx yorliqlari chop etish
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Mahsulotlarni tanlang va yorliqlarni chop eting
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowSettings(true)}
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Sozlamalar
+          </Button>
+          {labelQueue.length > 0 && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setShowPreview(true)}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Ko'rib chiqish
+              </Button>
+              <Button onClick={handlePrint}>
+                <Printer className="w-4 h-4 mr-2" />
+                Chop etish ({totalLabels})
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Products List */}
+        <div className="lg:col-span-2">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <CardTitle className="text-lg">Mahsulotlar</CardTitle>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      placeholder="Qidirish..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
+                        <SelectItem key={key} value={key}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Mahsulot</TableHead>
+                      <TableHead>SKU/Barcode</TableHead>
+                      <TableHead className="text-right">Narx</TableHead>
+                      <TableHead className="w-32 text-center">Amal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                          Mahsulotlar topilmadi
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredProducts.slice(0, 20).map((product) => {
+                        const inQueue = labelQueue.find(item => item.product.id === product.id);
+                        return (
+                          <TableRow key={product.id} className={inQueue ? "bg-blue-50" : ""}>
+                            <TableCell>
+                              <Package className="w-8 h-8 text-slate-400" />
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{product.name}</div>
+                              {product.category && (
+                                <div className="text-xs text-slate-500">{product.category}</div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <code className="text-xs bg-slate-100 px-2 py-1 rounded">
+                                {product.barcode || product.sku || `P${product.id}`}
+                              </code>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatPrice(product.sale_price)} {customSettings.currency}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-center gap-2">
+                                {inQueue ? (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-8 w-8"
+                                      onClick={() => updateQuantity(product.id, inQueue.quantity - 1)}
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </Button>
+                                    <span className="w-8 text-center font-medium">{inQueue.quantity}</span>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-8 w-8"
+                                      onClick={() => updateQuantity(product.id, inQueue.quantity + 1)}
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => addToQueue(product)}
+                                  >
+                                    <Plus className="w-4 h-4 mr-1" />
+                                    Qo'shish
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredProducts.length > 20 && (
+                <p className="text-center text-sm text-slate-500 mt-3">
+                  Ko'rsatilmoqda: 20 / {filteredProducts.length}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Label Queue */}
+        <div>
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg sticky top-4">
+            <CardHeader className="pb-4">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Tag className="w-5 h-5" />
+                  Chop etish navbati
+                </CardTitle>
+                {labelQueue.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={clearQueue}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Tozalash
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {labelQueue.length === 0 ? (
+                <div className="text-center py-8">
+                  <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">Navbat bo'sh</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Mahsulotlarni qo'shing
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {labelQueue.map(({ product, quantity }) => (
+                    <div
+                      key={product.id}
+                      className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{product.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {formatPrice(product.sale_price)} {customSettings.currency}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-2">
+                        <Badge variant="secondary">{quantity}x</Badge>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          onClick={() => removeFromQueue(product.id)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="border-t pt-3 mt-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-600">Jami yorliqlar:</span>
+                      <span className="font-bold text-lg">{totalLabels}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-slate-500 mt-1">
+                      <span>Shablon:</span>
+                      <span>{LABEL_TEMPLATES[selectedTemplate].name}</span>
+                    </div>
+                  </div>
+
+                  <Button className="w-full mt-4" onClick={handlePrint}>
+                    <Printer className="w-4 h-4 mr-2" />
+                    Chop etish
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Preview Modal */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Yorliqlarni ko'rib chiqish</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-slate-500">
+                Jami: {totalLabels} ta yorliq
+              </p>
+              <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
+                    <SelectItem key={key} value={key}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-wrap gap-3 p-4 bg-slate-100 rounded-lg">
+              {labelQueue.map(({ product, quantity }) => (
+                Array(Math.min(quantity, 3)).fill(null).map((_, idx) => (
+                  <LabelPreview
+                    key={`${product.id}-${idx}`}
+                    product={product}
+                    template={LABEL_TEMPLATES[selectedTemplate]}
+                  />
+                ))
+              ))}
+              {totalLabels > labelQueue.length * 3 && (
+                <div className="flex items-center justify-center p-4 text-slate-500">
+                  ... va yana {totalLabels - labelQueue.length * 3} ta
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowPreview(false)}>
+                Yopish
+              </Button>
+              <Button onClick={() => { handlePrint(); setShowPreview(false); }}>
+                <Printer className="w-4 h-4 mr-2" />
+                Chop etish
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings Modal */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Yorliq sozlamalari</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Ko'rsatiladigan ma'lumotlar</Label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showName" className="text-sm">Mahsulot nomi</Label>
+                  <Checkbox
+                    id="showName"
+                    checked={customSettings.showName}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showName: checked }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showSKU" className="text-sm">SKU/Barcode</Label>
+                  <Checkbox
+                    id="showSKU"
+                    checked={customSettings.showSKU}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showSKU: checked }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showPrice" className="text-sm">Narx</Label>
+                  <Checkbox
+                    id="showPrice"
+                    checked={customSettings.showPrice}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showPrice: checked }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showCategory" className="text-sm">Kategoriya</Label>
+                  <Checkbox
+                    id="showCategory"
+                    checked={customSettings.showCategory}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showCategory: checked }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showBarcode" className="text-sm">Shtrix-kod</Label>
+                  <Checkbox
+                    id="showBarcode"
+                    checked={customSettings.showBarcode}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showBarcode: checked }))
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="showQR" className="text-sm">QR kod</Label>
+                  <Checkbox
+                    id="showQR"
+                    checked={customSettings.showQR}
+                    onCheckedChange={(checked) =>
+                      setCustomSettings(prev => ({ ...prev, showQR: checked }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Valyuta</Label>
+              <Select
+                value={customSettings.currency}
+                onValueChange={(value) => setCustomSettings(prev => ({ ...prev, currency: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UZS">UZS (So'm)</SelectItem>
+                  <SelectItem value="USD">USD (Dollar)</SelectItem>
+                  <SelectItem value="EUR">EUR (Yevro)</SelectItem>
+                  <SelectItem value="RUB">RUB (Rubl)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Narx formati</Label>
+              <Select
+                value={customSettings.priceFormat}
+                onValueChange={(value) => setCustomSettings(prev => ({ ...prev, priceFormat: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">To'liq (12,500.50)</SelectItem>
+                  <SelectItem value="rounded">Yaxlitlangan (12,501)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowSettings(false)}>
+                Yopish
+              </Button>
+              <Button onClick={() => setShowSettings(false)}>
+                Saqlash
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

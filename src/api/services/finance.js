@@ -1,6 +1,77 @@
 import apiClient from '../client';
 
 export const financeService = {
+  // Bank Accounts
+  async listBankAccounts(params = {}) {
+    const response = await apiClient.get('/bank-accounts', { params });
+    return response.data.data;
+  },
+
+  async getBankAccount(id) {
+    const response = await apiClient.get(`/bank-accounts/${id}`);
+    return response.data.data;
+  },
+
+  async createBankAccount(data) {
+    const response = await apiClient.post('/bank-accounts', data);
+    return response.data.data;
+  },
+
+  async updateBankAccount(id, data) {
+    const response = await apiClient.put(`/bank-accounts/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteBankAccount(id) {
+    await apiClient.delete(`/bank-accounts/${id}`);
+  },
+
+  // Bank Transactions (for reconciliation)
+  async listBankTransactions(bankAccountId, params = {}) {
+    const response = await apiClient.get(`/bank-accounts/${bankAccountId}/transactions`, { params });
+    return response.data.data;
+  },
+
+  async createBankTransaction(bankAccountId, data) {
+    const response = await apiClient.post(`/bank-accounts/${bankAccountId}/transactions`, data);
+    return response.data.data;
+  },
+
+  async reconcileBankTransaction(bankAccountId, transactionId) {
+    const response = await apiClient.post(`/bank-accounts/${bankAccountId}/transactions/${transactionId}/reconcile`);
+    return response.data.data;
+  },
+
+  async importBankStatement(bankAccountId, data) {
+    const response = await apiClient.post(`/bank-accounts/${bankAccountId}/import`, data);
+    return response.data.data;
+  },
+
+  // Cash Transactions (Kassa)
+  async listCashTransactions(params = {}) {
+    const response = await apiClient.get('/cash-transactions', { params });
+    return response.data.data;
+  },
+
+  async getCashTransaction(id) {
+    const response = await apiClient.get(`/cash-transactions/${id}`);
+    return response.data.data;
+  },
+
+  async createCashTransaction(data) {
+    const response = await apiClient.post('/cash-transactions', data);
+    return response.data.data;
+  },
+
+  async updateCashTransaction(id, data) {
+    const response = await apiClient.put(`/cash-transactions/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteCashTransaction(id) {
+    await apiClient.delete(`/cash-transactions/${id}`);
+  },
+
   // Chart of Accounts
   async listAccounts(params = {}) {
     const response = await apiClient.get('/accounts', { params });
@@ -99,13 +170,43 @@ export const financeService = {
   },
 
   // Currencies
-  async listCurrencies() {
-    const response = await apiClient.get('/currencies');
+  async listCurrencies(params = {}) {
+    const response = await apiClient.get('/currencies', { params });
     return response.data.data;
   },
 
-  async getExchangeRate(code) {
-    const response = await apiClient.get(`/currencies/${code}/rate`);
+  async getCurrency(code) {
+    const response = await apiClient.get(`/currencies/${code}`);
+    return response.data.data;
+  },
+
+  async createCurrency(data) {
+    const response = await apiClient.post('/currencies', data);
+    return response.data.data;
+  },
+
+  async updateCurrency(code, data) {
+    const response = await apiClient.put(`/currencies/${code}`, data);
+    return response.data.data;
+  },
+
+  async deleteCurrency(code) {
+    await apiClient.delete(`/currencies/${code}`);
+  },
+
+  async getExchangeRate(code, date = null) {
+    const params = date ? { date } : {};
+    const response = await apiClient.get(`/currencies/${code}/rate`, { params });
+    return response.data.data;
+  },
+
+  async setExchangeRate(code, data) {
+    const response = await apiClient.post(`/currencies/${code}/rate`, data);
+    return response.data.data;
+  },
+
+  async listExchangeRates(params = {}) {
+    const response = await apiClient.get('/exchange-rates', { params });
     return response.data.data;
   },
 
