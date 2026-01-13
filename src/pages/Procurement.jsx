@@ -1,19 +1,61 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useModules } from '@/components/contexts/ModulesContext';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, ShoppingCart, TrendingUp, AlertCircle, CheckCircle, Truck, Brain, AlertTriangle, Target, Lightbulb, Edit2 } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  ShoppingCart,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Truck,
+  Brain,
+  AlertTriangle,
+  Target,
+  Lightbulb,
+  Edit2,
+  LayoutDashboard,
+  Building2,
+  FileQuestion,
+  FileText,
+  History,
+  DollarSign,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzeProcurement } from '@/api/services/aiAnalytics';
 
+import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+
+import Suppliers from '@/components/procurement/Suppliers';
+import RFQManagement from '@/components/procurement/RFQManagement';
+import Contracts from '@/components/procurement/Contracts';
+import PriceHistory from '@/components/procurement/PriceHistory';
+
 export default function Procurement() {
-  const { purchaseOrders, createPurchaseOrder, updatePurchaseOrder, isLoading } = useModules();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const {
+    suppliers,
+    purchaseOrders,
+    rfqs,
+    contracts,
+    createPurchaseOrder,
+    updatePurchaseOrder,
+    getSupplierById,
+    getSupplierStats,
+    isLoading,
+  } = useProcurement();
+
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -27,6 +69,7 @@ export default function Procurement() {
 
   const [newPO, setNewPO] = useState({
     po_number: '',
+    supplier_id: '',
     vendor_name: '',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: '',
@@ -34,7 +77,8 @@ export default function Procurement() {
     payment_terms: 'net_30'
   });
 
-  useEffect(() => {
+  // Filter purchase orders
+  React.useEffect(() => {
     let filtered = purchaseOrders;
     if (statusFilter !== 'all') {
       filtered = filtered.filter(po => po.status === statusFilter);
@@ -42,20 +86,23 @@ export default function Procurement() {
     if (searchQuery) {
       filtered = filtered.filter(po =>
         po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        po.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     setFilteredOrders(filtered);
   }, [purchaseOrders, searchQuery, statusFilter]);
 
   const handleCreatePO = async () => {
-    if (!newPO.vendor_name || !newPO.total_amount) return;
+    if (!newPO.supplier_id && !newPO.vendor_name) return;
 
     setIsSubmitting(true);
     try {
+      const supplier = getSupplierById(newPO.supplier_id);
       const poData = {
         ...newPO,
         po_number: newPO.po_number || `PO-${Date.now()}`,
+        vendor_name: supplier?.name || newPO.vendor_name,
         total_amount: parseFloat(newPO.total_amount) || 0,
         status: 'draft',
         ai_price_validation: true
@@ -66,6 +113,7 @@ export default function Procurement() {
 
       setNewPO({
         po_number: '',
+        supplier_id: '',
         vendor_name: '',
         order_date: new Date().toISOString().split('T')[0],
         expected_delivery_date: '',
@@ -89,13 +137,13 @@ export default function Procurement() {
   };
 
   const handleUpdatePO = async () => {
-    if (!editPO || !editPO.vendor_name) return;
+    if (!editPO || (!editPO.vendor_name && !editPO.supplier_name)) return;
 
     setIsSubmitting(true);
     try {
       const updates = {
         po_number: editPO.po_number,
-        vendor_name: editPO.vendor_name,
+        vendor_name: editPO.vendor_name || editPO.supplier_name,
         order_date: editPO.order_date,
         expected_delivery_date: editPO.expected_delivery_date,
         total_amount: parseFloat(editPO.total_amount) || 0,
@@ -132,6 +180,8 @@ export default function Procurement() {
     return colors[status] || colors.draft;
   };
 
+  // Statistics
+  const supplierStats = getSupplierStats();
   const metrics = {
     totalPOs: purchaseOrders.length,
     totalValue: purchaseOrders.reduce((sum, po) => sum + (po.total_amount || 0), 0),
@@ -139,12 +189,14 @@ export default function Procurement() {
     receivedPOs: purchaseOrders.filter(po => po.status === 'received').length
   };
 
+  // Chart data
   const vendorData = {};
   purchaseOrders.forEach(po => {
-    vendorData[po.vendor_name] = (vendorData[po.vendor_name] || 0) + (po.total_amount || 0);
+    const name = po.supplier_name || po.vendor_name || 'Unknown';
+    vendorData[name] = (vendorData[name] || 0) + (po.total_amount || 0);
   });
   const chartData = Object.entries(vendorData).slice(0, 5).map(([vendor, value]) => ({
-    vendor,
+    vendor: vendor.length > 15 ? vendor.substring(0, 15) + '...' : vendor,
     value
   }));
 
@@ -156,272 +208,441 @@ export default function Procurement() {
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <ShoppingCart className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Procurement & Purchasing</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">Ta'minot va Xaridlar</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
               AI-Powered
             </Badge>
           </div>
-          <p className="text-white/90">Smart procurement with AI-driven vendor selection and price optimization</p>
+          <p className="text-white/90">Ta'minotchilar, xarid buyurtmalari, shartnomalar va narxlarni boshqaring</p>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <ShoppingCart className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.totalPOs}</p>
-              <p className="text-sm text-slate-600">Total Purchase Orders</p>
-            </CardContent>
-          </Card>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger
+              value="dashboard"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </TabsTrigger>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Total Value</p>
-            </CardContent>
-          </Card>
+            <TabsTrigger
+              value="suppliers"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Building2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Ta'minotchilar</span>
+              <span className="sm:hidden">Suppliers</span>
+            </TabsTrigger>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-yellow-600" />
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.pendingPOs}</p>
-              <p className="text-sm text-slate-600">Pending Orders</p>
-            </CardContent>
-          </Card>
+            <TabsTrigger
+              value="purchase-orders"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span className="hidden sm:inline">Xarid buyurtmalari</span>
+              <span className="sm:hidden">PO</span>
+            </TabsTrigger>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.receivedPOs}</p>
-              <p className="text-sm text-slate-600">Received</p>
-            </CardContent>
-          </Card>
-        </div>
+            <TabsTrigger
+              value="rfq"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <FileQuestion className="w-4 h-4" />
+              <span className="hidden sm:inline">Takliflar so'rovi</span>
+              <span className="sm:hidden">RFQ</span>
+            </TabsTrigger>
 
-        {/* AI Insights Panel */}
-        {(procurementAnalysis.insights.length > 0 || procurementAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-indigo-600" />
-                AI Procurement Insights
-                <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {procurementAnalysis.insights.slice(0, 2).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
+            <TabsTrigger
+              value="contracts"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">Shartnomalar</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="price-history"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">Narxlar tarixi</span>
+              <span className="sm:hidden">Prices</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard" className="mt-6 space-y-6">
+            {/* Metrics */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Jami PO</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalPOs}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <ShoppingCart className="w-5 h-5 text-blue-600" />
                     </div>
                   </div>
-                ))}
-                {procurementAnalysis.recommendations.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
-                    <div className="flex items-start gap-3">
-                      <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">AI Recommendation</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{procurementAnalysis.recommendations[0].action}</p>
-                        <p className="text-xs text-slate-500 mt-1">{procurementAnalysis.recommendations[0].description}</p>
-                      </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Jami qiymat</p>
+                      <p className="text-lg font-bold text-green-600">
+                        {metrics.totalValue > 1000000
+                          ? `${(metrics.totalValue / 1000000).toFixed(1)}M`
+                          : metrics.totalValue.toLocaleString()}
+                      </p>
                     </div>
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Kutilmoqda</p>
+                      <p className="text-2xl font-bold text-yellow-600">{metrics.pendingPOs}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Qabul qilingan</p>
+                      <p className="text-2xl font-bold text-purple-600">{metrics.receivedPOs}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Ta'minotchilar</p>
+                      <p className="text-2xl font-bold text-indigo-600">{supplierStats.activeSuppliers}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-indigo-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500">Shartnomalar</p>
+                      <p className="text-2xl font-bold text-pink-600">{contracts.filter(c => c.status === 'active').length}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-pink-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* AI Insights Panel */}
+            {(procurementAnalysis.insights.length > 0 || procurementAnalysis.recommendations.length > 0) && (
+              <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Brain className="w-5 h-5 text-indigo-600" />
+                    AI Tahlil
+                    <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {procurementAnalysis.insights.slice(0, 2).map((insight, index) => (
+                      <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
+                        <div className="flex items-start gap-3">
+                          {insight.type === 'positive' ? (
+                            <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                          ) : insight.type === 'warning' ? (
+                            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                          ) : (
+                            <Target className="w-5 h-5 text-blue-500 mt-0.5" />
+                          )}
+                          <div>
+                            <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
+                            <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
+                            {insight.metric && (
+                              <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {procurementAnalysis.recommendations.length > 0 && (
+                      <div className="bg-white rounded-lg p-4 shadow-sm border border-indigo-100">
+                        <div className="flex items-start gap-3">
+                          <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-slate-900 text-sm">AI Tavsiya</h4>
+                            <p className="text-xs text-slate-600 mt-0.5">{procurementAnalysis.recommendations[0].action}</p>
+                            <p className="text-xs text-slate-500 mt-1">{procurementAnalysis.recommendations[0].description}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Chart */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {chartData.length > 0 && (
+                <Card className="bg-white/80 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle>Ta'minotchilar bo'yicha xaridlar</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
+                        <YAxis fontSize={12} />
+                        <Tooltip formatter={(value) => value.toLocaleString()} />
+                        <Bar dataKey="value" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Recent POs */}
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle>So'nggi buyurtmalar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {purchaseOrders.length === 0 ? (
+                    <div className="text-center py-8">
+                      <ShoppingCart className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-500">Hali buyurtmalar yo'q</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {purchaseOrders.slice(0, 5).map((po) => (
+                        <div key={po.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                          <div>
+                            <p className="font-medium text-sm">{po.po_number}</p>
+                            <p className="text-xs text-slate-500">{po.supplier_name || po.vendor_name}</p>
+                          </div>
+                          <div className="text-right">
+                            <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {(po.total_amount || 0).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Suppliers Tab */}
+          <TabsContent value="suppliers" className="mt-6">
+            <Suppliers />
+          </TabsContent>
+
+          {/* Purchase Orders Tab */}
+          <TabsContent value="purchase-orders" className="mt-6">
+            <Card className="bg-white/80 backdrop-blur-sm">
+              <CardHeader className="border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Xarid buyurtmalari</CardTitle>
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
+                    <Plus className="w-4 h-4 mr-2" /> Yangi PO
+                  </Button>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder="Qidirish..."
+                      className="pl-9"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Hammasi</SelectItem>
+                      <SelectItem value="draft">Qoralama</SelectItem>
+                      <SelectItem value="sent">Yuborilgan</SelectItem>
+                      <SelectItem value="confirmed">Tasdiqlangan</SelectItem>
+                      <SelectItem value="received">Qabul qilingan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : filteredOrders.length === 0 ? (
+                  <div className="text-center py-16">
+                    <ShoppingCart className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <p className="text-slate-500">Buyurtmalar topilmadi</p>
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">Birinchi PO yaratish</Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>PO #</TableHead>
+                          <TableHead>Ta'minotchi</TableHead>
+                          <TableHead>Buyurtma sanasi</TableHead>
+                          <TableHead>Yetkazish sanasi</TableHead>
+                          <TableHead>Summa</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Amallar</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredOrders.map((po) => (
+                          <TableRow key={po.id} className="hover:bg-slate-50">
+                            <TableCell className="font-mono text-sm">{po.po_number}</TableCell>
+                            <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>
+                            <TableCell className="text-sm">
+                              {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {po.expected_delivery_date ? format(new Date(po.expected_delivery_date), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                            <TableCell className="font-semibold">{(po.total_amount || 0).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title="Tahrirlash">
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                                {po.status === 'draft' && (
+                                  <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'sent')}>
+                                    Yuborish
+                                  </Button>
+                                )}
+                                {po.status === 'sent' && (
+                                  <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
+                                    Tasdiqlash
+                                  </Button>
+                                )}
+                                {po.status === 'confirmed' && (
+                                  <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
+                                    <Truck className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* Vendor Spend Chart */}
-          {chartData.length > 0 && (
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Top Vendors by Spend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="vendor" fontSize={12} angle={-45} textAnchor="end" height={80} />
-                    <YAxis fontSize={12} />
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Bar dataKey="value" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
               </CardContent>
             </Card>
-          )}
+          </TabsContent>
 
-          {/* Purchase Orders */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <CardTitle>Purchase Orders</CardTitle>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                  <Plus className="w-4 h-4 mr-2" /> New PO
-                </Button>
-              </div>
-              <div className="flex gap-3 mt-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Search POs..."
-                    className="pl-9"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="sent">Sent</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="received">Received</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : filteredOrders.length === 0 ? (
-                <div className="text-center py-16">
-                  <ShoppingCart className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No purchase orders yet</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">Create First PO</Button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>PO #</TableHead>
-                        <TableHead>Vendor</TableHead>
-                        <TableHead>Order Date</TableHead>
-                        <TableHead>Delivery Date</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOrders.map((po) => (
-                        <TableRow key={po.id} className="hover:bg-slate-50">
-                          <TableCell className="font-mono text-sm">{po.po_number}</TableCell>
-                          <TableCell className="font-medium">{po.vendor_name}</TableCell>
-                          <TableCell className="text-sm">
-                            {po.order_date ? format(new Date(po.order_date), 'MMM dd, yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {po.expected_delivery_date ? format(new Date(po.expected_delivery_date), 'MMM dd, yyyy') : '-'}
-                          </TableCell>
-                          <TableCell className="font-semibold">${(po.total_amount || 0).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title="Edit PO">
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              {po.status === 'draft' && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'sent')}>
-                                  Send
-                                </Button>
-                              )}
-                              {po.status === 'sent' && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
-                                  Confirm
-                                </Button>
-                              )}
-                              {po.status === 'confirmed' && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
-                                  <Truck className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          {/* RFQ Tab */}
+          <TabsContent value="rfq" className="mt-6">
+            <RFQManagement />
+          </TabsContent>
+
+          {/* Contracts Tab */}
+          <TabsContent value="contracts" className="mt-6">
+            <Contracts />
+          </TabsContent>
+
+          {/* Price History Tab */}
+          <TabsContent value="price-history" className="mt-6">
+            <PriceHistory />
+          </TabsContent>
+        </Tabs>
 
         {/* Create PO Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Purchase Order</DialogTitle>
+              <DialogTitle>Yangi xarid buyurtmasi</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">PO Number (Optional)</label>
+                  <label className="text-sm font-medium mb-1 block">PO raqami (Ixtiyoriy)</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder="Avtomatik generatsiya"
                     value={newPO.po_number}
                     onChange={(e) => setNewPO({...newPO, po_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Vendor *</label>
-                  <Input
-                    placeholder="Vendor name"
-                    value={newPO.vendor_name}
-                    onChange={(e) => setNewPO({...newPO, vendor_name: e.target.value})}
-                    required
-                  />
+                  <label className="text-sm font-medium mb-1 block">Ta'minotchi *</label>
+                  <Select
+                    value={newPO.supplier_id}
+                    onValueChange={(value) => {
+                      const supplier = suppliers.find(s => s.id === value);
+                      setNewPO({
+                        ...newPO,
+                        supplier_id: value,
+                        vendor_name: supplier?.name || ''
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Ta'minotchini tanlang" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.filter(s => s.status === 'active').map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Order Date *</label>
+                  <label className="text-sm font-medium mb-1 block">Buyurtma sanasi *</label>
                   <Input
                     type="date"
                     value={newPO.order_date}
@@ -430,7 +651,7 @@ export default function Procurement() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Expected Delivery</label>
+                  <label className="text-sm font-medium mb-1 block">Yetkazish sanasi</label>
                   <Input
                     type="date"
                     value={newPO.expected_delivery_date}
@@ -441,26 +662,27 @@ export default function Procurement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Total Amount *</label>
+                  <label className="text-sm font-medium mb-1 block">Jami summa *</label>
                   <Input
                     type="number"
-                    placeholder="0.00"
+                    placeholder="0"
                     value={newPO.total_amount}
                     onChange={(e) => setNewPO({...newPO, total_amount: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Payment Terms</label>
+                  <label className="text-sm font-medium mb-1 block">To'lov shartlari</label>
                   <Select value={newPO.payment_terms} onValueChange={(value) => setNewPO({...newPO, payment_terms: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="prepaid">Oldindan to'lov</SelectItem>
                       <SelectItem value="net_30">Net 30</SelectItem>
                       <SelectItem value="net_60">Net 60</SelectItem>
                       <SelectItem value="net_90">Net 90</SelectItem>
-                      <SelectItem value="due_on_receipt">Due on Receipt</SelectItem>
+                      <SelectItem value="due_on_receipt">Qabul qilganda</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -468,14 +690,14 @@ export default function Procurement() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  Bekor qilish
                 </Button>
                 <Button
                   onClick={handleCreatePO}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                  disabled={!newPO.vendor_name || !newPO.total_amount || isSubmitting}
+                  disabled={!newPO.supplier_id || !newPO.total_amount || isSubmitting}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create PO'}
+                  {isSubmitting ? 'Yaratilmoqda...' : 'Yaratish'}
                 </Button>
               </div>
             </div>
@@ -486,32 +708,30 @@ export default function Procurement() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Purchase Order</DialogTitle>
+              <DialogTitle>Buyurtmani tahrirlash</DialogTitle>
             </DialogHeader>
             {editPO && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">PO Number</label>
+                    <label className="text-sm font-medium mb-1 block">PO raqami</label>
                     <Input
                       value={editPO.po_number}
                       onChange={(e) => setEditPO({...editPO, po_number: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Vendor *</label>
+                    <label className="text-sm font-medium mb-1 block">Ta'minotchi</label>
                     <Input
-                      placeholder="Vendor name"
-                      value={editPO.vendor_name}
-                      onChange={(e) => setEditPO({...editPO, vendor_name: e.target.value})}
-                      required
+                      value={editPO.supplier_name || editPO.vendor_name}
+                      disabled
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Order Date *</label>
+                    <label className="text-sm font-medium mb-1 block">Buyurtma sanasi *</label>
                     <Input
                       type="date"
                       value={editPO.order_date?.split('T')[0] || ''}
@@ -520,7 +740,7 @@ export default function Procurement() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Expected Delivery</label>
+                    <label className="text-sm font-medium mb-1 block">Yetkazish sanasi</label>
                     <Input
                       type="date"
                       value={editPO.expected_delivery_date?.split('T')[0] || ''}
@@ -531,26 +751,27 @@ export default function Procurement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Total Amount *</label>
+                    <label className="text-sm font-medium mb-1 block">Jami summa *</label>
                     <Input
                       type="number"
-                      placeholder="0.00"
+                      placeholder="0"
                       value={editPO.total_amount}
                       onChange={(e) => setEditPO({...editPO, total_amount: e.target.value})}
                       required
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Payment Terms</label>
+                    <label className="text-sm font-medium mb-1 block">To'lov shartlari</label>
                     <Select value={editPO.payment_terms || 'net_30'} onValueChange={(value) => setEditPO({...editPO, payment_terms: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="prepaid">Oldindan to'lov</SelectItem>
                         <SelectItem value="net_30">Net 30</SelectItem>
                         <SelectItem value="net_60">Net 60</SelectItem>
                         <SelectItem value="net_90">Net 90</SelectItem>
-                        <SelectItem value="due_on_receipt">Due on Receipt</SelectItem>
+                        <SelectItem value="due_on_receipt">Qabul qilganda</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -563,25 +784,25 @@ export default function Procurement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="sent">Sent</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="received">Received</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="draft">Qoralama</SelectItem>
+                      <SelectItem value="sent">Yuborilgan</SelectItem>
+                      <SelectItem value="confirmed">Tasdiqlangan</SelectItem>
+                      <SelectItem value="received">Qabul qilingan</SelectItem>
+                      <SelectItem value="cancelled">Bekor qilingan</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditPO(null); }} className="flex-1">
-                    Cancel
+                    Bekor qilish
                   </Button>
                   <Button
                     onClick={handleUpdatePO}
                     className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                    disabled={!editPO.vendor_name || isSubmitting}
+                    disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
                   </Button>
                 </div>
               </div>

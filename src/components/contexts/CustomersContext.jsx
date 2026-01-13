@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { contactsService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const STORAGE_KEY = 'genix_customers';
 const PARTNERS_STORAGE_KEY = 'genix_partners';
@@ -9,20 +10,10 @@ const OPPORTUNITIES_STORAGE_KEY = 'genix_opportunities';
 
 const CustomersContext = createContext();
 
-// Helper to get company-specific storage key
+// Helper to get company-specific storage key with demo prefix
 const getStorageKey = (baseKey, companyId) => {
-  return companyId ? `${baseKey}_${companyId}` : baseKey;
-};
-
-// Check if backend is available
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-const checkBackendAvailable = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/info`);
-    return response.ok;
-  } catch {
-    return false;
-  }
+  const prefix = isDemoMode() ? 'demo_' : '';
+  return companyId ? `${prefix}${baseKey}_${companyId}` : `${prefix}${baseKey}`;
 };
 
 // Sample data for demo purposes
@@ -99,24 +90,28 @@ export function CustomersProvider({ children }) {
 
   const loadFromLocalStorage = useCallback(() => {
     const companyId = activeCompany?.id;
+    const demoMode = isDemoMode();
 
     const customersKey = getStorageKey(STORAGE_KEY, companyId);
     const leadsKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
     const opportunitiesKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
 
-    const storedCustomers = localStorage.getItem(customersKey);
-    setCustomers(storedCustomers ? JSON.parse(storedCustomers) : sampleCustomers);
+    const getData = (storageKey, sampleData) => {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) return JSON.parse(stored);
+      return demoMode ? sampleData : [];
+    };
 
-    const storedLeads = localStorage.getItem(leadsKey);
-    setLeads(storedLeads ? JSON.parse(storedLeads) : sampleLeads);
+    setCustomers(getData(customersKey, sampleCustomers));
+    setLeads(getData(leadsKey, sampleLeads));
+    setOpportunities(getData(opportunitiesKey, sampleOpportunities));
 
-    const storedOpportunities = localStorage.getItem(opportunitiesKey);
-    setOpportunities(storedOpportunities ? JSON.parse(storedOpportunities) : sampleOpportunities);
-
-    // Initialize localStorage if empty
-    if (!storedCustomers) localStorage.setItem(customersKey, JSON.stringify(sampleCustomers));
-    if (!storedLeads) localStorage.setItem(leadsKey, JSON.stringify(sampleLeads));
-    if (!storedOpportunities) localStorage.setItem(opportunitiesKey, JSON.stringify(sampleOpportunities));
+    // Initialize localStorage if empty - only in demo mode
+    if (demoMode) {
+      if (!localStorage.getItem(customersKey)) localStorage.setItem(customersKey, JSON.stringify(sampleCustomers));
+      if (!localStorage.getItem(leadsKey)) localStorage.setItem(leadsKey, JSON.stringify(sampleLeads));
+      if (!localStorage.getItem(opportunitiesKey)) localStorage.setItem(opportunitiesKey, JSON.stringify(sampleOpportunities));
+    }
   }, [activeCompany]);
 
   const loadData = useCallback(async () => {
@@ -126,7 +121,7 @@ export function CustomersProvider({ children }) {
     setError(null);
 
     try {
-      const isAvailable = await checkBackendAvailable();
+      const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
 
       if (isAvailable) {
@@ -135,7 +130,8 @@ export function CustomersProvider({ children }) {
           const contacts = await contactsService.list();
           // Filter contacts by type (customers vs vendors)
           const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
-          setCustomers(customerContacts.length > 0 ? customerContacts : sampleCustomers);
+          const demoMode = isDemoMode();
+          setCustomers(customerContacts.length > 0 ? customerContacts : (demoMode ? sampleCustomers : []));
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();

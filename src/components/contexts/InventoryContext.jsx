@@ -1,178 +1,471 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { inventoryService } from '@/api/services';
 import { useCompany } from './CompanyContext';
+import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
+const PRODUCTS_STORAGE_KEY = 'genix_products';
+const CATEGORIES_STORAGE_KEY = 'genix_product_categories';
+const WAREHOUSES_STORAGE_KEY = 'genix_warehouses';
 const INVENTORY_STORAGE_KEY = 'genix_inventory';
 const STOCK_MOVEMENTS_STORAGE_KEY = 'genix_stock_movements';
+const LOTS_STORAGE_KEY = 'genix_inventory_lots';
+const STOCK_COUNTS_STORAGE_KEY = 'genix_stock_counts';
 
 const InventoryContext = createContext();
 
 // Helper to get company-specific storage key
 const getStorageKey = (baseKey, companyId) => {
-  return companyId ? `${baseKey}_${companyId}` : baseKey;
+  const prefix = isDemoMode() ? 'demo_' : '';
+  return companyId ? `${prefix}${baseKey}_${companyId}` : `${prefix}${baseKey}`;
 };
 
-// Check if backend is available
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-const checkBackendAvailable = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/info`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
-
-// Sample inventory data for demo
-const sampleInventory = [
+// Sample products data
+const sampleProducts = [
   {
-    id: 'inv_1',
+    id: 'prod_1',
+    code: 'ELEC-LP15',
     name: 'Laptop Pro 15"',
     sku: 'ELEC-LP15-001',
-    category: 'electronics',
+    barcode: '1234567890123',
+    type: 'product',
+    category_id: 'cat_1',
     description: 'High-performance laptop with 16GB RAM',
-    current_stock: 45,
-    reorder_level: 20,
+    cost_price: 899,
+    list_price: 1299,
+    min_price: 1100,
+    is_stockable: true,
+    track_inventory: true,
+    min_stock_level: 20,
+    reorder_point: 25,
     reorder_quantity: 50,
-    unit_cost: 899,
-    selling_price: 1299,
-    supplier: 'TechSupply Inc',
-    location: 'Warehouse A-1',
-    status: 'active',
-    costing_method: 'fifo',
-    sales_velocity: 3.2,
-    abc_classification: 'A',
-    last_movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    is_purchasable: true,
+    is_sellable: true,
+    is_active: true,
+    tags: ['electronics', 'computers'],
+    created_at: new Date().toISOString()
   },
   {
-    id: 'inv_2',
+    id: 'prod_2',
+    code: 'ELEC-WM',
     name: 'Wireless Mouse',
     sku: 'ELEC-WM-002',
-    category: 'electronics',
+    barcode: '1234567890124',
+    type: 'product',
+    category_id: 'cat_1',
     description: 'Ergonomic wireless mouse',
-    current_stock: 8,
-    reorder_level: 25,
+    cost_price: 15,
+    list_price: 29.99,
+    min_price: 22,
+    is_stockable: true,
+    track_inventory: true,
+    min_stock_level: 25,
+    reorder_point: 30,
     reorder_quantity: 100,
-    unit_cost: 15,
-    selling_price: 29.99,
-    supplier: 'TechSupply Inc',
-    location: 'Warehouse A-2',
-    status: 'low_stock',
-    costing_method: 'fifo',
-    sales_velocity: 8.5,
-    abc_classification: 'B',
-    last_movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    is_purchasable: true,
+    is_sellable: true,
+    is_active: true,
+    tags: ['electronics', 'accessories'],
+    created_at: new Date().toISOString()
   },
   {
-    id: 'inv_3',
+    id: 'prod_3',
+    code: 'FURN-OC',
     name: 'Office Chair Premium',
     sku: 'FURN-OC-001',
-    category: 'office',
+    type: 'product',
+    category_id: 'cat_2',
     description: 'Ergonomic office chair with lumbar support',
-    current_stock: 32,
-    reorder_level: 10,
+    cost_price: 250,
+    list_price: 449,
+    min_price: 380,
+    is_stockable: true,
+    track_inventory: true,
+    min_stock_level: 10,
+    reorder_point: 15,
     reorder_quantity: 20,
-    unit_cost: 250,
-    selling_price: 449,
-    supplier: 'ComfortSeating Co',
-    location: 'Warehouse B-1',
-    status: 'active',
-    costing_method: 'weighted_average',
-    sales_velocity: 1.2,
-    abc_classification: 'A',
-    last_movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    is_purchasable: true,
+    is_sellable: true,
+    is_active: true,
+    tags: ['furniture', 'office'],
+    created_at: new Date().toISOString()
   },
   {
-    id: 'inv_4',
-    name: 'USB-C Cable 2m',
-    sku: 'ELEC-USB-003',
-    category: 'electronics',
-    description: 'High-speed USB-C charging cable',
-    current_stock: 250,
-    reorder_level: 100,
-    reorder_quantity: 500,
-    unit_cost: 3,
-    selling_price: 12.99,
-    supplier: 'CableMasters',
-    location: 'Warehouse A-3',
-    status: 'active',
-    costing_method: 'fifo',
-    sales_velocity: 15.3,
-    abc_classification: 'C',
-    last_movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
-  },
-  {
-    id: 'inv_5',
-    name: 'Standing Desk',
-    sku: 'FURN-SD-001',
-    category: 'office',
-    description: 'Electric height-adjustable standing desk',
-    current_stock: 0,
-    reorder_level: 5,
-    reorder_quantity: 10,
-    unit_cost: 450,
-    selling_price: 799,
-    supplier: 'DeskWorks Ltd',
-    location: 'Warehouse B-2',
-    status: 'backordered',
-    costing_method: 'fifo',
-    sales_velocity: 0.8,
-    abc_classification: 'A',
-    last_movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    id: 'prod_4',
+    code: 'SVC-INSTALL',
+    name: 'Installation Service',
+    sku: 'SVC-INSTALL-001',
+    type: 'service',
+    category_id: 'cat_3',
+    description: 'Professional installation service',
+    cost_price: 50,
+    list_price: 99,
+    min_price: 75,
+    is_stockable: false,
+    track_inventory: false,
+    min_stock_level: 0,
+    reorder_point: 0,
+    reorder_quantity: 0,
+    is_purchasable: false,
+    is_sellable: true,
+    is_active: true,
+    tags: ['services'],
+    created_at: new Date().toISOString()
   }
 ];
 
+// Sample categories data
+const sampleCategories = [
+  {
+    id: 'cat_1',
+    code: 'ELEC',
+    name: 'Electronics',
+    description: 'Electronic products and accessories',
+    parent_id: null,
+    is_active: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'cat_2',
+    code: 'FURN',
+    name: 'Furniture',
+    description: 'Office and home furniture',
+    parent_id: null,
+    is_active: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'cat_3',
+    code: 'SVC',
+    name: 'Services',
+    description: 'Professional services',
+    parent_id: null,
+    is_active: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'cat_4',
+    code: 'ELEC-COMP',
+    name: 'Computers',
+    description: 'Computers and laptops',
+    parent_id: 'cat_1',
+    is_active: true,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'cat_5',
+    code: 'ELEC-ACC',
+    name: 'Accessories',
+    description: 'Electronic accessories',
+    parent_id: 'cat_1',
+    is_active: true,
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample warehouses data
+const sampleWarehouses = [
+  {
+    id: 'wh_1',
+    code: 'WH-MAIN',
+    name: 'Main Warehouse',
+    address: '123 Industrial Blvd',
+    city: 'New York',
+    state: 'NY',
+    country: 'USA',
+    postal_code: '10001',
+    phone: '+1-555-0100',
+    email: 'main@warehouse.com',
+    manager_name: 'John Smith',
+    is_active: true,
+    is_default: true,
+    created_at: new Date().toISOString(),
+    locations: [
+      { id: 'loc_1', code: 'A-1', name: 'Aisle A, Shelf 1', zone: 'A', is_active: true },
+      { id: 'loc_2', code: 'A-2', name: 'Aisle A, Shelf 2', zone: 'A', is_active: true },
+      { id: 'loc_3', code: 'B-1', name: 'Aisle B, Shelf 1', zone: 'B', is_active: true }
+    ]
+  },
+  {
+    id: 'wh_2',
+    code: 'WH-DIST',
+    name: 'Distribution Center',
+    address: '456 Logistics Way',
+    city: 'Los Angeles',
+    state: 'CA',
+    country: 'USA',
+    postal_code: '90001',
+    phone: '+1-555-0200',
+    email: 'dist@warehouse.com',
+    manager_name: 'Jane Doe',
+    is_active: true,
+    is_default: false,
+    created_at: new Date().toISOString(),
+    locations: [
+      { id: 'loc_4', code: 'C-1', name: 'Aisle C, Shelf 1', zone: 'C', is_active: true },
+      { id: 'loc_5', code: 'C-2', name: 'Aisle C, Shelf 2', zone: 'C', is_active: true }
+    ]
+  }
+];
+
+// Sample inventory (stock levels)
+const sampleInventory = [
+  {
+    id: 'inv_1',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    location_id: 'loc_1',
+    quantity: 45,
+    reserved_quantity: 5,
+    available_quantity: 40,
+    lot_number: 'LOT-2025-001',
+    cost_price: 899,
+    last_count_date: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'inv_2',
+    product_id: 'prod_2',
+    warehouse_id: 'wh_1',
+    location_id: 'loc_2',
+    quantity: 120,
+    reserved_quantity: 10,
+    available_quantity: 110,
+    lot_number: 'LOT-2025-002',
+    cost_price: 15,
+    last_count_date: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'inv_3',
+    product_id: 'prod_3',
+    warehouse_id: 'wh_1',
+    location_id: 'loc_3',
+    quantity: 32,
+    reserved_quantity: 2,
+    available_quantity: 30,
+    lot_number: 'LOT-2025-003',
+    cost_price: 250,
+    last_count_date: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'inv_4',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_2',
+    location_id: 'loc_4',
+    quantity: 20,
+    reserved_quantity: 0,
+    available_quantity: 20,
+    lot_number: 'LOT-2025-004',
+    cost_price: 899,
+    last_count_date: new Date().toISOString(),
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample stock movements
 const sampleStockMovements = [
   {
     id: 'mov_1',
-    item_id: 'inv_1',
-    movement_type: 'inbound',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    movement_type: 'receipt',
     quantity: 20,
     unit_cost: 899,
     reference: 'PO-2025-001',
     notes: 'Regular stock replenishment',
-    movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    created_at: new Date().toISOString()
   },
   {
     id: 'mov_2',
-    item_id: 'inv_1',
-    movement_type: 'outbound',
-    quantity: 5,
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    movement_type: 'shipment',
+    quantity: -5,
     unit_cost: 899,
     reference: 'SO-2025-001',
     notes: 'Customer order fulfillment',
-    movement_date: new Date().toISOString(),
-    created_date: new Date().toISOString()
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'mov_3',
+    product_id: 'prod_2',
+    warehouse_id: 'wh_1',
+    movement_type: 'adjustment',
+    quantity: 10,
+    unit_cost: 15,
+    reference: 'ADJ-2025-001',
+    notes: 'Inventory count adjustment',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'mov_4',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    to_warehouse_id: 'wh_2',
+    movement_type: 'transfer',
+    quantity: -20,
+    unit_cost: 899,
+    reference: 'TRF-2025-001',
+    notes: 'Transfer to distribution center',
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample inventory lots (for FIFO/batch tracking)
+const sampleLots = [
+  {
+    id: 'lot_1',
+    lot_number: 'LOT-2025-001',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    quantity: 25,
+    original_quantity: 30,
+    unit_cost: 890,
+    manufacture_date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    serial_numbers: [],
+    status: 'active',
+    supplier: 'TechSupply Inc',
+    received_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'lot_2',
+    lot_number: 'LOT-2025-002',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    quantity: 20,
+    original_quantity: 20,
+    unit_cost: 899,
+    manufacture_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    expiry_date: new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    serial_numbers: [],
+    status: 'active',
+    supplier: 'Office Depot',
+    received_date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'lot_3',
+    lot_number: 'LOT-2025-003',
+    product_id: 'prod_2',
+    warehouse_id: 'wh_1',
+    quantity: 120,
+    original_quantity: 150,
+    unit_cost: 15,
+    manufacture_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    expiry_date: null,
+    serial_numbers: [],
+    status: 'active',
+    supplier: 'Gadget Wholesale',
+    received_date: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'lot_4',
+    lot_number: 'LOT-2024-050',
+    product_id: 'prod_3',
+    warehouse_id: 'wh_1',
+    quantity: 5,
+    original_quantity: 10,
+    unit_cost: 240,
+    manufacture_date: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    expiry_date: null,
+    serial_numbers: ['SN-001', 'SN-002', 'SN-003', 'SN-004', 'SN-005'],
+    status: 'active',
+    supplier: 'Furniture Pro',
+    received_date: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample stock counts (inventarizatsiya)
+const sampleStockCounts = [
+  {
+    id: 'sc_1',
+    count_number: 'INV-2025-001',
+    warehouse_id: 'wh_1',
+    count_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'completed',
+    counted_by: 'John Smith',
+    approved_by: 'Jane Doe',
+    notes: 'Monthly inventory count',
+    lines: [
+      { product_id: 'prod_1', system_qty: 42, counted_qty: 45, variance: 3, variance_reason: 'Uncounted receipt found' },
+      { product_id: 'prod_2', system_qty: 118, counted_qty: 120, variance: 2, variance_reason: 'Minor count error' },
+      { product_id: 'prod_3', system_qty: 32, counted_qty: 32, variance: 0, variance_reason: null }
+    ],
+    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    completed_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'sc_2',
+    count_number: 'INV-2025-002',
+    warehouse_id: 'wh_2',
+    count_date: new Date().toISOString().split('T')[0],
+    status: 'in_progress',
+    counted_by: 'Mike Johnson',
+    approved_by: null,
+    notes: 'Quarterly audit count',
+    lines: [
+      { product_id: 'prod_1', system_qty: 20, counted_qty: null, variance: null, variance_reason: null }
+    ],
+    created_at: new Date().toISOString(),
+    completed_at: null
   }
 ];
 
 export function InventoryProvider({ children }) {
   const { activeCompany } = useCompany();
-  const [items, setItems] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [inventory, setInventory] = useState([]);
   const [stockMovements, setStockMovements] = useState([]);
+  const [lots, setLots] = useState([]);
+  const [stockCounts, setStockCounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
 
   const loadFromLocalStorage = useCallback(() => {
     const companyId = activeCompany?.id;
-    const itemsKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
-    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+    const demoMode = isDemoMode();
 
-    const storedItems = localStorage.getItem(itemsKey);
-    setItems(storedItems ? JSON.parse(storedItems) : sampleInventory);
+    // Helper to get data - only use sample data in demo mode when localStorage is empty
+    const getData = (key, sampleData) => {
+      const storageKey = getStorageKey(key, companyId);
+      const stored = localStorage.getItem(storageKey);
+      if (stored) return JSON.parse(stored);
+      return demoMode ? sampleData : [];
+    };
 
-    const storedMovements = localStorage.getItem(movementsKey);
-    setStockMovements(storedMovements ? JSON.parse(storedMovements) : sampleStockMovements);
+    setProducts(getData(PRODUCTS_STORAGE_KEY, sampleProducts));
+    setCategories(getData(CATEGORIES_STORAGE_KEY, sampleCategories));
+    setWarehouses(getData(WAREHOUSES_STORAGE_KEY, sampleWarehouses));
+    setInventory(getData(INVENTORY_STORAGE_KEY, sampleInventory));
+    setStockMovements(getData(STOCK_MOVEMENTS_STORAGE_KEY, sampleStockMovements));
+    setLots(getData(LOTS_STORAGE_KEY, sampleLots));
+    setStockCounts(getData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
 
-    if (!storedItems) localStorage.setItem(itemsKey, JSON.stringify(sampleInventory));
-    if (!storedMovements) localStorage.setItem(movementsKey, JSON.stringify(sampleStockMovements));
+    // Only initialize localStorage with sample data in demo mode
+    if (demoMode) {
+      const initIfEmpty = (key, sampleData) => {
+        const storageKey = getStorageKey(key, companyId);
+        if (!localStorage.getItem(storageKey)) {
+          localStorage.setItem(storageKey, JSON.stringify(sampleData));
+        }
+      };
+
+      initIfEmpty(PRODUCTS_STORAGE_KEY, sampleProducts);
+      initIfEmpty(CATEGORIES_STORAGE_KEY, sampleCategories);
+      initIfEmpty(WAREHOUSES_STORAGE_KEY, sampleWarehouses);
+      initIfEmpty(INVENTORY_STORAGE_KEY, sampleInventory);
+      initIfEmpty(STOCK_MOVEMENTS_STORAGE_KEY, sampleStockMovements);
+      initIfEmpty(LOTS_STORAGE_KEY, sampleLots);
+      initIfEmpty(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts);
+    }
   }, [activeCompany]);
 
   const loadData = useCallback(async () => {
@@ -187,24 +480,19 @@ export function InventoryProvider({ children }) {
 
       if (isAvailable) {
         try {
-          const [products, inventory, movements] = await Promise.all([
+          const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
             inventoryService.listProducts(),
+            inventoryService.listCategories(),
+            inventoryService.listWarehouses(),
             inventoryService.listInventory(),
             inventoryService.listInventoryMovements()
           ]);
 
-          // Merge products and inventory data
-          const mergedItems = (products || []).map(product => {
-            const stock = (inventory || []).find(s => s.product_id === product.id);
-            return {
-              ...product,
-              current_stock: stock?.quantity || 0,
-              location: stock?.location || 'Unknown'
-            };
-          });
-
-          setItems(mergedItems.length > 0 ? mergedItems : sampleInventory);
-          setStockMovements(movements || sampleStockMovements);
+          setProducts(productsData?.length > 0 ? productsData : sampleProducts);
+          setCategories(categoriesData?.length > 0 ? categoriesData : sampleCategories);
+          setWarehouses(warehousesData?.length > 0 ? warehousesData : sampleWarehouses);
+          setInventory(inventoryData?.length > 0 ? inventoryData : sampleInventory);
+          setStockMovements(movementsData?.length > 0 ? movementsData : sampleStockMovements);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -225,7 +513,6 @@ export function InventoryProvider({ children }) {
     loadData();
   }, [loadData]);
 
-  // Listen for company change events
   useEffect(() => {
     const handleCompanyChange = () => {
       loadData();
@@ -234,60 +521,55 @@ export function InventoryProvider({ children }) {
     return () => window.removeEventListener('companyChanged', handleCompanyChange);
   }, [loadData]);
 
-  // Inventory Item CRUD
-  const createItem = useCallback(async (itemData) => {
+  // ================== PRODUCTS ==================
+  const createProduct = useCallback(async (productData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
         const newProduct = await inventoryService.createProduct({
-          ...itemData,
+          ...productData,
           company_id: companyId
         });
-        setItems(prev => [...prev, newProduct]);
+        setProducts(prev => [...prev, newProduct]);
         return newProduct;
       } catch (err) {
         console.error('API error, falling back to local:', err);
       }
     }
 
-    const newItem = {
-      id: `inv_${Date.now()}`,
-      ...itemData,
-      company_id: companyId,
-      costing_method: itemData.costing_method || 'fifo',
-      sales_velocity: 0,
-      abc_classification: 'C',
-      last_movement_date: new Date().toISOString(),
-      created_date: new Date().toISOString()
+    const newProduct = {
+      id: `prod_${Date.now()}`,
+      ...productData,
+      created_at: new Date().toISOString()
     };
-    const updated = [...items, newItem];
+    const updated = [...products, newProduct];
     localStorage.setItem(storageKey, JSON.stringify(updated));
-    setItems(updated);
-    return newItem;
-  }, [backendAvailable, items, activeCompany]);
+    setProducts(updated);
+    return newProduct;
+  }, [backendAvailable, products, activeCompany]);
 
-  const updateItem = useCallback(async (id, itemData) => {
+  const updateProduct = useCallback(async (id, productData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        await inventoryService.updateProduct(id, itemData);
+        await inventoryService.updateProduct(id, productData);
       } catch (err) {
         console.error('API error:', err);
       }
     }
 
-    const updated = items.map(item => item.id === id ? { ...item, ...itemData } : item);
+    const updated = products.map(p => p.id === id ? { ...p, ...productData } : p);
     localStorage.setItem(storageKey, JSON.stringify(updated));
-    setItems(updated);
-  }, [backendAvailable, items, activeCompany]);
+    setProducts(updated);
+  }, [backendAvailable, products, activeCompany]);
 
-  const deleteItem = useCallback(async (id) => {
+  const deleteProduct = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
@@ -297,68 +579,291 @@ export function InventoryProvider({ children }) {
       }
     }
 
-    const updated = items.filter(item => item.id !== id);
+    const updated = products.filter(p => p.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
-    setItems(updated);
-  }, [backendAvailable, items, activeCompany]);
+    setProducts(updated);
+  }, [backendAvailable, products, activeCompany]);
 
-  // Stock Movement CRUD
-  const createStockMovement = useCallback(async (movementData) => {
+  // ================== CATEGORIES ==================
+  const createCategory = useCallback(async (categoryData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        if (movementData.movement_type === 'inbound' || movementData.movement_type === 'outbound') {
-          await inventoryService.adjustInventory({
-            product_id: movementData.item_id,
-            quantity: movementData.movement_type === 'inbound' ? movementData.quantity : -movementData.quantity,
-            reason: movementData.notes,
-            reference: movementData.reference
-          });
-        }
+        const newCategory = await inventoryService.createCategory(categoryData);
+        setCategories(prev => [...prev, newCategory]);
+        return newCategory;
       } catch (err) {
         console.error('API error:', err);
       }
     }
 
-    const newMovement = {
-      id: `mov_${Date.now()}`,
-      ...movementData,
-      company_id: companyId,
-      movement_date: new Date().toISOString(),
-      created_date: new Date().toISOString()
+    const newCategory = {
+      id: `cat_${Date.now()}`,
+      ...categoryData,
+      created_at: new Date().toISOString()
     };
-    const updated = [...stockMovements, newMovement];
+    const updated = [...categories, newCategory];
     localStorage.setItem(storageKey, JSON.stringify(updated));
-    setStockMovements(updated);
+    setCategories(updated);
+    return newCategory;
+  }, [backendAvailable, categories, activeCompany]);
 
-    // Update item stock based on movement
-    const item = items.find(i => i.id === movementData.item_id);
-    if (item) {
-      const stockChange = movementData.movement_type === 'inbound' ? movementData.quantity : -movementData.quantity;
-      updateItem(item.id, {
-        current_stock: item.current_stock + stockChange,
-        last_movement_date: new Date().toISOString()
+  const updateCategory = useCallback(async (id, categoryData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.updateCategory(id, categoryData);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = categories.map(c => c.id === id ? { ...c, ...categoryData } : c);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setCategories(updated);
+  }, [backendAvailable, categories, activeCompany]);
+
+  const deleteCategory = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteCategory(id);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = categories.filter(c => c.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setCategories(updated);
+  }, [backendAvailable, categories, activeCompany]);
+
+  // ================== WAREHOUSES ==================
+  const createWarehouse = useCallback(async (warehouseData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        const newWarehouse = await inventoryService.createWarehouse(warehouseData);
+        setWarehouses(prev => [...prev, newWarehouse]);
+        return newWarehouse;
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const newWarehouse = {
+      id: `wh_${Date.now()}`,
+      ...warehouseData,
+      locations: [],
+      created_at: new Date().toISOString()
+    };
+    const updated = [...warehouses, newWarehouse];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+    return newWarehouse;
+  }, [backendAvailable, warehouses, activeCompany]);
+
+  const updateWarehouse = useCallback(async (id, warehouseData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.updateWarehouse(id, warehouseData);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = warehouses.map(w => w.id === id ? { ...w, ...warehouseData } : w);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+  }, [backendAvailable, warehouses, activeCompany]);
+
+  const deleteWarehouse = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteWarehouse(id);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = warehouses.filter(w => w.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+  }, [backendAvailable, warehouses, activeCompany]);
+
+  const createWarehouseLocation = useCallback(async (warehouseId, locationData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        const newLocation = await inventoryService.createWarehouseLocation(warehouseId, locationData);
+        setWarehouses(prev => prev.map(w =>
+          w.id === warehouseId
+            ? { ...w, locations: [...(w.locations || []), newLocation] }
+            : w
+        ));
+        return newLocation;
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const newLocation = {
+      id: `loc_${Date.now()}`,
+      ...locationData,
+      is_active: true
+    };
+    const updated = warehouses.map(w =>
+      w.id === warehouseId
+        ? { ...w, locations: [...(w.locations || []), newLocation] }
+        : w
+    );
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+    return newLocation;
+  }, [backendAvailable, warehouses, activeCompany]);
+
+  // ================== INVENTORY OPERATIONS ==================
+  const adjustInventory = useCallback(async (adjustmentData) => {
+    const companyId = activeCompany?.id;
+    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.adjustInventory(adjustmentData);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    // Update inventory
+    const existingIndex = inventory.findIndex(
+      i => i.product_id === adjustmentData.product_id && i.warehouse_id === adjustmentData.warehouse_id
+    );
+
+    let updatedInventory;
+    if (existingIndex >= 0) {
+      updatedInventory = inventory.map((item, idx) =>
+        idx === existingIndex
+          ? { ...item, quantity: item.quantity + adjustmentData.quantity }
+          : item
+      );
+    } else {
+      updatedInventory = [...inventory, {
+        id: `inv_${Date.now()}`,
+        product_id: adjustmentData.product_id,
+        warehouse_id: adjustmentData.warehouse_id,
+        location_id: adjustmentData.location_id,
+        quantity: adjustmentData.quantity,
+        reserved_quantity: 0,
+        available_quantity: adjustmentData.quantity,
+        created_at: new Date().toISOString()
+      }];
+    }
+    localStorage.setItem(inventoryKey, JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
+
+    // Create movement record
+    const movement = {
+      id: `mov_${Date.now()}`,
+      product_id: adjustmentData.product_id,
+      warehouse_id: adjustmentData.warehouse_id,
+      movement_type: 'adjustment',
+      quantity: adjustmentData.quantity,
+      reference: adjustmentData.reference || `ADJ-${Date.now()}`,
+      notes: adjustmentData.reason,
+      created_at: new Date().toISOString()
+    };
+    const updatedMovements = [...stockMovements, movement];
+    localStorage.setItem(movementsKey, JSON.stringify(updatedMovements));
+    setStockMovements(updatedMovements);
+
+    return movement;
+  }, [backendAvailable, inventory, stockMovements, activeCompany]);
+
+  const transferInventory = useCallback(async (transferData) => {
+    const companyId = activeCompany?.id;
+    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.transferInventory(transferData);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    // Decrement source
+    let updatedInventory = inventory.map(item => {
+      if (item.product_id === transferData.product_id && item.warehouse_id === transferData.from_warehouse_id) {
+        return { ...item, quantity: item.quantity - transferData.quantity };
+      }
+      return item;
+    });
+
+    // Increment destination
+    const destIndex = updatedInventory.findIndex(
+      i => i.product_id === transferData.product_id && i.warehouse_id === transferData.to_warehouse_id
+    );
+
+    if (destIndex >= 0) {
+      updatedInventory = updatedInventory.map((item, idx) =>
+        idx === destIndex
+          ? { ...item, quantity: item.quantity + transferData.quantity }
+          : item
+      );
+    } else {
+      updatedInventory.push({
+        id: `inv_${Date.now()}`,
+        product_id: transferData.product_id,
+        warehouse_id: transferData.to_warehouse_id,
+        location_id: transferData.to_location_id,
+        quantity: transferData.quantity,
+        reserved_quantity: 0,
+        available_quantity: transferData.quantity,
+        created_at: new Date().toISOString()
       });
     }
 
-    return newMovement;
-  }, [backendAvailable, stockMovements, items, updateItem, activeCompany]);
+    localStorage.setItem(inventoryKey, JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
 
-  // Transfer inventory between locations
-  const transferInventory = useCallback(async (data) => {
-    if (backendAvailable) {
-      try {
-        await inventoryService.transferInventory(data);
-      } catch (err) {
-        console.error('API error:', err);
-      }
-    }
-    // Local handling would go here
-  }, [backendAvailable]);
+    // Create transfer movement record
+    const movement = {
+      id: `mov_${Date.now()}`,
+      product_id: transferData.product_id,
+      warehouse_id: transferData.from_warehouse_id,
+      to_warehouse_id: transferData.to_warehouse_id,
+      movement_type: 'transfer',
+      quantity: transferData.quantity,
+      reference: transferData.reference || `TRF-${Date.now()}`,
+      notes: transferData.notes,
+      created_at: new Date().toISOString()
+    };
+    const updatedMovements = [...stockMovements, movement];
+    localStorage.setItem(movementsKey, JSON.stringify(updatedMovements));
+    setStockMovements(updatedMovements);
 
-  // Get inventory valuation
+    return movement;
+  }, [backendAvailable, inventory, stockMovements, activeCompany]);
+
   const getInventoryValuation = useCallback(async () => {
     if (backendAvailable) {
       try {
@@ -368,44 +873,304 @@ export function InventoryProvider({ children }) {
       }
     }
     // Calculate from local data
-    return items.reduce((total, item) => total + (item.current_stock * item.unit_cost), 0);
-  }, [backendAvailable, items]);
+    return inventory.reduce((total, item) => {
+      const product = products.find(p => p.id === item.product_id);
+      return total + (item.quantity * (product?.cost_price || 0));
+    }, 0);
+  }, [backendAvailable, inventory, products]);
 
-  const listItems = useCallback((sortField) => {
-    let sorted = [...items];
-    if (sortField) {
-      const desc = sortField.startsWith('-');
-      const field = desc ? sortField.slice(1) : sortField;
-      sorted.sort((a, b) => desc ? (b[field] > a[field] ? 1 : -1) : (a[field] > b[field] ? 1 : -1));
-    }
-    return sorted;
-  }, [items]);
+  const getInventorySummary = useCallback(() => {
+    const totalValue = inventory.reduce((total, item) => {
+      const product = products.find(p => p.id === item.product_id);
+      return total + (item.quantity * (product?.cost_price || 0));
+    }, 0);
 
-  const listMovements = useCallback((sortField, limit) => {
-    let sorted = [...stockMovements];
-    if (sortField) {
-      const desc = sortField.startsWith('-');
-      const field = desc ? sortField.slice(1) : sortField;
-      sorted.sort((a, b) => desc ? (b[field] > a[field] ? 1 : -1) : (a[field] > b[field] ? 1 : -1));
-    }
-    return limit ? sorted.slice(0, limit) : sorted;
-  }, [stockMovements]);
+    const totalItems = inventory.reduce((total, item) => total + item.quantity, 0);
+
+    const lowStockProducts = products.filter(p => {
+      const stockItems = inventory.filter(i => i.product_id === p.id);
+      const totalStock = stockItems.reduce((sum, i) => sum + i.quantity, 0);
+      return p.is_stockable && totalStock <= p.min_stock_level;
+    });
+
+    return {
+      totalValue,
+      totalItems,
+      totalProducts: products.length,
+      totalWarehouses: warehouses.length,
+      lowStockCount: lowStockProducts.length,
+      lowStockProducts
+    };
+  }, [inventory, products, warehouses]);
+
+  // Helper to get product stock across warehouses
+  const getProductStock = useCallback((productId) => {
+    return inventory
+      .filter(i => i.product_id === productId)
+      .map(i => ({
+        ...i,
+        warehouse: warehouses.find(w => w.id === i.warehouse_id)
+      }));
+  }, [inventory, warehouses]);
+
+  // Helper to get warehouse inventory
+  const getWarehouseInventory = useCallback((warehouseId) => {
+    return inventory
+      .filter(i => i.warehouse_id === warehouseId)
+      .map(i => ({
+        ...i,
+        product: products.find(p => p.id === i.product_id)
+      }));
+  }, [inventory, products]);
+
+  // ================== LOT/BATCH TRACKING ==================
+  const createLot = useCallback(async (lotData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
+
+    const newLot = {
+      id: `lot_${Date.now()}`,
+      lot_number: lotData.lot_number || `LOT-${new Date().getFullYear()}-${String(lots.length + 1).padStart(3, '0')}`,
+      ...lotData,
+      original_quantity: lotData.quantity,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+    const updated = [...lots, newLot];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setLots(updated);
+    return newLot;
+  }, [lots, activeCompany]);
+
+  const updateLot = useCallback(async (id, lotData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
+    const updated = lots.map(l => l.id === id ? { ...l, ...lotData } : l);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setLots(updated);
+  }, [lots, activeCompany]);
+
+  const consumeLot = useCallback(async (lotId, quantity) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
+    const updated = lots.map(l => {
+      if (l.id === lotId) {
+        const newQty = l.quantity - quantity;
+        return { ...l, quantity: Math.max(0, newQty), status: newQty <= 0 ? 'depleted' : 'active' };
+      }
+      return l;
+    });
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setLots(updated);
+  }, [lots, activeCompany]);
+
+  const getProductLots = useCallback((productId) => {
+    return lots
+      .filter(l => l.product_id === productId && l.status === 'active')
+      .sort((a, b) => new Date(a.received_date) - new Date(b.received_date)); // FIFO order
+  }, [lots]);
+
+  const getExpiringLots = useCallback((daysAhead = 30) => {
+    const futureDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+    return lots
+      .filter(l => l.expiry_date && new Date(l.expiry_date) <= futureDate && l.status === 'active')
+      .map(l => ({
+        ...l,
+        product: products.find(p => p.id === l.product_id),
+        warehouse: warehouses.find(w => w.id === l.warehouse_id),
+        daysUntilExpiry: Math.ceil((new Date(l.expiry_date) - new Date()) / (24 * 60 * 60 * 1000))
+      }))
+      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+  }, [lots, products, warehouses]);
+
+  // ================== STOCK COUNTING (INVENTARIZATSIYA) ==================
+  const createStockCount = useCallback(async (countData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
+
+    // Get current inventory for the warehouse
+    const warehouseInventory = inventory.filter(i => i.warehouse_id === countData.warehouse_id);
+    const lines = warehouseInventory.map(inv => ({
+      product_id: inv.product_id,
+      system_qty: inv.quantity,
+      counted_qty: null,
+      variance: null,
+      variance_reason: null
+    }));
+
+    const newCount = {
+      id: `sc_${Date.now()}`,
+      count_number: `INV-${new Date().getFullYear()}-${String(stockCounts.length + 1).padStart(3, '0')}`,
+      warehouse_id: countData.warehouse_id,
+      count_date: countData.count_date || new Date().toISOString().split('T')[0],
+      status: 'draft',
+      counted_by: countData.counted_by || '',
+      approved_by: null,
+      notes: countData.notes || '',
+      lines,
+      created_at: new Date().toISOString(),
+      completed_at: null
+    };
+    const updated = [...stockCounts, newCount];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setStockCounts(updated);
+    return newCount;
+  }, [stockCounts, inventory, activeCompany]);
+
+  const updateStockCountLine = useCallback(async (countId, productId, countedQty, reason) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
+    const updated = stockCounts.map(sc => {
+      if (sc.id === countId) {
+        const updatedLines = sc.lines.map(line => {
+          if (line.product_id === productId) {
+            const variance = countedQty - line.system_qty;
+            return { ...line, counted_qty: countedQty, variance, variance_reason: reason || null };
+          }
+          return line;
+        });
+        return { ...sc, lines: updatedLines, status: 'in_progress' };
+      }
+      return sc;
+    });
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setStockCounts(updated);
+  }, [stockCounts, activeCompany]);
+
+  const completeStockCount = useCallback(async (countId, approvedBy) => {
+    const companyId = activeCompany?.id;
+    const countsKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
+    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    const count = stockCounts.find(sc => sc.id === countId);
+    if (!count) return;
+
+    // Apply adjustments to inventory
+    let updatedInventory = [...inventory];
+    const newMovements = [];
+
+    count.lines.forEach(line => {
+      if (line.variance && line.variance !== 0) {
+        // Update inventory
+        updatedInventory = updatedInventory.map(inv => {
+          if (inv.product_id === line.product_id && inv.warehouse_id === count.warehouse_id) {
+            return { ...inv, quantity: line.counted_qty, last_count_date: new Date().toISOString() };
+          }
+          return inv;
+        });
+
+        // Create adjustment movement
+        newMovements.push({
+          id: `mov_${Date.now()}_${line.product_id}`,
+          product_id: line.product_id,
+          warehouse_id: count.warehouse_id,
+          movement_type: 'adjustment',
+          quantity: line.variance,
+          reference: count.count_number,
+          notes: `Inventory count adjustment: ${line.variance_reason || 'Count variance'}`,
+          created_at: new Date().toISOString()
+        });
+      }
+    });
+
+    localStorage.setItem(inventoryKey, JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
+
+    const updatedMovements = [...stockMovements, ...newMovements];
+    localStorage.setItem(movementsKey, JSON.stringify(updatedMovements));
+    setStockMovements(updatedMovements);
+
+    // Update count status
+    const updatedCounts = stockCounts.map(sc =>
+      sc.id === countId
+        ? { ...sc, status: 'completed', approved_by: approvedBy, completed_at: new Date().toISOString() }
+        : sc
+    );
+    localStorage.setItem(countsKey, JSON.stringify(updatedCounts));
+    setStockCounts(updatedCounts);
+  }, [stockCounts, inventory, stockMovements, activeCompany]);
+
+  const cancelStockCount = useCallback(async (countId) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
+    const updated = stockCounts.map(sc =>
+      sc.id === countId ? { ...sc, status: 'cancelled' } : sc
+    );
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setStockCounts(updated);
+  }, [stockCounts, activeCompany]);
+
+  // Legacy compatibility - items mapped to products with stock info
+  const items = products.map(p => {
+    const stockItems = inventory.filter(i => i.product_id === p.id);
+    const totalStock = stockItems.reduce((sum, i) => sum + i.quantity, 0);
+    return {
+      ...p,
+      current_stock: totalStock,
+      status: totalStock === 0 ? 'out_of_stock' : totalStock <= p.min_stock_level ? 'low_stock' : 'active'
+    };
+  });
 
   return (
     <InventoryContext.Provider value={{
-      items,
+      // Products
+      products,
+      createProduct,
+      updateProduct,
+      deleteProduct,
+
+      // Categories
+      categories,
+      createCategory,
+      updateCategory,
+      deleteCategory,
+
+      // Warehouses
+      warehouses,
+      createWarehouse,
+      updateWarehouse,
+      deleteWarehouse,
+      createWarehouseLocation,
+
+      // Inventory
+      inventory,
       stockMovements,
+      adjustInventory,
+      transferInventory,
+      getInventoryValuation,
+      getInventorySummary,
+      getProductStock,
+      getWarehouseInventory,
+
+      // Lot/Batch Tracking
+      lots,
+      createLot,
+      updateLot,
+      consumeLot,
+      getProductLots,
+      getExpiringLots,
+
+      // Stock Counting (Inventarizatsiya)
+      stockCounts,
+      createStockCount,
+      updateStockCountLine,
+      completeStockCount,
+      cancelStockCount,
+
+      // Legacy compatibility
+      items,
+      createItem: createProduct,
+      updateItem: updateProduct,
+      deleteItem: deleteProduct,
+      createStockMovement: adjustInventory,
+      listItems: () => items,
+      listMovements: () => stockMovements,
+
+      // State
       isLoading,
       backendAvailable,
       error,
-      createItem,
-      updateItem,
-      deleteItem,
-      createStockMovement,
-      transferInventory,
-      getInventoryValuation,
-      listItems,
-      listMovements,
       refreshData: loadData
     }}>
       {children}

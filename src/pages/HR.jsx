@@ -27,8 +27,20 @@ import {
   DollarSign,
   Shield,
   Check,
-  X as XIcon
+  X as XIcon,
+  Upload,
+  Download,
+  Printer,
 } from "lucide-react";
+
+// Import universal ERP components
+import {
+  ImportModal,
+  ExportModal,
+  ImportExportButtons,
+  PrintPreviewModal,
+  useAuditTrail,
+} from '@/components/shared';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,9 +82,78 @@ export default function HR() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
+  const { addAuditLog } = useAuditTrail('employees');
+
+  // Export columns configuration
+  const exportColumns = [
+    { key: 'full_name', label: "To'liq ismi" },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Telefon' },
+    { key: 'job_title', label: 'Lavozimi' },
+    { key: 'department', label: "Bo'lim" },
+    { key: 'hire_date', label: 'Ishga kirgan sana' },
+    { key: 'salary', label: 'Maosh', render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'status', label: 'Holat' },
+    { key: 'performance_score', label: 'Samaradorlik bali' },
+  ];
+
+  // Import columns configuration
+  const importColumns = [
+    { key: 'full_name', label: "To'liq ismi", required: true },
+    { key: 'email', label: 'Email', required: true },
+    { key: 'phone', label: 'Telefon' },
+    { key: 'job_title', label: 'Lavozimi', required: true },
+    { key: 'department', label: "Bo'lim", required: true },
+    { key: 'hire_date', label: 'Ishga kirgan sana' },
+    { key: 'salary', label: 'Maosh' },
+  ];
+
+  const handleImport = async (data) => {
+    for (const row of data) {
+      const employeeData = {
+        full_name: row.full_name,
+        email: row.email,
+        phone: row.phone || '',
+        job_title: row.job_title,
+        department: row.department || 'general',
+        hire_date: row.hire_date || new Date().toISOString().split('T')[0],
+        salary: parseFloat(row.salary) || 0,
+        status: 'active',
+        performance_score: 3,
+        turnover_risk: 'low',
+      };
+      hrService.createEmployee(employeeData);
+    }
+    addAuditLog('create', 'batch', `${data.length} employees imported`);
+    loadEmployees();
+  };
+
+  const generatePrintConfig = (employee) => ({
+    template: 'payslip',
+    title: 'Xodim ma\'lumotlari',
+    documentNumber: employee.id,
+    documentDate: new Date().toLocaleDateString('uz-UZ'),
+    headerFields: [
+      { label: 'Xodim', value: employee.full_name },
+      { label: 'Lavozim', value: employee.job_title },
+      { label: "Bo'lim", value: getDepartmentName(employee.department) },
+      { label: 'Email', value: employee.email },
+      { label: 'Telefon', value: employee.phone },
+      { label: 'Ishga kirgan', value: employee.hire_date },
+    ],
+    tableColumns: [],
+    tableData: [],
+    totals: [
+      { label: 'Oylik maosh', value: `${(employee.salary || 0).toLocaleString()} UZS`, bold: true },
+    ],
+  });
+
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
     email: '',
@@ -476,13 +557,17 @@ Only return the JSON, no other text.`;
             <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('hr_title')}</h1>
             <p className="text-slate-600 mt-2">{t('hr_subtitle')}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {isAssessingRisk && (
               <Badge className="bg-purple-100 text-purple-700 border-purple-200 animate-pulse">
                 <Brain className="w-3 h-3 mr-1" />
                 AI Assessing Risk...
               </Badge>
             )}
+            <ImportExportButtons
+              onImport={() => setShowImportModal(true)}
+              onExport={() => setShowExportModal(true)}
+            />
             <Button
               onClick={() => setShowAddModal(true)}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
@@ -1213,6 +1298,37 @@ Only return the JSON, no other text.`;
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Import Modal */}
+        <ImportModal
+          open={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImport}
+          columns={importColumns}
+          entityName="Xodimlar"
+        />
+
+        {/* Export Modal */}
+        <ExportModal
+          open={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          data={filteredEmployees}
+          columns={exportColumns}
+          entityName="Xodimlar"
+          title="Xodimlar ro'yxati"
+        />
+
+        {/* Print Preview Modal */}
+        {selectedEmployee && showPrintPreview && (
+          <PrintPreviewModal
+            open={showPrintPreview}
+            onClose={() => {
+              setShowPrintPreview(false);
+            }}
+            config={generatePrintConfig(selectedEmployee)}
+            filename={`employee_${selectedEmployee.id}`}
+          />
+        )}
       </div>
     </div>
   );
