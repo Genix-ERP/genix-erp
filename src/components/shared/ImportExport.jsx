@@ -647,28 +647,39 @@ export function ImportExportButtons({
   importDisabled = false,
   exportDisabled = false,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   return (
     <div className="flex items-center gap-2">
       {onImport && (
         <Button
           variant="outline"
           size="sm"
-          onClick={onImport}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onImport();
+          }}
           disabled={importDisabled}
         >
           <Upload className="w-4 h-4 mr-1" />
-          Import
+          {t('import')}
         </Button>
       )}
       {onExport && (
         <Button
           variant="outline"
           size="sm"
-          onClick={onExport}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onExport();
+          }}
           disabled={exportDisabled}
         >
           <Download className="w-4 h-4 mr-1" />
-          Export
+          {t('export')}
         </Button>
       )}
     </div>
