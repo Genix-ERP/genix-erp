@@ -76,7 +76,7 @@ export default function SubscriptionStatus({ compact = false }) {
           </div>
         )}
 
-        <Link to="/Settings?tab=subscription">
+        <Link to="/settings?tab=subscription">
           <Button variant="ghost" size="sm" className="h-6 text-xs">
             <ArrowUpRight className="w-3 h-3" />
           </Button>
@@ -215,7 +215,7 @@ export default function SubscriptionStatus({ compact = false }) {
 
         {/* Upgrade Button */}
         {subscription?.plan !== 'enterprise' && (
-          <Link to="/Settings?tab=subscription">
+          <Link to="/settings?tab=subscription">
             <Button className="w-full bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
               <Crown className="w-4 h-4 mr-2" />
               Obunani Yangilash
@@ -286,7 +286,7 @@ export function AIUsageIndicator() {
         className={`w-20 h-1.5 ${percentage >= 80 ? '[&>div]:bg-orange-500' : '[&>div]:bg-purple-500'}`}
       />
       {percentage >= 80 && (
-        <Link to="/Settings?tab=subscription">
+        <Link to="/settings?tab=subscription">
           <Button variant="ghost" size="sm" className="h-5 text-[10px] text-orange-600 hover:text-orange-700 p-1">
             Yangilash
           </Button>

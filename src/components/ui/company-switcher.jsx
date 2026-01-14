@@ -144,14 +144,14 @@ export default function CompanySwitcher() {
         {/* Add Company / Upgrade */}
         {hasMultiCompany ? (
           canAddMore ? (
-            <Link to="/AddCompany">
+            <Link to="/addcompany">
               <DropdownMenuItem className="cursor-pointer">
                 <Plus className="w-4 h-4 mr-2 text-slate-500" />
                 <span>Yangi kompaniya qo'shish</span>
               </DropdownMenuItem>
             </Link>
           ) : (
-            <Link to="/Settings?tab=subscription">
+            <Link to="/settings?tab=subscription">
               <DropdownMenuItem className="cursor-pointer text-amber-600">
                 <Crown className="w-4 h-4 mr-2" />
                 <span>Limit tugadi - Yangilash</span>
@@ -159,7 +159,7 @@ export default function CompanySwitcher() {
             </Link>
           )
         ) : (
-          <Link to="/Settings?tab=subscription">
+          <Link to="/settings?tab=subscription">
             <DropdownMenuItem className="cursor-pointer text-purple-600">
               <Crown className="w-4 h-4 mr-2" />
               <span>Ko'p kompaniya uchun yangilang</span>
@@ -168,7 +168,7 @@ export default function CompanySwitcher() {
         )}
 
         {/* Manage Companies */}
-        <Link to="/Companies">
+        <Link to="/companies">
           <DropdownMenuItem className="cursor-pointer">
             <Settings className="w-4 h-4 mr-2 text-slate-500" />
             <span>Kompaniyalarni boshqarish</span>
