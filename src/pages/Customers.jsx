@@ -41,6 +41,7 @@ import CustomerForm from "@/components/customers/CustomerForm";
 import CustomerMetrics from "@/components/customers/CustomerMetrics";
 import DragDropKanban from "@/components/crm/DragDropKanban";
 import LeadsKanban from "@/components/crm/LeadsKanban";
+import LeadForm from "@/components/crm/LeadForm";
 import OpportunityForm from "@/components/crm/OpportunityForm";
 import CallInterface from "@/components/crm/CallInterface";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -88,8 +89,16 @@ export default function Customers() {
 
   // Load call logs
   useEffect(() => {
-    const logs = pbxService.getCallLogs(activeCompany?.id);
-    setCallLogs(logs);
+    const loadCallLogs = async () => {
+      try {
+        const logs = await pbxService.getCallLogs(activeCompany?.id);
+        setCallLogs(logs || []);
+      } catch (error) {
+        console.error('Failed to load call logs:', error);
+        setCallLogs([]);
+      }
+    };
+    loadCallLogs();
   }, [activeCompany]);
 
   // Handle call customer
@@ -170,6 +179,16 @@ export default function Customers() {
   const handleLeadEdit = (lead) => {
     setEditingLead(lead);
     setShowLeadForm(true);
+  };
+
+  const handleLeadSave = (leadData) => {
+    if (editingLead) {
+      updateLead(editingLead.id, leadData);
+    } else {
+      createLead(leadData);
+    }
+    setShowLeadForm(false);
+    setEditingLead(null);
   };
 
   const handleLeadDeleteConfirm = () => {
@@ -358,7 +377,7 @@ export default function Customers() {
                       <SelectValue placeholder={t('status')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All {t('status')}</SelectItem>
+                      <SelectItem value="all">{t('all')} {t('status')}</SelectItem>
                       <SelectItem value="prospect">{t('prospect')}</SelectItem>
                       <SelectItem value="active">{t('active')}</SelectItem>
                       <SelectItem value="inactive">{t('inactive')}</SelectItem>
@@ -370,7 +389,7 @@ export default function Customers() {
                       <SelectValue placeholder={t('industry')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All {t('industry')}</SelectItem>
+                      <SelectItem value="all">{t('all')} {t('industry')}</SelectItem>
                       <SelectItem value="technology">{t('technology')}</SelectItem>
                       <SelectItem value="healthcare">{t('healthcare')}</SelectItem>
                       <SelectItem value="retail">{t('retail')}</SelectItem>
@@ -385,7 +404,7 @@ export default function Customers() {
             {/* Customers Table */}
             <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
               <CardHeader>
-                <CardTitle>{t('customers')} Directory</CardTitle>
+                <CardTitle>{t('customers_directory')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -393,11 +412,11 @@ export default function Customers() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t('company_name')}</TableHead>
-                        <TableHead>Contact</TableHead>
+                        <TableHead>{t('contact')}</TableHead>
                         <TableHead>{t('industry')}</TableHead>
                         <TableHead>{t('status')}</TableHead>
                         <TableHead>{t('value')}</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -533,9 +552,13 @@ export default function Customers() {
               customer={customerToCall}
               language={language}
               companyId={activeCompany?.id}
-              onUpdate={() => {
-                const logs = pbxService.getCallLogs(activeCompany?.id);
-                setCallLogs(logs);
+              onUpdate={async () => {
+                try {
+                  const logs = await pbxService.getCallLogs(activeCompany?.id);
+                  setCallLogs(logs || []);
+                } catch (error) {
+                  console.error('Failed to refresh call logs:', error);
+                }
               }}
             />
           </TabsContent>
@@ -593,6 +616,19 @@ export default function Customers() {
             onCancel={() => {
               setShowForm(false);
               setEditingCustomer(null);
+            }}
+            language={language}
+          />
+        )}
+
+        {/* Lead Form Modal */}
+        {showLeadForm && (
+          <LeadForm
+            lead={editingLead}
+            onSave={handleLeadSave}
+            onCancel={() => {
+              setShowLeadForm(false);
+              setEditingLead(null);
             }}
             language={language}
           />
