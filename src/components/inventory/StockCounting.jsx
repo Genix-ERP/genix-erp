@@ -13,10 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { hrService } from "@/api/services/hr";
 
 export default function StockCounting() {
   const { language } = useLanguage();
@@ -25,6 +27,7 @@ export default function StockCounting() {
     stockCounts,
     products,
     warehouses,
+    inventory,
     createStockCount,
     updateStockCountLine,
     completeStockCount,
@@ -39,15 +42,32 @@ export default function StockCounting() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
+  const [employees, setEmployees] = useState([]);
 
   const [newCount, setNewCount] = useState({
     warehouse_id: '',
     count_date: new Date().toISOString().split('T')[0],
     counted_by: '',
-    notes: ''
+    notes: '',
+    selected_products: [] // empty = all products, otherwise specific product IDs
   });
 
   const [approvedBy, setApprovedBy] = useState('');
+
+  // Fetch employees on mount
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const data = await hrService.listEmployees();
+        setEmployees(data || []);
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+        // Fallback to empty array if API fails
+        setEmployees([]);
+      }
+    };
+    fetchEmployees();
+  }, []);
 
   // Calculate summaries
   const summary = {
@@ -75,7 +95,8 @@ export default function StockCounting() {
         warehouse_id: '',
         count_date: new Date().toISOString().split('T')[0],
         counted_by: '',
-        notes: ''
+        notes: '',
+        selected_products: []
       });
       setShowCreateModal(false);
       setSelectedCount(count);
@@ -476,7 +497,7 @@ export default function StockCounting() {
               <label className="text-sm font-medium">{t('warehouse')}</label>
               <Select
                 value={newCount.warehouse_id}
-                onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v })}
+                onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v, selected_products: [] })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_warehouse')} />
@@ -488,6 +509,96 @@ export default function StockCounting() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Product selection - show products in selected warehouse */}
+            <div>
+              <label className="text-sm font-medium">{t('products')}</label>
+              <p className="text-xs text-slate-500 mb-2">{t('select_products_to_count')}</p>
+              <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-2">
+                {!newCount.warehouse_id ? (
+                  <p className="text-sm text-slate-500 text-center py-4">
+                    {t('select_warehouse_first')}
+                  </p>
+                ) : (() => {
+                  // Get products from inventory in this warehouse
+                  const warehouseProducts = inventory
+                    .filter(inv => inv.warehouse_id === newCount.warehouse_id)
+                    .map(inv => {
+                      const product = products.find(p => p.id === inv.product_id);
+                      return product ? { ...product, system_qty: inv.quantity } : null;
+                    })
+                    .filter(Boolean);
+
+                  // If no inventory, show all products with 0 quantity
+                  const displayProducts = warehouseProducts.length > 0
+                    ? warehouseProducts
+                    : products.map(p => ({ ...p, system_qty: 0 }));
+
+                  if (displayProducts.length === 0) {
+                    return (
+                      <p className="text-sm text-slate-500 text-center py-4">
+                        {t('no_products_in_warehouse')}
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div className="flex items-center gap-2 pb-2 border-b">
+                        <Checkbox
+                          id="select-all"
+                          checked={newCount.selected_products.length === 0 || newCount.selected_products.length === displayProducts.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setNewCount({ ...newCount, selected_products: [] }); // Empty = all products
+                            } else {
+                              setNewCount({ ...newCount, selected_products: [] });
+                            }
+                          }}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          {t('all_products')} ({displayProducts.length})
+                        </label>
+                      </div>
+                      {displayProducts.map(product => (
+                        <div key={product.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`product-${product.id}`}
+                            checked={newCount.selected_products.length === 0 || newCount.selected_products.includes(product.id)}
+                            onCheckedChange={(checked) => {
+                              if (newCount.selected_products.length === 0) {
+                                // Currently "all" is selected, switch to specific selection
+                                const allIds = displayProducts.map(p => p.id);
+                                if (!checked) {
+                                  setNewCount({ ...newCount, selected_products: allIds.filter(id => id !== product.id) });
+                                }
+                              } else {
+                                if (checked) {
+                                  const newSelected = [...newCount.selected_products, product.id];
+                                  // If all selected, switch back to empty (all)
+                                  if (newSelected.length === displayProducts.length) {
+                                    setNewCount({ ...newCount, selected_products: [] });
+                                  } else {
+                                    setNewCount({ ...newCount, selected_products: newSelected });
+                                  }
+                                } else {
+                                  setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
+                                }
+                              }
+                            }}
+                          />
+                          <label htmlFor={`product-${product.id}`} className="text-sm cursor-pointer flex-1 flex justify-between">
+                            <span>{product.name}</span>
+                            <span className="text-slate-500">{product.system_qty} {t('units')}</span>
+                          </label>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
             <div>
               <label className="text-sm font-medium">{t('date')}</label>
               <Input
@@ -498,11 +609,29 @@ export default function StockCounting() {
             </div>
             <div>
               <label className="text-sm font-medium">{t('counted_by')}</label>
-              <Input
-                value={newCount.counted_by}
-                onChange={(e) => setNewCount({ ...newCount, counted_by: e.target.value })}
-                placeholder={t('employee_name')}
-              />
+              {employees.length > 0 ? (
+                <Select
+                  value={newCount.counted_by}
+                  onValueChange={(v) => setNewCount({ ...newCount, counted_by: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_employee')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.name || `${emp.first_name} ${emp.last_name}`}>
+                        {emp.name || `${emp.first_name} ${emp.last_name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={newCount.counted_by}
+                  onChange={(e) => setNewCount({ ...newCount, counted_by: e.target.value })}
+                  placeholder={t('employee_name')}
+                />
+              )}
             </div>
             <div>
               <label className="text-sm font-medium">{t('notes')}</label>
@@ -545,11 +674,29 @@ export default function StockCounting() {
             </div>
             <div>
               <label className="text-sm font-medium">{t('approved_by')}</label>
-              <Input
-                value={approvedBy}
-                onChange={(e) => setApprovedBy(e.target.value)}
-                placeholder={t('employee_name')}
-              />
+              {employees.length > 0 ? (
+                <Select
+                  value={approvedBy}
+                  onValueChange={setApprovedBy}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_employee')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.name || `${emp.first_name} ${emp.last_name}`}>
+                        {emp.name || `${emp.first_name} ${emp.last_name}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={approvedBy}
+                  onChange={(e) => setApprovedBy(e.target.value)}
+                  placeholder={t('employee_name')}
+                />
+              )}
             </div>
             <div className="flex gap-2 justify-end mt-6">
               <Button variant="outline" onClick={() => setShowCompleteModal(false)}>{t('cancel')}</Button>
