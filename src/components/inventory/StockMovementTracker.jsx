@@ -36,16 +36,17 @@ export default function StockMovementTracker({ movements, items }) {
 
   React.useEffect(() => {
     if (searchQuery) {
-      const filtered = (movements || []).filter(movement => 
-        movement.reference_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        movement.supplier_or_customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        items.find(item => item.id === movement.inventory_item_id)?.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const filtered = (movements || []).filter(movement => {
+        const product = products.find(p => p.id === movement.product_id);
+        return movement.reference?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          movement.supplier_or_customer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      });
       setFilteredMovements(filtered);
     } else {
       setFilteredMovements(movements || []);
     }
-  }, [searchQuery, movements, items]);
+  }, [searchQuery, movements, products]);
 
   const getMovementIcon = (type) => {
     const icons = {
@@ -69,14 +70,14 @@ export default function StockMovementTracker({ movements, items }) {
     return colors[type] || "bg-gray-100 text-gray-800";
   };
 
-  const getItemName = (itemId) => {
-    const item = items.find(i => i.id === itemId);
-    return item ? item.name : 'Unknown Item';
+  const getItemName = (productId) => {
+    const product = products.find(p => p.id === productId);
+    return product ? product.name : t('unknown');
   };
 
-  const getItemSku = (itemId) => {
-    const item = items.find(i => i.id === itemId);
-    return item ? item.sku : 'N/A';
+  const getItemSku = (productId) => {
+    const product = products.find(p => p.id === productId);
+    return product ? (product.sku || product.code) : 'N/A';
   };
 
   const calculateTotalValue = (movements) => {
@@ -129,6 +130,7 @@ export default function StockMovementTracker({ movements, items }) {
       await adjustInventory({
         product_id: newMovement.product_id,
         warehouse_id: newMovement.warehouse_id,
+        movement_type: newMovement.movement_type,
         quantity: quantity,
         unit_cost: parseFloat(newMovement.unit_cost) || 0,
         reference: newMovement.reference || `${newMovement.movement_type.toUpperCase()}-${Date.now()}`,
@@ -252,14 +254,14 @@ export default function StockMovementTracker({ movements, items }) {
                       <TableRow key={movement.id || index} className="hover:bg-slate-50/80">
                         <TableCell>
                           <div className="text-sm">
-                            <div>{movement.movement_date ? format(new Date(movement.movement_date), 'MMM d, yyyy') : 'N/A'}</div>
-                            <div className="text-slate-500">{movement.movement_date ? format(new Date(movement.movement_date), 'HH:mm') : ''}</div>
+                            <div>{movement.created_at ? format(new Date(movement.created_at), 'MMM d, yyyy') : 'N/A'}</div>
+                            <div className="text-slate-500">{movement.created_at ? format(new Date(movement.created_at), 'HH:mm') : ''}</div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{getItemName(movement.inventory_item_id)}</p>
-                            <p className="text-sm text-slate-500">{getItemSku(movement.inventory_item_id)}</p>
+                            <p className="font-medium">{getItemName(movement.product_id)}</p>
+                            <p className="text-sm text-slate-500">{getItemSku(movement.product_id)}</p>
                             {movement.batch_number && (
                               <Badge variant="outline" className="text-xs mt-1">
                                 {t('batch')}: {movement.batch_number}
@@ -289,7 +291,7 @@ export default function StockMovementTracker({ movements, items }) {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <div>{movement.reference_number || 'N/A'}</div>
+                            <div>{movement.reference || 'N/A'}</div>
                             {movement.supplier_or_customer && (
                               <div className="text-slate-500">{movement.supplier_or_customer}</div>
                             )}

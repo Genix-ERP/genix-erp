@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,17 +129,41 @@ export default function PriceLabelPrinting() {
   const [labelQueue, setLabelQueue] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [customSettings, setCustomSettings] = useState({
-    showBarcode: true,
-    showQR: false,
-    showPrice: true,
-    showName: true,
-    showSKU: true,
-    showCategory: false,
-    showStock: false,
-    currency: "UZS",
-    priceFormat: "full", // full, rounded
-  });
+
+  // Load label settings from localStorage
+  const getInitialSettings = () => {
+    const defaultSettings = {
+      showBarcode: true,
+      showQR: false,
+      showPrice: true,
+      showName: true,
+      showSKU: true,
+      showCategory: false,
+      showStock: false,
+      currency: "UZS",
+      priceFormat: "full",
+    };
+    try {
+      const saved = localStorage.getItem('genix_label_settings');
+      if (saved) {
+        return { ...defaultSettings, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.error('Error loading label settings:', e);
+    }
+    return defaultSettings;
+  };
+
+  const [customSettings, setCustomSettings] = useState(getInitialSettings);
+
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('genix_label_settings', JSON.stringify(customSettings));
+    } catch (e) {
+      console.error('Error saving label settings:', e);
+    }
+  }, [customSettings]);
 
   // Get all products with inventory info
   const allProducts = products.map(product => {

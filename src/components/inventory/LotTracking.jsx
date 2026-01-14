@@ -6,11 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, Calendar, AlertTriangle, Clock, CheckCircle,
   Warehouse, Tag, Hash, Layers, TrendingDown, ChevronDown, ChevronRight,
-  FileText, Barcode
+  FileText, Barcode, Eye, Edit, Trash2, MoreHorizontal
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format, differenceInDays } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -25,6 +31,7 @@ export default function LotTracking() {
     warehouses,
     createLot,
     updateLot,
+    deleteLot,
     getProductLots,
     getExpiringLots,
     isLoading
@@ -35,6 +42,10 @@ export default function LotTracking() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedLot, setSelectedLot] = useState(null);
   const [expandedLots, setExpandedLots] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
@@ -130,6 +141,72 @@ export default function LotTracking() {
 
   const toggleLotExpand = (lotId) => {
     setExpandedLots(prev => ({ ...prev, [lotId]: !prev[lotId] }));
+  };
+
+  const handleViewLot = (lot) => {
+    setSelectedLot(lot);
+    setShowViewModal(true);
+  };
+
+  const handleEditLot = (lot) => {
+    setSelectedLot(lot);
+    setNewLot({
+      lot_number: lot.lot_number || '',
+      product_id: lot.product_id || '',
+      warehouse_id: lot.warehouse_id || '',
+      quantity: lot.quantity?.toString() || '',
+      unit_cost: lot.unit_cost?.toString() || '',
+      manufacture_date: lot.manufacture_date || '',
+      expiry_date: lot.expiry_date || '',
+      supplier: lot.supplier || '',
+      received_date: lot.received_date || '',
+      serial_numbers: lot.serial_numbers?.join(', ') || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateLot = async () => {
+    if (!selectedLot) return;
+    setIsSaving(true);
+    try {
+      const serialNumbers = newLot.serial_numbers
+        ? newLot.serial_numbers.split(',').map(s => s.trim()).filter(s => s)
+        : [];
+
+      await updateLot(selectedLot.id, {
+        lot_number: newLot.lot_number,
+        product_id: newLot.product_id,
+        warehouse_id: newLot.warehouse_id,
+        quantity: parseInt(newLot.quantity) || 0,
+        unit_cost: parseFloat(newLot.unit_cost) || 0,
+        manufacture_date: newLot.manufacture_date,
+        expiry_date: newLot.expiry_date,
+        supplier: newLot.supplier,
+        received_date: newLot.received_date,
+        serial_numbers: serialNumbers
+      });
+
+      setShowEditModal(false);
+      setSelectedLot(null);
+    } catch (err) {
+      console.error('Error updating lot:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteLot = async () => {
+    if (!selectedLot) return;
+    setIsSaving(true);
+    try {
+      await deleteLot(selectedLot.id);
+      setShowDeleteModal(false);
+      setSelectedLot(null);
+    } catch (err) {
+      console.error('Error deleting lot:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const expiringLots = getExpiringLots(30);
@@ -286,6 +363,7 @@ export default function LotTracking() {
                 <TableHead>{t('received_date')}</TableHead>
                 <TableHead>{t('expiry')}</TableHead>
                 <TableHead>{t('status')}</TableHead>
+                <TableHead className="text-right">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -336,10 +414,39 @@ export default function LotTracking() {
                           {lot.status === 'active' ? t('active') : t('depleted')}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewLot(lot)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              {t('view')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditLot(lot)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              {t('edit')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => {
+                                setSelectedLot(lot);
+                                setShowDeleteModal(true);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {t('delete')}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
                     {isExpanded && lot.serial_numbers?.length > 0 && (
                       <TableRow className="bg-slate-50">
-                        <TableCell colSpan={9} className="py-3">
+                        <TableCell colSpan={10} className="py-3">
                           <div className="pl-8">
                             <p className="text-sm font-medium text-slate-600 mb-2">{t('serial_numbers')}:</p>
                             <div className="flex flex-wrap gap-2">
@@ -359,7 +466,7 @@ export default function LotTracking() {
               })}
               {filteredLots.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={10} className="text-center py-8 text-slate-500">
                     {t('no_lots_found')}
                   </TableCell>
                 </TableRow>
@@ -499,6 +606,277 @@ export default function LotTracking() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Lot Modal */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-[var(--genix-blue)]" />
+              {t('lot_details')}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedLot && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('lot_number')}</p>
+                  <p className="font-mono font-semibold">{selectedLot.lot_number}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('status')}</p>
+                  <Badge className={selectedLot.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                    {selectedLot.status === 'active' ? t('active') : t('depleted')}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('product')}</p>
+                  <p className="font-medium">{products.find(p => p.id === selectedLot.product_id)?.name || t('unknown')}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('warehouse')}</p>
+                  <p className="font-medium">{warehouses.find(w => w.id === selectedLot.warehouse_id)?.name || t('unknown')}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('quantity')}</p>
+                  <p className="font-semibold">{selectedLot.quantity} / {selectedLot.original_quantity}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('unit_cost')}</p>
+                  <p className="font-semibold">{formatCurrency(selectedLot.unit_cost)}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('total_value')}</p>
+                  <p className="font-semibold">{formatCurrency(selectedLot.quantity * selectedLot.unit_cost)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('received_date')}</p>
+                  <p className="font-medium">{selectedLot.received_date ? format(new Date(selectedLot.received_date), 'dd.MM.yyyy') : '-'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('manufacture_date')}</p>
+                  <p className="font-medium">{selectedLot.manufacture_date ? format(new Date(selectedLot.manufacture_date), 'dd.MM.yyyy') : '-'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('expiry_date')}</p>
+                  <p className="font-medium">{selectedLot.expiry_date ? format(new Date(selectedLot.expiry_date), 'dd.MM.yyyy') : '-'}</p>
+                </div>
+              </div>
+
+              {selectedLot.supplier && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('supplier')}</p>
+                  <p className="font-medium">{selectedLot.supplier}</p>
+                </div>
+              )}
+
+              {selectedLot.serial_numbers?.length > 0 && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-2">{t('serial_numbers')}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedLot.serial_numbers.map((sn, idx) => (
+                      <Badge key={idx} variant="outline" className="font-mono">
+                        <Barcode className="w-3 h-3 mr-1" />
+                        {sn}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-4">
+                <Button variant="outline" onClick={() => setShowViewModal(false)}>
+                  {t('close')}
+                </Button>
+                <Button onClick={() => { setShowViewModal(false); handleEditLot(selectedLot); }}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  {t('edit')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Lot Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('edit_lot')}</DialogTitle>
+            <DialogDescription>{t('update_lot_details')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('lot_number')}</label>
+                <Input
+                  value={newLot.lot_number}
+                  onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
+                  placeholder="LOT-2025-001"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('received_date')}</label>
+                <Input
+                  type="date"
+                  value={newLot.received_date}
+                  onChange={(e) => setNewLot({ ...newLot, received_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">{t('product')}</label>
+              <Select
+                value={newLot.product_id}
+                onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_product')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.filter(p => p.is_stockable).map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">{t('warehouse')}</label>
+              <Select
+                value={newLot.warehouse_id}
+                onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_warehouse')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('quantity')}</label>
+                <Input
+                  type="number"
+                  value={newLot.quantity}
+                  onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('unit_cost')}</label>
+                <Input
+                  type="number"
+                  value={newLot.unit_cost}
+                  onChange={(e) => setNewLot({ ...newLot, unit_cost: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('manufacture_date')}</label>
+                <Input
+                  type="date"
+                  value={newLot.manufacture_date}
+                  onChange={(e) => setNewLot({ ...newLot, manufacture_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('expiry_date')}</label>
+                <Input
+                  type="date"
+                  value={newLot.expiry_date}
+                  onChange={(e) => setNewLot({ ...newLot, expiry_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">{t('supplier')}</label>
+              <Input
+                value={newLot.supplier}
+                onChange={(e) => setNewLot({ ...newLot, supplier: e.target.value })}
+                placeholder={t('supplier_name_placeholder')}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">{t('serial_numbers_comma_separated')}</label>
+              <Input
+                value={newLot.serial_numbers}
+                onChange={(e) => setNewLot({ ...newLot, serial_numbers: e.target.value })}
+                placeholder="SN-001, SN-002, SN-003"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end mt-6">
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>{t('cancel')}</Button>
+              <Button
+                onClick={handleUpdateLot}
+                disabled={isSaving || !newLot.product_id || !newLot.warehouse_id || !newLot.quantity}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
+                {isSaving ? t('saving') : t('update')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">{t('delete_lot')}</DialogTitle>
+            <DialogDescription>
+              {t('delete_lot_confirmation')}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedLot && (
+            <div className="space-y-4 mt-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">
+                  <AlertTriangle className="w-4 h-4 inline mr-2" />
+                  {t('lot_number')}: <strong>{selectedLot.lot_number}</strong>
+                </p>
+                <p className="text-sm text-red-600 mt-1">
+                  {t('this_action_cannot_be_undone')}
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteLot}
+                  disabled={isSaving}
+                >
+                  {isSaving ? t('deleting') : t('delete')}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
