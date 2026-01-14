@@ -59,9 +59,12 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
     });
     setIsConfigured(pbxService.isConfigured());
 
-    // Load call logs
-    const logs = pbxService.getCallLogs(companyId);
-    setLocalCallLogs(logs);
+    // Load call logs (async)
+    const loadCallLogs = async () => {
+      const logs = await pbxService.getCallLogs(companyId);
+      setLocalCallLogs(Array.isArray(logs) ? logs : []);
+    };
+    loadCallLogs();
   }, [companyId]);
 
   // Update dial number when customer changes
@@ -160,7 +163,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
         }, companyId);
 
         // Refresh call logs
-        setLocalCallLogs(pbxService.getCallLogs(companyId));
+        const refreshedLogs = await pbxService.getCallLogs(companyId);
+        setLocalCallLogs(Array.isArray(refreshedLogs) ? refreshedLogs : []);
       } catch (error) {
         console.error('Failed to end call:', error);
       }
@@ -192,7 +196,9 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   };
 
   // Combine provided callLogs with local logs
-  const allCallLogs = [...callLogs, ...localCallLogs]
+  const safeCallLogs = Array.isArray(callLogs) ? callLogs : [];
+  const safeLocalCallLogs = Array.isArray(localCallLogs) ? localCallLogs : [];
+  const allCallLogs = [...safeCallLogs, ...safeLocalCallLogs]
     .filter((log, index, self) =>
       index === self.findIndex((l) => l.id === log.id)
     )
