@@ -11,8 +11,12 @@ import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Downloa
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzePayroll } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 export default function Payroll() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
 
   // AI Analysis
@@ -189,13 +193,13 @@ export default function Payroll() {
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Payroll Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('payroll_management')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered')}
             </Badge>
           </div>
-          <p className="text-white/90">Automated payroll processing with tax calculations and compliance</p>
+          <p className="text-white/90">{t('payroll_management_subtitle')}</p>
         </div>
 
         {/* Metrics */}
@@ -208,7 +212,7 @@ export default function Payroll() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.totalPayrolls}</p>
-              <p className="text-sm text-slate-600">Total Payrolls</p>
+              <p className="text-sm text-slate-600">{t('total_payrolls')}</p>
             </CardContent>
           </Card>
 
@@ -220,7 +224,7 @@ export default function Payroll() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalGrossPay.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Gross Pay</p>
+              <p className="text-sm text-slate-600">{t('gross_pay')}</p>
             </CardContent>
           </Card>
 
@@ -232,7 +236,7 @@ export default function Payroll() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalNetPay.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Net Pay</p>
+              <p className="text-sm text-slate-600">{t('net_pay')}</p>
             </CardContent>
           </Card>
 
@@ -244,7 +248,7 @@ export default function Payroll() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.pendingPayments}</p>
-              <p className="text-sm text-slate-600">Pending Payments</p>
+              <p className="text-sm text-slate-600">{t('pending_payments')}</p>
             </CardContent>
           </Card>
         </div>
@@ -255,8 +259,8 @@ export default function Payroll() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-purple-600" />
-                AI Payroll Insights
-                <Badge className="bg-purple-100 text-purple-700 text-xs">Live</Badge>
+                {t('ai_payroll_insights')}
+                <Badge className="bg-purple-100 text-purple-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -302,7 +306,7 @@ export default function Payroll() {
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Monthly Payroll</CardTitle>
+                <CardTitle>{t('monthly_payroll')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
@@ -322,16 +326,16 @@ export default function Payroll() {
           <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
-                <CardTitle>Payroll Records</CardTitle>
+                <CardTitle>{t('payroll_records')}</CardTitle>
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-purple-600 to-indigo-600">
-                  <Plus className="w-4 h-4 mr-2" /> Process Payroll
+                  <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
                 </Button>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Search payrolls..."
+                    placeholder={t('search_payrolls')}
                     className="pl-9"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -342,11 +346,11 @@ export default function Payroll() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="calculated">Calculated</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
+                    <SelectItem value="draft">{t('draft')}</SelectItem>
+                    <SelectItem value="calculated">{t('calculated')}</SelectItem>
+                    <SelectItem value="approved">{t('approved')}</SelectItem>
+                    <SelectItem value="paid">{t('paid')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -359,21 +363,21 @@ export default function Payroll() {
               ) : filteredPayrolls.length === 0 ? (
                 <div className="text-center py-16">
                   <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No payroll records yet</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">Process First Payroll</Button>
+                  <p className="text-slate-500">{t('no_payroll_records_yet')}</p>
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('process_first_payroll')}</Button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Payroll #</TableHead>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Period</TableHead>
-                        <TableHead>Gross Pay</TableHead>
-                        <TableHead>Net Pay</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t('payroll_number')}</TableHead>
+                        <TableHead>{t('employee')}</TableHead>
+                        <TableHead>{t('period')}</TableHead>
+                        <TableHead>{t('gross_pay')}</TableHead>
+                        <TableHead>{t('net_pay')}</TableHead>
+                        <TableHead>{t('status')}</TableHead>
+                        <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -395,15 +399,15 @@ export default function Payroll() {
                             <div className="flex gap-1">
                               {payroll.status === 'calculated' && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
-                                  Approve
+                                  {t('approve')}
                                 </Button>
                               )}
                               {payroll.status === 'approved' && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
-                                  Pay
+                                  {t('pay')}
                                 </Button>
                               )}
-                              <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title="Download Payslip">
+                              <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
                                 <Download className="w-4 h-4" />
                               </Button>
                             </div>
@@ -422,24 +426,24 @@ export default function Payroll() {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Process Payroll</DialogTitle>
+              <DialogTitle>{t('process_payroll')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Payroll Number</label>
+                  <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder={t('auto_generated')}
                     value={newPayroll.payroll_number}
                     onChange={(e) => setNewPayroll({...newPayroll, payroll_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Employee *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
                   <Select value={newPayroll.employee_name} onValueChange={(value) => setNewPayroll({...newPayroll, employee_name: value})}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select employee" />
+                      <SelectValue placeholder={t('select_employee')} />
                     </SelectTrigger>
                     <SelectContent>
                       {employees.map(emp => (
@@ -452,7 +456,7 @@ export default function Payroll() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Pay Period Start *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('pay_period_start')} *</label>
                   <Input
                     type="date"
                     value={newPayroll.pay_period_start}
@@ -461,7 +465,7 @@ export default function Payroll() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Pay Period End *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('pay_period_end')} *</label>
                   <Input
                     type="date"
                     value={newPayroll.pay_period_end}
@@ -470,7 +474,7 @@ export default function Payroll() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Payment Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('payment_date')} *</label>
                   <Input
                     type="date"
                     value={newPayroll.payment_date}
@@ -481,10 +485,10 @@ export default function Payroll() {
               </div>
 
               <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Earnings</h3>
+                <h3 className="font-semibold mb-3">{t('earnings')}</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Basic Salary *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('basic_salary')} *</label>
                     <Input
                       type="number"
                       placeholder="0.00"
@@ -494,7 +498,7 @@ export default function Payroll() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Overtime Hours</label>
+                    <label className="text-sm font-medium mb-1 block">{t('overtime_hours')}</label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -503,7 +507,7 @@ export default function Payroll() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Bonuses</label>
+                    <label className="text-sm font-medium mb-1 block">{t('bonuses')}</label>
                     <Input
                       type="number"
                       placeholder="0.00"
@@ -512,7 +516,7 @@ export default function Payroll() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Allowances</label>
+                    <label className="text-sm font-medium mb-1 block">{t('allowances')}</label>
                     <Input
                       type="number"
                       placeholder="0.00"
@@ -525,18 +529,18 @@ export default function Payroll() {
 
               {newPayroll.basic_salary > 0 && (
                 <div className="p-4 bg-slate-50 rounded-lg">
-                  <h4 className="font-semibold mb-3">Payroll Summary</h4>
+                  <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span>Gross Pay:</span>
+                      <span>{t('gross_pay')}:</span>
                       <span className="font-semibold">${calculatePayroll(newPayroll).gross_pay.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-red-600">
-                      <span>Total Deductions:</span>
+                      <span>{t('total_deductions')}:</span>
                       <span className="font-semibold">-${calculatePayroll(newPayroll).total_deductions.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t text-lg">
-                      <span className="font-bold">Net Pay:</span>
+                      <span className="font-bold">{t('net_pay')}:</span>
                       <span className="font-bold text-green-600">${calculatePayroll(newPayroll).net_pay.toFixed(2)}</span>
                     </div>
                   </div>
@@ -545,14 +549,14 @@ export default function Payroll() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreatePayroll}
                   className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
                   disabled={!newPayroll.employee_name || !newPayroll.basic_salary}
                 >
-                  Process Payroll
+                  {t('process_payroll')}
                 </Button>
               </div>
             </div>

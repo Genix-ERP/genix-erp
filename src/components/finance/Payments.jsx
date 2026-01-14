@@ -176,7 +176,7 @@ export default function Payments() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Received</p>
+                <p className="text-sm text-slate-500">{t('total_received')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   ${summaryStats.totalInbound.toLocaleString()}
                 </p>
@@ -192,7 +192,7 @@ export default function Payments() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Paid</p>
+                <p className="text-sm text-slate-500">{t('total_paid')}</p>
                 <p className="text-2xl font-bold text-red-600">
                   ${summaryStats.totalOutbound.toLocaleString()}
                 </p>
@@ -208,7 +208,7 @@ export default function Payments() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Pending</p>
+                <p className="text-sm text-slate-500">{t('pending')}</p>
                 <p className="text-2xl font-bold text-yellow-600">
                   {summaryStats.pendingCount}
                 </p>
@@ -224,7 +224,7 @@ export default function Payments() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Confirmed</p>
+                <p className="text-sm text-slate-500">{t('confirmed')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {summaryStats.confirmedCount}
                 </p>
@@ -247,10 +247,10 @@ export default function Payments() {
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">
-                  Payments
+                  {t('payments')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredPayments.length} payments total
+                  {filteredPayments.length} {t('payments_total')}
                 </p>
               </div>
             </div>
@@ -258,7 +258,7 @@ export default function Payments() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search payments..."
+                  placeholder={t('search_payments')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -266,31 +266,31 @@ export default function Payments() {
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[140px] bg-slate-50">
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder={t('type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="inbound">Received</SelectItem>
-                  <SelectItem value="outbound">Paid</SelectItem>
+                  <SelectItem value="all">{t('all_types')}</SelectItem>
+                  <SelectItem value="inbound">{t('received')}</SelectItem>
+                  <SelectItem value="outbound">{t('paid')}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[140px] bg-slate-50">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="all">{t('all_status')}</SelectItem>
+                  <SelectItem value="draft">{t('draft')}</SelectItem>
+                  <SelectItem value="pending">{t('pending')}</SelectItem>
+                  <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
+                  <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                 </SelectContent>
               </Select>
               <Button
                 onClick={() => setShowCreateModal(true)}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
               >
-                <Plus className="w-4 h-4 mr-2" /> New Payment
+                <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
               </Button>
             </div>
           </div>
@@ -309,19 +309,19 @@ export default function Payments() {
                 <CreditCard className="w-10 h-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? 'No payments found' : 'No payments yet'}
+                {searchQuery ? t('no_payments_found') : t('no_payments_yet')}
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {searchQuery
-                  ? 'Try adjusting your search or filters'
-                  : 'Start by recording your first payment transaction'}
+                  ? t('try_adjusting_search') || 'Try adjusting your search or filters'
+                  : t('record_first_payment')}
               </p>
               {!searchQuery && (
                 <Button
                   onClick={() => setShowCreateModal(true)}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
-                  <Plus className="w-4 h-4 mr-2" /> Create First Payment
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_payment')}
                 </Button>
               )}
             </div>

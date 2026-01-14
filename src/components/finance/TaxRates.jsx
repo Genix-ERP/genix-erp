@@ -172,7 +172,7 @@ export default function TaxRates() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Active Rates</p>
+                <p className="text-sm text-slate-500">{t('active_rates')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {summaryStats.totalActive}
                 </p>
@@ -188,7 +188,7 @@ export default function TaxRates() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Sales Taxes</p>
+                <p className="text-sm text-slate-500">{t('sales_taxes')}</p>
                 <p className="text-2xl font-bold text-blue-600">
                   {summaryStats.salesTaxes}
                 </p>
@@ -204,7 +204,7 @@ export default function TaxRates() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Purchase Taxes</p>
+                <p className="text-sm text-slate-500">{t('purchase_taxes')}</p>
                 <p className="text-2xl font-bold text-purple-600">
                   {summaryStats.purchaseTaxes}
                 </p>
@@ -220,7 +220,7 @@ export default function TaxRates() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Average Rate</p>
+                <p className="text-sm text-slate-500">{t('average_rate')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {summaryStats.avgRate}%
                 </p>
@@ -243,10 +243,10 @@ export default function TaxRates() {
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">
-                  Tax Rates
+                  {t('tax_rates')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredTaxRates.length} tax rates configured
+                  {filteredTaxRates.length} {t('tax_rates_configured')}
                 </p>
               </div>
             </div>
@@ -254,7 +254,7 @@ export default function TaxRates() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search tax rates..."
+                  placeholder={t('search_tax_rates')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -262,12 +262,12 @@ export default function TaxRates() {
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[160px] bg-slate-50">
-                  <SelectValue placeholder="Tax Type" />
+                  <SelectValue placeholder={t('tax_type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="sales">Sales Tax</SelectItem>
-                  <SelectItem value="purchase">Purchase Tax</SelectItem>
+                  <SelectItem value="all">{t('all_types')}</SelectItem>
+                  <SelectItem value="sales">{t('sales_tax')}</SelectItem>
+                  <SelectItem value="purchase">{t('purchase_tax')}</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -277,7 +277,7 @@ export default function TaxRates() {
                 }}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
               >
-                <Plus className="w-4 h-4 mr-2" /> New Tax Rate
+                <Plus className="w-4 h-4 mr-2" /> {t('new_tax_rate')}
               </Button>
             </div>
           </div>
@@ -296,12 +296,12 @@ export default function TaxRates() {
                 <Percent className="w-10 h-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? 'No tax rates found' : 'No tax rates configured'}
+                {searchQuery ? t('no_tax_rates_found') : t('no_tax_rates_configured')}
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {searchQuery
-                  ? 'Try adjusting your search or filters'
-                  : 'Set up tax rates for your sales and purchase transactions'}
+                  ? t('try_adjusting_search') || 'Try adjusting your search or filters'
+                  : t('setup_tax_rates')}
               </p>
               {!searchQuery && (
                 <Button
@@ -311,7 +311,7 @@ export default function TaxRates() {
                   }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
-                  <Plus className="w-4 h-4 mr-2" /> Create First Tax Rate
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_tax_rate')}
                 </Button>
               )}
             </div>

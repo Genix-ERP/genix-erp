@@ -11,18 +11,20 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 
-const accountTypes = [
-  { value: 'asset', label: 'Asset', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
-  { value: 'liability', label: 'Liability', icon: TrendingDown, color: 'bg-red-100 text-red-800' },
-  { value: 'equity', label: 'Equity', icon: Scale, color: 'bg-purple-100 text-purple-800' },
-  { value: 'revenue', label: 'Revenue', icon: TrendingUp, color: 'bg-green-100 text-green-800' },
-  { value: 'expense', label: 'Expense', icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
+const getAccountTypes = (t) => [
+  { value: 'asset', label: t('asset'), icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
+  { value: 'liability', label: t('liability'), icon: TrendingDown, color: 'bg-red-100 text-red-800' },
+  { value: 'equity', label: t('equity'), icon: Scale, color: 'bg-purple-100 text-purple-800' },
+  { value: 'revenue', label: t('revenue'), icon: TrendingUp, color: 'bg-green-100 text-green-800' },
+  { value: 'expense', label: t('expense'), icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
 ];
 
 export default function ChartOfAccounts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { accounts, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
+
+  const accountTypes = getAccountTypes(t);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -144,7 +146,7 @@ export default function ChartOfAccounts() {
   };
 
   const handleDelete = async (account) => {
-    if (window.confirm(`Are you sure you want to delete account "${account.name}"?`)) {
+    if (window.confirm(`${t('confirm_delete_account') || 'Are you sure you want to delete this account?'}`)) {
       try {
         await deleteAccount(account.id);
       } catch (error) {
@@ -333,8 +335,8 @@ export default function ChartOfAccounts() {
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {searchQuery || typeFilter !== 'all'
-                  ? 'Try adjusting your search or filter'
-                  : 'Start by creating your first account to organize your finances'}
+                  ? t('try_adjusting_search') || 'Try adjusting your search or filter'
+                  : t('start_creating_account') || 'Start by creating your first account to organize your finances'}
               </p>
               {!searchQuery && typeFilter === 'all' && (
                 <Button

@@ -6,8 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Activity, TrendingUp, TrendingDown, ArrowRightLeft, AlertTriangle, Plus, Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function StockMovementTracker({ movements, items }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
 
@@ -239,8 +243,8 @@ export default function StockMovementTracker({ movements, items }) {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                       <Activity className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                      <p>No stock movements found</p>
-                      <p className="text-sm">Stock movements will appear here as you manage inventory</p>
+                      <p>{t('no_stock_movements_found')}</p>
+                      <p className="text-sm">{t('stock_movements_appear_here')}</p>
                     </TableCell>
                   </TableRow>
                 )}

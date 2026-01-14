@@ -92,10 +92,10 @@ export default function ChangePasswordSettings() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Lock className="w-5 h-5" />
-          Change Password
+          {t('change_password')}
         </CardTitle>
         <CardDescription>
-          Update your password to keep your account secure
+          {t('change_password_description')}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -110,43 +110,43 @@ export default function ChangePasswordSettings() {
           {success && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-sm text-green-800">
               <Check className="w-4 h-4" />
-              Password changed successfully!
+              {t('password_changed_success')}
             </div>
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
+            <Label htmlFor="currentPassword">{t('current_password')}</Label>
             <Input
               id="currentPassword"
               type="password"
               value={formData.currentPassword}
               onChange={handleChange}
-              placeholder="Enter your current password"
+              placeholder={t('current_password_placeholder')}
               disabled={isLoading}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
+            <Label htmlFor="newPassword">{t('new_password')}</Label>
             <Input
               id="newPassword"
               type="password"
               value={formData.newPassword}
               onChange={handleChange}
-              placeholder="Enter your new password"
+              placeholder={t('new_password_placeholder')}
               disabled={isLoading}
             />
-            <p className="text-xs text-slate-500">Must be at least 8 characters long</p>
+            <p className="text-xs text-slate-500">{t('password_min_length')}</p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm New Password</Label>
+            <Label htmlFor="confirmPassword">{t('confirm_new_password')}</Label>
             <Input
               id="confirmPassword"
               type="password"
               value={formData.confirmPassword}
               onChange={handleChange}
-              placeholder="Confirm your new password"
+              placeholder={t('confirm_password_placeholder')}
               disabled={isLoading}
             />
           </div>
@@ -164,12 +164,12 @@ export default function ChangePasswordSettings() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
+                  {t('updating_password')}
                 </>
               ) : (
                 <>
                   <Lock className="mr-2 h-4 w-4" />
-                  Change Password
+                  {t('change_password')}
                 </>
               )}
             </Button>

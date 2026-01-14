@@ -295,9 +295,9 @@ export default function Products() {
   const getStockStatus = (product) => {
     if (!product.is_stockable) return null;
     const stock = getProductStock(product.id);
-    if (stock === 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-800 border-red-200' };
-    if (stock <= product.min_stock_level) return { label: 'Low Stock', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
-    return { label: 'In Stock', color: 'bg-green-100 text-green-800 border-green-200' };
+    if (stock === 0) return { label: t('out_of_stock'), color: 'bg-red-100 text-red-800 border-red-200' };
+    if (stock <= product.min_stock_level) return { label: t('low_stock'), color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+    return { label: t('in_stock'), color: 'bg-green-100 text-green-800 border-green-200' };
   };
 
   const getCategoryName = (categoryId) => {
@@ -313,7 +313,7 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Products</p>
+                <p className="text-sm text-slate-500">{t('total_products')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {summaryStats.totalProducts}
                 </p>
@@ -329,7 +329,7 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Active</p>
+                <p className="text-sm text-slate-500">{t('active')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {summaryStats.activeProducts}
                 </p>
@@ -345,7 +345,7 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Stockable</p>
+                <p className="text-sm text-slate-500">{t('stockable')}</p>
                 <p className="text-2xl font-bold text-blue-600">
                   {summaryStats.stockableProducts}
                 </p>
@@ -361,7 +361,7 @@ export default function Products() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Services</p>
+                <p className="text-sm text-slate-500">{t('services')}</p>
                 <p className="text-2xl font-bold text-purple-600">
                   {summaryStats.serviceProducts}
                 </p>
@@ -384,10 +384,10 @@ export default function Products() {
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">
-                  Products & Services
+                  {t('products_services')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredProducts.length} items
+                  {filteredProducts.length} {t('items')}
                 </p>
               </div>
             </div>
@@ -395,7 +395,7 @@ export default function Products() {
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search products..."
+                  placeholder={t('search_products')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -403,10 +403,10 @@ export default function Products() {
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-[150px] bg-slate-50">
-                  <SelectValue placeholder="Category" />
+                  <SelectValue placeholder={t('category')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="all">{t('all_categories')}</SelectItem>
                   {categories.filter(c => !c.parent_id).map(category => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.name}
@@ -416,23 +416,23 @@ export default function Products() {
               </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[130px] bg-slate-50">
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder={t('type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="product">Product</SelectItem>
-                  <SelectItem value="service">Service</SelectItem>
+                  <SelectItem value="all">{t('all_types')}</SelectItem>
+                  <SelectItem value="product">{t('product')}</SelectItem>
+                  <SelectItem value="service">{t('service')}</SelectItem>
                   <SelectItem value="bundle">Bundle</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[130px] bg-slate-50">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="all">{t('all_status')}</SelectItem>
+                  <SelectItem value="active">{t('active')}</SelectItem>
+                  <SelectItem value="inactive">{t('inactive')}</SelectItem>
                 </SelectContent>
               </Select>
               <ImportExportButtons
@@ -446,7 +446,7 @@ export default function Products() {
                 }}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
               >
-                <Plus className="w-4 h-4 mr-2" /> New Product
+                <Plus className="w-4 h-4 mr-2" /> {t('new_product')}
               </Button>
             </div>
           </div>
@@ -489,15 +489,15 @@ export default function Products() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">Product</TableHead>
-                    <TableHead className="font-semibold text-slate-700">SKU / Code</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Type</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Category</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">Cost</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">Price</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">Stock</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Status</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">Actions</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('product')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('sku_code')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('category')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('cost')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('price')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">{t('stock')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
