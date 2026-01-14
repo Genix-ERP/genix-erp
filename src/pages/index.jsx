@@ -98,28 +98,27 @@ function PagesContent() {
                         <Layout currentPageName={currentPage}>
                             <Routes>
                                 <Route path="/" element={<Dashboard />} />
-                                <Route path="/Dashboard" element={<Dashboard />} />
-                                <Route path="/AIAssistant" element={<AIAssistant />} />
-                                <Route path="/Inventory" element={<Inventory />} />
-                                <Route path="/Workflows" element={<Workflows />} />
-                                <Route path="/HR" element={<HR />} />
-                                <Route path="/Apps" element={<Apps />} />
-                                <Route path="/Customers" element={<Customers />} />
-                                <Route path="/Settings" element={<Settings />} />
-                                <Route path="/Financials" element={<Financials />} />
-                                <Route path="/Notifications" element={<Notifications />} />
-                                <Route path="/AdminPanel" element={<AdminPanel />} />
+                                <Route path="/dashboard" element={<Dashboard />} />
+                                <Route path="/aiassistant" element={<AIAssistant />} />
+                                <Route path="/inventory" element={<Inventory />} />
+                                <Route path="/workflows" element={<Workflows />} />
+                                <Route path="/hr" element={<HR />} />
+                                <Route path="/apps" element={<Apps />} />
+                                <Route path="/customers" element={<Customers />} />
+                                <Route path="/settings" element={<Settings />} />
+                                <Route path="/financials" element={<Financials />} />
+                                <Route path="/notifications" element={<Notifications />} />
                                 <Route path="/adminpanel" element={<AdminPanel />} />
-                                <Route path="/Manufacturing" element={<Manufacturing />} />
-                                <Route path="/Procurement" element={<Procurement />} />
-                                <Route path="/Projects" element={<Projects />} />
-                                <Route path="/SalesOrders" element={<SalesOrders />} />
-                                <Route path="/Assets" element={<Assets />} />
-                                <Route path="/Expenses" element={<Expenses />} />
-                                <Route path="/Payroll" element={<Payroll />} />
-                                <Route path="/Contracts" element={<Contracts />} />
-                                <Route path="/Companies" element={<Companies />} />
-                                <Route path="/AddCompany" element={<AddCompany />} />
+                                <Route path="/manufacturing" element={<Manufacturing />} />
+                                <Route path="/procurement" element={<Procurement />} />
+                                <Route path="/projects" element={<Projects />} />
+                                <Route path="/salesorders" element={<SalesOrders />} />
+                                <Route path="/assets" element={<Assets />} />
+                                <Route path="/expenses" element={<Expenses />} />
+                                <Route path="/payroll" element={<Payroll />} />
+                                <Route path="/contracts" element={<Contracts />} />
+                                <Route path="/companies" element={<Companies />} />
+                                <Route path="/addcompany" element={<AddCompany />} />
                             </Routes>
                         </Layout>
                     </ProtectedRoute>

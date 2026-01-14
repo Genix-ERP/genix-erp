@@ -136,7 +136,7 @@ export default function Companies() {
           </h1>
           <p className="text-slate-600 mt-1">Barcha kompaniyalarni boshqaring va yangilarini qo'shing</p>
         </div>
-        <Link to="/AddCompany">
+        <Link to="/addcompany">
           <Button
             disabled={!canAddMore}
             className={canAddMore
@@ -171,7 +171,7 @@ export default function Companies() {
               </div>
             </div>
             {!canAddMore && (
-              <Link to="/Settings?tab=subscription">
+              <Link to="/settings?tab=subscription">
                 <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
                   <Crown className="w-4 h-4 mr-2" />
                   Tarifni yangilash
@@ -234,7 +234,7 @@ export default function Companies() {
                         <Building2 className="w-12 h-12 text-slate-300" />
                         <p className="text-slate-500">Kompaniyalar topilmadi</p>
                         {canAddMore && (
-                          <Link to="/AddCompany">
+                          <Link to="/addcompany">
                             <Button variant="outline" size="sm">
                               <Plus className="w-4 h-4 mr-2" />
                               Kompaniya qo'shish

@@ -8,6 +8,7 @@ export { default as purchaseService } from './purchase';
 export { default as procurementService } from './procurement';
 export { default as hrService } from './hr';
 export { default as aiService } from './ai';
+export { default as pbxService } from './pbx';
 
 // Re-export the API client
 export { default as apiClient } from '../client';
