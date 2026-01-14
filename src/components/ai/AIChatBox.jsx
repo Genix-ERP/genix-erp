@@ -23,6 +23,7 @@ export default function AIChatBox({ isOpen, onClose, initialPrompt = null }) {
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef(null);
+  const initialPromptSentRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,12 +43,20 @@ export default function AIChatBox({ isOpen, onClose, initialPrompt = null }) {
     }
   }, [isOpen]);
 
-  // Send initial prompt if provided
+  // Send initial prompt if provided (only once per prompt)
   useEffect(() => {
-    if (isOpen && initialPrompt && !isLoading) {
+    if (isOpen && initialPrompt && activeConversation && initialPrompt !== initialPromptSentRef.current) {
+      initialPromptSentRef.current = initialPrompt;
       handleSendMessage(initialPrompt);
     }
-  }, [isOpen, initialPrompt]);
+  }, [isOpen, initialPrompt, activeConversation]);
+
+  // Reset the sent prompt ref when chatbox closes
+  useEffect(() => {
+    if (!isOpen) {
+      initialPromptSentRef.current = null;
+    }
+  }, [isOpen]);
 
   const handleSendMessage = async (messageText = input) => {
     if (!messageText.trim() || isLoading) return;

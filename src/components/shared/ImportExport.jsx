@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 import {
   Dialog,
   DialogContent,
@@ -42,8 +44,6 @@ import {
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
-import { useLanguage } from "@/components/contexts/LanguageContext";
-import { useTranslation } from "@/components/utils/translations";
 
 // Export formats
 export const EXPORT_FORMATS = {
@@ -172,7 +172,7 @@ export function ImportModal({
   onClose,
   onImport,
   columns = [],
-  entityName = "Data",
+  entityName = "Ma'lumotlar",
   templateColumns = null,
 }) {
   const { language } = useLanguage();
@@ -289,7 +289,7 @@ export function ImportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
-            {entityName} {t('import')}
+            {t('import')} {entityName}
           </DialogTitle>
         </DialogHeader>
 
@@ -350,7 +350,7 @@ export function ImportModal({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-lg font-medium">{t('select_excel_csv_file')}</p>
+                <p className="text-lg font-medium">{t('select_excel_or_csv')}</p>
                 <p className="text-sm text-slate-500 mt-1">
                   {t('supported_formats')}
                 </p>
@@ -487,7 +487,7 @@ export function ExportModal({
   onClose,
   data = [],
   columns = [],
-  entityName = "Data",
+  entityName = "Ma'lumotlar",
   title = "Report",
 }) {
   const { language } = useLanguage();
@@ -542,14 +542,14 @@ export function ExportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="w-5 h-5" />
-            {entityName} {t('export')}
+            {t('export')} {entityName}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Format Selection */}
           <div className="space-y-2">
-            <Label>{t('format')}</Label>
+            <Label>{t('format') || 'Format'}</Label>
             <div className="grid grid-cols-4 gap-2">
               {Object.entries(EXPORT_FORMATS).map(([key, config]) => {
                 const Icon = config.icon;
@@ -574,7 +574,7 @@ export function ExportModal({
           {/* Column Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>{t('columns')}</Label>
+              <Label>{t('columns') || 'Ustunlar'}</Label>
               <Button
                 variant="ghost"
                 size="sm"
@@ -587,8 +587,8 @@ export function ExportModal({
                 }
               >
                 {selectedColumns.length === columns.length
-                  ? t('deselect_all')
-                  : t('select_all')}
+                  ? t('deselect_all') || "Barchasini bekor qilish"
+                  : t('select_all') || "Barchasini tanlash"}
               </Button>
             </div>
             <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
@@ -609,13 +609,13 @@ export function ExportModal({
 
           {/* Summary */}
           <div className="p-3 bg-slate-50 rounded-lg text-sm">
-            <strong>{data.length}</strong> {t('rows')},{" "}
-            <strong>{selectedColumns.length}</strong> {t('columns_to_export')}
+            <strong>{data.length}</strong> {t('rows') || 'qator'},{" "}
+            <strong>{selectedColumns.length}</strong> {t('columns_will_be_exported') || 'ustun eksport qilinadi'}
           </div>
 
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={onClose}>
-              {t('cancel')}
+              {t('cancel') || 'Bekor qilish'}
             </Button>
             <Button
               onClick={handleExport}
@@ -624,12 +624,12 @@ export function ExportModal({
               {isExporting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {t('exporting')}...
+                  {t('exporting') || 'Eksport qilinmoqda...'}
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4 mr-2" />
-                  {t('export')}
+                  {t('export') || 'Eksport qilish'}
                 </>
               )}
             </Button>
@@ -647,39 +647,28 @@ export function ImportExportButtons({
   importDisabled = false,
   exportDisabled = false,
 }) {
-  const { language } = useLanguage();
-  const { t } = useTranslation(language);
-
   return (
     <div className="flex items-center gap-2">
       {onImport && (
         <Button
           variant="outline"
           size="sm"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onImport();
-          }}
+          onClick={onImport}
           disabled={importDisabled}
         >
           <Upload className="w-4 h-4 mr-1" />
-          {t('import')}
+          Import
         </Button>
       )}
       {onExport && (
         <Button
           variant="outline"
           size="sm"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onExport();
-          }}
+          onClick={onExport}
           disabled={exportDisabled}
         >
           <Download className="w-4 h-4 mr-1" />
-          {t('export')}
+          Export
         </Button>
       )}
     </div>
