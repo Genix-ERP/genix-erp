@@ -123,49 +123,49 @@ function LayoutContent({ children, currentPageName }) {
       badge: null
     },
     'manufacturing': {
-      title: "Manufacturing",
+      title: t("manufacturing"),
       url: createPageUrl("Manufacturing"),
       icon: Zap,
       badge: null
     },
     'procurement': {
-      title: "Procurement",
+      title: t("procurement"),
       url: createPageUrl("Procurement"),
       icon: ShoppingCart,
       badge: null
     },
     'projects': {
-      title: "Projects",
+      title: t("projects"),
       url: createPageUrl("Projects"),
       icon: Briefcase,
       badge: null
     },
     'sales_orders': {
-      title: "Sales Orders",
+      title: t("sales_orders"),
       url: createPageUrl("SalesOrders"),
       icon: ShoppingBag,
       badge: null
     },
     'assets': {
-      title: "Assets",
+      title: t("assets"),
       url: createPageUrl("Assets"),
       icon: Monitor,
       badge: null
     },
     'expenses': {
-      title: "Expenses",
+      title: t("expenses"),
       url: createPageUrl("Expenses"),
       icon: Receipt,
       badge: null
     },
     'payroll': {
-      title: "Payroll",
+      title: t("payroll"),
       url: createPageUrl("Payroll"),
       icon: DollarSign,
       badge: null
     },
     'contracts': {
-      title: "Contracts",
+      title: t("contracts"),
       url: createPageUrl("Contracts"),
       icon: FileText,
       badge: null

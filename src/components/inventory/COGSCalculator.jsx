@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calculator, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function COGSCalculator({ items, movements }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [cogsCalculations, setCogsCalculations] = useState([]);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -95,32 +99,32 @@ export default function COGSCalculator({ items, movements }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calculator className="w-5 h-5 text-[var(--genix-blue)]" />
-              <CardTitle>COGS Calculator</CardTitle>
+              <CardTitle>{t('cogs_calculator')}</CardTitle>
             </div>
-            <Button 
-              onClick={calculateCOGS} 
+            <Button
+              onClick={calculateCOGS}
               disabled={isCalculating}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
             >
-              {isCalculating ? "Calculating..." : "Recalculate COGS"}
+              {isCalculating ? t('loading') : t('recalculate_cogs')}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           <div className="mb-6 p-4 bg-[var(--genix-light-blue)]/30 rounded-lg">
-            <h4 className="font-semibold mb-2">Understanding COGS Methods:</h4>
+            <h4 className="font-semibold mb-2">{t('understanding_cogs_methods')}</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <Badge className="bg-green-100 text-green-800 mb-2">FIFO (Recommended)</Badge>
-                <p>First In, First Out - Uses oldest inventory costs first. IFRS compliant and provides better matching in inflationary periods.</p>
+                <Badge className="bg-green-100 text-green-800 mb-2">{t('fifo_recommended')}</Badge>
+                <p>{t('fifo_description')}</p>
               </div>
               <div>
-                <Badge className="bg-blue-100 text-blue-800 mb-2">Weighted Average</Badge>
-                <p>Uses average cost of all inventory. Good for bulk commodities and provides smooth cost flow.</p>
+                <Badge className="bg-blue-100 text-blue-800 mb-2">{t('weighted_average')}</Badge>
+                <p>{t('weighted_avg_description')}</p>
               </div>
               <div>
-                <Badge className="bg-orange-100 text-orange-800 mb-2">LIFO (US Only)</Badge>
-                <p>Last In, First Out - Uses newest inventory costs first. US GAAP only, not IFRS compliant.</p>
+                <Badge className="bg-orange-100 text-orange-800 mb-2">{t('lifo_us_only')}</Badge>
+                <p>{t('lifo_description')}</p>
               </div>
             </div>
           </div>

@@ -9,8 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { analyzeContracts } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 export default function Contracts() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
 
   // AI Analysis
@@ -139,7 +143,7 @@ export default function Contracts() {
   };
 
   const handleDeleteContract = (contractId) => {
-    if (window.confirm('Are you sure you want to delete this contract? This action cannot be undone.')) {
+    if (window.confirm(t('delete_contract_confirm'))) {
       deleteContract(contractId);
     }
   };
@@ -185,13 +189,13 @@ export default function Contracts() {
         <div className="bg-gradient-to-r from-rose-600 to-pink-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <FileText className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Contract Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('contract_management')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered')}
             </Badge>
           </div>
-          <p className="text-white/90">Manage contracts lifecycle with automated renewals and compliance tracking</p>
+          <p className="text-white/90">{t('contract_management_subtitle')}</p>
         </div>
 
         {/* Metrics */}
@@ -204,7 +208,7 @@ export default function Contracts() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.totalContracts}</p>
-              <p className="text-sm text-slate-600">Total Contracts</p>
+              <p className="text-sm text-slate-600">{t('total_contracts')}</p>
             </CardContent>
           </Card>
 
@@ -216,7 +220,7 @@ export default function Contracts() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.activeContracts}</p>
-              <p className="text-sm text-slate-600">Active Contracts</p>
+              <p className="text-sm text-slate-600">{t('active_contracts')}</p>
             </CardContent>
           </Card>
 
@@ -228,7 +232,7 @@ export default function Contracts() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Total Value</p>
+              <p className="text-sm text-slate-600">{t('total_value')}</p>
             </CardContent>
           </Card>
 
@@ -240,7 +244,7 @@ export default function Contracts() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.expiringSoon}</p>
-              <p className="text-sm text-slate-600">Expiring Soon</p>
+              <p className="text-sm text-slate-600">{t('expiring_soon')}</p>
             </CardContent>
           </Card>
         </div>
@@ -251,8 +255,8 @@ export default function Contracts() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-rose-600" />
-                AI Contract Insights
-                <Badge className="bg-rose-100 text-rose-700 text-xs">Live</Badge>
+                {t('ai_contract_insights')}
+                <Badge className="bg-rose-100 text-rose-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -296,16 +300,16 @@ export default function Contracts() {
         <Card className="bg-white/80 backdrop-blur-sm">
           <CardHeader className="border-b">
             <div className="flex items-center justify-between">
-              <CardTitle>Contracts</CardTitle>
+              <CardTitle>{t('contracts')}</CardTitle>
               <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-rose-600 to-pink-600">
-                <Plus className="w-4 h-4 mr-2" /> New Contract
+                <Plus className="w-4 h-4 mr-2" /> {t('new_contract')}
               </Button>
             </div>
             <div className="flex gap-3 mt-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search contracts..."
+                  placeholder={t('search_contracts')}
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -316,11 +320,11 @@ export default function Contracts() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                  <SelectItem value="renewed">Renewed</SelectItem>
+                  <SelectItem value="all">{t('all_status')}</SelectItem>
+                  <SelectItem value="draft">{t('draft')}</SelectItem>
+                  <SelectItem value="active">{t('active')}</SelectItem>
+                  <SelectItem value="expired">{t('expired')}</SelectItem>
+                  <SelectItem value="renewed">{t('renewed')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -333,8 +337,8 @@ export default function Contracts() {
             ) : filteredContracts.length === 0 ? (
               <div className="text-center py-16">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No contracts yet</p>
-                <Button onClick={() => setShowCreateModal(true)} className="mt-4">Create First Contract</Button>
+                <p className="text-slate-500">{t('no_contracts_yet')}</p>
+                <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_contract')}</Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -351,39 +355,39 @@ export default function Contracts() {
                             </Badge>
                             {contract.auto_renew && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                                Auto-Renew
+                                {t('auto_renew')}
                               </Badge>
                             )}
                           </div>
 
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                             <div>
-                              <p className="text-slate-500">Contract #</p>
+                              <p className="text-slate-500">{t('contract_number')}</p>
                               <p className="font-mono font-semibold">{contract.contract_number}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500">Party</p>
+                              <p className="text-slate-500">{t('party')}</p>
                               <p className="font-medium">{contract.party_name}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500">Value</p>
+                              <p className="text-slate-500">{t('value')}</p>
                               <p className="font-semibold">${(contract.contract_value || 0).toLocaleString()}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500">Billing</p>
-                              <p className="font-medium">{contract.billing_cycle}</p>
+                              <p className="text-slate-500">{t('billing')}</p>
+                              <p className="font-medium">{t(contract.billing_cycle) || contract.billing_cycle}</p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-6 mt-4 text-sm">
                             <div>
-                              <span className="text-slate-500">Start: </span>
+                              <span className="text-slate-500">{t('start')}: </span>
                               <span className="font-medium">
                                 {contract.start_date ? format(new Date(contract.start_date), 'MMM dd, yyyy') : '-'}
                               </span>
                             </div>
                             <div>
-                              <span className="text-slate-500">End: </span>
+                              <span className="text-slate-500">{t('end')}: </span>
                               <span className="font-medium">
                                 {contract.end_date ? format(new Date(contract.end_date), 'MMM dd, yyyy') : '-'}
                               </span>
@@ -391,30 +395,30 @@ export default function Contracts() {
                             {contract.daysUntilExpiry !== undefined && contract.daysUntilExpiry >= 0 && contract.daysUntilExpiry <= 30 && (
                               <div className="flex items-center gap-2 text-orange-600">
                                 <Bell className="w-4 h-4" />
-                                <span className="font-medium">Expires in {contract.daysUntilExpiry} days</span>
+                                <span className="font-medium">{t('expires_in_days').replace('{days}', contract.daysUntilExpiry)}</span>
                               </div>
                             )}
                           </div>
                         </div>
 
                         <div className="flex gap-2 ml-4">
-                          <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title="View Contract">
+                          <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title={t('view_contract')}>
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title="Edit Contract">
+                          <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
                             <Edit2 className="w-4 h-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract.id)} title="Delete Contract" className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract.id)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
                             <Trash2 className="w-4 h-4" />
                           </Button>
                           {contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
                             <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'renewed')}>
-                              Renew
+                              {t('renew')}
                             </Button>
                           )}
                           {contract.status === 'active' && (
                             <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'terminated')}>
-                              Terminate
+                              {t('terminate')}
                             </Button>
                           )}
                         </div>
@@ -431,40 +435,40 @@ export default function Contracts() {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Contract</DialogTitle>
+              <DialogTitle>{t('create_contract')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Contract Number</label>
+                  <label className="text-sm font-medium mb-1 block">{t('contract_number_label')}</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder={t('auto_generated')}
                     value={newContract.contract_number}
                     onChange={(e) => setNewContract({...newContract, contract_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Contract Type *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
                   <Select value={newContract.contract_type} onValueChange={(value) => setNewContract({...newContract, contract_type: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="customer">Customer</SelectItem>
-                      <SelectItem value="vendor">Vendor</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
-                      <SelectItem value="partner">Partner</SelectItem>
-                      <SelectItem value="lease">Lease</SelectItem>
+                      <SelectItem value="customer">{t('customer')}</SelectItem>
+                      <SelectItem value="vendor">{t('vendor')}</SelectItem>
+                      <SelectItem value="employee">{t('employee')}</SelectItem>
+                      <SelectItem value="partner">{t('partner')}</SelectItem>
+                      <SelectItem value="lease">{t('lease')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Contract Name *</label>
+                <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
                 <Input
-                  placeholder="Contract name"
+                  placeholder={t('contract_name_placeholder')}
                   value={newContract.contract_name}
                   onChange={(e) => setNewContract({...newContract, contract_name: e.target.value})}
                   required
@@ -472,9 +476,9 @@ export default function Contracts() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Party Name *</label>
+                <label className="text-sm font-medium mb-1 block">{t('party_name')} *</label>
                 <Input
-                  placeholder="Company or person name"
+                  placeholder={t('party_name_placeholder')}
                   value={newContract.party_name}
                   onChange={(e) => setNewContract({...newContract, party_name: e.target.value})}
                   required
@@ -483,7 +487,7 @@ export default function Contracts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Start Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('start_date')} *</label>
                   <Input
                     type="date"
                     value={newContract.start_date}
@@ -492,7 +496,7 @@ export default function Contracts() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">End Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('end_date')} *</label>
                   <Input
                     type="date"
                     value={newContract.end_date}
@@ -504,26 +508,26 @@ export default function Contracts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Contract Value *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('contract_value')} *</label>
                   <Input
                     type="number"
-                    placeholder="0.00"
+                    placeholder="0"
                     value={newContract.contract_value}
                     onChange={(e) => setNewContract({...newContract, contract_value: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Billing Cycle</label>
+                  <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
                   <Select value={newContract.billing_cycle} onValueChange={(value) => setNewContract({...newContract, billing_cycle: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                      <SelectItem value="quarterly">Quarterly</SelectItem>
-                      <SelectItem value="annually">Annually</SelectItem>
-                      <SelectItem value="one_time">One Time</SelectItem>
+                      <SelectItem value="monthly">{t('monthly')}</SelectItem>
+                      <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
+                      <SelectItem value="annually">{t('annually')}</SelectItem>
+                      <SelectItem value="one_time">{t('one_time')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -538,20 +542,20 @@ export default function Contracts() {
                   className="w-4 h-4"
                 />
                 <label htmlFor="auto_renew" className="text-sm font-medium">
-                  Enable auto-renewal
+                  {t('enable_auto_renewal')}
                 </label>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateContract}
                   className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
                   disabled={!newContract.contract_name || !newContract.party_name || isSubmitting}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Contract'}
+                  {isSubmitting ? t('creating') : t('create_contract')}
                 </Button>
               </div>
             </div>
@@ -562,7 +566,7 @@ export default function Contracts() {
         <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Contract Details</DialogTitle>
+              <DialogTitle>{t('contract_details')}</DialogTitle>
             </DialogHeader>
             {selectedContract && (
               <div className="space-y-6 py-4">
@@ -577,44 +581,44 @@ export default function Contracts() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm text-slate-500">Contract Number</p>
+                      <p className="text-sm text-slate-500">{t('contract_number_label')}</p>
                       <p className="font-mono font-semibold">{selectedContract.contract_number}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">Party Name</p>
+                      <p className="text-sm text-slate-500">{t('party_name')}</p>
                       <p className="font-medium">{selectedContract.party_name}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">Contract Value</p>
+                      <p className="text-sm text-slate-500">{t('contract_value')}</p>
                       <p className="text-xl font-bold text-rose-600">${(selectedContract.contract_value || 0).toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">Billing Cycle</p>
-                      <p className="font-medium capitalize">{selectedContract.billing_cycle}</p>
+                      <p className="text-sm text-slate-500">{t('billing_cycle')}</p>
+                      <p className="font-medium capitalize">{t(selectedContract.billing_cycle) || selectedContract.billing_cycle}</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm text-slate-500">Start Date</p>
+                      <p className="text-sm text-slate-500">{t('start_date')}</p>
                       <p className="font-medium">
                         {selectedContract.start_date ? format(new Date(selectedContract.start_date), 'MMM dd, yyyy') : '-'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">End Date</p>
+                      <p className="text-sm text-slate-500">{t('end_date')}</p>
                       <p className="font-medium">
                         {selectedContract.end_date ? format(new Date(selectedContract.end_date), 'MMM dd, yyyy') : '-'}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm text-slate-500">Auto-Renewal</p>
-                      <p className="font-medium">{selectedContract.auto_renew ? 'Enabled' : 'Disabled'}</p>
+                      <p className="text-sm text-slate-500">{t('auto_renewal')}</p>
+                      <p className="font-medium">{selectedContract.auto_renew ? t('enabled') : t('disabled')}</p>
                     </div>
                     {selectedContract.daysUntilExpiry !== undefined && selectedContract.daysUntilExpiry >= 0 && (
                       <div>
-                        <p className="text-sm text-slate-500">Days Until Expiry</p>
+                        <p className="text-sm text-slate-500">{t('days_until_expiry')}</p>
                         <p className={`font-bold ${selectedContract.daysUntilExpiry <= 30 ? 'text-orange-600' : 'text-green-600'}`}>
-                          {selectedContract.daysUntilExpiry} days
+                          {selectedContract.daysUntilExpiry} {t('days') || 'days'}
                         </p>
                       </div>
                     )}
@@ -623,13 +627,13 @@ export default function Contracts() {
 
                 <div className="flex gap-3 pt-4 border-t">
                   <Button variant="outline" onClick={() => setShowViewModal(false)} className="flex-1">
-                    Close
+                    {t('close')}
                   </Button>
                   <Button
                     onClick={() => { setShowViewModal(false); handleEditContract(selectedContract); }}
                     className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
                   >
-                    Edit Contract
+                    {t('edit_contract')}
                   </Button>
                 </div>
               </div>
@@ -641,37 +645,37 @@ export default function Contracts() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Contract</DialogTitle>
+              <DialogTitle>{t('edit_contract')}</DialogTitle>
             </DialogHeader>
             {editContract && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Contract Number</label>
+                    <label className="text-sm font-medium mb-1 block">{t('contract_number_label')}</label>
                     <Input
                       value={editContract.contract_number}
                       onChange={(e) => setEditContract({...editContract, contract_number: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Contract Type *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
                     <Select value={editContract.contract_type} onValueChange={(value) => setEditContract({...editContract, contract_type: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="customer">Customer</SelectItem>
-                        <SelectItem value="vendor">Vendor</SelectItem>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="partner">Partner</SelectItem>
-                        <SelectItem value="lease">Lease</SelectItem>
+                        <SelectItem value="customer">{t('customer')}</SelectItem>
+                        <SelectItem value="vendor">{t('vendor')}</SelectItem>
+                        <SelectItem value="employee">{t('employee')}</SelectItem>
+                        <SelectItem value="partner">{t('partner')}</SelectItem>
+                        <SelectItem value="lease">{t('lease')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Contract Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('contract_name')} *</label>
                   <Input
                     value={editContract.contract_name}
                     onChange={(e) => setEditContract({...editContract, contract_name: e.target.value})}
@@ -679,7 +683,7 @@ export default function Contracts() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Party Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('party_name')} *</label>
                   <Input
                     value={editContract.party_name}
                     onChange={(e) => setEditContract({...editContract, party_name: e.target.value})}
@@ -688,7 +692,7 @@ export default function Contracts() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Start Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('start_date')}</label>
                     <Input
                       type="date"
                       value={editContract.start_date}
@@ -696,7 +700,7 @@ export default function Contracts() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">End Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
                     <Input
                       type="date"
                       value={editContract.end_date}
@@ -707,7 +711,7 @@ export default function Contracts() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Contract Value</label>
+                    <label className="text-sm font-medium mb-1 block">{t('contract_value')}</label>
                     <Input
                       type="number"
                       value={editContract.contract_value}
@@ -715,33 +719,33 @@ export default function Contracts() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Billing Cycle</label>
+                    <label className="text-sm font-medium mb-1 block">{t('billing_cycle')}</label>
                     <Select value={editContract.billing_cycle} onValueChange={(value) => setEditContract({...editContract, billing_cycle: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="quarterly">Quarterly</SelectItem>
-                        <SelectItem value="annually">Annually</SelectItem>
-                        <SelectItem value="one_time">One Time</SelectItem>
+                        <SelectItem value="monthly">{t('monthly')}</SelectItem>
+                        <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
+                        <SelectItem value="annually">{t('annually')}</SelectItem>
+                        <SelectItem value="one_time">{t('one_time')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
                   <Select value={editContract.status || 'active'} onValueChange={(value) => setEditContract({...editContract, status: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="expired">Expired</SelectItem>
-                      <SelectItem value="terminated">Terminated</SelectItem>
-                      <SelectItem value="renewed">Renewed</SelectItem>
+                      <SelectItem value="draft">{t('draft')}</SelectItem>
+                      <SelectItem value="active">{t('active')}</SelectItem>
+                      <SelectItem value="expired">{t('expired')}</SelectItem>
+                      <SelectItem value="terminated">{t('terminated')}</SelectItem>
+                      <SelectItem value="renewed">{t('renewed')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -755,20 +759,20 @@ export default function Contracts() {
                     className="w-4 h-4"
                   />
                   <label htmlFor="edit_auto_renew" className="text-sm font-medium">
-                    Enable auto-renewal
+                    {t('enable_auto_renewal')}
                   </label>
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditContract(null); }} className="flex-1">
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     onClick={handleUpdateContract}
                     className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
                     disabled={!editContract.contract_name || !editContract.party_name || isSubmitting}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isSubmitting ? t('saving') : t('save_changes')}
                   </Button>
                 </div>
               </div>

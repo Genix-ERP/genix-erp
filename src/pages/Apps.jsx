@@ -28,96 +28,96 @@ import { useTranslation } from '@/components/utils/translations';
 const appsList = [
   {
     id: 'crm',
-    name: 'CRM & Sales',
-    description: 'AI-powered customer relationship management with VOIP integration.',
+    nameKey: 'app_crm_name',
+    descriptionKey: 'app_crm_description',
     version: '2.1',
     icon: Users,
     color: 'var(--genix-blue)'
   },
   {
     id: 'inventory',
-    name: 'Inventory & Supply Chain',
-    description: 'FIFO-compliant stock management with demand forecasting.',
+    nameKey: 'app_inventory_name',
+    descriptionKey: 'app_inventory_description',
     version: '1.8',
     icon: Package,
     color: 'var(--genix-orange)'
   },
   {
     id: 'finance',
-    name: 'Finance & Accounting',
-    description: 'Automated bookkeeping, financial intelligence, and compliance.',
+    nameKey: 'app_finance_name',
+    descriptionKey: 'app_finance_description',
     version: '2.0',
     icon: DollarSign,
     color: 'var(--genix-green)'
   },
   {
     id: 'hr',
-    name: 'Human Resources',
-    description: 'Intelligent workforce management, from recruitment to payroll.',
+    nameKey: 'app_hr_name',
+    descriptionKey: 'app_hr_description',
     version: '1.5',
     icon: Briefcase,
     color: 'var(--genix-purple)'
   },
   {
     id: 'manufacturing',
-    name: 'Manufacturing',
-    description: 'Optimize production schedules, manage BOMs, and predict maintenance.',
+    nameKey: 'app_manufacturing_name',
+    descriptionKey: 'app_manufacturing_description',
     version: '1.0',
     icon: Zap,
     color: '#334155'
   },
   {
     id: 'procurement',
-    name: 'Procurement & Purchasing',
-    description: 'Smart vendor management with AI-driven price optimization.',
+    nameKey: 'app_procurement_name',
+    descriptionKey: 'app_procurement_description',
     version: '1.0',
     icon: ShoppingCart,
     color: '#6366f1'
   },
   {
     id: 'projects',
-    name: 'Project Management',
-    description: 'Plan, track, and deliver projects on time and within budget.',
+    nameKey: 'app_projects_name',
+    descriptionKey: 'app_projects_description',
     version: '1.0',
     icon: Briefcase,
     color: '#3b82f6'
   },
   {
     id: 'sales_orders',
-    name: 'Sales Orders',
-    description: 'Manage orders from quote to delivery with AI insights.',
+    nameKey: 'app_sales_orders_name',
+    descriptionKey: 'app_sales_orders_description',
     version: '1.0',
     icon: ShoppingBag,
     color: '#10b981'
   },
   {
     id: 'assets',
-    name: 'Fixed Assets',
-    description: 'Track and manage fixed assets with automated depreciation.',
+    nameKey: 'app_assets_name',
+    descriptionKey: 'app_assets_description',
     version: '1.0',
     icon: Monitor,
     color: '#f59e0b'
   },
   {
     id: 'expenses',
-    name: 'Expense Management',
-    description: 'Submit and manage expenses with AI receipt scanning.',
+    nameKey: 'app_expenses_name',
+    descriptionKey: 'app_expenses_description',
     version: '1.0',
     icon: Receipt,
     color: '#14b8a6'
   },
   {
     id: 'payroll',
-    name: 'Payroll',
-    description: 'Automated payroll processing with tax calculations.',
+    nameKey: 'app_payroll_name',
+    descriptionKey: 'app_payroll_description',
     version: '1.0',
     icon: DollarSign,
     color: '#8b5cf6'
   },
   {
     id: 'contracts',
-    name: 'Contract Management',
-    description: 'Manage contract lifecycle with automated renewals.',
+    nameKey: 'app_contracts_name',
+    descriptionKey: 'app_contracts_description',
     version: '1.0',
     icon: FileText,
     color: '#ec4899'
@@ -151,7 +151,7 @@ const AppCard = ({ app, isInstalled, onAction, isLoading }) => {
         {/* Title - Full width, centered */}
         <div className="text-center">
           <CardTitle className="text-lg font-bold text-slate-900 leading-tight mb-3">
-            {app.name}
+            {t(app.nameKey)}
           </CardTitle>
           <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-xs font-medium">
             v{app.version}
@@ -163,7 +163,7 @@ const AppCard = ({ app, isInstalled, onAction, isLoading }) => {
       <CardContent className="flex flex-col flex-1 pt-0 pb-6 px-6">
         {/* Description */}
         <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 mb-6 text-center">
-          {app.description}
+          {t(app.descriptionKey)}
         </p>
         
         {/* Spacer */}
@@ -251,8 +251,8 @@ export default function Apps() {
   };
 
   const filteredApps = appsList.filter(app =>
-    app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    app.description.toLowerCase().includes(searchQuery.toLowerCase())
+    t(app.nameKey).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t(app.descriptionKey).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (

@@ -11,10 +11,14 @@ import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign,
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Expenses() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { expenses, createExpense, updateExpense, isLoading } = useModules();
 
   // AI Analysis
@@ -153,13 +157,13 @@ export default function Expenses() {
         <div className="bg-gradient-to-r from-teal-600 to-cyan-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <Receipt className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Expense Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('expense_management')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered')}
             </Badge>
           </div>
-          <p className="text-white/90">Submit, track, and manage employee expenses with AI receipt scanning</p>
+          <p className="text-white/90">{t('expense_management_subtitle')}</p>
         </div>
 
         {/* Metrics */}
@@ -172,7 +176,7 @@ export default function Expenses() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.totalClaims}</p>
-              <p className="text-sm text-slate-600">Total Claims</p>
+              <p className="text-sm text-slate-600">{t('total_claims')}</p>
             </CardContent>
           </Card>
 
@@ -184,7 +188,7 @@ export default function Expenses() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalAmount.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Total Amount</p>
+              <p className="text-sm text-slate-600">{t('total_amount')}</p>
             </CardContent>
           </Card>
 
@@ -196,7 +200,7 @@ export default function Expenses() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.pendingApproval}</p>
-              <p className="text-sm text-slate-600">Pending Approval</p>
+              <p className="text-sm text-slate-600">{t('pending_approval')}</p>
             </CardContent>
           </Card>
 
@@ -208,7 +212,7 @@ export default function Expenses() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.pendingPayment}</p>
-              <p className="text-sm text-slate-600">Pending Payment</p>
+              <p className="text-sm text-slate-600">{t('pending_payment')}</p>
             </CardContent>
           </Card>
         </div>
@@ -219,8 +223,8 @@ export default function Expenses() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-teal-600" />
-                AI Expense Insights
-                <Badge className="bg-teal-100 text-teal-700 text-xs">Live</Badge>
+                {t('ai_expense_insights')}
+                <Badge className="bg-teal-100 text-teal-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -266,7 +270,7 @@ export default function Expenses() {
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Expenses by Category</CardTitle>
+                <CardTitle>{t('expenses_by_category')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
@@ -302,16 +306,16 @@ export default function Expenses() {
           <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
-                <CardTitle>Expense Claims</CardTitle>
+                <CardTitle>{t('expense_claims')}</CardTitle>
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-teal-600 to-cyan-600">
-                  <Plus className="w-4 h-4 mr-2" /> New Claim
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
                 </Button>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Search claims..."
+                    placeholder={t('search_claims')}
                     className="pl-9"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -322,11 +326,11 @@ export default function Expenses() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="submitted">Submitted</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
+                    <SelectItem value="draft">{t('draft')}</SelectItem>
+                    <SelectItem value="submitted">{t('submitted')}</SelectItem>
+                    <SelectItem value="approved">{t('approved')}</SelectItem>
+                    <SelectItem value="paid">{t('paid')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -339,21 +343,21 @@ export default function Expenses() {
               ) : filteredClaims.length === 0 ? (
                 <div className="text-center py-16">
                   <Receipt className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No expense claims yet</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">Submit First Claim</Button>
+                  <p className="text-slate-500">{t('no_expense_claims_yet')}</p>
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('submit_first_claim')}</Button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Claim #</TableHead>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t('claim_number')}</TableHead>
+                        <TableHead>{t('employee')}</TableHead>
+                        <TableHead>{t('date')}</TableHead>
+                        <TableHead>{t('category')}</TableHead>
+                        <TableHead>{t('amount')}</TableHead>
+                        <TableHead>{t('status')}</TableHead>
+                        <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -373,12 +377,12 @@ export default function Expenses() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title="Edit Claim">
+                              <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
                                 <Edit2 className="w-4 h-4" />
                               </Button>
                               {claim.status === 'draft' && (
                                 <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'submitted')}>
-                                  Submit
+                                  {t('submit')}
                                 </Button>
                               )}
                               {claim.status === 'submitted' && (
@@ -393,7 +397,7 @@ export default function Expenses() {
                               )}
                               {claim.status === 'approved' && (
                                 <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'paid')}>
-                                  Pay
+                                  {t('pay')}
                                 </Button>
                               )}
                             </div>
@@ -414,24 +418,24 @@ export default function Expenses() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Brain className="w-5 h-5 text-teal-600" />
-                Submit Expense Claim
+                {t('submit_expense_claim')}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Claim Number</label>
+                  <label className="text-sm font-medium mb-1 block">{t('claim_number_label')}</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder={t('auto_generated_if_empty')}
                     value={newClaim.claim_number}
                     onChange={(e) => setNewClaim({...newClaim, claim_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Employee Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
                   <Input
-                    placeholder="Your name"
+                    placeholder={t('your_name')}
                     value={newClaim.employee_name}
                     onChange={(e) => setNewClaim({...newClaim, employee_name: e.target.value})}
                     required
@@ -441,7 +445,7 @@ export default function Expenses() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Expense Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('expense_date')} *</label>
                   <Input
                     type="date"
                     value={newClaim.expense_date}
@@ -450,24 +454,24 @@ export default function Expenses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Category *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
                   <Select value={newClaim.category} onValueChange={(value) => setNewClaim({...newClaim, category: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="travel">Travel</SelectItem>
-                      <SelectItem value="meals">Meals</SelectItem>
-                      <SelectItem value="accommodation">Accommodation</SelectItem>
-                      <SelectItem value="transportation">Transportation</SelectItem>
-                      <SelectItem value="office_supplies">Office Supplies</SelectItem>
-                      <SelectItem value="training">Training</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="travel">{t('travel')}</SelectItem>
+                      <SelectItem value="meals">{t('meals')}</SelectItem>
+                      <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
+                      <SelectItem value="transportation">{t('transportation')}</SelectItem>
+                      <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
+                      <SelectItem value="training">{t('training')}</SelectItem>
+                      <SelectItem value="other">{t('other')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Amount *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                   <Input
                     type="number"
                     placeholder="0.00"
@@ -479,9 +483,9 @@ export default function Expenses() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Description</label>
+                <label className="text-sm font-medium mb-1 block">{t('description')}</label>
                 <Input
-                  placeholder="Expense description"
+                  placeholder={t('expense_description')}
                   value={newClaim.description}
                   onChange={(e) => setNewClaim({...newClaim, description: e.target.value})}
                 />
@@ -489,14 +493,14 @@ export default function Expenses() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
                   disabled={!newClaim.employee_name || !newClaim.amount || isSubmitting}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit Claim'}
+                  {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
               </div>
             </div>
@@ -507,20 +511,20 @@ export default function Expenses() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Expense Claim</DialogTitle>
+              <DialogTitle>{t('edit_expense_claim')}</DialogTitle>
             </DialogHeader>
             {editClaim && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Claim Number</label>
+                    <label className="text-sm font-medium mb-1 block">{t('claim_number_label')}</label>
                     <Input
                       value={editClaim.claim_number}
                       onChange={(e) => setEditClaim({...editClaim, claim_number: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Employee Name *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
                     <Input
                       value={editClaim.employee_name}
                       onChange={(e) => setEditClaim({...editClaim, employee_name: e.target.value})}
@@ -530,7 +534,7 @@ export default function Expenses() {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Expense Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('expense_date')}</label>
                     <Input
                       type="date"
                       value={editClaim.expense_date?.split('T')[0] || ''}
@@ -538,24 +542,24 @@ export default function Expenses() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Category</label>
+                    <label className="text-sm font-medium mb-1 block">{t('category')}</label>
                     <Select value={editClaim.category || 'travel'} onValueChange={(value) => setEditClaim({...editClaim, category: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="travel">Travel</SelectItem>
-                        <SelectItem value="meals">Meals</SelectItem>
-                        <SelectItem value="accommodation">Accommodation</SelectItem>
-                        <SelectItem value="transportation">Transportation</SelectItem>
-                        <SelectItem value="office_supplies">Office Supplies</SelectItem>
-                        <SelectItem value="training">Training</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="travel">{t('travel')}</SelectItem>
+                        <SelectItem value="meals">{t('meals')}</SelectItem>
+                        <SelectItem value="accommodation">{t('accommodation')}</SelectItem>
+                        <SelectItem value="transportation">{t('transportation')}</SelectItem>
+                        <SelectItem value="office_supplies">{t('office_supplies')}</SelectItem>
+                        <SelectItem value="training">{t('training')}</SelectItem>
+                        <SelectItem value="other">{t('other')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Amount *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                     <Input
                       type="number"
                       value={editClaim.amount}
@@ -565,23 +569,23 @@ export default function Expenses() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
                   <Select value={editClaim.status || 'draft'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="draft">{t('draft')}</SelectItem>
+                      <SelectItem value="submitted">{t('submitted')}</SelectItem>
+                      <SelectItem value="approved">{t('approved')}</SelectItem>
+                      <SelectItem value="rejected">{t('rejected')}</SelectItem>
+                      <SelectItem value="paid">{t('paid')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Description</label>
+                  <label className="text-sm font-medium mb-1 block">{t('description')}</label>
                   <Input
                     value={editClaim.description || ''}
                     onChange={(e) => setEditClaim({...editClaim, description: e.target.value})}
@@ -590,14 +594,14 @@ export default function Expenses() {
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditClaim(null); }} className="flex-1">
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     onClick={handleUpdateClaim}
                     className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
                     disabled={!editClaim.employee_name || isSubmitting}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isSubmitting ? t('saving') : t('save_changes')}
                   </Button>
                 </div>
               </div>

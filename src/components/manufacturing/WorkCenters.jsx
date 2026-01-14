@@ -8,10 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Cog, AlertTriangle, CheckCircle, Wrench } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
 export default function WorkCenters() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [workCenters, setWorkCenters] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,10 +109,10 @@ export default function WorkCenters() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-xl font-bold flex items-center gap-2">
               <Cog className="w-6 h-6 text-slate-700" />
-              Work Centers
+              {t('work_centers')}
             </CardTitle>
             <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-              <Plus className="w-4 h-4 mr-2" /> Add Work Center
+              <Plus className="w-4 h-4 mr-2" /> {t('add_work_center')}
             </Button>
           </div>
         </CardHeader>
@@ -118,7 +122,7 @@ export default function WorkCenters() {
         <div className="flex items-center justify-center py-16">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-600">Loading work centers...</p>
+            <p className="text-slate-600">{t('loading_work_centers')}</p>
           </div>
         </div>
       ) : workCenters.length === 0 ? (
@@ -127,10 +131,10 @@ export default function WorkCenters() {
             <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Cog className="w-10 h-10 text-slate-400" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">No work centers configured</h3>
-            <p className="text-sm text-slate-500 mb-6">Add work centers to manage your production facilities</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_work_centers_configured')}</h3>
+            <p className="text-sm text-slate-500 mb-6">{t('add_work_centers_description')}</p>
             <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-              <Plus className="w-4 h-4 mr-2" /> Add First Work Center
+              <Plus className="w-4 h-4 mr-2" /> {t('add_first_work_center')}
             </Button>
           </CardContent>
         </Card>
@@ -156,31 +160,31 @@ export default function WorkCenters() {
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-xs text-blue-600 font-medium">Utilization</p>
+                      <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
                       <p className="text-lg font-bold text-blue-900">{wc.utilization_rate || 0}%</p>
                     </div>
                     <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-purple-600 font-medium">OEE Score</p>
+                      <p className="text-xs text-purple-600 font-medium">{t('oee_score')}</p>
                       <p className="text-lg font-bold text-purple-900">{wc.oee_score || 0}%</p>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-600">Type:</span>
-                      <Badge variant="outline" className="text-xs">{wc.work_center_type}</Badge>
+                      <span className="text-slate-600">{t('type')}:</span>
+                      <Badge variant="outline" className="text-xs">{t(wc.work_center_type) || wc.work_center_type}</Badge>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600">Capacity/Day:</span>
-                      <span className="font-semibold">{wc.capacity_per_day || 0} units</span>
+                      <span className="text-slate-600">{t('capacity_per_day')}:</span>
+                      <span className="font-semibold">{wc.capacity_per_day || 0} {t('units')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600">Cost/Hour:</span>
+                      <span className="text-slate-600">{t('cost_per_hour')}:</span>
                       <span className="font-semibold">${wc.cost_per_hour || 0}</span>
                     </div>
                     {wc.location && (
                       <div className="flex justify-between">
-                        <span className="text-slate-600">Location:</span>
+                        <span className="text-slate-600">{t('location')}:</span>
                         <span className="font-medium">{wc.location}</span>
                       </div>
                     )}
@@ -194,7 +198,7 @@ export default function WorkCenters() {
           {utilizationData.length > 0 && (
             <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
               <CardHeader>
-                <CardTitle>Work Center Utilization Overview</CardTitle>
+                <CardTitle>{t('work_center_utilization_overview')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -227,22 +231,22 @@ export default function WorkCenters() {
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add Work Center</DialogTitle>
+            <DialogTitle>{t('add_work_center')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Work Center Code</label>
+                <label className="text-sm font-medium mb-1 block">{t('work_center_code')}</label>
                 <Input
-                  placeholder="Auto-generated if empty"
+                  placeholder={t('auto_generated_if_empty')}
                   value={newWorkCenter.work_center_code}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, work_center_code: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Name *</label>
+                <label className="text-sm font-medium mb-1 block">{t('name')} *</label>
                 <Input
-                  placeholder="Work center name"
+                  placeholder={t('work_center_name')}
                   value={newWorkCenter.name}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
                   required
@@ -252,24 +256,24 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Type *</label>
+                <label className="text-sm font-medium mb-1 block">{t('type')} *</label>
                 <Select value={newWorkCenter.work_center_type} onValueChange={(value) => setNewWorkCenter({...newWorkCenter, work_center_type: value})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="machine">Machine</SelectItem>
-                    <SelectItem value="assembly_line">Assembly Line</SelectItem>
-                    <SelectItem value="quality_station">Quality Station</SelectItem>
-                    <SelectItem value="packaging">Packaging</SelectItem>
-                    <SelectItem value="warehouse">Warehouse</SelectItem>
+                    <SelectItem value="machine">{t('machine')}</SelectItem>
+                    <SelectItem value="assembly_line">{t('assembly_line')}</SelectItem>
+                    <SelectItem value="quality_station">{t('quality_station')}</SelectItem>
+                    <SelectItem value="packaging">{t('packaging')}</SelectItem>
+                    <SelectItem value="warehouse">{t('warehouse')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Location</label>
+                <label className="text-sm font-medium mb-1 block">{t('location')}</label>
                 <Input
-                  placeholder="Physical location"
+                  placeholder={t('physical_location')}
                   value={newWorkCenter.location}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, location: e.target.value})}
                 />
@@ -278,7 +282,7 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Capacity/Day</label>
+                <label className="text-sm font-medium mb-1 block">{t('capacity_per_day')}</label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -287,7 +291,7 @@ export default function WorkCenters() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Efficiency %</label>
+                <label className="text-sm font-medium mb-1 block">{t('efficiency_percent')}</label>
                 <Input
                   type="number"
                   placeholder="100"
@@ -296,7 +300,7 @@ export default function WorkCenters() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Cost/Hour $</label>
+                <label className="text-sm font-medium mb-1 block">{t('cost_per_hour')}</label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -308,14 +312,14 @@ export default function WorkCenters() {
 
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowCreateModal(false); resetForm(); }} className="flex-1">
-                Cancel
+                {t('cancel')}
               </Button>
-              <Button 
-                onClick={handleCreateWorkCenter} 
+              <Button
+                onClick={handleCreateWorkCenter}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
                 disabled={!newWorkCenter.name}
               >
-                Add Work Center
+                {t('add_work_center')}
               </Button>
             </div>
           </div>

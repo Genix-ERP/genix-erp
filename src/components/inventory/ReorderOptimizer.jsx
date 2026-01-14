@@ -6,8 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { InvokeLLM } from "@/api/integrations";
 import { Target, TrendingUp, Clock, AlertTriangle, Zap, Brain } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function ReorderOptimizer({ items, movements }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [reorderRecommendations, setReorderRecommendations] = useState([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationInsights, setOptimizationInsights] = useState(null);
@@ -184,22 +188,22 @@ export default function ReorderOptimizer({ items, movements }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Target className="w-5 h-5 text-[var(--genix-blue)]" />
-              <CardTitle>Reorder Recommendations</CardTitle>
+              <CardTitle>{t('reorder_recommendations')}</CardTitle>
             </div>
-            <Button 
-              onClick={generateReorderRecommendations} 
+            <Button
+              onClick={generateReorderRecommendations}
               disabled={isOptimizing}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
             >
               {isOptimizing ? (
                 <>
                   <Zap className="w-4 h-4 mr-2 animate-spin" />
-                  Optimizing...
+                  {t('loading')}
                 </>
               ) : (
                 <>
                   <Zap className="w-4 h-4 mr-2" />
-                  Refresh Analysis
+                  {t('refresh_analysis')}
                 </>
               )}
             </Button>

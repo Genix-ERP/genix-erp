@@ -291,7 +291,7 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Package className="w-4 h-4" />
-              <span className="hidden sm:inline">Products</span>
+              <span className="hidden sm:inline">{t('products')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -299,7 +299,7 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Warehouse className="w-4 h-4" />
-              <span className="hidden sm:inline">Warehouses</span>
+              <span className="hidden sm:inline">{t('warehouses')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -307,8 +307,8 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Box className="w-4 h-4" />
-              <span className="hidden sm:inline">Stock Management</span>
-              <span className="sm:hidden">Stock</span>
+              <span className="hidden sm:inline">{t('stock_management')}</span>
+              <span className="sm:hidden">{t('stock')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -316,7 +316,7 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Calculator className="w-4 h-4" />
-              <span className="hidden sm:inline">COGS</span>
+              <span className="hidden sm:inline">{t('cogs')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -324,7 +324,7 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Target className="w-4 h-4" />
-              <span className="hidden sm:inline">Reorder</span>
+              <span className="hidden sm:inline">{t('reorder')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -332,7 +332,7 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Analytics</span>
+              <span className="hidden sm:inline">{t('analytics')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -340,8 +340,8 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Layers className="w-4 h-4" />
-              <span className="hidden sm:inline">Partiyalar</span>
-              <span className="sm:hidden">Lots</span>
+              <span className="hidden sm:inline">{t('lots')}</span>
+              <span className="sm:hidden">{t('lots')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -349,8 +349,8 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">Inventarizatsiya</span>
-              <span className="sm:hidden">Count</span>
+              <span className="hidden sm:inline">{t('stocktake')}</span>
+              <span className="sm:hidden">{t('stocktake')}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -358,8 +358,8 @@ export default function Inventory() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Printer className="w-4 h-4" />
-              <span className="hidden sm:inline">Yorliqlar</span>
-              <span className="sm:hidden">Print</span>
+              <span className="hidden sm:inline">{t('labels')}</span>
+              <span className="sm:hidden">{t('labels')}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -429,7 +429,7 @@ export default function Inventory() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Products</p>
+                      <p className="text-xs text-slate-500">{t('products')}</p>
                       <p className="text-lg font-bold text-blue-600">{products?.length || 0}</p>
                     </div>
                     <Package className="w-6 h-6 text-blue-600" />
@@ -441,7 +441,7 @@ export default function Inventory() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Warehouses</p>
+                      <p className="text-xs text-slate-500">{t('warehouses')}</p>
                       <p className="text-lg font-bold text-purple-600">{warehouses?.length || 0}</p>
                     </div>
                     <Warehouse className="w-6 h-6 text-purple-600" />
@@ -511,7 +511,7 @@ export default function Inventory() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
                 <CardHeader>
-                  <CardTitle>Stock Movements</CardTitle>
+                  <CardTitle>{t('stock_movements')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <StockMovementTracker movements={stockMovements} items={items} />
@@ -520,7 +520,7 @@ export default function Inventory() {
 
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
                 <CardHeader>
-                  <CardTitle>ABC Analysis</CardTitle>
+                  <CardTitle>{t('abc_analysis')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -529,22 +529,22 @@ export default function Inventory() {
                         <div className="text-2xl font-bold text-green-600">
                           {items.filter(i => i.abc_classification === 'A').length}
                         </div>
-                        <div className="text-sm text-slate-600">A Items</div>
-                        <div className="text-xs text-slate-500">High Priority</div>
+                        <div className="text-sm text-slate-600">{t('a_items')}</div>
+                        <div className="text-xs text-slate-500">{t('high')}</div>
                       </div>
                       <div className="text-center p-4 bg-blue-50 rounded-lg">
                         <div className="text-2xl font-bold text-blue-600">
                           {items.filter(i => i.abc_classification === 'B').length}
                         </div>
-                        <div className="text-sm text-slate-600">B Items</div>
-                        <div className="text-xs text-slate-500">Medium Priority</div>
+                        <div className="text-sm text-slate-600">{t('b_items')}</div>
+                        <div className="text-xs text-slate-500">{t('medium')}</div>
                       </div>
                       <div className="text-center p-4 bg-slate-50 rounded-lg">
                         <div className="text-2xl font-bold text-slate-600">
                           {items.filter(i => i.abc_classification === 'C' || !i.abc_classification).length}
                         </div>
-                        <div className="text-sm text-slate-600">C Items</div>
-                        <div className="text-xs text-slate-500">Low Priority</div>
+                        <div className="text-sm text-slate-600">{t('c_items')}</div>
+                        <div className="text-xs text-slate-500">{t('low')}</div>
                       </div>
                     </div>
                   </div>

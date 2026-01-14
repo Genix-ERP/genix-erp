@@ -9,10 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeAssets } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Assets() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
 
   // AI Analysis
@@ -160,13 +164,13 @@ export default function Assets() {
         <div className="bg-gradient-to-r from-orange-600 to-amber-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <Monitor className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Fixed Assets</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('fixed_assets')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered')}
             </Badge>
           </div>
-          <p className="text-white/90">Track, manage, and optimize your fixed assets with automated depreciation</p>
+          <p className="text-white/90">{t('fixed_assets_subtitle')}</p>
         </div>
 
         {/* Metrics */}
@@ -179,7 +183,7 @@ export default function Assets() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.totalAssets}</p>
-              <p className="text-sm text-slate-600">Total Assets</p>
+              <p className="text-sm text-slate-600">{t('total_assets')}</p>
             </CardContent>
           </Card>
 
@@ -191,7 +195,7 @@ export default function Assets() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Purchase Value</p>
+              <p className="text-sm text-slate-600">{t('purchase_value')}</p>
             </CardContent>
           </Card>
 
@@ -203,7 +207,7 @@ export default function Assets() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.currentValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Current Value</p>
+              <p className="text-sm text-slate-600">{t('current_value')}</p>
             </CardContent>
           </Card>
 
@@ -215,7 +219,7 @@ export default function Assets() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalDepreciation.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Depreciation</p>
+              <p className="text-sm text-slate-600">{t('depreciation')}</p>
             </CardContent>
           </Card>
         </div>
@@ -226,8 +230,8 @@ export default function Assets() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-orange-600" />
-                AI Asset Insights
-                <Badge className="bg-orange-100 text-orange-700 text-xs">Live</Badge>
+                {t('ai_asset_insights')}
+                <Badge className="bg-orange-100 text-orange-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -273,7 +277,7 @@ export default function Assets() {
           {chartData.length > 0 && (
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Assets by Category</CardTitle>
+                <CardTitle>{t('assets_by_category')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
@@ -304,16 +308,16 @@ export default function Assets() {
           <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
-                <CardTitle>Fixed Assets</CardTitle>
+                <CardTitle>{t('fixed_assets')}</CardTitle>
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-orange-600 to-amber-600">
-                  <Plus className="w-4 h-4 mr-2" /> New Asset
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
                 </Button>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
-                    placeholder="Search assets..."
+                  <Input
+                    placeholder={t('search_assets')}
                     className="pl-9"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -324,12 +328,12 @@ export default function Assets() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="machinery">Machinery</SelectItem>
-                    <SelectItem value="equipment">Equipment</SelectItem>
-                    <SelectItem value="vehicles">Vehicles</SelectItem>
-                    <SelectItem value="buildings">Buildings</SelectItem>
-                    <SelectItem value="computers">Computers</SelectItem>
+                    <SelectItem value="all">{t('all_categories')}</SelectItem>
+                    <SelectItem value="machinery">{t('machinery')}</SelectItem>
+                    <SelectItem value="equipment">{t('equipment')}</SelectItem>
+                    <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
+                    <SelectItem value="buildings">{t('buildings')}</SelectItem>
+                    <SelectItem value="computers">{t('computers')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -342,8 +346,8 @@ export default function Assets() {
               ) : filteredAssets.length === 0 ? (
                 <div className="text-center py-16">
                   <Monitor className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No assets yet</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">Add First Asset</Button>
+                  <p className="text-slate-500">{t('no_assets_yet')}</p>
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('add_first_asset')}</Button>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -361,31 +365,31 @@ export default function Assets() {
 
                             <div className="grid grid-cols-4 gap-4 text-sm">
                               <div>
-                                <p className="text-slate-500">Purchase Cost</p>
+                                <p className="text-slate-500">{t('purchase_cost')}</p>
                                 <p className="font-semibold">${(asset.purchase_cost || 0).toLocaleString()}</p>
                               </div>
                               <div>
-                                <p className="text-slate-500">Current Value</p>
+                                <p className="text-slate-500">{t('current_value')}</p>
                                 <p className="font-semibold text-green-600">${(asset.current_value || 0).toLocaleString()}</p>
                               </div>
                               <div>
-                                <p className="text-slate-500">Depreciation</p>
+                                <p className="text-slate-500">{t('depreciation')}</p>
                                 <p className="font-semibold text-orange-600">${(asset.accumulated_depreciation || 0).toLocaleString()}</p>
                               </div>
                               <div>
-                                <p className="text-slate-500">Method</p>
-                                <p className="font-medium">{asset.depreciation_method}</p>
+                                <p className="text-slate-500">{t('method')}</p>
+                                <p className="font-medium">{t(asset.depreciation_method) || asset.depreciation_method}</p>
                               </div>
                             </div>
 
                             {asset.next_maintenance_date && (
                               <div className="mt-3 flex items-center gap-2 text-sm">
                                 <Wrench className="w-4 h-4 text-yellow-600" />
-                                <span className="text-slate-600">Next maintenance: {asset.next_maintenance_date}</span>
+                                <span className="text-slate-600">{t('next_maintenance')}: {asset.next_maintenance_date}</span>
                               </div>
                             )}
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title="Edit Asset">
+                          <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
                             <Edit2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -402,23 +406,23 @@ export default function Assets() {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add Fixed Asset</DialogTitle>
+              <DialogTitle>{t('add_fixed_asset')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Asset Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('asset_name')} *</label>
                   <Input
-                    placeholder="Asset name"
+                    placeholder={t('asset_name')}
                     value={newAsset.asset_name}
                     onChange={(e) => setNewAsset({...newAsset, asset_name: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Asset Code</label>
+                  <label className="text-sm font-medium mb-1 block">{t('asset_code')}</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder={t('auto_generated_if_empty')}
                     value={newAsset.asset_code}
                     onChange={(e) => setNewAsset({...newAsset, asset_code: e.target.value})}
                   />
@@ -427,23 +431,23 @@ export default function Assets() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Category *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('category')} *</label>
                   <Select value={newAsset.asset_category} onValueChange={(value) => setNewAsset({...newAsset, asset_category: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="machinery">Machinery</SelectItem>
-                      <SelectItem value="equipment">Equipment</SelectItem>
-                      <SelectItem value="vehicles">Vehicles</SelectItem>
-                      <SelectItem value="buildings">Buildings</SelectItem>
-                      <SelectItem value="furniture">Furniture</SelectItem>
-                      <SelectItem value="computers">Computers</SelectItem>
+                      <SelectItem value="machinery">{t('machinery')}</SelectItem>
+                      <SelectItem value="equipment">{t('equipment')}</SelectItem>
+                      <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
+                      <SelectItem value="buildings">{t('buildings')}</SelectItem>
+                      <SelectItem value="furniture">{t('furniture')}</SelectItem>
+                      <SelectItem value="computers">{t('computers')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Purchase Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('purchase_date')} *</label>
                   <Input
                     type="date"
                     value={newAsset.purchase_date}
@@ -455,7 +459,7 @@ export default function Assets() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Purchase Cost *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('purchase_cost')} *</label>
                   <Input
                     type="number"
                     placeholder="0.00"
@@ -465,7 +469,7 @@ export default function Assets() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Useful Life (years) *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('useful_life_years')} *</label>
                   <Input
                     type="number"
                     placeholder="5"
@@ -475,15 +479,15 @@ export default function Assets() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Depreciation Method</label>
+                  <label className="text-sm font-medium mb-1 block">{t('depreciation_method')}</label>
                   <Select value={newAsset.depreciation_method} onValueChange={(value) => setNewAsset({...newAsset, depreciation_method: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="straight_line">Straight Line</SelectItem>
-                      <SelectItem value="declining_balance">Declining Balance</SelectItem>
-                      <SelectItem value="units_of_production">Units of Production</SelectItem>
+                      <SelectItem value="straight_line">{t('straight_line')}</SelectItem>
+                      <SelectItem value="declining_balance">{t('declining_balance')}</SelectItem>
+                      <SelectItem value="units_of_production">{t('units_of_production')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -491,14 +495,14 @@ export default function Assets() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateAsset}
                   className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
                   disabled={!newAsset.asset_name || !newAsset.purchase_cost || isSubmitting}
                 >
-                  {isSubmitting ? 'Adding...' : 'Add Asset'}
+                  {isSubmitting ? t('adding') : t('add_asset')}
                 </Button>
               </div>
             </div>
@@ -509,20 +513,20 @@ export default function Assets() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Asset</DialogTitle>
+              <DialogTitle>{t('edit_asset')}</DialogTitle>
             </DialogHeader>
             {editAsset && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Asset Name *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('asset_name')} *</label>
                     <Input
                       value={editAsset.asset_name}
                       onChange={(e) => setEditAsset({...editAsset, asset_name: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Asset Code</label>
+                    <label className="text-sm font-medium mb-1 block">{t('asset_code')}</label>
                     <Input
                       value={editAsset.asset_code}
                       onChange={(e) => setEditAsset({...editAsset, asset_code: e.target.value})}
@@ -532,32 +536,32 @@ export default function Assets() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Category</label>
+                    <label className="text-sm font-medium mb-1 block">{t('category')}</label>
                     <Select value={editAsset.asset_category || 'equipment'} onValueChange={(value) => setEditAsset({...editAsset, asset_category: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="machinery">Machinery</SelectItem>
-                        <SelectItem value="equipment">Equipment</SelectItem>
-                        <SelectItem value="vehicles">Vehicles</SelectItem>
-                        <SelectItem value="buildings">Buildings</SelectItem>
-                        <SelectItem value="furniture">Furniture</SelectItem>
-                        <SelectItem value="computers">Computers</SelectItem>
+                        <SelectItem value="machinery">{t('machinery')}</SelectItem>
+                        <SelectItem value="equipment">{t('equipment')}</SelectItem>
+                        <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
+                        <SelectItem value="buildings">{t('buildings')}</SelectItem>
+                        <SelectItem value="furniture">{t('furniture')}</SelectItem>
+                        <SelectItem value="computers">{t('computers')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Status</label>
+                    <label className="text-sm font-medium mb-1 block">{t('status')}</label>
                     <Select value={editAsset.status || 'active'} onValueChange={(value) => setEditAsset({...editAsset, status: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="under_maintenance">Under Maintenance</SelectItem>
-                        <SelectItem value="retired">Retired</SelectItem>
-                        <SelectItem value="disposed">Disposed</SelectItem>
+                        <SelectItem value="active">{t('active')}</SelectItem>
+                        <SelectItem value="under_maintenance">{t('under_maintenance')}</SelectItem>
+                        <SelectItem value="retired">{t('retired')}</SelectItem>
+                        <SelectItem value="disposed">{t('disposed')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -565,7 +569,7 @@ export default function Assets() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Purchase Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('purchase_date')}</label>
                     <Input
                       type="date"
                       value={editAsset.purchase_date?.split('T')[0] || ''}
@@ -573,7 +577,7 @@ export default function Assets() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Next Maintenance Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('next_maintenance_date')}</label>
                     <Input
                       type="date"
                       value={editAsset.next_maintenance_date?.split('T')[0] || ''}
@@ -584,7 +588,7 @@ export default function Assets() {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Purchase Cost</label>
+                    <label className="text-sm font-medium mb-1 block">{t('purchase_cost')}</label>
                     <Input
                       type="number"
                       value={editAsset.purchase_cost}
@@ -592,7 +596,7 @@ export default function Assets() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Salvage Value</label>
+                    <label className="text-sm font-medium mb-1 block">{t('salvage_value')}</label>
                     <Input
                       type="number"
                       value={editAsset.salvage_value || 0}
@@ -600,7 +604,7 @@ export default function Assets() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Useful Life (years)</label>
+                    <label className="text-sm font-medium mb-1 block">{t('useful_life_years')}</label>
                     <Input
                       type="number"
                       value={editAsset.useful_life_years}
@@ -611,22 +615,22 @@ export default function Assets() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Depreciation Method</label>
+                    <label className="text-sm font-medium mb-1 block">{t('depreciation_method')}</label>
                     <Select value={editAsset.depreciation_method || 'straight_line'} onValueChange={(value) => setEditAsset({...editAsset, depreciation_method: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="straight_line">Straight Line</SelectItem>
-                        <SelectItem value="declining_balance">Declining Balance</SelectItem>
-                        <SelectItem value="units_of_production">Units of Production</SelectItem>
+                        <SelectItem value="straight_line">{t('straight_line')}</SelectItem>
+                        <SelectItem value="declining_balance">{t('declining_balance')}</SelectItem>
+                        <SelectItem value="units_of_production">{t('units_of_production')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Location</label>
+                    <label className="text-sm font-medium mb-1 block">{t('location')}</label>
                     <Input
-                      placeholder="e.g., Main Office, Warehouse A"
+                      placeholder={t('location_placeholder')}
                       value={editAsset.location || ''}
                       onChange={(e) => setEditAsset({...editAsset, location: e.target.value})}
                     />
@@ -635,14 +639,14 @@ export default function Assets() {
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditAsset(null); }} className="flex-1">
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     onClick={handleUpdateAsset}
                     className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
                     disabled={!editAsset.asset_name || isSubmitting}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isSubmitting ? t('saving') : t('save_changes')}
                   </Button>
                 </div>
               </div>

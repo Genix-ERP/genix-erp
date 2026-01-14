@@ -433,19 +433,19 @@ export default function Customers() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
                 <CardHeader>
-                  <CardTitle>Customer {t('analytics')}</CardTitle>
+                  <CardTitle>{t('customer_analytics')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4 text-center py-8">
                     <TrendingUp className="w-16 h-16 mx-auto text-slate-300" />
-                    <p className="text-slate-600">Advanced analytics coming soon</p>
+                    <p className="text-slate-600">{t('advanced_analytics_coming_soon')}</p>
                   </div>
                 </CardContent>
               </Card>
 
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
                 <CardHeader>
-                  <CardTitle>{t('industry')} Breakdown</CardTitle>
+                  <CardTitle>{t('sector_breakdown')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">

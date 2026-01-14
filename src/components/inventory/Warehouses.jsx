@@ -218,7 +218,7 @@ export default function Warehouses() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Warehouses</p>
+                <p className="text-sm text-slate-500">{t('total_warehouses')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {summaryStats.totalWarehouses}
                 </p>
@@ -234,7 +234,7 @@ export default function Warehouses() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Active</p>
+                <p className="text-sm text-slate-500">{t('active')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {summaryStats.activeWarehouses}
                 </p>
@@ -250,7 +250,7 @@ export default function Warehouses() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Locations</p>
+                <p className="text-sm text-slate-500">{t('total_locations')}</p>
                 <p className="text-2xl font-bold text-purple-600">
                   {summaryStats.totalLocations}
                 </p>
@@ -266,7 +266,7 @@ export default function Warehouses() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Stock</p>
+                <p className="text-sm text-slate-500">{t('total_stock')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   {summaryStats.totalStock.toLocaleString()}
                 </p>
@@ -289,10 +289,10 @@ export default function Warehouses() {
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">
-                  Warehouses
+                  {t('warehouses')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredWarehouses.length} warehouses configured
+                  {filteredWarehouses.length} {t('warehouses').toLowerCase()}
                 </p>
               </div>
             </div>
@@ -300,7 +300,7 @@ export default function Warehouses() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search warehouses..."
+                  placeholder={t('search') + '...'}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -313,7 +313,7 @@ export default function Warehouses() {
                 }}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
               >
-                <Plus className="w-4 h-4 mr-2" /> New Warehouse
+                <Plus className="w-4 h-4 mr-2" /> {t('new_warehouse')}
               </Button>
             </div>
           </div>
@@ -332,12 +332,12 @@ export default function Warehouses() {
                 <Warehouse className="w-10 h-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? 'No warehouses found' : 'No warehouses yet'}
+                {searchQuery ? t('no_results_found') : t('no_warehouses_yet')}
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {searchQuery
-                  ? 'Try adjusting your search'
-                  : 'Set up your first warehouse to start managing inventory'}
+                  ? t('search')
+                  : t('setup_first_warehouse')}
               </p>
               {!searchQuery && (
                 <Button
@@ -347,7 +347,7 @@ export default function Warehouses() {
                   }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
-                  <Plus className="w-4 h-4 mr-2" /> Create First Warehouse
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_warehouse')}
                 </Button>
               )}
             </div>

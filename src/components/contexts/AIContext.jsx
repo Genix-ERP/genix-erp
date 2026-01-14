@@ -8,6 +8,7 @@ import { useCustomers } from './CustomersContext';
 import { useFinancials } from './FinancialsContext';
 import { useModules } from './ModulesContext';
 import { useVendors } from './VendorsContext';
+import { useLanguage } from './LanguageContext';
 
 const AIContext = createContext(null);
 
@@ -276,10 +277,321 @@ const getUserData = (companyId) => {
   }
 };
 
+// AI text translations for multilingual support
+const AI_TEXTS = {
+  en: {
+    salesAnalysis: 'Sales Analysis',
+    noSalesOrders: "You don't have any sales orders recorded yet.",
+    toGetStarted: 'To get started:',
+    goToSalesOrders: 'Go to **Sales Orders** module',
+    createFirstSalesOrder: 'Create your first sales order',
+    comeBackForInsights: 'Come back and ask me for insights!',
+    onceSalesData: 'Once you have sales data, I can help you with:',
+    revenueTrends: 'Revenue trends and growth analysis',
+    topCustomersByRevenue: 'Top customers by revenue',
+    productPerformance: 'Product performance insights',
+    salesForecasting: 'Sales forecasting',
+    keyMetrics: 'Key Metrics:',
+    totalRevenue: 'Total Revenue',
+    totalOrders: 'Total Orders',
+    avgOrderValue: 'Average Order Value',
+    orderStatusBreakdown: 'Order Status Breakdown:',
+    orders: 'orders',
+    topCustomers: 'Top Customers by Revenue:',
+    noCustomerData: 'No customer data available',
+    outstandingPayments: 'Outstanding Payments:',
+    unpaidOrdersTotaling: 'unpaid orders totaling',
+    allOrdersPaid: 'All orders are paid!',
+    recommendations: 'Recommendations:',
+    focusOnRetaining: 'Focus on retaining',
+    yourTopCustomer: '(your top customer)',
+    followUpOn: 'Follow up on',
+    unpaidInvoices: 'unpaid invoices',
+    considerAnalyzing: 'Consider analyzing product performance for optimization',
+    yourDataSummary: 'Your Data',
+    inventoryAnalysis: 'Inventory Analysis',
+    noInventoryItems: "You don't have any inventory items recorded yet.",
+    goToInventory: 'Go to **Inventory** module',
+    addYourProducts: 'Add your products/items',
+    setReorderLevels: 'Set reorder levels for automatic alerts',
+    onceInventoryData: 'Once you have inventory data, I can help you with:',
+    lowStockAlerts: 'Low stock alerts',
+    reorderRecommendations: 'Reorder recommendations',
+    deadStockIdentification: 'Dead stock identification',
+    inventoryValuation: 'Inventory valuation',
+    overview: 'Overview:',
+    totalSKUs: 'Total SKUs',
+    totalUnits: 'Total Units',
+    totalValue: 'Total Value',
+    lowStockAlert: 'Low Stock Alert',
+    items: 'items',
+    product: 'Product',
+    current: 'Current',
+    reorderLevel: 'Reorder Level',
+    status: 'Status',
+    outOfStock: 'Out of Stock',
+    low: 'Low',
+    allItemsStocked: 'All items are adequately stocked!',
+    needsImmediateAttention: 'items need immediate attention',
+    createPurchaseOrders: 'Create purchase orders for',
+    lowStockItems: 'low stock items',
+    inventoryLevelsHealthy: 'Inventory levels are healthy',
+    urgent: 'Urgent: Restock',
+    outOfStockItems: 'out-of-stock items',
+    reviewSlowMoving: 'Review slow-moving items for promotions',
+    financialAnalysis: 'Financial Analysis',
+    noFinancialData: "You don't have any financial data recorded yet.",
+    createSalesOrdersToTrack: 'Create **Sales Orders** to track revenue',
+    logExpenses: 'Log **Expenses** for cost tracking',
+    recordFinancialTrans: 'Record **Financial Transactions** for cash flow',
+    onceFinancialData: 'Once you have data, I can help you with:',
+    cashFlowAnalysis: 'Cash flow analysis',
+    profitMarginCalc: 'Profit margin calculations',
+    expenseBreakdowns: 'Expense breakdowns',
+    receivablesPayablesTracking: 'Receivables and payables tracking',
+    financialHealthDashboard: 'Financial Health Dashboard',
+    revenueProfit: 'Revenue & Profit:',
+    totalPurchases: 'Total Purchases',
+    totalExpenses: 'Total Expenses',
+    grossProfit: 'Gross Profit',
+    netProfit: 'Net Profit',
+    profitMargin: 'Profit Margin',
+    receivablesPayables: 'Receivables & Payables:',
+    accountsReceivable: 'Accounts Receivable',
+    unpaidInvoicesCount: 'unpaid invoices',
+    accountsPayable: 'Accounts Payable',
+    unpaidBills: 'unpaid bills',
+    expenseBreakdown: 'Expense Breakdown:',
+    billsPendingPayment: 'bills pending payment',
+    reviewExpenses: 'Review expenses - currently operating at a loss',
+    maintainProfitability: 'Maintain current profitability trends',
+    businessAtGlance: 'Your Business at a Glance:',
+    salesOrdersCount: 'Sales Orders',
+    noOrdersYet: 'No orders yet',
+    inventoryItemsCount: 'Inventory Items',
+    lowStockCount: 'low stock',
+    noItemsYet: 'No items yet',
+    customersCount: 'Customers',
+    noneYet: 'None yet',
+    employeesCount: 'Employees',
+    assetsCount: 'Assets',
+    projectsCount: 'Projects',
+    contractsCount: 'Contracts',
+    whatToAnalyze: 'What would you like to analyze?',
+    showSalesPerformance: 'Show me sales performance',
+    whatInventoryRestock: 'What inventory needs restocking?',
+    analyzeFinancialHealth: 'Analyze our financial health',
+    showCustomerInsights: 'Show customer insights',
+    hrPayrollSummary: 'HR and payroll summary',
+    imYourCopilot: "I'm your Genix AI Business Copilot. I can help you with:",
+    analyticsInsights: 'Analytics & Insights',
+    salesPerformanceAnalysis: 'Sales performance analysis',
+    inventoryOptimization: 'Inventory optimization',
+    financialHealthMonitoring: 'Financial health monitoring',
+    customerBehaviorInsights: 'Customer behavior insights',
+    automation: 'Automation',
+    createManageWorkflows: 'Create and manage workflows',
+    setupAlertsNotifications: 'Set up alerts and notifications',
+    automateRepetitiveTasks: 'Automate repetitive tasks',
+    reports: 'Reports',
+    generateFinancialStatements: 'Generate financial statements',
+    createSalesReports: 'Create sales reports',
+    exportDataFormats: 'Export data in various formats',
+    recommendationsSection: 'Recommendations',
+    identifyOpportunities: 'Identify opportunities',
+    flagRisksIssues: 'Flag risks and issues',
+    suggestImprovements: 'Suggest improvements',
+    gettingStarted: 'Getting Started:',
+    noDataYet: "It looks like you don't have much data yet. Start by adding:",
+    customersInModule: '**Customers** in the Customers module',
+    inventoryItemsInModule: '**Inventory items** in the Inventory module',
+    salesOrdersToTrack: '**Sales orders** to track revenue',
+    onceDataPersonalized: 'Once you have data, I can provide personalized insights and recommendations!',
+    greeting: 'Hello! How can I help you today?',
+  },
+  uz: {
+    salesAnalysis: 'Savdo Tahlili',
+    noSalesOrders: "Sizda hali savdo buyurtmalari yo'q.",
+    toGetStarted: 'Boshlash uchun:',
+    goToSalesOrders: '**Savdo Buyurtmalari** moduliga o\'ting',
+    createFirstSalesOrder: 'Birinchi savdo buyurtmangizni yarating',
+    comeBackForInsights: 'Qaytib kelib, tahlil so\'rang!',
+    onceSalesData: 'Savdo ma\'lumotlaringiz bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    revenueTrends: 'Daromad tendensiyalari va o\'sish tahlili',
+    topCustomersByRevenue: 'Daromad bo\'yicha eng yaxshi mijozlar',
+    productPerformance: 'Mahsulot samaradorligi haqida ma\'lumot',
+    salesForecasting: 'Savdo prognozi',
+    keyMetrics: 'Asosiy Ko\'rsatkichlar:',
+    totalRevenue: 'Jami Daromad',
+    totalOrders: 'Jami Buyurtmalar',
+    avgOrderValue: 'O\'rtacha Buyurtma Qiymati',
+    orderStatusBreakdown: 'Buyurtma Holati:',
+    orders: 'buyurtma',
+    topCustomers: 'Daromad bo\'yicha Eng Yaxshi Mijozlar:',
+    noCustomerData: 'Mijoz ma\'lumotlari mavjud emas',
+    outstandingPayments: 'To\'lanmagan To\'lovlar:',
+    unpaidOrdersTotaling: 'jami summa bilan to\'lanmagan buyurtmalar',
+    allOrdersPaid: 'Barcha buyurtmalar to\'langan!',
+    recommendations: 'Tavsiyalar:',
+    focusOnRetaining: 'Ushlab qolishga e\'tibor bering:',
+    yourTopCustomer: '(eng yaxshi mijozingiz)',
+    followUpOn: 'Kuzatib boring:',
+    unpaidInvoices: 'to\'lanmagan hisob-faktura',
+    considerAnalyzing: 'Optimallashtirish uchun mahsulot samaradorligini tahlil qilishni o\'ylab ko\'ring',
+    yourDataSummary: 'Sizning Ma\'lumotlaringiz',
+    inventoryAnalysis: 'Inventar Tahlili',
+    noInventoryItems: "Sizda hali inventar mahsulotlari yo'q.",
+    goToInventory: '**Inventar** moduliga o\'ting',
+    addYourProducts: 'Mahsulotlaringizni qo\'shing',
+    setReorderLevels: 'Avtomatik ogohlantirishlar uchun qayta buyurtma darajasini belgilang',
+    onceInventoryData: 'Inventar ma\'lumotlaringiz bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    lowStockAlerts: 'Kam zaxira ogohlantirishlari',
+    reorderRecommendations: 'Qayta buyurtma tavsiylari',
+    deadStockIdentification: 'Harakatsiz zaxiralarni aniqlash',
+    inventoryValuation: 'Inventar baholash',
+    overview: 'Umumiy Ko\'rinish:',
+    totalSKUs: 'Jami SKUlar',
+    totalUnits: 'Jami Birliklar',
+    totalValue: 'Jami Qiymat',
+    lowStockAlert: 'Kam Zaxira Ogohlantirishi',
+    items: 'ta mahsulot',
+    product: 'Mahsulot',
+    current: 'Joriy',
+    reorderLevel: 'Qayta buyurtma',
+    status: 'Holat',
+    outOfStock: 'Tugagan',
+    low: 'Kam',
+    allItemsStocked: 'Barcha mahsulotlar yetarli darajada mavjud!',
+    needsImmediateAttention: 'ta mahsulot zudlik bilan e\'tibor talab qiladi',
+    createPurchaseOrders: 'Xarid buyurtmasi yarating:',
+    lowStockItems: 'kam zaxiradagi mahsulot',
+    inventoryLevelsHealthy: 'Inventar darajalari sog\'lom',
+    urgent: 'Shoshilinch: Qayta to\'ldiring',
+    outOfStockItems: 'tugagan mahsulot',
+    reviewSlowMoving: 'Sekin sotilayotgan mahsulotlarni aksiyalar uchun ko\'rib chiqing',
+    financialAnalysis: 'Moliyaviy Tahlil',
+    noFinancialData: "Sizda hali moliyaviy ma'lumotlar yo'q.",
+    createSalesOrdersToTrack: 'Daromadni kuzatish uchun **Savdo Buyurtmalari** yarating',
+    logExpenses: 'Xarajatlarni kuzatish uchun **Xarajatlar** kiriting',
+    recordFinancialTrans: 'Pul oqimi uchun **Moliyaviy Operatsiyalar** qayd qiling',
+    onceFinancialData: 'Ma\'lumotlaringiz bo\'lganda, quyidagilar bilan yordam bera olaman:',
+    cashFlowAnalysis: 'Pul oqimi tahlili',
+    profitMarginCalc: 'Foyda marjasini hisoblash',
+    expenseBreakdowns: 'Xarajatlar taqsimoti',
+    receivablesPayablesTracking: 'Debitorlik va kreditorlik kuzatuvi',
+    financialHealthDashboard: 'Moliyaviy Salomatlik Paneli',
+    revenueProfit: 'Daromad va Foyda:',
+    totalPurchases: 'Jami Xaridlar',
+    totalExpenses: 'Jami Xarajatlar',
+    grossProfit: 'Yalpi Foyda',
+    netProfit: 'Sof Foyda',
+    profitMargin: 'Foyda Marjasi',
+    receivablesPayables: 'Debitorlik va Kreditorlik:',
+    accountsReceivable: 'Debitorlik',
+    unpaidInvoicesCount: 'to\'lanmagan hisob-faktura',
+    accountsPayable: 'Kreditorlik',
+    unpaidBills: 'to\'lanmagan hisob',
+    expenseBreakdown: 'Xarajatlar Taqsimoti:',
+    billsPendingPayment: 'to\'lovni kutayotgan hisob',
+    reviewExpenses: 'Xarajatlarni ko\'rib chiqing - hozirda zarar bilan ishlayapti',
+    maintainProfitability: 'Joriy foyda tendensiyalarini saqlang',
+    businessAtGlance: 'Biznesingiz bir qarashda:',
+    salesOrdersCount: 'Savdo Buyurtmalari',
+    noOrdersYet: 'Hali buyurtmalar yo\'q',
+    inventoryItemsCount: 'Inventar Mahsulotlari',
+    lowStockCount: 'kam zaxira',
+    noItemsYet: 'Hali mahsulotlar yo\'q',
+    customersCount: 'Mijozlar',
+    noneYet: 'Hali yo\'q',
+    employeesCount: 'Xodimlar',
+    assetsCount: 'Aktivlar',
+    projectsCount: 'Loyihalar',
+    contractsCount: 'Shartnomalar',
+    whatToAnalyze: 'Nimani tahlil qilishni xohlaysiz?',
+    showSalesPerformance: 'Savdo samaradorligini ko\'rsating',
+    whatInventoryRestock: 'Qaysi inventar to\'ldirilishi kerak?',
+    analyzeFinancialHealth: 'Moliyaviy salomatlikni tahlil qiling',
+    showCustomerInsights: 'Mijozlar haqida ma\'lumot ko\'rsating',
+    hrPayrollSummary: 'HR va ish haqi xulosasi',
+    imYourCopilot: "Men sizning Genix AI Biznes Yordamchingizman. Quyidagilar bilan yordam bera olaman:",
+    analyticsInsights: 'Tahlil va Tushunchalar',
+    salesPerformanceAnalysis: 'Savdo samaradorligi tahlili',
+    inventoryOptimization: 'Inventarni optimallashtirish',
+    financialHealthMonitoring: 'Moliyaviy salomatlik monitoringi',
+    customerBehaviorInsights: 'Mijoz xulq-atvori haqida tushunchalar',
+    automation: 'Avtomatlashtirish',
+    createManageWorkflows: 'Ish jarayonlarini yaratish va boshqarish',
+    setupAlertsNotifications: 'Ogohlantirishlar va bildirishnomalarni sozlash',
+    automateRepetitiveTasks: 'Takrorlanuvchi vazifalarni avtomatlashtirish',
+    reports: 'Hisobotlar',
+    generateFinancialStatements: 'Moliyaviy hisobotlar yaratish',
+    createSalesReports: 'Savdo hisobotlarini yaratish',
+    exportDataFormats: 'Ma\'lumotlarni turli formatlarda eksport qilish',
+    recommendationsSection: 'Tavsiyalar',
+    identifyOpportunities: 'Imkoniyatlarni aniqlash',
+    flagRisksIssues: 'Xavf va muammolarni belgilash',
+    suggestImprovements: 'Yaxshilanishlarni taklif qilish',
+    gettingStarted: 'Boshlash:',
+    noDataYet: "Ko'rinishidan hali ko'p ma'lumotingiz yo'q. Quyidagilarni qo'shishdan boshlang:",
+    customersInModule: 'Mijozlar moduliga **Mijozlar**',
+    inventoryItemsInModule: 'Inventar moduliga **Inventar mahsulotlari**',
+    salesOrdersToTrack: 'Daromadni kuzatish uchun **Savdo buyurtmalari**',
+    onceDataPersonalized: 'Ma\'lumotlaringiz bo\'lganda, shaxsiylashtirilgan tahlil va tavsiyalar bera olaman!',
+    greeting: 'Salom! Bugun sizga qanday yordam bera olaman?',
+  },
+  ru: {
+    salesAnalysis: 'Анализ Продаж',
+    noSalesOrders: "У вас пока нет записанных заказов на продажу.",
+    toGetStarted: 'Чтобы начать:',
+    goToSalesOrders: 'Перейдите в модуль **Заказы на продажу**',
+    createFirstSalesOrder: 'Создайте свой первый заказ',
+    comeBackForInsights: 'Вернитесь и спросите меня об аналитике!',
+    onceSalesData: 'Когда у вас будут данные о продажах, я могу помочь с:',
+    revenueTrends: 'Анализ трендов и роста выручки',
+    topCustomersByRevenue: 'Топ клиенты по выручке',
+    productPerformance: 'Аналитика производительности продуктов',
+    salesForecasting: 'Прогнозирование продаж',
+    greeting: 'Привет! Чем я могу вам помочь сегодня?',
+    // Add more Russian translations as needed
+  }
+};
+
+// Helper to get translated text
+const getAIText = (key, lang = 'en') => {
+  const texts = AI_TEXTS[lang] || AI_TEXTS.en;
+  return texts[key] || AI_TEXTS.en[key] || key;
+};
+
+// Detect user's language from message
+const detectMessageLanguage = (message) => {
+  const lowerMessage = message.toLowerCase();
+
+  // Uzbek patterns
+  const uzPatterns = ['salom', 'rahmat', 'qanday', 'nima', 'kerak', 'yordam', 'ko\'rsating', 'tahlil',
+    'savdo', 'xarid', 'mijoz', 'mahsulot', 'inventar', 'xodim', 'loyiha', 'shartnoma',
+    'qilish', 'yaratish', 'qo\'shish', 'o\'chirish', 'yangilash', 'menga', 'biznes'];
+
+  // Russian patterns
+  const ruPatterns = ['привет', 'спасибо', 'помощь', 'показать', 'анализ', 'продажи', 'покупки',
+    'клиенты', 'товары', 'инвентарь', 'сотрудники', 'проекты', 'контракты'];
+
+  const uzScore = uzPatterns.filter(p => lowerMessage.includes(p)).length;
+  const ruScore = ruPatterns.filter(p => lowerMessage.includes(p)).length;
+
+  if (uzScore > ruScore && uzScore > 0) return 'uz';
+  if (ruScore > uzScore && ruScore > 0) return 'ru';
+  return null; // Return null to use system language
+};
+
 // AI response generator for demo/fallback mode - uses REAL user data (company-scoped)
-const generateDemoResponse = (message, context = {}, companyId = null) => {
+const generateDemoResponse = (message, context = {}, companyId = null, systemLang = 'en') => {
   const lowerMessage = message.toLowerCase();
   const userData = getUserData(companyId);
+
+  // Detect language from message or use system language
+  const detectedLang = detectMessageLanguage(message);
+  const lang = detectedLang || systemLang || 'en';
+  const t = (key) => getAIText(key, lang);
 
   // Sales & Revenue queries
   if (lowerMessage.includes('sales') || lowerMessage.includes('revenue') || lowerMessage.includes('top customer')) {
@@ -921,6 +1233,17 @@ Example: "Generate sales report for last quarter as PDF"`,
     };
   }
 
+  // Check if user just said greeting (hello, salom, etc.)
+  const greetingPatterns = ['hello', 'hi', 'hey', 'salom', 'assalomu', 'привет', 'здравствуй'];
+  const isGreeting = greetingPatterns.some(p => lowerMessage.includes(p)) && lowerMessage.length < 30;
+
+  if (isGreeting) {
+    return {
+      content: t('greeting'),
+      tool_calls: []
+    };
+  }
+
   // Default response - show data summary
   const { salesOrders = [], inventory = [], employees = [], customers = [], expenses = [], assets = [], projects = [], contracts = [] } = userData;
 
@@ -931,58 +1254,58 @@ Example: "Generate sales report for last quarter as PDF"`,
     const lowStockItems = inventory.filter(i => (i.current_stock || 0) <= (i.reorder_level || 10));
 
     return {
-      content: `I'm your Genix AI Business Copilot. Here's a quick overview of your data:
+      content: `${t('imYourCopilot').split('.')[0]}.
 
-**Your Business at a Glance:**
-${salesOrders.length > 0 ? `- Sales Orders: ${salesOrders.length} (Total: $${totalRevenue.toLocaleString()})` : '- Sales Orders: No orders yet'}
-${inventory.length > 0 ? `- Inventory Items: ${inventory.length}${lowStockItems.length > 0 ? ` (⚠️ ${lowStockItems.length} low stock)` : ''}` : '- Inventory: No items yet'}
-${customers.length > 0 ? `- Customers: ${customers.length}` : '- Customers: None yet'}
-${employees.length > 0 ? `- Employees: ${employees.length}` : '- Employees: None yet'}
-${assets.length > 0 ? `- Assets: ${assets.length}` : ''}
-${projects.length > 0 ? `- Projects: ${projects.length}` : ''}
-${contracts.length > 0 ? `- Contracts: ${contracts.length}` : ''}
+**${t('businessAtGlance')}**
+${salesOrders.length > 0 ? `- ${t('salesOrdersCount')}: ${salesOrders.length} (${t('totalRevenue')}: $${totalRevenue.toLocaleString()})` : `- ${t('salesOrdersCount')}: ${t('noOrdersYet')}`}
+${inventory.length > 0 ? `- ${t('inventoryItemsCount')}: ${inventory.length}${lowStockItems.length > 0 ? ` (⚠️ ${lowStockItems.length} ${t('lowStockCount')})` : ''}` : `- ${t('inventoryItemsCount')}: ${t('noItemsYet')}`}
+${customers.length > 0 ? `- ${t('customersCount')}: ${customers.length}` : `- ${t('customersCount')}: ${t('noneYet')}`}
+${employees.length > 0 ? `- ${t('employeesCount')}: ${employees.length}` : `- ${t('employeesCount')}: ${t('noneYet')}`}
+${assets.length > 0 ? `- ${t('assetsCount')}: ${assets.length}` : ''}
+${projects.length > 0 ? `- ${t('projectsCount')}: ${projects.length}` : ''}
+${contracts.length > 0 ? `- ${t('contractsCount')}: ${contracts.length}` : ''}
 
-**What would you like to analyze?**
-- "Show me sales performance"
-- "What inventory needs restocking?"
-- "Analyze our financial health"
-- "Show customer insights"
-- "HR and payroll summary"`,
+**${t('whatToAnalyze')}**
+- "${t('showSalesPerformance')}"
+- "${t('whatInventoryRestock')}"
+- "${t('analyzeFinancialHealth')}"
+- "${t('showCustomerInsights')}"
+- "${t('hrPayrollSummary')}"`,
       tool_calls: []
     };
   }
 
   return {
-    content: `I'm your Genix AI Business Copilot. I can help you with:
+    content: `${t('imYourCopilot')}
 
-**📊 Analytics & Insights**
-- Sales performance analysis
-- Inventory optimization
-- Financial health monitoring
-- Customer behavior insights
+**📊 ${t('analyticsInsights')}**
+- ${t('salesPerformanceAnalysis')}
+- ${t('inventoryOptimization')}
+- ${t('financialHealthMonitoring')}
+- ${t('customerBehaviorInsights')}
 
-**🤖 Automation**
-- Create and manage workflows
-- Set up alerts and notifications
-- Automate repetitive tasks
+**🤖 ${t('automation')}**
+- ${t('createManageWorkflows')}
+- ${t('setupAlertsNotifications')}
+- ${t('automateRepetitiveTasks')}
 
-**📋 Reports**
-- Generate financial statements
-- Create sales reports
-- Export data in various formats
+**📋 ${t('reports')}**
+- ${t('generateFinancialStatements')}
+- ${t('createSalesReports')}
+- ${t('exportDataFormats')}
 
-**💡 Recommendations**
-- Identify opportunities
-- Flag risks and issues
-- Suggest improvements
+**💡 ${t('recommendationsSection')}**
+- ${t('identifyOpportunities')}
+- ${t('flagRisksIssues')}
+- ${t('suggestImprovements')}
 
-**Getting Started:**
-It looks like you don't have much data yet. Start by adding:
-1. **Customers** in the Customers module
-2. **Inventory items** in the Inventory module
-3. **Sales orders** to track revenue
+**${t('gettingStarted')}**
+${t('noDataYet')}
+1. ${t('customersInModule')}
+2. ${t('inventoryItemsInModule')}
+3. ${t('salesOrdersToTrack')}
 
-Once you have data, I can provide personalized insights and recommendations!`,
+${t('onceDataPersonalized')}`,
     tool_calls: []
   };
 };
@@ -991,6 +1314,15 @@ export function AIProvider({ children }) {
   const { isBackendConnected, isOwner, isSiteAdmin, user } = useAuth();
   const { activeCompany, addCompany, companies, getCompanyCount } = useCompany();
   const { canMakeAIRequest, incrementAIUsage, getRemainingAIRequests, getAIUsagePercentage, getPlanLimits, subscription, canAddCompany } = useSubscription();
+
+  // Get user's language preference
+  let currentLanguage = 'en';
+  try {
+    const langContext = useLanguage();
+    currentLanguage = langContext?.language || 'en';
+  } catch (e) {
+    // LanguageContext not available, use default
+  }
 
   // Get context methods for AI actions
   let inventoryContext = null;
@@ -1742,7 +2074,7 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
       // Generate demo response with slight delay for realism
       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-      const demoResponse = generateDemoResponse(content, context, activeCompany?.id);
+      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage);
       const assistantMessage = {
         id: `msg_${++messageIdCounter.current}`,
         role: 'assistant',

@@ -321,7 +321,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                 <Target className="w-4 h-4 md:w-5 md:h-5 text-[var(--genix-purple)]" />
-                AI Recommendations
+                {t('ai_recommendations')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -341,7 +341,7 @@ export default function Dashboard() {
                       <p className="text-xs text-slate-500 mt-1">{rec.description}</p>
                     </div>
                     <Badge variant="outline" className="text-xs shrink-0">
-                      {rec.impact} impact
+                      {rec.impact === 'high' ? t('high_impact') : rec.impact === 'medium' ? t('medium_impact') : t('low_impact')}
                     </Badge>
                   </div>
                 ))}
@@ -358,7 +358,7 @@ export default function Dashboard() {
 
                 <Link to={createPageUrl("AIAssistant")}>
                   <Button variant="outline" className="w-full mt-4 text-sm md:text-base">
-                    Get More AI Insights <ArrowRight className="w-4 h-4 ml-2" />
+                    {t('get_more_ai_insights')} <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </Link>
               </div>
@@ -370,44 +370,44 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 md:mt-8">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200/50">
             <CardContent className="p-4">
-              <div className="text-sm text-blue-600 font-medium">Sales Orders</div>
+              <div className="text-sm text-blue-600 font-medium">{t('sales_orders')}</div>
               <div className="text-2xl font-bold text-blue-900">{salesOrders.length}</div>
               <div className="text-xs text-blue-600/70 mt-1">
-                {salesOrders.filter(o => o.status === 'confirmed').length} confirmed
+                {salesOrders.filter(o => o.status === 'confirmed').length} {t('confirmed')}
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-green-200/50">
             <CardContent className="p-4">
-              <div className="text-sm text-green-600 font-medium">Active Projects</div>
+              <div className="text-sm text-green-600 font-medium">{t('active_projects')}</div>
               <div className="text-2xl font-bold text-green-900">
                 {projects.filter(p => p.status === 'active').length}
               </div>
               <div className="text-xs text-green-600/70 mt-1">
-                of {projects.length} total
+                {projects.length} {t('total')}
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200/50">
             <CardContent className="p-4">
-              <div className="text-sm text-purple-600 font-medium">Employees</div>
+              <div className="text-sm text-purple-600 font-medium">{t('employees')}</div>
               <div className="text-2xl font-bold text-purple-900">{employees.length}</div>
               <div className="text-xs text-purple-600/70 mt-1">
-                {hrAnalysis.metrics?.highRiskCount || 0} at risk
+                {hrAnalysis.metrics?.highRiskCount || 0} {t('at_risk')}
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-200/50">
             <CardContent className="p-4">
-              <div className="text-sm text-orange-600 font-medium">Pipeline</div>
+              <div className="text-sm text-orange-600 font-medium">{t('pipeline')}</div>
               <div className="text-2xl font-bold text-orange-900">
                 ${opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0).toLocaleString()}
               </div>
               <div className="text-xs text-orange-600/70 mt-1">
-                {opportunities.length} opportunities
+                {opportunities.length} {t('opportunities')}
               </div>
             </CardContent>
           </Card>

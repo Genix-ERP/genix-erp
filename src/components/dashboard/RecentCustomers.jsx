@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Users, ArrowRight } from "lucide-react";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 const statusColors = {
   prospect: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -14,12 +16,15 @@ const statusColors = {
 };
 
 export default function RecentCustomers({ customers }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   return (
     <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5 text-[var(--genix-blue)]" />
-          Recent Customers
+          {t('recent_customers')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -52,16 +57,16 @@ export default function RecentCustomers({ customers }) {
             ))}
             <Link to={createPageUrl("Customers")}>
               <Button variant="outline" className="w-full mt-4">
-                View All Customers <ArrowRight className="w-4 h-4 ml-2" />
+                {t('view_all')} <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
           </div>
         ) : (
           <div className="text-center py-8 text-slate-500">
             <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
-            <p>No customers yet</p>
+            <p>{t('no_customers_yet')}</p>
             <Link to={createPageUrl("Customers")}>
-              <Button className="mt-4">Add First Customer</Button>
+              <Button className="mt-4">{t('add_first_customer')}</Button>
             </Link>
           </div>
         )}

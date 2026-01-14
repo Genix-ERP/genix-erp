@@ -260,8 +260,8 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl">
         <CardContent className="p-12 text-center">
           <Target className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-          <h3 className="text-xl font-semibold text-slate-600 mb-2">No Opportunities Yet</h3>
-          <p className="text-slate-500">Create opportunities to see your sales pipeline</p>
+          <h3 className="text-xl font-semibold text-slate-600 mb-2">{t('no_opportunities')}</h3>
+          <p className="text-slate-500">{t('create_opportunities')}</p>
         </CardContent>
       </Card>
     );

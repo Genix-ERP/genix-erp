@@ -475,7 +475,7 @@ export function InventoryProvider({ children }) {
     setError(null);
 
     try {
-      const isAvailable = await checkBackendAvailable();
+      const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
 
       if (isAvailable) {

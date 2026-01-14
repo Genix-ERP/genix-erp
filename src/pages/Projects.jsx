@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { analyzeProjects } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 // Default statuses for Kanban
 const DEFAULT_STATUSES = [
@@ -20,6 +22,8 @@ const DEFAULT_STATUSES = [
 ];
 
 export default function Projects() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { projects, createProject, updateProject, isLoading } = useModules();
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,7 +176,7 @@ export default function Projects() {
     // Don't remove if there are projects with this status
     const hasProjects = projects.some(p => p.status === statusId);
     if (hasProjects) {
-      alert('Cannot remove status that has projects assigned to it.');
+      alert(t('cannot_remove_status'));
       return;
     }
     setCustomStatuses(customStatuses.filter(s => s.id !== statusId));
@@ -233,7 +237,7 @@ export default function Projects() {
           </div>
           <div className="flex items-center gap-2">
             <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>
-            <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title="Edit Project">
+            <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title={t('edit_project')}>
               <Edit2 className="w-4 h-4" />
             </Button>
           </div>
@@ -242,7 +246,7 @@ export default function Projects() {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-slate-600">Progress</span>
+            <span className="text-slate-600">{t('progress')}</span>
             <span className="font-semibold">{project.progress_percentage || 0}%</span>
           </div>
           <Progress value={project.progress_percentage || 0} className="h-2" />
@@ -250,11 +254,11 @@ export default function Projects() {
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-slate-500 mb-1">Budget</p>
+            <p className="text-slate-500 mb-1">{t('budget')}</p>
             <p className="font-semibold">${(project.budget || 0).toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-slate-500 mb-1">Spent</p>
+            <p className="text-slate-500 mb-1">{t('spent')}</p>
             <p className="font-semibold">${(project.actual_cost || 0).toLocaleString()}</p>
           </div>
         </div>
@@ -262,7 +266,7 @@ export default function Projects() {
         <div className="flex items-center gap-2">
           {project.priority && (
             <Badge className={getPriorityColor(project.priority)} variant="outline">
-              {project.priority}
+              {t(project.priority)}
             </Badge>
           )}
           <Badge variant="outline" className="text-xs">
@@ -298,7 +302,7 @@ export default function Projects() {
           ))}
           {columnProjects.length === 0 && (
             <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-300 rounded-lg">
-              Drop projects here
+              {t('drop_projects_here')}
             </div>
           )}
         </div>
@@ -314,13 +318,13 @@ export default function Projects() {
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <Briefcase className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Project Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('project_management')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered')}
             </Badge>
           </div>
-          <p className="text-white/90">Plan, track, and deliver projects on time and within budget</p>
+          <p className="text-white/90">{t('project_management_subtitle')}</p>
         </div>
 
         {/* Metrics */}
@@ -333,7 +337,7 @@ export default function Projects() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.totalProjects}</p>
-              <p className="text-sm text-slate-600">Total Projects</p>
+              <p className="text-sm text-slate-600">{t('total_projects')}</p>
             </CardContent>
           </Card>
 
@@ -345,7 +349,7 @@ export default function Projects() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.activeProjects}</p>
-              <p className="text-sm text-slate-600">Active Projects</p>
+              <p className="text-sm text-slate-600">{t('active_projects')}</p>
             </CardContent>
           </Card>
 
@@ -357,7 +361,7 @@ export default function Projects() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">${metrics.totalBudget.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Total Budget</p>
+              <p className="text-sm text-slate-600">{t('total_budget')}</p>
             </CardContent>
           </Card>
 
@@ -369,7 +373,7 @@ export default function Projects() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-slate-900">{metrics.avgProgress}%</p>
-              <p className="text-sm text-slate-600">Avg. Progress</p>
+              <p className="text-sm text-slate-600">{t('avg_progress')}</p>
             </CardContent>
           </Card>
         </div>
@@ -380,8 +384,8 @@ export default function Projects() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-blue-600" />
-                AI Project Insights
-                <Badge className="bg-blue-100 text-blue-700 text-xs">Live</Badge>
+                {t('ai_project_insights')}
+                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -392,7 +396,7 @@ export default function Projects() {
                       <DollarSign className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Total Spent</p>
+                      <p className="text-xs text-slate-500">{t('total_spent')}</p>
                       <p className="text-lg font-bold text-slate-900">${(projectAnalysis.metrics?.totalSpent || 0).toLocaleString()}</p>
                     </div>
                   </div>
@@ -425,7 +429,7 @@ export default function Projects() {
                   <div className="flex items-start gap-3">
                     <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="font-medium text-slate-900 text-sm mb-2">AI Recommendations</h4>
+                      <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations')}</h4>
                       <div className="flex flex-wrap gap-2">
                         {projectAnalysis.recommendations.map((rec, index) => (
                           <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
@@ -448,7 +452,7 @@ export default function Projects() {
         <Card className="bg-white/80 backdrop-blur-sm">
           <CardHeader className="border-b">
             <div className="flex items-center justify-between flex-wrap gap-4">
-              <CardTitle>Projects</CardTitle>
+              <CardTitle>{t('projects')}</CardTitle>
               <div className="flex items-center gap-2">
                 {/* View Toggle */}
                 <div className="flex items-center bg-slate-100 rounded-lg p-1">
@@ -458,7 +462,7 @@ export default function Projects() {
                     onClick={() => setViewMode('grid')}
                     className="h-8"
                   >
-                    <LayoutGrid className="w-4 h-4 mr-1" /> Grid
+                    <LayoutGrid className="w-4 h-4 mr-1" /> {t('grid')}
                   </Button>
                   <Button
                     size="sm"
@@ -466,17 +470,17 @@ export default function Projects() {
                     onClick={() => setViewMode('kanban')}
                     className="h-8"
                   >
-                    <Columns className="w-4 h-4 mr-1" /> Kanban
+                    <Columns className="w-4 h-4 mr-1" /> {t('kanban')}
                   </Button>
                 </div>
 
                 {/* Status Settings */}
                 <Button variant="outline" size="sm" onClick={() => setShowStatusModal(true)}>
-                  <Settings className="w-4 h-4 mr-1" /> Statuses
+                  <Settings className="w-4 h-4 mr-1" /> {t('statuses')}
                 </Button>
 
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600">
-                  <Plus className="w-4 h-4 mr-2" /> New Project
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_project')}
                 </Button>
               </div>
             </div>
@@ -484,7 +488,7 @@ export default function Projects() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search projects..."
+                  placeholder={t('search_projects')}
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -496,7 +500,7 @@ export default function Projects() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
                     {customStatuses.map(status => (
                       <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
                     ))}
@@ -513,8 +517,8 @@ export default function Projects() {
             ) : filteredProjects.length === 0 && viewMode === 'grid' ? (
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No projects yet</p>
-                <Button onClick={() => setShowCreateModal(true)} className="mt-4">Create First Project</Button>
+                <p className="text-slate-500">{t('no_projects_yet')}</p>
+                <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_project')}</Button>
               </div>
             ) : viewMode === 'kanban' ? (
               /* Kanban View */
@@ -540,23 +544,23 @@ export default function Projects() {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create New Project</DialogTitle>
+              <DialogTitle>{t('create_new_project')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Project Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('project_name')} *</label>
                   <Input
-                    placeholder="Project name"
+                    placeholder={t('project_name')}
                     value={newProject.project_name}
                     onChange={(e) => setNewProject({...newProject, project_name: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Project Code</label>
+                  <label className="text-sm font-medium mb-1 block">{t('project_code')}</label>
                   <Input
-                    placeholder="Auto-generated"
+                    placeholder={t('auto_generated')}
                     value={newProject.project_code}
                     onChange={(e) => setNewProject({...newProject, project_code: e.target.value})}
                   />
@@ -564,9 +568,9 @@ export default function Projects() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Client Name *</label>
+                <label className="text-sm font-medium mb-1 block">{t('client_name')} *</label>
                 <Input
-                  placeholder="Client name"
+                  placeholder={t('client_name')}
                   value={newProject.client_name}
                   onChange={(e) => setNewProject({...newProject, client_name: e.target.value})}
                   required
@@ -575,7 +579,7 @@ export default function Projects() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Start Date *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('start_date')} *</label>
                   <Input
                     type="date"
                     value={newProject.start_date}
@@ -584,7 +588,7 @@ export default function Projects() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">End Date</label>
+                  <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
                   <Input
                     type="date"
                     value={newProject.end_date}
@@ -595,7 +599,7 @@ export default function Projects() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Budget *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('budget')} *</label>
                   <Input
                     type="number"
                     placeholder="0.00"
@@ -605,29 +609,29 @@ export default function Projects() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Billing Type</label>
+                  <label className="text-sm font-medium mb-1 block">{t('billing_type')}</label>
                   <Select value={newProject.billing_type} onValueChange={(value) => setNewProject({...newProject, billing_type: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fixed_price">Fixed Price</SelectItem>
-                      <SelectItem value="time_material">Time & Material</SelectItem>
-                      <SelectItem value="milestone">Milestone</SelectItem>
+                      <SelectItem value="fixed_price">{t('fixed_price')}</SelectItem>
+                      <SelectItem value="time_material">{t('time_material')}</SelectItem>
+                      <SelectItem value="milestone">{t('milestone')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Priority</label>
+                  <label className="text-sm font-medium mb-1 block">{t('priority')}</label>
                   <Select value={newProject.priority} onValueChange={(value) => setNewProject({...newProject, priority: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="critical">Critical</SelectItem>
+                      <SelectItem value="low">{t('low')}</SelectItem>
+                      <SelectItem value="medium">{t('medium')}</SelectItem>
+                      <SelectItem value="high">{t('high')}</SelectItem>
+                      <SelectItem value="critical">{t('critical')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -635,14 +639,14 @@ export default function Projects() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Cancel
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateProject}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600"
                   disabled={!newProject.project_name || !newProject.client_name || isSubmitting}
                 >
-                  {isSubmitting ? 'Creating...' : 'Create Project'}
+                  {isSubmitting ? t('creating') : t('create_project')}
                 </Button>
               </div>
             </div>
@@ -653,20 +657,20 @@ export default function Projects() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Project</DialogTitle>
+              <DialogTitle>{t('edit_project')}</DialogTitle>
             </DialogHeader>
             {editProject && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Project Name *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('project_name')} *</label>
                     <Input
                       value={editProject.project_name}
                       onChange={(e) => setEditProject({...editProject, project_name: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Project Code</label>
+                    <label className="text-sm font-medium mb-1 block">{t('project_code')}</label>
                     <Input
                       value={editProject.project_code}
                       onChange={(e) => setEditProject({...editProject, project_code: e.target.value})}
@@ -675,7 +679,7 @@ export default function Projects() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Client Name *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('client_name')} *</label>
                   <Input
                     value={editProject.client_name}
                     onChange={(e) => setEditProject({...editProject, client_name: e.target.value})}
@@ -684,7 +688,7 @@ export default function Projects() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Start Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('start_date')}</label>
                     <Input
                       type="date"
                       value={editProject.start_date?.split('T')[0] || ''}
@@ -692,7 +696,7 @@ export default function Projects() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">End Date</label>
+                    <label className="text-sm font-medium mb-1 block">{t('end_date')}</label>
                     <Input
                       type="date"
                       value={editProject.end_date?.split('T')[0] || ''}
@@ -703,7 +707,7 @@ export default function Projects() {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Budget</label>
+                    <label className="text-sm font-medium mb-1 block">{t('budget')}</label>
                     <Input
                       type="number"
                       value={editProject.budget}
@@ -711,29 +715,29 @@ export default function Projects() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Billing Type</label>
+                    <label className="text-sm font-medium mb-1 block">{t('billing_type')}</label>
                     <Select value={editProject.billing_type || 'time_material'} onValueChange={(value) => setEditProject({...editProject, billing_type: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="fixed_price">Fixed Price</SelectItem>
-                        <SelectItem value="time_material">Time & Material</SelectItem>
-                        <SelectItem value="milestone">Milestone</SelectItem>
+                        <SelectItem value="fixed_price">{t('fixed_price')}</SelectItem>
+                        <SelectItem value="time_material">{t('time_material')}</SelectItem>
+                        <SelectItem value="milestone">{t('milestone')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Priority</label>
+                    <label className="text-sm font-medium mb-1 block">{t('priority')}</label>
                     <Select value={editProject.priority || 'medium'} onValueChange={(value) => setEditProject({...editProject, priority: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
+                        <SelectItem value="low">{t('low')}</SelectItem>
+                        <SelectItem value="medium">{t('medium')}</SelectItem>
+                        <SelectItem value="high">{t('high')}</SelectItem>
+                        <SelectItem value="critical">{t('critical')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -741,7 +745,7 @@ export default function Projects() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Status</label>
+                    <label className="text-sm font-medium mb-1 block">{t('status')}</label>
                     <Select value={editProject.status || 'planning'} onValueChange={(value) => setEditProject({...editProject, status: value})}>
                       <SelectTrigger>
                         <SelectValue />
@@ -754,7 +758,7 @@ export default function Projects() {
                     </Select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Progress (%)</label>
+                    <label className="text-sm font-medium mb-1 block">{t('progress_percent')}</label>
                     <Input
                       type="number"
                       min="0"
@@ -767,14 +771,14 @@ export default function Projects() {
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditProject(null); }} className="flex-1">
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button
                     onClick={handleUpdateProject}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600"
                     disabled={!editProject.project_name || !editProject.client_name || isSubmitting}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isSubmitting ? t('saving') : t('save_changes')}
                   </Button>
                 </div>
               </div>
@@ -786,15 +790,15 @@ export default function Projects() {
         <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Manage Project Statuses</DialogTitle>
+              <DialogTitle>{t('manage_project_statuses')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {/* Add New Status */}
               <div className="space-y-3 p-4 bg-slate-50 rounded-lg">
-                <h4 className="text-sm font-medium">Add New Status</h4>
+                <h4 className="text-sm font-medium">{t('add_new_status')}</h4>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Status name"
+                    placeholder={t('status_name')}
                     value={newStatus.label}
                     onChange={(e) => setNewStatus({...newStatus, label: e.target.value})}
                     className="flex-1"
@@ -822,14 +826,14 @@ export default function Projects() {
 
               {/* Existing Statuses */}
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">Current Statuses</h4>
+                <h4 className="text-sm font-medium">{t('current_statuses')}</h4>
                 {customStatuses.map((status, index) => (
                   <div key={status.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
                     <div className="flex items-center gap-3">
                       <GripVertical className="w-4 h-4 text-slate-400" />
                       <Badge className={status.color}>{status.label}</Badge>
                       <span className="text-xs text-slate-500">
-                        ({projects.filter(p => p.status === status.id).length} projects)
+                        ({projects.filter(p => p.status === status.id).length} {t('projects')})
                       </span>
                     </div>
                     <Button
@@ -846,7 +850,7 @@ export default function Projects() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button onClick={() => setShowStatusModal(false)}>Done</Button>
+                <Button onClick={() => setShowStatusModal(false)}>{t('done')}</Button>
               </div>
             </div>
           </DialogContent>

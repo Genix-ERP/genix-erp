@@ -109,6 +109,7 @@ function PagesContent() {
                                 <Route path="/Financials" element={<Financials />} />
                                 <Route path="/Notifications" element={<Notifications />} />
                                 <Route path="/AdminPanel" element={<AdminPanel />} />
+                                <Route path="/adminpanel" element={<AdminPanel />} />
                                 <Route path="/Manufacturing" element={<Manufacturing />} />
                                 <Route path="/Procurement" element={<Procurement />} />
                                 <Route path="/Projects" element={<Projects />} />

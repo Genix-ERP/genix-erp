@@ -23,7 +23,7 @@ export default function Settings() {
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   const handleLogout = async () => {
-    if (confirm('Are you sure you want to logout?')) {
+    if (confirm(t('logout_confirm'))) {
       setIsLoggingOut(true);
       logout();
     }
@@ -45,7 +45,7 @@ export default function Settings() {
             </TabsTrigger>
             <TabsTrigger value="subscription">
               <Crown className="w-4 h-4 mr-2" />
-              Obuna
+              {t('subscription')}
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="w-4 h-4 mr-2" />
@@ -53,7 +53,7 @@ export default function Settings() {
             </TabsTrigger>
             <TabsTrigger value="security">
               <Lock className="w-4 h-4 mr-2" />
-              Security
+              {t('security')}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="profile" className="mt-6">
@@ -75,14 +75,14 @@ export default function Settings() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <LogOut className="w-5 h-5 text-red-600" />
-              Logout
+              {t('logout')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-600 mb-4">
-              Sign out of your account and return to the login page.
+              {t('logout_description')}
             </p>
-            <Button 
+            <Button
               onClick={handleLogout}
               disabled={isLoggingOut}
               variant="destructive"
@@ -91,12 +91,12 @@ export default function Settings() {
               {isLoggingOut ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Logging out...
+                  {t('logging_out')}
                 </>
               ) : (
                 <>
                   <LogOut className="w-4 h-4 mr-2" />
-                  Logout
+                  {t('logout')}
                 </>
               )}
             </Button>
