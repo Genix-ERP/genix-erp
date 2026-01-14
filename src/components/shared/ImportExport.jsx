@@ -42,6 +42,8 @@ import {
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 // Export formats
 export const EXPORT_FORMATS = {
@@ -170,9 +172,11 @@ export function ImportModal({
   onClose,
   onImport,
   columns = [],
-  entityName = "Ma'lumotlar",
+  entityName = "Data",
   templateColumns = null,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [parsedData, setParsedData] = useState(null);
@@ -205,7 +209,7 @@ export function ImportModal({
       setMapping(autoMapping);
       setStep(2);
     } catch (error) {
-      setErrors(["Faylni o'qishda xatolik: " + error.message]);
+      setErrors([t('file_read_error') + ": " + error.message]);
     } finally {
       setIsProcessing(false);
     }
@@ -222,7 +226,7 @@ export function ImportModal({
         )?.[0];
         if (mappedHeader && !row[mappedHeader]) {
           validationErrors.push(
-            `Qator ${index + 2}: "${field.label}" maydoni bo'sh`
+            `${t('row')} ${index + 2}: "${field.label}" ${t('field_is_empty')}`
           );
         }
       });
@@ -255,7 +259,7 @@ export function ImportModal({
       await onImport(transformedData);
       handleClose();
     } catch (error) {
-      setErrors(["Import xatolik: " + error.message]);
+      setErrors([t('import_error') + ": " + error.message]);
     } finally {
       setIsProcessing(false);
     }
@@ -285,7 +289,7 @@ export function ImportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
-            {entityName} import qilish
+            {entityName} {t('import')}
           </DialogTitle>
         </DialogHeader>
 
@@ -304,7 +308,7 @@ export function ImportModal({
               >
                 1
               </div>
-              <span className="text-sm font-medium">Fayl tanlash</span>
+              <span className="text-sm font-medium">{t('select_file')}</span>
             </div>
             <ArrowRight className="w-4 h-4 text-slate-400" />
             <div
@@ -319,7 +323,7 @@ export function ImportModal({
               >
                 2
               </div>
-              <span className="text-sm font-medium">Ustunlarni moslash</span>
+              <span className="text-sm font-medium">{t('map_columns')}</span>
             </div>
             <ArrowRight className="w-4 h-4 text-slate-400" />
             <div
@@ -334,7 +338,7 @@ export function ImportModal({
               >
                 3
               </div>
-              <span className="text-sm font-medium">Import</span>
+              <span className="text-sm font-medium">{t('import')}</span>
             </div>
           </div>
 
@@ -346,9 +350,9 @@ export function ImportModal({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-lg font-medium">Excel yoki CSV fayl tanlang</p>
+                <p className="text-lg font-medium">{t('select_excel_csv_file')}</p>
                 <p className="text-sm text-slate-500 mt-1">
-                  .xlsx, .xls, .csv formatlar qo'llab-quvvatlanadi
+                  {t('supported_formats')}
                 </p>
               </div>
 
@@ -366,7 +370,7 @@ export function ImportModal({
               <div className="flex justify-center">
                 <Button variant="outline" onClick={downloadTemplate}>
                   <Download className="w-4 h-4 mr-2" />
-                  Shablon yuklab olish
+                  {t('download_template')}
                 </Button>
               </div>
             </div>
@@ -377,8 +381,7 @@ export function ImportModal({
             <div className="space-y-4">
               <div className="p-3 bg-slate-50 rounded-lg">
                 <p className="text-sm">
-                  <strong>{file?.name}</strong> - {parsedData.rows.length} qator
-                  topildi
+                  <strong>{file?.name}</strong> - {parsedData.rows.length} {t('rows_found')}
                 </p>
               </div>
 
@@ -386,12 +389,12 @@ export function ImportModal({
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Fayl ustuni</TableHead>
+                      <TableHead>{t('file_column')}</TableHead>
                       <TableHead>
                         <ArrowRight className="w-4 h-4" />
                       </TableHead>
-                      <TableHead>Tizim maydoni</TableHead>
-                      <TableHead>Namuna</TableHead>
+                      <TableHead>{t('system_field')}</TableHead>
+                      <TableHead>{t('sample')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -409,10 +412,10 @@ export function ImportModal({
                             }
                           >
                             <SelectTrigger className="w-48">
-                              <SelectValue placeholder="Tanlang" />
+                              <SelectValue placeholder={t('select')} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="skip">O'tkazib yuborish</SelectItem>
+                              <SelectItem value="skip">{t('skip')}</SelectItem>
                               {columns.map((col) => (
                                 <SelectItem key={col.key} value={col.key}>
                                   {col.label}
@@ -436,7 +439,7 @@ export function ImportModal({
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                   <div className="flex items-center gap-2 text-red-700 mb-2">
                     <AlertCircle className="w-4 h-4" />
-                    <span className="font-medium">Xatoliklar:</span>
+                    <span className="font-medium">{t('errors')}:</span>
                   </div>
                   <ul className="text-sm text-red-600 space-y-1">
                     {errors.map((err, i) => (
@@ -448,7 +451,7 @@ export function ImportModal({
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(1)}>
-                  Orqaga
+                  {t('back')}
                 </Button>
                 <Button
                   onClick={handleImport}
@@ -460,12 +463,12 @@ export function ImportModal({
                   {isProcessing ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Import qilinmoqda...
+                      {t('importing')}...
                     </>
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      Import qilish ({parsedData.rows.length} qator)
+                      {t('import')} ({parsedData.rows.length} {t('rows')})
                     </>
                   )}
                 </Button>
@@ -484,9 +487,11 @@ export function ExportModal({
   onClose,
   data = [],
   columns = [],
-  entityName = "Ma'lumotlar",
+  entityName = "Data",
   title = "Report",
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [format, setFormat] = useState("xlsx");
   const [selectedColumns, setSelectedColumns] = useState(
     columns.map((col) => col.key)
@@ -537,14 +542,14 @@ export function ExportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="w-5 h-5" />
-            {entityName} eksport qilish
+            {entityName} {t('export')}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Format Selection */}
           <div className="space-y-2">
-            <Label>Format</Label>
+            <Label>{t('format')}</Label>
             <div className="grid grid-cols-4 gap-2">
               {Object.entries(EXPORT_FORMATS).map(([key, config]) => {
                 const Icon = config.icon;
@@ -569,7 +574,7 @@ export function ExportModal({
           {/* Column Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Ustunlar</Label>
+              <Label>{t('columns')}</Label>
               <Button
                 variant="ghost"
                 size="sm"
@@ -582,8 +587,8 @@ export function ExportModal({
                 }
               >
                 {selectedColumns.length === columns.length
-                  ? "Barchasini bekor qilish"
-                  : "Barchasini tanlash"}
+                  ? t('deselect_all')
+                  : t('select_all')}
               </Button>
             </div>
             <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
@@ -604,13 +609,13 @@ export function ExportModal({
 
           {/* Summary */}
           <div className="p-3 bg-slate-50 rounded-lg text-sm">
-            <strong>{data.length}</strong> qator,{" "}
-            <strong>{selectedColumns.length}</strong> ustun eksport qilinadi
+            <strong>{data.length}</strong> {t('rows')},{" "}
+            <strong>{selectedColumns.length}</strong> {t('columns_to_export')}
           </div>
 
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={onClose}>
-              Bekor qilish
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleExport}
@@ -619,12 +624,12 @@ export function ExportModal({
               {isExporting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Eksport qilinmoqda...
+                  {t('exporting')}...
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4 mr-2" />
-                  Eksport qilish
+                  {t('export')}
                 </>
               )}
             </Button>

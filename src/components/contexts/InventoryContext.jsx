@@ -836,10 +836,13 @@ export function InventoryProvider({ children }) {
       id: `mov_${Date.now()}`,
       product_id: adjustmentData.product_id,
       warehouse_id: adjustmentData.warehouse_id,
-      movement_type: 'adjustment',
+      movement_type: adjustmentData.movement_type || 'adjustment',
       quantity: adjustmentData.quantity,
+      unit_cost: adjustmentData.unit_cost || 0,
+      total_value: (adjustmentData.unit_cost || 0) * Math.abs(adjustmentData.quantity),
       reference: adjustmentData.reference || `ADJ-${Date.now()}`,
       notes: adjustmentData.reason,
+      supplier_or_customer: adjustmentData.supplier_or_customer,
       created_at: new Date().toISOString()
     };
     const updatedMovements = [...stockMovements, movement];
@@ -1002,6 +1005,14 @@ export function InventoryProvider({ children }) {
     setLots(updated);
   }, [lots, activeCompany]);
 
+  const deleteLot = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
+    const updated = lots.filter(l => l.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setLots(updated);
+  }, [lots, activeCompany]);
+
   const consumeLot = useCallback(async (lotId, quantity) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
@@ -1041,7 +1052,15 @@ export function InventoryProvider({ children }) {
     const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
 
     // Get current inventory for the warehouse
-    const warehouseInventory = inventory.filter(i => i.warehouse_id === countData.warehouse_id);
+    let warehouseInventory = inventory.filter(i => i.warehouse_id === countData.warehouse_id);
+
+    // If specific products are selected, filter to only those
+    if (countData.selected_products && countData.selected_products.length > 0) {
+      warehouseInventory = warehouseInventory.filter(i =>
+        countData.selected_products.includes(i.product_id)
+      );
+    }
+
     const lines = warehouseInventory.map(inv => ({
       product_id: inv.product_id,
       system_qty: inv.quantity,
@@ -1201,6 +1220,7 @@ export function InventoryProvider({ children }) {
       lots,
       createLot,
       updateLot,
+      deleteLot,
       consumeLot,
       getProductLots,
       getExpiringLots,
