@@ -374,7 +374,7 @@ export default function Inventory() {
                 </div>
                 <div className="flex gap-3">
                   <Textarea
-                    placeholder="Ask me anything about your inventory... e.g., 'Show me low stock items' or 'What's my total inventory value?'"
+                    placeholder={t('inventory_ai_placeholder')}
                     value={aiQuery}
                     onChange={(e) => setAiQuery(e.target.value)}
                     className="flex-1"
@@ -382,7 +382,7 @@ export default function Inventory() {
                   />
                   <Button onClick={handleAIQuery} className="px-6">
                     <MessageSquare className="w-4 h-4 mr-2" />
-                    Ask AI
+                    {t('ask_ai')}
                   </Button>
                 </div>
                 {aiResponse && (

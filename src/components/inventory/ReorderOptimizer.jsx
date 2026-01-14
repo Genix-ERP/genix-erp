@@ -144,7 +144,7 @@ export default function ReorderOptimizer({ items, movements }) {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-              <CardTitle>AI Reorder Optimization</CardTitle>
+              <CardTitle>{t('ai_reorder_optimization')}</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -152,7 +152,7 @@ export default function ReorderOptimizer({ items, movements }) {
             
             {optimizationInsights.priority_actions && (
               <div>
-                <h4 className="font-semibold mb-2">Priority Actions</h4>
+                <h4 className="font-semibold mb-2">{t('priority_actions')}</h4>
                 <div className="space-y-2">
                   {optimizationInsights.priority_actions.map((action, index) => (
                     <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border">
@@ -173,7 +173,7 @@ export default function ReorderOptimizer({ items, movements }) {
               <div className="p-3 bg-green-50 rounded-lg">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp className="w-4 h-4 text-green-600" />
-                  <span className="font-semibold text-green-800">Cost Savings Potential</span>
+                  <span className="font-semibold text-green-800">{t('cost_savings_potential')}</span>
                 </div>
                 <p className="text-sm text-green-700">{optimizationInsights.cost_savings_potential}</p>
               </div>
@@ -215,13 +215,13 @@ export default function ReorderOptimizer({ items, movements }) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Current Stock</TableHead>
-                    <TableHead>Days Left</TableHead>
-                    <TableHead>Velocity</TableHead>
-                    <TableHead>Risk Level</TableHead>
-                    <TableHead>Recommended Order</TableHead>
-                    <TableHead>Action</TableHead>
+                    <TableHead>{t('item')}</TableHead>
+                    <TableHead>{t('current_stock')}</TableHead>
+                    <TableHead>{t('days_left')}</TableHead>
+                    <TableHead>{t('velocity')}</TableHead>
+                    <TableHead>{t('risk_level')}</TableHead>
+                    <TableHead>{t('recommended_order')}</TableHead>
+                    <TableHead>{t('action')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -245,7 +245,7 @@ export default function ReorderOptimizer({ items, movements }) {
                             <div className="flex items-center gap-1 mt-1">
                               <AlertTriangle className="w-3 h-3 text-orange-500" />
                               <span className="text-xs text-orange-600">
-                                Below {item.reorder_level}
+                                {t('below')} {item.reorder_level}
                               </span>
                             </div>
                           )}
@@ -253,37 +253,37 @@ export default function ReorderOptimizer({ items, movements }) {
                       </TableCell>
                       <TableCell>
                         <div className={`font-medium ${item.daysOfStock < 7 ? 'text-red-600' : item.daysOfStock < 14 ? 'text-yellow-600' : 'text-green-600'}`}>
-                          {item.daysOfStock < 999 ? `${item.daysOfStock.toFixed(1)} days` : '999+ days'}
+                          {item.daysOfStock < 999 ? `${item.daysOfStock.toFixed(1)} ${t('days')}` : `999+ ${t('days')}`}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <div>{item.calculatedVelocity.toFixed(1)}/day</div>
+                          <div>{item.calculatedVelocity.toFixed(1)}/{t('day')}</div>
                           <div className="text-slate-500">
-                            {(item.calculatedVelocity * 30).toFixed(0)}/month
+                            {(item.calculatedVelocity * 30).toFixed(0)}/{t('month')}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Badge className={getRiskColor(item.riskLevel)}>
-                          {item.riskLevel}
+                          {t(item.riskLevel)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{item.optimalOrderQty} units</div>
+                          <div className="font-medium">{item.optimalOrderQty} {t('units')}</div>
                           <div className="text-sm text-slate-500">
-                            ${(item.optimalOrderQty * item.unit_cost).toLocaleString()} value
+                            ${(item.optimalOrderQty * item.unit_cost).toLocaleString()} {t('value')}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button 
+                        <Button
                           size="sm"
                           variant={item.riskLevel === 'high' ? 'default' : 'outline'}
                           className={item.riskLevel === 'high' ? 'bg-red-600 hover:bg-red-700' : ''}
                         >
-                          {item.riskLevel === 'high' ? 'Order Now' : 'Schedule Order'}
+                          {item.riskLevel === 'high' ? t('order_now') : t('schedule_order')}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -294,9 +294,9 @@ export default function ReorderOptimizer({ items, movements }) {
           ) : (
             <div className="text-center py-12">
               <Target className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">All Stock Levels Optimal</h3>
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">{t('all_stock_levels_optimal')}</h3>
               <p className="text-slate-500">
-                No immediate reorder recommendations. Your inventory levels look healthy!
+                {t('no_immediate_reorder')}
               </p>
             </div>
           )}
