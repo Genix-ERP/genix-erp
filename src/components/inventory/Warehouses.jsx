@@ -26,6 +26,8 @@ export default function Warehouses() {
     updateWarehouse,
     deleteWarehouse,
     createWarehouseLocation,
+    updateWarehouseLocation,
+    deleteWarehouseLocation,
     getWarehouseInventory,
     isLoading
   } = useInventory();
@@ -38,7 +40,10 @@ export default function Warehouses() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showEditLocationModal, setShowEditLocationModal] = useState(false);
+  const [showDeleteLocationModal, setShowDeleteLocationModal] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -203,6 +208,48 @@ export default function Warehouses() {
       console.error('Error creating location:', error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleEditLocation = (warehouse, location) => {
+    setSelectedWarehouse(warehouse);
+    setSelectedLocation(location);
+    setLocationForm({
+      code: location.code || '',
+      name: location.name || '',
+      zone: location.zone || '',
+      is_active: location.is_active !== false
+    });
+    setShowEditLocationModal(true);
+  };
+
+  const handleUpdateLocation = () => {
+    setIsSaving(true);
+    try {
+      updateWarehouseLocation(selectedWarehouse.id, selectedLocation.id, locationForm);
+      resetLocationForm();
+      setSelectedLocation(null);
+      setShowEditLocationModal(false);
+    } catch (error) {
+      console.error('Error updating location:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteLocationClick = (warehouse, location) => {
+    setSelectedWarehouse(warehouse);
+    setSelectedLocation(location);
+    setShowDeleteLocationModal(true);
+  };
+
+  const handleDeleteLocation = () => {
+    try {
+      deleteWarehouseLocation(selectedWarehouse.id, selectedLocation.id);
+      setSelectedLocation(null);
+      setShowDeleteLocationModal(false);
+    } catch (error) {
+      console.error('Error deleting location:', error);
     }
   };
 
@@ -463,20 +510,40 @@ export default function Warehouses() {
                               {warehouse.locations.map(location => (
                                 <div
                                   key={location.id}
-                                  className="p-3 bg-white rounded-lg border border-slate-200 flex items-center justify-between"
+                                  className="p-3 bg-white rounded-lg border border-slate-200 flex items-center justify-between group"
                                 >
-                                  <div>
+                                  <div className="flex-1 min-w-0">
                                     <p className="font-medium text-slate-900">{location.name}</p>
                                     <p className="text-xs text-slate-500">
                                       {t('code')}: {location.code} {location.zone && `| ${t('zone')}: ${location.zone}`}
                                     </p>
                                   </div>
-                                  <Badge className={location.is_active
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-slate-100 text-slate-600'
-                                  }>
-                                    {location.is_active ? t('active') : t('inactive')}
-                                  </Badge>
+                                  <div className="flex items-center gap-2">
+                                    <Badge className={location.is_active
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-slate-100 text-slate-600'
+                                    }>
+                                      {location.is_active ? t('active') : t('inactive')}
+                                    </Badge>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleEditLocation(warehouse, location)}
+                                        className="h-7 w-7 p-0"
+                                      >
+                                        <Pencil className="w-3 h-3 text-slate-500" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteLocationClick(warehouse, location)}
+                                        className="h-7 w-7 p-0"
+                                      >
+                                        <Trash2 className="w-3 h-3 text-red-500" />
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -712,6 +779,119 @@ export default function Warehouses() {
                 disabled={isSaving || !locationForm.name || !locationForm.code}
               >
                 {isSaving ? t('saving') : t('add_location')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Location Modal */}
+      <Dialog open={showEditLocationModal} onOpenChange={setShowEditLocationModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />
+              {t('edit_location')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('edit_location_in')} {selectedWarehouse?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                <Input
+                  placeholder={t('location_code_placeholder')}
+                  value={locationForm.code}
+                  onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('zone')}</label>
+                <Input
+                  placeholder={t('zone_placeholder')}
+                  value={locationForm.zone}
+                  onChange={(e) => setLocationForm({...locationForm, zone: e.target.value})}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+              <Input
+                placeholder={t('location_name_placeholder')}
+                value={locationForm.name}
+                onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
+                required
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={locationForm.is_active}
+                onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}
+              />
+              <span className="text-sm text-slate-700">{t('active')}</span>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowEditLocationModal(false);
+                  resetLocationForm();
+                  setSelectedLocation(null);
+                }}
+                className="flex-1"
+                disabled={isSaving}
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleUpdateLocation}
+                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                disabled={isSaving || !locationForm.name || !locationForm.code}
+              >
+                {isSaving ? t('saving') : t('save_changes')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Location Confirmation Modal */}
+      <Dialog open={showDeleteLocationModal} onOpenChange={setShowDeleteLocationModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              {t('delete_location')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600 mb-4">
+              {t('delete_location_confirm')}{' '}
+              <span className="font-semibold text-slate-900">"{selectedLocation?.name}"</span>
+              {' '}{t('from')}{' '}
+              <span className="font-semibold text-slate-900">"{selectedWarehouse?.name}"</span>?
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteLocationModal(false);
+                  setSelectedLocation(null);
+                }}
+                className="flex-1"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleDeleteLocation}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('delete')}
               </Button>
             </div>
           </div>

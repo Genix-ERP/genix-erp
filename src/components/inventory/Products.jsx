@@ -36,6 +36,8 @@ export default function Products() {
     updateProduct,
     deleteProduct,
     createCategory,
+    updateCategory,
+    deleteCategory,
     isLoading
   } = useInventory();
 
@@ -51,9 +53,14 @@ export default function Products() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editCategoryName, setEditCategoryName] = useState('');
   const { addAuditLog } = useAuditTrail('products');
 
   // Export columns configuration
@@ -302,6 +309,38 @@ export default function Products() {
     setShowCategoryModal(false);
   };
 
+  const handleEditCategoryClick = (category) => {
+    setSelectedCategory(category);
+    setEditCategoryName(category.name);
+    setShowEditCategoryModal(true);
+  };
+
+  const handleUpdateCategory = () => {
+    if (!editCategoryName.trim() || !selectedCategory) return;
+
+    updateCategory(selectedCategory.id, {
+      ...selectedCategory,
+      name: editCategoryName.trim(),
+      code: editCategoryName.toUpperCase().replace(/\s+/g, '-').substring(0, 10)
+    });
+    setEditCategoryName('');
+    setSelectedCategory(null);
+    setShowEditCategoryModal(false);
+  };
+
+  const handleDeleteCategoryClick = (category) => {
+    setSelectedCategory(category);
+    setShowDeleteCategoryModal(true);
+  };
+
+  const handleDeleteCategory = () => {
+    if (!selectedCategory) return;
+
+    deleteCategory(selectedCategory.id);
+    setSelectedCategory(null);
+    setShowDeleteCategoryModal(false);
+  };
+
   const getTypeColor = (type) => {
     const colors = {
       product: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -420,19 +459,30 @@ export default function Products() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[150px] bg-slate-50">
-                  <SelectValue placeholder={t('category')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_categories')}</SelectItem>
-                  {categories.filter(c => !c.parent_id).map(category => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-1">
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-[150px] bg-slate-50">
+                    <SelectValue placeholder={t('category')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_categories')}</SelectItem>
+                    {categories.filter(c => !c.parent_id).map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowCategoryManageModal(true)}
+                  title={t('manage_categories')}
+                  className="h-10 w-10"
+                >
+                  <Tag className="w-4 h-4" />
+                </Button>
+              </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[130px] bg-slate-50">
                   <SelectValue placeholder={t('type')} />
@@ -1099,6 +1149,179 @@ export default function Products() {
               >
                 <Plus className="w-4 h-4 mr-2" />
                 {t('create')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Management Modal */}
+      <Dialog open={showCategoryManageModal} onOpenChange={setShowCategoryManageModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Tag className="w-5 h-5 text-[var(--genix-purple)]" />
+              {t('manage_categories')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('manage_categories_description')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {/* Add new category inline */}
+            <div className="flex gap-2">
+              <Input
+                placeholder={t('category_name_placeholder')}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleCreateCategory}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                disabled={!newCategoryName.trim()}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t('add')}
+              </Button>
+            </div>
+
+            {/* Categories list */}
+            <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
+              {categories.length === 0 ? (
+                <div className="p-4 text-center text-slate-500">
+                  {t('no_categories_yet')}
+                </div>
+              ) : (
+                categories.map(category => (
+                  <div
+                    key={category.id}
+                    className="p-3 flex items-center justify-between hover:bg-slate-50 group"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">{category.name}</p>
+                      <p className="text-xs text-slate-500">{t('code')}: {category.code}</p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditCategoryClick(category)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="w-4 h-4 text-slate-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteCategoryClick(category)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCategoryManageModal(false)}
+              >
+                {t('close')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Category Modal */}
+      <Dialog open={showEditCategoryModal} onOpenChange={setShowEditCategoryModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Tag className="w-5 h-5 text-[var(--genix-blue)]" />
+              {t('edit_category')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('category_name')} *
+              </label>
+              <Input
+                placeholder={t('category_name_placeholder')}
+                value={editCategoryName}
+                onChange={(e) => setEditCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUpdateCategory()}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowEditCategoryModal(false);
+                  setEditCategoryName('');
+                  setSelectedCategory(null);
+                }}
+                className="flex-1"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleUpdateCategory}
+                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                disabled={!editCategoryName.trim()}
+              >
+                {t('save_changes')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Category Confirmation Modal */}
+      <Dialog open={showDeleteCategoryModal} onOpenChange={setShowDeleteCategoryModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              {t('delete_category')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600 mb-4">
+              {t('delete_category_confirm')}{' '}
+              <span className="font-semibold text-slate-900">"{selectedCategory?.name}"</span>?
+            </p>
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-yellow-700">
+                  {t('delete_category_warning')}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteCategoryModal(false);
+                  setSelectedCategory(null);
+                }}
+                className="flex-1"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleDeleteCategory}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('delete')}
               </Button>
             </div>
           </div>

@@ -49,18 +49,31 @@ export default function COGSCalculator({ items, movements }) {
 
   const calculateCOGS = useCallback(() => {
     setIsCalculating(true);
-    
+
+    // Guard against empty/undefined items
+    if (!items || items.length === 0) {
+      setCogsCalculations([]);
+      setIsCalculating(false);
+      return;
+    }
+
     // Simulate COGS calculations for recent outbound movements
     const calculations = items.slice(0, 10).map((item) => {
       const sampleSaleQty = Math.floor(Math.random() * 50) + 10;
-      
-      const fifo = calculateFIFOCOGS(item, sampleSaleQty);
-      const wac = calculateWACCOGS(item, sampleSaleQty);
-      const lifo = calculateLIFOCOGS(item, sampleSaleQty);
+
+      // Use cost_price if unit_cost is not available (Products use cost_price)
+      const itemWithCost = {
+        ...item,
+        unit_cost: item.unit_cost || item.cost_price || 0
+      };
+
+      const fifo = calculateFIFOCOGS(itemWithCost, sampleSaleQty);
+      const wac = calculateWACCOGS(itemWithCost, sampleSaleQty);
+      const lifo = calculateLIFOCOGS(itemWithCost, sampleSaleQty);
 
       return {
         id: item.id,
-        sku: item.sku,
+        sku: item.sku || item.code,
         name: item.name,
         saleQuantity: sampleSaleQty,
         currentMethod: item.costing_method || 'fifo',

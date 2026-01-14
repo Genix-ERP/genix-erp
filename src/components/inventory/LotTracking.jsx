@@ -122,10 +122,10 @@ export default function LotTracking() {
   const getExpiryStatus = (expiryDate) => {
     if (!expiryDate) return null;
     const days = differenceInDays(new Date(expiryDate), new Date());
-    if (days < 0) return { status: 'expired', label: "Muddati o'tgan", color: 'bg-red-100 text-red-700' };
-    if (days <= 30) return { status: 'expiring', label: `${days} kun qoldi`, color: 'bg-orange-100 text-orange-700' };
-    if (days <= 90) return { status: 'soon', label: `${days} kun`, color: 'bg-yellow-100 text-yellow-700' };
-    return { status: 'ok', label: `${days} kun`, color: 'bg-green-100 text-green-700' };
+    if (days < 0) return { status: 'expired', label: t('expired'), color: 'bg-red-100 text-red-700' };
+    if (days <= 30) return { status: 'expiring', label: `${days} ${t('days_left')}`, color: 'bg-orange-100 text-orange-700' };
+    if (days <= 90) return { status: 'soon', label: `${days} ${t('days')}`, color: 'bg-yellow-100 text-yellow-700' };
+    return { status: 'ok', label: `${days} ${t('days')}`, color: 'bg-green-100 text-green-700' };
   };
 
   const toggleLotExpand = (lotId) => {
@@ -142,7 +142,7 @@ export default function LotTracking() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">Faol Partiyalar</p>
+                <p className="text-sm text-blue-600 font-medium">{t('active_lots')}</p>
                 <p className="text-2xl font-bold text-blue-800">{summary.totalLots}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
@@ -156,9 +156,9 @@ export default function LotTracking() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-orange-600 font-medium">Muddati Tugayotgan</p>
+                <p className="text-sm text-orange-600 font-medium">{t('expiring_soon')}</p>
                 <p className="text-2xl font-bold text-orange-800">{summary.expiringLots}</p>
-                <p className="text-xs text-orange-500">30 kun ichida</p>
+                <p className="text-xs text-orange-500">{t('within_30_days')}</p>
               </div>
               <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-orange-600" />
@@ -171,7 +171,7 @@ export default function LotTracking() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600 font-medium">Umumiy Qiymat</p>
+                <p className="text-sm text-green-600 font-medium">{t('total_value')}</p>
                 <p className="text-2xl font-bold text-green-800">{formatCurrency(summary.totalValue)}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
@@ -185,9 +185,9 @@ export default function LotTracking() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600 font-medium">Kam Qolgan</p>
+                <p className="text-sm text-red-600 font-medium">{t('low_stock')}</p>
                 <p className="text-2xl font-bold text-red-800">{summary.lowStockLots}</p>
-                <p className="text-xs text-red-500">&lt;20% qoldi</p>
+                <p className="text-xs text-red-500">{t('less_than_20_percent')}</p>
               </div>
               <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
                 <TrendingDown className="w-6 h-6 text-red-600" />
@@ -203,7 +203,7 @@ export default function LotTracking() {
           <CardHeader className="pb-2">
             <CardTitle className="text-orange-700 flex items-center gap-2 text-base">
               <AlertTriangle className="w-5 h-5" />
-              Muddati Tugayotgan Partiyalar
+              {t('expiring_lots')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -215,9 +215,9 @@ export default function LotTracking() {
                     <span className="font-medium">{lot.product?.name}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm text-slate-500">{lot.quantity} dona</span>
+                    <span className="text-sm text-slate-500">{lot.quantity} {t('units')}</span>
                     <Badge className={lot.daysUntilExpiry <= 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
-                      {lot.daysUntilExpiry <= 0 ? "Muddati o'tgan" : `${lot.daysUntilExpiry} kun qoldi`}
+                      {lot.daysUntilExpiry <= 0 ? t('expired') : `${lot.daysUntilExpiry} ${t('days_left')}`}
                     </Badge>
                   </div>
                 </div>
@@ -233,7 +233,7 @@ export default function LotTracking() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Partiya qidirish..."
+              placeholder={t('search_lots')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -241,20 +241,20 @@ export default function LotTracking() {
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Holat" />
+              <SelectValue placeholder={t('status')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Barchasi</SelectItem>
-              <SelectItem value="active">Faol</SelectItem>
-              <SelectItem value="depleted">Tugagan</SelectItem>
+              <SelectItem value="all">{t('all')}</SelectItem>
+              <SelectItem value="active">{t('active')}</SelectItem>
+              <SelectItem value="depleted">{t('depleted')}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={productFilter} onValueChange={setProductFilter}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Mahsulot" />
+              <SelectValue placeholder={t('product')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Barcha mahsulotlar</SelectItem>
+              <SelectItem value="all">{t('all_products')}</SelectItem>
               {products.filter(p => p.is_stockable).map(p => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
               ))}
@@ -267,7 +267,7 @@ export default function LotTracking() {
           className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Yangi Partiya
+          {t('new_lot')}
         </Button>
       </div>
 
@@ -278,14 +278,14 @@ export default function LotTracking() {
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead className="w-8"></TableHead>
-                <TableHead>Partiya №</TableHead>
-                <TableHead>Mahsulot</TableHead>
-                <TableHead>Ombor</TableHead>
-                <TableHead>Miqdor</TableHead>
-                <TableHead>Tan Narx</TableHead>
-                <TableHead>Qabul Qilingan</TableHead>
-                <TableHead>Muddati</TableHead>
-                <TableHead>Holat</TableHead>
+                <TableHead>{t('lot_number')}</TableHead>
+                <TableHead>{t('product')}</TableHead>
+                <TableHead>{t('warehouse')}</TableHead>
+                <TableHead>{t('quantity')}</TableHead>
+                <TableHead>{t('unit_cost')}</TableHead>
+                <TableHead>{t('received_date')}</TableHead>
+                <TableHead>{t('expiry')}</TableHead>
+                <TableHead>{t('status')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -307,13 +307,13 @@ export default function LotTracking() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Package className="w-4 h-4 text-slate-400" />
-                          {product?.name || 'Noma\'lum'}
+                          {product?.name || t('unknown')}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Warehouse className="w-4 h-4 text-slate-400" />
-                          {warehouse?.name || 'Noma\'lum'}
+                          {warehouse?.name || t('unknown')}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -333,7 +333,7 @@ export default function LotTracking() {
                       </TableCell>
                       <TableCell>
                         <Badge className={lot.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                          {lot.status === 'active' ? 'Faol' : 'Tugagan'}
+                          {lot.status === 'active' ? t('active') : t('depleted')}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -341,7 +341,7 @@ export default function LotTracking() {
                       <TableRow className="bg-slate-50">
                         <TableCell colSpan={9} className="py-3">
                           <div className="pl-8">
-                            <p className="text-sm font-medium text-slate-600 mb-2">Seriya Raqamlari:</p>
+                            <p className="text-sm font-medium text-slate-600 mb-2">{t('serial_numbers')}:</p>
                             <div className="flex flex-wrap gap-2">
                               {lot.serial_numbers.map((sn, idx) => (
                                 <Badge key={idx} variant="outline" className="font-mono">
@@ -360,7 +360,7 @@ export default function LotTracking() {
               {filteredLots.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-slate-500">
-                    Partiyalar mavjud emas
+                    {t('no_lots_found')}
                   </TableCell>
                 </TableRow>
               )}
@@ -373,13 +373,13 @@ export default function LotTracking() {
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Yangi Partiya Yaratish</DialogTitle>
-            <DialogDescription>Mahsulot partiyasi ma'lumotlarini kiriting</DialogDescription>
+            <DialogTitle>{t('create_new_lot')}</DialogTitle>
+            <DialogDescription>{t('enter_lot_details')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Partiya №</label>
+                <label className="text-sm font-medium">{t('lot_number')}</label>
                 <Input
                   value={newLot.lot_number}
                   onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
@@ -387,7 +387,7 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Qabul Qilingan Sana</label>
+                <label className="text-sm font-medium">{t('received_date')}</label>
                 <Input
                   type="date"
                   value={newLot.received_date}
@@ -397,13 +397,13 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">Mahsulot</label>
+              <label className="text-sm font-medium">{t('product')}</label>
               <Select
                 value={newLot.product_id}
                 onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Mahsulotni tanlang" />
+                  <SelectValue placeholder={t('select_product')} />
                 </SelectTrigger>
                 <SelectContent>
                   {products.filter(p => p.is_stockable).map(p => (
@@ -414,13 +414,13 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">Ombor</label>
+              <label className="text-sm font-medium">{t('warehouse')}</label>
               <Select
                 value={newLot.warehouse_id}
                 onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Omborni tanlang" />
+                  <SelectValue placeholder={t('select_warehouse')} />
                 </SelectTrigger>
                 <SelectContent>
                   {warehouses.map(w => (
@@ -432,7 +432,7 @@ export default function LotTracking() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Miqdor</label>
+                <label className="text-sm font-medium">{t('quantity')}</label>
                 <Input
                   type="number"
                   value={newLot.quantity}
@@ -441,7 +441,7 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Tan Narx</label>
+                <label className="text-sm font-medium">{t('unit_cost')}</label>
                 <Input
                   type="number"
                   value={newLot.unit_cost}
@@ -453,7 +453,7 @@ export default function LotTracking() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Ishlab Chiqarilgan Sana</label>
+                <label className="text-sm font-medium">{t('manufacture_date')}</label>
                 <Input
                   type="date"
                   value={newLot.manufacture_date}
@@ -461,7 +461,7 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Yaroqlilik Muddati</label>
+                <label className="text-sm font-medium">{t('expiry_date')}</label>
                 <Input
                   type="date"
                   value={newLot.expiry_date}
@@ -471,16 +471,16 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">Yetkazib Beruvchi</label>
+              <label className="text-sm font-medium">{t('supplier')}</label>
               <Input
                 value={newLot.supplier}
                 onChange={(e) => setNewLot({ ...newLot, supplier: e.target.value })}
-                placeholder="Yetkazib beruvchi nomi"
+                placeholder={t('supplier_name_placeholder')}
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium">Seriya Raqamlari (vergul bilan ajrating)</label>
+              <label className="text-sm font-medium">{t('serial_numbers_comma_separated')}</label>
               <Input
                 value={newLot.serial_numbers}
                 onChange={(e) => setNewLot({ ...newLot, serial_numbers: e.target.value })}
@@ -489,13 +489,13 @@ export default function LotTracking() {
             </div>
 
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleCreateLot}
                 disabled={isSaving || !newLot.product_id || !newLot.warehouse_id || !newLot.quantity}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? t('saving') : t('save')}
               </Button>
             </div>
           </div>
