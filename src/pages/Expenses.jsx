@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
+import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,22 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2 } from 'lucide-react';
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user } = useAuth();
   const { expenses, createExpense, updateExpense, isLoading } = useModules();
 
   // AI Analysis
-  const expenseAnalysis = useMemo(() => analyzeExpenses(expenses), [expenses]);
+  const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
   const [filteredClaims, setFilteredClaims] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -33,7 +36,7 @@ export default function Expenses() {
 
   const [newClaim, setNewClaim] = useState({
     claim_number: '',
-    employee_name: '',
+    employee_name: user?.full_name || '',
     expense_date: new Date().toISOString().split('T')[0],
     category: 'travel',
     amount: 0,
@@ -70,7 +73,7 @@ export default function Expenses() {
 
       setNewClaim({
         claim_number: '',
-        employee_name: '',
+        employee_name: user?.full_name || '',
         expense_date: new Date().toISOString().split('T')[0],
         category: 'travel',
         amount: 0,
@@ -125,6 +128,84 @@ export default function Expenses() {
     updateExpense(claimId, updates);
   };
 
+  const handleRecommendationClick = (recommendation) => {
+    // Generate proper prompt based on recommendation type and language
+    let prompt = '';
+
+    if (recommendation.action.includes('Set Category Budgets') || recommendation.action.includes('Toifa byudjetlarini belgilash') || recommendation.action.includes('Установка бюджетов по категориям')) {
+      // Set category budgets prompt
+      if (language === 'uz') {
+        prompt = 'Xarajat toifalari uchun byudjet chegaralarini qanday belgilashim kerak? Har bir toifa uchun optimal xarajat limitlarini aniqlashda menga yordam bering.';
+      } else if (language === 'ru') {
+        prompt = 'Как мне установить бюджетные лимиты для категорий расходов? Помогите мне определить оптимальные лимиты расходов для каждой категории.';
+      } else {
+        prompt = 'How should I set budget limits for expense categories? Help me determine optimal spending limits for each category.';
+      }
+    } else if (recommendation.action.includes('Review Pending') || recommendation.action.includes('Kutilayotgan xarajatlarni') || recommendation.action.includes('Проверка ожидающих')) {
+      // Review pending expenses prompt
+      const pending = expenses.filter(e => e.status === 'pending' || e.status === 'submitted').length;
+      if (language === 'uz') {
+        prompt = `Menda ${pending} ta kutilayotgan xarajat tasdiqlanishi kerak. Xarajatlarni ko'rib chiqish va tasdiqlash jarayonini qanday tartibga solishim mumkin?`;
+      } else if (language === 'ru') {
+        prompt = `У меня ${pending} расходов ожидают одобрения. Как я могу организовать процесс проверки и одобрения расходов?`;
+      } else {
+        prompt = `I have ${pending} expenses awaiting approval. How can I streamline the expense review and approval process?`;
+      }
+    } else {
+      // Generic prompt
+      prompt = recommendation.action;
+    }
+
+    // Open AI chatbox with the prompt
+    if (window.openAIChat) {
+      window.openAIChat(prompt);
+    }
+  };
+
+  const handleExportToExcel = () => {
+    // Prepare data for export
+    const exportData = filteredClaims.map(claim => ({
+      [t('claim_number')]: claim.claim_number,
+      [t('employee')]: claim.employee_name,
+      [t('expense_date')]: claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '',
+      [t('category')]: t(claim.category),
+      [t('amount')]: claim.amount,
+      [t('description')]: claim.description,
+      [t('status')]: t(claim.status),
+      [t('submission_date')]: claim.submission_date ? format(new Date(claim.submission_date), 'dd.MM.yyyy') : '',
+      [t('approval_date')]: claim.approval_date ? format(new Date(claim.approval_date), 'dd.MM.yyyy') : '',
+      [t('payment_date')]: claim.payment_date ? format(new Date(claim.payment_date), 'dd.MM.yyyy') : ''
+    }));
+
+    // Create worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths
+    const columnWidths = [
+      { wch: 15 }, // Claim Number
+      { wch: 20 }, // Employee
+      { wch: 12 }, // Expense Date
+      { wch: 15 }, // Category
+      { wch: 12 }, // Amount
+      { wch: 30 }, // Description
+      { wch: 12 }, // Status
+      { wch: 12 }, // Submission Date
+      { wch: 12 }, // Approval Date
+      { wch: 12 }  // Payment Date
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, t('expense_claims'));
+
+    // Generate filename with current date
+    const filename = `expense_claims_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+
+    // Download
+    XLSX.writeFile(workbook, filename);
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       draft: 'bg-gray-100 text-gray-800',
@@ -147,7 +228,7 @@ export default function Expenses() {
   expenses.forEach(c => {
     categoryData[c.category] = (categoryData[c.category] || 0) + (c.amount || 0);
   });
-  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
+  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name: t(name), value }));
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -253,10 +334,15 @@ export default function Expenses() {
               {expenseAnalysis.recommendations.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {expenseAnalysis.recommendations.map((rec, index) => (
-                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-teal-100">
+                    <button
+                      key={index}
+                      onClick={() => handleRecommendationClick(rec)}
+                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-teal-100 hover:bg-teal-50 hover:border-teal-300 transition-colors cursor-pointer"
+                      title={t('ask_ai_about_this')}
+                    >
                       <Lightbulb className="w-3 h-3 text-yellow-500" />
                       <span className="text-slate-700">{rec.action}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -307,9 +393,18 @@ export default function Expenses() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('expense_claims')}</CardTitle>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-teal-600 to-cyan-600">
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleExportToExcel}
+                    variant="outline"
+                    className="border-teal-200 text-teal-700 hover:bg-teal-50"
+                  >
+                    <Download className="w-4 h-4 mr-2" /> {t('export')}
+                  </Button>
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-teal-600 to-cyan-600">
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
+                  </Button>
+                </div>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
@@ -366,14 +461,14 @@ export default function Expenses() {
                           <TableCell className="font-mono text-sm">{claim.claim_number}</TableCell>
                           <TableCell className="font-medium">{claim.employee_name}</TableCell>
                           <TableCell className="text-sm">
-                            {claim.expense_date ? format(new Date(claim.expense_date), 'MMM dd, yyyy') : '-'}
+                            {claim.expense_date ? format(new Date(claim.expense_date), 'dd.MM.yyyy') : '-'}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{claim.category}</Badge>
+                            <Badge variant="outline">{t(claim.category)}</Badge>
                           </TableCell>
                           <TableCell className="font-semibold">${(claim.amount || 0).toLocaleString()}</TableCell>
                           <TableCell>
-                            <Badge className={getStatusColor(claim.status)}>{claim.status}</Badge>
+                            <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -433,12 +528,11 @@ export default function Expenses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('employee_name')}</label>
                   <Input
-                    placeholder={t('your_name')}
                     value={newClaim.employee_name}
-                    onChange={(e) => setNewClaim({...newClaim, employee_name: e.target.value})}
-                    required
+                    disabled
+                    className="bg-slate-50 text-slate-600"
                   />
                 </div>
               </div>
@@ -498,7 +592,7 @@ export default function Expenses() {
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
-                  disabled={!newClaim.employee_name || !newClaim.amount || isSubmitting}
+                  disabled={!newClaim.amount || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
