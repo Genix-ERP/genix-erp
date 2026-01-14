@@ -56,7 +56,7 @@ export default function AddCompany() {
       }
       setSuccess(true);
       setTimeout(() => {
-        navigate('/Companies');
+        navigate('/companies');
       }, 1500);
     } catch (err) {
       console.error("Error saving company:", err);
@@ -68,7 +68,7 @@ export default function AddCompany() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
         <div className="max-w-2xl mx-auto">
-          <Link to="/Companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
+          <Link to="/companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
             <ArrowLeft className="w-4 h-4" />
             Kompaniyalarga qaytish
           </Link>
@@ -89,7 +89,7 @@ export default function AddCompany() {
                     {companyCount} / {maxCompanies}
                   </Badge>
                 </div>
-                <Link to="/Settings?tab=subscription">
+                <Link to="/settings?tab=subscription">
                   <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 mt-4">
                     <Crown className="w-4 h-4 mr-2" />
                     Tarifni yangilash
@@ -128,7 +128,7 @@ export default function AddCompany() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
       <div className="max-w-2xl mx-auto">
-        <Link to="/Companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
+        <Link to="/companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
           <ArrowLeft className="w-4 h-4" />
           Kompaniyalarga qaytish
         </Link>
@@ -253,7 +253,7 @@ export default function AddCompany() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <Link to="/Companies">
+                <Link to="/companies">
                   <Button type="button" variant="outline">
                     Bekor qilish
                   </Button>
