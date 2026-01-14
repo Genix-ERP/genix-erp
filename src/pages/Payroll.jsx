@@ -24,6 +24,7 @@ export default function Payroll() {
   const [filteredPayrolls, setFilteredPayrolls] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [newPayroll, setNewPayroll] = useState({
@@ -40,17 +41,26 @@ export default function Payroll() {
 
   useEffect(() => {
     let filtered = payrolls;
+
+    // Apply status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(p => p.status === statusFilter);
     }
+
+    // Apply employee filter OR search (search takes precedence)
     if (searchQuery) {
+      // If user is searching, ignore employee filter
       filtered = filtered.filter(p =>
         p.payroll_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
+    } else if (employeeFilter !== 'all') {
+      // Only apply employee filter if not searching
+      filtered = filtered.filter(p => p.employee_name === employeeFilter);
     }
+
     setFilteredPayrolls(filtered);
-  }, [payrolls, searchQuery, statusFilter]);
+  }, [payrolls, searchQuery, statusFilter, employeeFilter]);
 
   const calculatePayroll = (data) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
@@ -390,6 +400,17 @@ export default function Payroll() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+                <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t('all_employees')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_employees')}</SelectItem>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.full_name}>{emp.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
