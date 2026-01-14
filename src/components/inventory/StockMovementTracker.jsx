@@ -3,17 +3,36 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Activity, TrendingUp, TrendingDown, ArrowRightLeft, AlertTriangle, Plus, Search } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Activity, TrendingUp, TrendingDown, ArrowRightLeft, AlertTriangle, Plus, Search, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useInventory } from "@/components/contexts/InventoryContext";
 
 export default function StockMovementTracker({ movements, items }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { adjustInventory, warehouses, products } = useInventory();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
+
+  // New Movement Modal state
+  const [showNewMovementModal, setShowNewMovementModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newMovement, setNewMovement] = useState({
+    product_id: '',
+    warehouse_id: '',
+    movement_type: 'inbound',
+    quantity: '',
+    unit_cost: '',
+    reference: '',
+    supplier_or_customer: '',
+    notes: ''
+  });
 
   React.useEffect(() => {
     if (searchQuery) {
@@ -79,6 +98,53 @@ export default function StockMovementTracker({ movements, items }) {
       netValue: calculateTotalValue(inbound) - calculateTotalValue(outbound)
     };
   }, [filteredMovements]);
+
+  // Handler for opening new movement modal
+  const handleNewMovementClick = () => {
+    setNewMovement({
+      product_id: '',
+      warehouse_id: warehouses?.[0]?.id || '',
+      movement_type: 'inbound',
+      quantity: '',
+      unit_cost: '',
+      reference: '',
+      supplier_or_customer: '',
+      notes: ''
+    });
+    setShowNewMovementModal(true);
+  };
+
+  // Handler for creating new movement
+  const handleCreateMovement = async () => {
+    if (!newMovement.product_id || !newMovement.warehouse_id || !newMovement.quantity) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const quantity = newMovement.movement_type === 'outbound'
+        ? -Math.abs(parseFloat(newMovement.quantity))
+        : parseFloat(newMovement.quantity);
+
+      await adjustInventory({
+        product_id: newMovement.product_id,
+        warehouse_id: newMovement.warehouse_id,
+        quantity: quantity,
+        unit_cost: parseFloat(newMovement.unit_cost) || 0,
+        reference: newMovement.reference || `${newMovement.movement_type.toUpperCase()}-${Date.now()}`,
+        reason: newMovement.notes,
+        supplier_or_customer: newMovement.supplier_or_customer
+      });
+
+      setShowNewMovementModal(false);
+      // Force refresh of movements display
+      window.location.reload();
+    } catch (error) {
+      console.error('Error creating movement:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -153,7 +219,10 @@ export default function StockMovementTracker({ movements, items }) {
                   className="pl-9 w-64"
                 />
               </div>
-              <Button className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+              <Button
+                onClick={handleNewMovementClick}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 {t('new_movement')}
               </Button>
@@ -253,6 +322,175 @@ export default function StockMovementTracker({ movements, items }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* New Movement Modal */}
+      <Dialog open={showNewMovementModal} onOpenChange={setShowNewMovementModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-[var(--genix-blue)]" />
+              {t('new_movement')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('add_stock_movement_description')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Product Selection */}
+            <div className="space-y-2">
+              <Label>{t('select_product')}</Label>
+              <Select
+                value={newMovement.product_id}
+                onValueChange={(value) => {
+                  const product = products?.find(p => p.id === value);
+                  setNewMovement(prev => ({
+                    ...prev,
+                    product_id: value,
+                    unit_cost: product?.cost_price?.toString() || ''
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_product')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(products || items || []).map(product => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} ({product.sku || product.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Warehouse Selection */}
+            <div className="space-y-2">
+              <Label>{t('warehouse')}</Label>
+              <Select
+                value={newMovement.warehouse_id}
+                onValueChange={(value) => setNewMovement(prev => ({ ...prev, warehouse_id: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_warehouse')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(warehouses || []).map(warehouse => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Movement Type */}
+            <div className="space-y-2">
+              <Label>{t('movement_type')}</Label>
+              <Select
+                value={newMovement.movement_type}
+                onValueChange={(value) => setNewMovement(prev => ({ ...prev, movement_type: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inbound">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      {t('inbound')}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="outbound">
+                    <div className="flex items-center gap-2">
+                      <TrendingDown className="w-4 h-4 text-red-600" />
+                      {t('outbound')}
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="adjustment">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                      {t('adjustment')}
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Quantity and Unit Cost */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('quantity')}</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={newMovement.quantity}
+                  onChange={(e) => setNewMovement(prev => ({ ...prev, quantity: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('unit_cost')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newMovement.unit_cost}
+                  onChange={(e) => setNewMovement(prev => ({ ...prev, unit_cost: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            {/* Reference Number */}
+            <div className="space-y-2">
+              <Label>{t('reference')}</Label>
+              <Input
+                value={newMovement.reference}
+                onChange={(e) => setNewMovement(prev => ({ ...prev, reference: e.target.value }))}
+                placeholder={t('reference_number_placeholder')}
+              />
+            </div>
+
+            {/* Supplier/Customer */}
+            <div className="space-y-2">
+              <Label>{t('supplier_or_customer')}</Label>
+              <Input
+                value={newMovement.supplier_or_customer}
+                onChange={(e) => setNewMovement(prev => ({ ...prev, supplier_or_customer: e.target.value }))}
+                placeholder={t('supplier_or_customer_placeholder')}
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label>{t('notes')}</Label>
+              <Input
+                value={newMovement.notes}
+                onChange={(e) => setNewMovement(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder={t('movement_notes_placeholder')}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowNewMovementModal(false)}
+              disabled={isSubmitting}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={handleCreateMovement}
+              disabled={isSubmitting || !newMovement.product_id || !newMovement.warehouse_id || !newMovement.quantity}
+              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+            >
+              {isSubmitting ? t('loading') : t('add_movement')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

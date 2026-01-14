@@ -3,8 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import ReactMarkdown from 'react-markdown';
 import {
   Package,
   Search,
@@ -13,9 +11,7 @@ import {
   TrendingUp,
   Filter,
   Download,
-  Brain,
   BarChart3,
-  MessageSquare,
   Calculator,
   Clock,
   Target,
@@ -74,8 +70,6 @@ export default function Inventory() {
   const [editingItem, setEditingItem] = useState(null);
   const [insights, setInsights] = useState(null);
   const [compliance, setCompliance] = useState(null);
-  const [aiQuery, setAiQuery] = useState("");
-  const [aiResponse, setAiResponse] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
 
   // Get summary from context
@@ -170,46 +164,6 @@ export default function Inventory() {
   useEffect(() => {
     filterItems();
   }, [filterItems]);
-
-  const handleAIQuery = () => {
-    if (!aiQuery.trim()) return;
-
-    const query = aiQuery.toLowerCase();
-    const analysis = analyzeInventory(items, stockMovements);
-    let response = "";
-
-    const lowStockItems = items.filter(i => i.current_stock <= (i.reorder_level || 10));
-    const deadStockItems = items.filter(i => i.status === 'dead_stock');
-    const totalValue = items.reduce((sum, item) => sum + (item.current_stock * (item.unit_cost || 0)), 0);
-
-    if (query.includes('low stock') || query.includes('reorder') || query.includes('out of stock')) {
-      response = `**Low Stock Analysis**\n\nYou have **${lowStockItems.length}** items below reorder level:\n\n${lowStockItems.length > 0 ? lowStockItems.map(i => `- **${i.name}** (${i.sku})\n  Current: ${i.current_stock} units | Reorder at: ${i.reorder_level}`).join('\n\n') : 'All items are adequately stocked!'}\n\n**AI Recommendation:** ${lowStockItems.length > 0 ? 'Generate purchase orders for these items to avoid stockouts. Estimated stockout cost: $' + (lowStockItems.length * 500).toLocaleString() : 'Continue monitoring stock levels.'}`;
-    } else if (query.includes('dead stock') || query.includes('not moving') || query.includes('slow')) {
-      const deadValue = deadStockItems.reduce((sum, i) => sum + (i.current_stock * (i.unit_cost || 0)), 0);
-      response = `**Dead Stock Analysis**\n\nYou have **${deadStockItems.length}** items classified as dead stock:\n\n${deadStockItems.length > 0 ? deadStockItems.map(i => `- **${i.name}** (${i.sku})\n  Value: $${(i.current_stock * (i.unit_cost || 0)).toLocaleString()}`).join('\n\n') : 'No dead stock detected - great inventory management!'}\n\n**Tied-up Capital:** $${deadValue.toLocaleString()}\n\n**AI Recommendation:** ${deadStockItems.length > 0 ? 'Consider liquidation sales, promotional bundles, or donation for tax benefits.' : 'Keep monitoring slow-moving items.'}`;
-    } else if (query.includes('value') || query.includes('total') || query.includes('worth')) {
-      const categories = [...new Set(items.map(i => i.category || 'uncategorized'))];
-      response = `**Inventory Valuation Report**\n\n**Total Value:** $${totalValue.toLocaleString()}\n**Total SKUs:** ${items.length}\n**Total Units:** ${items.reduce((sum, i) => sum + i.current_stock, 0).toLocaleString()}\n\n**By Category:**\n${categories.map(cat => {
-        const catItems = items.filter(i => (i.category || 'uncategorized') === cat);
-        const catValue = catItems.reduce((sum, i) => sum + (i.current_stock * (i.unit_cost || 0)), 0);
-        return `- **${cat}:** $${catValue.toLocaleString()} (${catItems.length} items)`;
-      }).join('\n')}\n\n**AI Insight:** ${analysis.insights.length > 0 ? analysis.insights[0].description : 'Inventory levels are optimal.'}`;
-    } else if (query.includes('abc') || query.includes('classification') || query.includes('priority')) {
-      const aItems = items.filter(i => i.abc_classification === 'A');
-      const bItems = items.filter(i => i.abc_classification === 'B');
-      const cItems = items.filter(i => !i.abc_classification || i.abc_classification === 'C');
-      response = `**ABC Classification Analysis**\n\n**A Items (High Priority):** ${aItems.length} items\n- High-value, fast-moving\n- Require close monitoring\n\n**B Items (Medium Priority):** ${bItems.length} items\n- Moderate value and velocity\n- Regular review needed\n\n**C Items (Low Priority):** ${cItems.length} items\n- Lower value, slower moving\n- Periodic review sufficient\n\n**AI Recommendation:** Focus reorder optimization on A-class items for maximum impact on revenue.`;
-    } else if (query.includes('expir') || query.includes('expire') || query.includes('shelf life')) {
-      const expiringItems = items.filter(i => i.expiration_date && new Date(i.expiration_date) < new Date(Date.now() + 30*24*60*60*1000));
-      response = `**Expiration Alert**\n\n**Items expiring within 30 days:** ${expiringItems.length}\n\n${expiringItems.length > 0 ? expiringItems.map(i => `- **${i.name}** - Expires: ${new Date(i.expiration_date).toLocaleDateString()}`).join('\n') : 'No items expiring soon!'}\n\n**AI Recommendation:** ${expiringItems.length > 0 ? 'Consider promotional pricing or bundle deals to move these items before expiration.' : 'Continue regular expiration monitoring.'}`;
-    } else if (query.includes('recommend') || query.includes('suggest') || query.includes('what should')) {
-      response = `**AI Recommendations**\n\n${analysis.recommendations.map((rec, i) => `${i + 1}. **${rec.action}**\n   ${rec.description}\n   Impact: ${rec.impact}`).join('\n\n')}\n\n**Priority Actions:**\n${analysis.insights.filter(i => i.priority === 'high').map(i => `- ${i.title}: ${i.description}`).join('\n') || '- No critical issues detected'}`;
-    } else {
-      response = `**Inventory Intelligence Report**\n\n**Quick Stats:**\n- Total SKUs: ${items.length}\n- Total Value: $${totalValue.toLocaleString()}\n- Low Stock Items: ${lowStockItems.length}\n- Dead Stock Items: ${deadStockItems.length}\n\n**Key Insights:**\n${analysis.insights.slice(0, 3).map(i => `- **${i.title}:** ${i.description}`).join('\n')}\n\n**Try asking about:**\n- "Show me low stock items"\n- "What's my total inventory value?"\n- "ABC classification analysis"\n- "Items expiring soon"\n- "What do you recommend?"`;
-    }
-
-    setAiResponse(response);
-  };
 
   const handleSave = (itemData) => {
     if (editingItem) {
@@ -365,40 +319,6 @@ export default function Inventory() {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="mt-6 space-y-6">
-            {/* AI Query Interface */}
-            <Card className="bg-gradient-to-r from-[var(--genix-blue)]/5 to-[var(--genix-purple)]/5 border-[var(--genix-blue)]/20">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-                  <h3 className="font-semibold text-[var(--genix-navy)]">{t('inventory_ai_assistant')}</h3>
-                </div>
-                <div className="flex gap-3">
-                  <Textarea
-                    placeholder={t('inventory_ai_placeholder')}
-                    value={aiQuery}
-                    onChange={(e) => setAiQuery(e.target.value)}
-                    className="flex-1"
-                    rows={2}
-                  />
-                  <Button onClick={handleAIQuery} className="px-6">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    {t('ask_ai')}
-                  </Button>
-                </div>
-                {aiResponse && (
-                  <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Brain className="w-4 h-4 text-[var(--genix-purple)]" />
-                      <span className="font-medium text-slate-700">AI Analysis:</span>
-                    </div>
-                    <div className="prose prose-sm max-w-none text-slate-600">
-                      <ReactMarkdown>{aiResponse}</ReactMarkdown>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Metrics Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
