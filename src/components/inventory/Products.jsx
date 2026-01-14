@@ -6,16 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Filter, MoreHorizontal, AlertCircle,
-  CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History
+  CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
+  Layers, Printer
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import LotTracking from "./LotTracking";
+import PriceLabelPrinting from "./PriceLabelPrinting";
 
 // Import universal ERP components
 import {
@@ -46,6 +50,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [activeSubTab, setActiveSubTab] = useState("list");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -365,6 +370,34 @@ export default function Products() {
 
   return (
     <div className="space-y-6">
+      {/* Sub-tabs for Products, Lots, Labels */}
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
+        <TabsList className="bg-slate-100 p-1 rounded-lg mb-4">
+          <TabsTrigger
+            value="list"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Package className="w-4 h-4" />
+            {t('products')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="lots"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Layers className="w-4 h-4" />
+            {t('lots')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="labels"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Printer className="w-4 h-4" />
+            {t('labels')}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Products List Tab */}
+        <TabsContent value="list" className="mt-0 space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -672,6 +705,18 @@ export default function Products() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Lots Tab */}
+        <TabsContent value="lots" className="mt-0">
+          <LotTracking />
+        </TabsContent>
+
+        {/* Labels Tab */}
+        <TabsContent value="labels" className="mt-0">
+          <PriceLabelPrinting />
+        </TabsContent>
+      </Tabs>
 
       {/* Create/Edit Product Modal */}
       <Dialog open={showCreateModal || showEditModal} onOpenChange={(open) => {

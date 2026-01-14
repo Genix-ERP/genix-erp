@@ -21,9 +21,7 @@ import {
   LayoutDashboard,
   Box,
   ShoppingCart,
-  Layers,
-  ClipboardList,
-  Printer
+  ClipboardList
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,9 +36,7 @@ import ReorderOptimizer from "@/components/inventory/ReorderOptimizer";
 import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
 import InventoryManagement from "@/components/inventory/InventoryManagement";
-import LotTracking from "@/components/inventory/LotTracking";
 import StockCounting from "@/components/inventory/StockCounting";
-import PriceLabelPrinting from "@/components/inventory/PriceLabelPrinting";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -290,30 +286,12 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="lots"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Layers className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('lots')}</span>
-              <span className="sm:hidden">{t('lots')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="counting"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <ClipboardList className="w-4 h-4" />
               <span className="hidden sm:inline">{t('stocktake')}</span>
               <span className="sm:hidden">{t('stocktake')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="labels"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Printer className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('labels')}</span>
-              <span className="sm:hidden">{t('labels')}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -473,19 +451,9 @@ export default function Inventory() {
             </div>
           </TabsContent>
 
-          {/* Lot Tracking Tab */}
-          <TabsContent value="lots" className="mt-6">
-            <LotTracking />
-          </TabsContent>
-
           {/* Stock Counting Tab */}
           <TabsContent value="counting" className="mt-6">
             <StockCounting />
-          </TabsContent>
-
-          {/* Price Labels Tab */}
-          <TabsContent value="labels" className="mt-6">
-            <PriceLabelPrinting />
           </TabsContent>
         </Tabs>
 
