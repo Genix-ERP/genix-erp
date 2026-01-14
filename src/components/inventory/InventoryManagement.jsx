@@ -56,8 +56,14 @@ export default function InventoryManagement() {
     reference: ''
   });
 
-  // Get summary stats
-  const summary = getInventorySummary();
+  // Get summary stats with safety defaults
+  const rawSummary = getInventorySummary();
+  const summary = {
+    totalValue: rawSummary?.totalValue || 0,
+    totalItems: rawSummary?.totalItems || 0,
+    totalProducts: rawSummary?.totalProducts || 0,
+    lowStockCount: rawSummary?.lowStockCount || 0
+  };
 
   // Filter inventory items
   const filteredInventory = inventory.filter(item => {
@@ -349,8 +355,9 @@ export default function InventoryManagement() {
                       {filteredInventory.map(item => {
                         const product = products.find(p => p.id === item.product_id);
                         const warehouse = warehouses.find(w => w.id === item.warehouse_id);
-                        const isLowStock = product?.min_stock_level && item.quantity <= product.min_stock_level;
-                        const isOutOfStock = item.quantity === 0;
+                        const quantity = item.quantity || 0;
+                        const isLowStock = product?.min_stock_level && quantity <= product.min_stock_level;
+                        const isOutOfStock = quantity === 0;
 
                         return (
                           <TableRow key={item.id} className="hover:bg-blue-50/50">
@@ -367,13 +374,13 @@ export default function InventoryManagement() {
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                              {item.quantity.toLocaleString()}
+                              {(item.quantity || 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right text-slate-600 tabular-nums">
                               {(item.reserved_quantity || 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-medium text-green-600 tabular-nums">
-                              {(item.available_quantity || item.quantity).toLocaleString()}
+                              {(item.available_quantity || item.quantity || 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="font-mono text-sm text-slate-600">
                               {item.lot_number || '-'}
@@ -457,8 +464,9 @@ export default function InventoryManagement() {
                     </TableHeader>
                     <TableBody>
                       {filteredMovements.map(movement => {
-                        const TypeIcon = getMovementTypeIcon(movement.movement_type, movement.quantity);
-                        const isPositive = movement.quantity > 0;
+                        const movementQty = movement.quantity || 0;
+                        const TypeIcon = getMovementTypeIcon(movement.movement_type, movementQty);
+                        const isPositive = movementQty > 0;
 
                         return (
                           <TableRow key={movement.id} className="hover:bg-blue-50/50">
@@ -494,7 +502,7 @@ export default function InventoryManagement() {
                             <TableCell className={`text-right font-semibold tabular-nums ${
                               isPositive ? 'text-green-600' : 'text-red-600'
                             }`}>
-                              {isPositive ? '+' : ''}{movement.quantity.toLocaleString()}
+                              {isPositive ? '+' : ''}{(movement.quantity || 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="font-mono text-sm text-slate-600">
                               {movement.reference || '-'}
