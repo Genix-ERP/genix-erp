@@ -511,85 +511,93 @@ export default function StockCounting() {
             </div>
 
             {/* Product selection - show products in selected warehouse */}
-            {newCount.warehouse_id && (
-              <div>
-                <label className="text-sm font-medium">{t('products')}</label>
-                <p className="text-xs text-slate-500 mb-2">{t('select_products_to_count')}</p>
-                <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-2">
-                  {(() => {
-                    const warehouseProducts = inventory
-                      .filter(inv => inv.warehouse_id === newCount.warehouse_id)
-                      .map(inv => {
-                        const product = products.find(p => p.id === inv.product_id);
-                        return product ? { ...product, system_qty: inv.quantity } : null;
-                      })
-                      .filter(Boolean);
+            <div>
+              <label className="text-sm font-medium">{t('products')}</label>
+              <p className="text-xs text-slate-500 mb-2">{t('select_products_to_count')}</p>
+              <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-2">
+                {!newCount.warehouse_id ? (
+                  <p className="text-sm text-slate-500 text-center py-4">
+                    {t('select_warehouse_first')}
+                  </p>
+                ) : (() => {
+                  // Get products from inventory in this warehouse
+                  const warehouseProducts = inventory
+                    .filter(inv => inv.warehouse_id === newCount.warehouse_id)
+                    .map(inv => {
+                      const product = products.find(p => p.id === inv.product_id);
+                      return product ? { ...product, system_qty: inv.quantity } : null;
+                    })
+                    .filter(Boolean);
 
-                    if (warehouseProducts.length === 0) {
-                      return (
-                        <p className="text-sm text-slate-500 text-center py-4">
-                          {t('no_products_in_warehouse')}
-                        </p>
-                      );
-                    }
+                  // If no inventory, show all products with 0 quantity
+                  const displayProducts = warehouseProducts.length > 0
+                    ? warehouseProducts
+                    : products.map(p => ({ ...p, system_qty: 0 }));
 
+                  if (displayProducts.length === 0) {
                     return (
-                      <>
-                        <div className="flex items-center gap-2 pb-2 border-b">
+                      <p className="text-sm text-slate-500 text-center py-4">
+                        {t('no_products_in_warehouse')}
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div className="flex items-center gap-2 pb-2 border-b">
+                        <Checkbox
+                          id="select-all"
+                          checked={newCount.selected_products.length === 0 || newCount.selected_products.length === displayProducts.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setNewCount({ ...newCount, selected_products: [] }); // Empty = all products
+                            } else {
+                              setNewCount({ ...newCount, selected_products: [] });
+                            }
+                          }}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          {t('all_products')} ({displayProducts.length})
+                        </label>
+                      </div>
+                      {displayProducts.map(product => (
+                        <div key={product.id} className="flex items-center gap-2">
                           <Checkbox
-                            id="select-all"
-                            checked={newCount.selected_products.length === 0 || newCount.selected_products.length === warehouseProducts.length}
+                            id={`product-${product.id}`}
+                            checked={newCount.selected_products.length === 0 || newCount.selected_products.includes(product.id)}
                             onCheckedChange={(checked) => {
-                              if (checked) {
-                                setNewCount({ ...newCount, selected_products: [] }); // Empty = all products
+                              if (newCount.selected_products.length === 0) {
+                                // Currently "all" is selected, switch to specific selection
+                                const allIds = displayProducts.map(p => p.id);
+                                if (!checked) {
+                                  setNewCount({ ...newCount, selected_products: allIds.filter(id => id !== product.id) });
+                                }
                               } else {
-                                setNewCount({ ...newCount, selected_products: [] });
+                                if (checked) {
+                                  const newSelected = [...newCount.selected_products, product.id];
+                                  // If all selected, switch back to empty (all)
+                                  if (newSelected.length === displayProducts.length) {
+                                    setNewCount({ ...newCount, selected_products: [] });
+                                  } else {
+                                    setNewCount({ ...newCount, selected_products: newSelected });
+                                  }
+                                } else {
+                                  setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
+                                }
                               }
                             }}
                           />
-                          <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                            {t('all_products')} ({warehouseProducts.length})
+                          <label htmlFor={`product-${product.id}`} className="text-sm cursor-pointer flex-1 flex justify-between">
+                            <span>{product.name}</span>
+                            <span className="text-slate-500">{product.system_qty} {t('units')}</span>
                           </label>
                         </div>
-                        {warehouseProducts.map(product => (
-                          <div key={product.id} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`product-${product.id}`}
-                              checked={newCount.selected_products.length === 0 || newCount.selected_products.includes(product.id)}
-                              onCheckedChange={(checked) => {
-                                if (newCount.selected_products.length === 0) {
-                                  // Currently "all" is selected, switch to specific selection
-                                  const allIds = warehouseProducts.map(p => p.id);
-                                  if (!checked) {
-                                    setNewCount({ ...newCount, selected_products: allIds.filter(id => id !== product.id) });
-                                  }
-                                } else {
-                                  if (checked) {
-                                    const newSelected = [...newCount.selected_products, product.id];
-                                    // If all selected, switch back to empty (all)
-                                    if (newSelected.length === warehouseProducts.length) {
-                                      setNewCount({ ...newCount, selected_products: [] });
-                                    } else {
-                                      setNewCount({ ...newCount, selected_products: newSelected });
-                                    }
-                                  } else {
-                                    setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
-                                  }
-                                }
-                              }}
-                            />
-                            <label htmlFor={`product-${product.id}`} className="text-sm cursor-pointer flex-1 flex justify-between">
-                              <span>{product.name}</span>
-                              <span className="text-slate-500">{product.system_qty} {t('units')}</span>
-                            </label>
-                          </div>
-                        ))}
-                      </>
-                    );
-                  })()}
-                </div>
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
-            )}
+            </div>
 
             <div>
               <label className="text-sm font-medium">{t('date')}</label>

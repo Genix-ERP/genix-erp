@@ -282,7 +282,7 @@ export default function ReorderOptimizer({ items, movements }) {
                         <div>
                           <div className="font-medium">{item.optimalOrderQty} {t('units')}</div>
                           <div className="text-sm text-slate-500">
-                            ${(item.optimalOrderQty * item.unit_cost).toLocaleString()} {t('value')}
+                            ${((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0)).toLocaleString()} {t('value')}
                           </div>
                         </div>
                       </TableCell>
@@ -291,6 +291,10 @@ export default function ReorderOptimizer({ items, movements }) {
                           size="sm"
                           variant={item.riskLevel === 'high' ? 'default' : 'outline'}
                           className={item.riskLevel === 'high' ? 'bg-red-600 hover:bg-red-700' : ''}
+                          onClick={() => {
+                            // For now, show an alert - in production this would create a purchase order
+                            alert(`${t('schedule_order')}: ${item.name}\n${t('quantity')}: ${item.optimalOrderQty} ${t('units')}\n${t('value')}: $${((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0)).toLocaleString()}`);
+                          }}
                         >
                           {item.riskLevel === 'high' ? t('order_now') : t('schedule_order')}
                         </Button>

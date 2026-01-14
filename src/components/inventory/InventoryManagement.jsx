@@ -195,7 +195,7 @@ export default function InventoryManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Value</p>
+                <p className="text-sm text-slate-500">{t('total_value')}</p>
                 <p className="text-2xl font-bold text-slate-900">
                   ${summary.totalValue.toLocaleString()}
                 </p>
@@ -211,7 +211,7 @@ export default function InventoryManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Items</p>
+                <p className="text-sm text-slate-500">{t('total_items')}</p>
                 <p className="text-2xl font-bold text-blue-600">
                   {summary.totalItems.toLocaleString()}
                 </p>
@@ -227,7 +227,7 @@ export default function InventoryManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Products</p>
+                <p className="text-sm text-slate-500">{t('products')}</p>
                 <p className="text-2xl font-bold text-purple-600">
                   {summary.totalProducts}
                 </p>
@@ -243,7 +243,7 @@ export default function InventoryManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Low Stock</p>
+                <p className="text-sm text-slate-500">{t('low_stock')}</p>
                 <p className="text-2xl font-bold text-red-600">
                   {summary.lowStockCount}
                 </p>
@@ -267,7 +267,7 @@ export default function InventoryManagement() {
                     <Package className="w-5 h-5 text-[var(--genix-blue)]" />
                   </div>
                   <CardTitle className="text-xl font-bold text-slate-900">
-                    Inventory Management
+                    {t('inventory_management')}
                   </CardTitle>
                 </div>
                 <div className="flex gap-2">
@@ -278,7 +278,7 @@ export default function InventoryManagement() {
                       setShowAdjustModal(true);
                     }}
                   >
-                    <RotateCcw className="w-4 h-4 mr-2" /> Adjust Stock
+                    <RotateCcw className="w-4 h-4 mr-2" /> {t('adjust_stock')}
                   </Button>
                   <Button
                     onClick={() => {
@@ -287,16 +287,16 @@ export default function InventoryManagement() {
                     }}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
                   >
-                    <ArrowRightLeft className="w-4 h-4 mr-2" /> Transfer
+                    <ArrowRightLeft className="w-4 h-4 mr-2" /> {t('transfer')}
                   </Button>
                 </div>
               </div>
               <TabsList className="w-fit bg-slate-100/80 p-1">
                 <TabsTrigger value="stock" className="data-[state=active]:bg-white">
-                  <Package className="w-4 h-4 mr-2" /> Stock Levels
+                  <Package className="w-4 h-4 mr-2" /> {t('stock_levels')}
                 </TabsTrigger>
                 <TabsTrigger value="movements" className="data-[state=active]:bg-white">
-                  <History className="w-4 h-4 mr-2" /> Movements
+                  <History className="w-4 h-4 mr-2" /> {t('movements')}
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -309,7 +309,7 @@ export default function InventoryManagement() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Search products..."
+                    placeholder={t('search_products')}
                     className="pl-9 bg-slate-50 border-slate-200 h-10"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -317,10 +317,10 @@ export default function InventoryManagement() {
                 </div>
                 <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
                   <SelectTrigger className="w-[180px] bg-slate-50">
-                    <SelectValue placeholder="Warehouse" />
+                    <SelectValue placeholder={t('warehouse')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Warehouses</SelectItem>
+                    <SelectItem value="all">{t('all_warehouses')}</SelectItem>
                     {warehouses.map(warehouse => (
                       <SelectItem key={warehouse.id} value={warehouse.id}>
                         {warehouse.name}
@@ -338,9 +338,9 @@ export default function InventoryManagement() {
               ) : filteredInventory.length === 0 ? (
                 <div className="text-center py-16 px-6">
                   <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No inventory found</h3>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_inventory_found')}</h3>
                   <p className="text-sm text-slate-500">
-                    {searchQuery ? 'Try adjusting your search' : 'Stock will appear here once products are added'}
+                    {searchQuery ? t('try_adjusting_search') : t('stock_will_appear_here')}
                   </p>
                 </div>
               ) : (
@@ -348,13 +348,13 @@ export default function InventoryManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-700">Product</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Warehouse</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">Quantity</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">Reserved</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">Available</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Lot #</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Status</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('product')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('warehouse')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('quantity')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('reserved')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('available')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('lot_number')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -393,11 +393,11 @@ export default function InventoryManagement() {
                             </TableCell>
                             <TableCell>
                               {isOutOfStock ? (
-                                <Badge className="bg-red-100 text-red-800 border-red-200">Out of Stock</Badge>
+                                <Badge className="bg-red-100 text-red-800 border-red-200">{t('out_of_stock')}</Badge>
                               ) : isLowStock ? (
-                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Low Stock</Badge>
+                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{t('low_stock')}</Badge>
                               ) : (
-                                <Badge className="bg-green-100 text-green-800 border-green-200">In Stock</Badge>
+                                <Badge className="bg-green-100 text-green-800 border-green-200">{t('in_stock')}</Badge>
                               )}
                             </TableCell>
                           </TableRow>
@@ -417,7 +417,7 @@ export default function InventoryManagement() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Search movements..."
+                    placeholder={t('search')}
                     className="pl-9 bg-slate-50 border-slate-200 h-10"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -425,14 +425,14 @@ export default function InventoryManagement() {
                 </div>
                 <Select value={movementTypeFilter} onValueChange={setMovementTypeFilter}>
                   <SelectTrigger className="w-[160px] bg-slate-50">
-                    <SelectValue placeholder="Type" />
+                    <SelectValue placeholder={t('type')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="receipt">Receipt</SelectItem>
-                    <SelectItem value="shipment">Shipment</SelectItem>
-                    <SelectItem value="adjustment">Adjustment</SelectItem>
-                    <SelectItem value="transfer">Transfer</SelectItem>
+                    <SelectItem value="all">{t('all_types')}</SelectItem>
+                    <SelectItem value="receipt">{t('receipt')}</SelectItem>
+                    <SelectItem value="shipment">{t('shipment')}</SelectItem>
+                    <SelectItem value="adjustment">{t('adjustment')}</SelectItem>
+                    <SelectItem value="transfer">{t('transfer')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -445,9 +445,9 @@ export default function InventoryManagement() {
               ) : filteredMovements.length === 0 ? (
                 <div className="text-center py-16 px-6">
                   <History className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No movements found</h3>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_movements_found')}</h3>
                   <p className="text-sm text-slate-500">
-                    {searchQuery ? 'Try adjusting your search' : 'Stock movements will appear here'}
+                    {searchQuery ? t('try_adjusting_search') : t('movements_will_appear_here')}
                   </p>
                 </div>
               ) : (
@@ -455,17 +455,17 @@ export default function InventoryManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-700">Type</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
                         <TableHead className="font-semibold text-slate-700">
                           <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4" /> Date
+                            <Calendar className="w-4 h-4" /> {t('date')}
                           </div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700">Product</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Warehouse</TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">Quantity</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Reference</TableHead>
-                        <TableHead className="font-semibold text-slate-700">Notes</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('product')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('warehouse')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('quantity')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('notes')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -534,21 +534,21 @@ export default function InventoryManagement() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-[var(--genix-blue)]" />
-              Adjust Stock
+              {t('adjust_stock')}
             </DialogTitle>
             <DialogDescription>
-              Make a stock adjustment (positive or negative)
+              {t('make_stock_adjustment')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Product *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('product')} *</label>
               <Select
                 value={adjustForm.product_id}
                 onValueChange={(value) => setAdjustForm({...adjustForm, product_id: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select product" />
+                  <SelectValue placeholder={t('select_product')} />
                 </SelectTrigger>
                 <SelectContent>
                   {products.filter(p => p.is_stockable).map(product => (
@@ -561,13 +561,13 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Warehouse *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('warehouse')} *</label>
               <Select
                 value={adjustForm.warehouse_id}
                 onValueChange={(value) => setAdjustForm({...adjustForm, warehouse_id: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select warehouse" />
+                  <SelectValue placeholder={t('select_warehouse')} />
                 </SelectTrigger>
                 <SelectContent>
                   {warehouses.filter(w => w.is_active).map(warehouse => (
@@ -579,18 +579,18 @@ export default function InventoryManagement() {
               </Select>
               {adjustForm.product_id && adjustForm.warehouse_id && (
                 <p className="text-xs text-slate-500 mt-1">
-                  Current stock: {getAvailableStock(adjustForm.product_id, adjustForm.warehouse_id)}
+                  {t('stock')}: {getAvailableStock(adjustForm.product_id, adjustForm.warehouse_id)}
                 </p>
               )}
             </div>
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Quantity * <span className="text-slate-400">(use negative for decrease)</span>
+                {t('quantity')} * <span className="text-slate-400">({t('use_negative_for_decrease')})</span>
               </label>
               <Input
                 type="number"
-                placeholder="e.g., 10 or -5"
+                placeholder={t('enter_quantity')}
                 value={adjustForm.quantity}
                 onChange={(e) => setAdjustForm({...adjustForm, quantity: e.target.value})}
                 required
@@ -598,9 +598,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Reason *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reason')} *</label>
               <Textarea
-                placeholder="Reason for adjustment"
+                placeholder={t('reason_for_adjustment')}
                 value={adjustForm.reason}
                 onChange={(e) => setAdjustForm({...adjustForm, reason: e.target.value})}
                 rows={2}
@@ -609,9 +609,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Reference</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reference')}</label>
               <Input
-                placeholder="Optional reference"
+                placeholder={t('optional_reference')}
                 value={adjustForm.reference}
                 onChange={(e) => setAdjustForm({...adjustForm, reference: e.target.value})}
               />
@@ -624,14 +624,14 @@ export default function InventoryManagement() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleAdjust}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !adjustForm.product_id || !adjustForm.warehouse_id || !adjustForm.quantity || !adjustForm.reason}
               >
-                {isSaving ? 'Saving...' : 'Adjust Stock'}
+                {isSaving ? t('saving') : t('adjust_stock')}
               </Button>
             </div>
           </div>
@@ -644,21 +644,21 @@ export default function InventoryManagement() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <ArrowRightLeft className="w-5 h-5 text-[var(--genix-purple)]" />
-              Transfer Stock
+              {t('transfer_stock')}
             </DialogTitle>
             <DialogDescription>
-              Transfer inventory between warehouses
+              {t('transfer_inventory_between_warehouses')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Product *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('product')} *</label>
               <Select
                 value={transferForm.product_id}
                 onValueChange={(value) => setTransferForm({...transferForm, product_id: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select product" />
+                  <SelectValue placeholder={t('select_product')} />
                 </SelectTrigger>
                 <SelectContent>
                   {products.filter(p => p.is_stockable).map(product => (
@@ -671,13 +671,13 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">From Warehouse *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('from_warehouse')} *</label>
               <Select
                 value={transferForm.from_warehouse_id}
                 onValueChange={(value) => setTransferForm({...transferForm, from_warehouse_id: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select source" />
+                  <SelectValue placeholder={t('select_source')} />
                 </SelectTrigger>
                 <SelectContent>
                   {warehouses.filter(w => w.is_active).map(warehouse => (
@@ -689,19 +689,19 @@ export default function InventoryManagement() {
               </Select>
               {transferForm.product_id && transferForm.from_warehouse_id && (
                 <p className="text-xs text-slate-500 mt-1">
-                  Available: {getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)}
+                  {t('available')}: {getAvailableStock(transferForm.product_id, transferForm.from_warehouse_id)}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">To Warehouse *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('to_warehouse')} *</label>
               <Select
                 value={transferForm.to_warehouse_id}
                 onValueChange={(value) => setTransferForm({...transferForm, to_warehouse_id: value})}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select destination" />
+                  <SelectValue placeholder={t('select_destination')} />
                 </SelectTrigger>
                 <SelectContent>
                   {warehouses
@@ -716,11 +716,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Quantity *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('quantity')} *</label>
               <Input
                 type="number"
                 min="1"
-                placeholder="Enter quantity"
+                placeholder={t('enter_quantity')}
                 value={transferForm.quantity}
                 onChange={(e) => setTransferForm({...transferForm, quantity: e.target.value})}
                 required
@@ -728,9 +728,9 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Notes</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('notes')}</label>
               <Textarea
-                placeholder="Optional notes"
+                placeholder={t('optional_notes')}
                 value={transferForm.notes}
                 onChange={(e) => setTransferForm({...transferForm, notes: e.target.value})}
                 rows={2}
@@ -744,7 +744,7 @@ export default function InventoryManagement() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleTransfer}
@@ -758,7 +758,7 @@ export default function InventoryManagement() {
                   transferForm.from_warehouse_id === transferForm.to_warehouse_id
                 }
               >
-                {isSaving ? 'Transferring...' : 'Transfer Stock'}
+                {isSaving ? t('transferring') : t('transfer_stock')}
               </Button>
             </div>
           </div>
