@@ -738,6 +738,58 @@ export function InventoryProvider({ children }) {
     return newLocation;
   }, [backendAvailable, warehouses, activeCompany]);
 
+  const updateWarehouseLocation = useCallback(async (warehouseId, locationId, locationData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.updateWarehouseLocation(warehouseId, locationId, locationData);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = warehouses.map(w => {
+      if (w.id === warehouseId) {
+        return {
+          ...w,
+          locations: (w.locations || []).map(loc =>
+            loc.id === locationId ? { ...loc, ...locationData } : loc
+          )
+        };
+      }
+      return w;
+    });
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+  }, [backendAvailable, warehouses, activeCompany]);
+
+  const deleteWarehouseLocation = useCallback(async (warehouseId, locationId) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteWarehouseLocation(warehouseId, locationId);
+      } catch (err) {
+        console.error('API error:', err);
+      }
+    }
+
+    const updated = warehouses.map(w => {
+      if (w.id === warehouseId) {
+        return {
+          ...w,
+          locations: (w.locations || []).filter(loc => loc.id !== locationId)
+        };
+      }
+      return w;
+    });
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setWarehouses(updated);
+  }, [backendAvailable, warehouses, activeCompany]);
+
   // ================== INVENTORY OPERATIONS ==================
   const adjustInventory = useCallback(async (adjustmentData) => {
     const companyId = activeCompany?.id;
@@ -1132,6 +1184,8 @@ export function InventoryProvider({ children }) {
       updateWarehouse,
       deleteWarehouse,
       createWarehouseLocation,
+      updateWarehouseLocation,
+      deleteWarehouseLocation,
 
       // Inventory
       inventory,

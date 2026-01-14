@@ -65,9 +65,12 @@ export default function InventoryManagement() {
     lowStockCount: rawSummary?.lowStockCount || 0
   };
 
-  // Filter inventory items
+  // Filter inventory items - only show items with valid products and warehouses
   const filteredInventory = inventory.filter(item => {
     const product = products.find(p => p.id === item.product_id);
+    const warehouse = warehouses.find(w => w.id === item.warehouse_id);
+    // Skip inventory items without matching product or warehouse (orphaned mock data)
+    if (!product || !warehouse) return false;
     const matchesSearch = !searchQuery ||
       product?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product?.code?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -75,9 +78,12 @@ export default function InventoryManagement() {
     return matchesSearch && matchesWarehouse;
   });
 
-  // Filter movements
+  // Filter movements - only show movements with valid products and warehouses
   const filteredMovements = stockMovements.filter(movement => {
     const product = products.find(p => p.id === movement.product_id);
+    const warehouse = warehouses.find(w => w.id === movement.warehouse_id);
+    // Skip movements without matching product or warehouse (orphaned mock data)
+    if (!product || !warehouse) return false;
     const matchesSearch = !searchQuery ||
       product?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       movement.reference?.toLowerCase().includes(searchQuery.toLowerCase());
