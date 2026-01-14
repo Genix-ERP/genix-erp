@@ -148,9 +148,10 @@ export function CustomersProvider({ children }) {
 
           // Load leads from API
           const apiLeads = await leadsService.list(companyId);
+          const leadsArray = Array.isArray(apiLeads) ? apiLeads : [];
 
           // If API returns empty, check localStorage for any locally stored leads
-          if (apiLeads.length === 0) {
+          if (leadsArray.length === 0) {
             const leadsKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
             const localLeads = localStorage.getItem(leadsKey);
             if (localLeads) {
@@ -159,7 +160,7 @@ export function CustomersProvider({ children }) {
               setLeads(demoMode ? sampleLeads : []);
             }
           } else {
-            setLeads(apiLeads);
+            setLeads(leadsArray);
           }
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
