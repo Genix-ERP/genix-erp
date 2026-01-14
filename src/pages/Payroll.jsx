@@ -20,7 +20,7 @@ export default function Payroll() {
   const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
 
   // AI Analysis
-  const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees), [payrolls, employees]);
+  const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
   const [filteredPayrolls, setFilteredPayrolls] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -118,16 +118,60 @@ export default function Payroll() {
     updatePayroll(payrollId, { status: newStatus });
   };
 
+  const handleRecommendationClick = (recommendation) => {
+    // Generate proper prompt based on recommendation type and language
+    let prompt = '';
+
+    if (recommendation.action.includes('Tax Compliance') || recommendation.action.includes('Soliq muvofiqligini') || recommendation.action.includes('налогового соответствия')) {
+      // Tax compliance review prompt
+      if (language === 'uz') {
+        prompt = 'Ish haqi soliqlarini tekshirishda menga yordam bering. Barcha soliq ushlab qolinmalari to\'g\'ri ekanligiga qanday ishonch hosil qilishim mumkin?';
+      } else if (language === 'ru') {
+        prompt = 'Помогите мне проверить налоги на зарплату. Как я могу убедиться, что все налоговые удержания правильные?';
+      } else {
+        prompt = 'Help me review payroll taxes. How can I ensure all tax withholdings are accurate?';
+      }
+    } else if (recommendation.action.includes('Process') || recommendation.action.includes('qayta ishlash') || recommendation.action.includes('Обработка')) {
+      // Process pending payroll prompt
+      const pending = payrolls.filter(p => p.status === 'approved').length;
+      if (language === 'uz') {
+        prompt = `Menda ${pending} ta kutilayotgan ish haqi yozuvi bor. Ularni qanday qayta ishlashim kerak?`;
+      } else if (language === 'ru') {
+        prompt = `У меня ${pending} записей о зарплате в ожидании. Как мне их обработать?`;
+      } else {
+        prompt = `I have ${pending} pending payroll records. How should I process them?`;
+      }
+    } else {
+      // Generic prompt
+      prompt = recommendation.action;
+    }
+
+    // Open AI chatbox with the prompt
+    if (window.openAIChat) {
+      window.openAIChat(prompt);
+    }
+  };
+
   const handleDownloadPayslip = (payroll) => {
+    // Format dates properly
+    const formatDate = (dateStr) => {
+      if (!dateStr) return 'N/A';
+      try {
+        return format(new Date(dateStr), 'MMM dd, yyyy');
+      } catch {
+        return dateStr;
+      }
+    };
+
     // Generate CSV payslip content
     const csvContent = [
       ['PAYROLL SLIP'],
       [''],
       ['Payroll Number', payroll.payroll_number],
       ['Employee', payroll.employee_name],
-      ['Pay Period Start', payroll.pay_period_start || 'N/A'],
-      ['Pay Period End', payroll.pay_period_end || 'N/A'],
-      ['Payment Date', payroll.payment_date || 'N/A'],
+      ['Pay Period Start', formatDate(payroll.pay_period_start)],
+      ['Pay Period End', formatDate(payroll.pay_period_end)],
+      ['Payment Date', formatDate(payroll.payment_date)],
       [''],
       ['EARNINGS'],
       ['Basic Salary', (payroll.basic_salary || 0).toFixed(2)],
@@ -146,7 +190,7 @@ export default function Payroll() {
       ['NET PAY', (payroll.net_pay || 0).toFixed(2)],
       [''],
       ['Status', payroll.status?.toUpperCase() || 'N/A'],
-      ['Generated', new Date().toLocaleString()]
+      ['Generated', format(new Date(), 'MMM dd, yyyy HH:mm')]
     ].map(row => row.join(',')).join('\n');
 
     // Create and download CSV file
@@ -180,7 +224,7 @@ export default function Payroll() {
 
   const monthlyData = {};
   payrolls.forEach(p => {
-    const month = p.pay_period_end ? new Date(p.pay_period_end).toLocaleDateString('en-US', { month: 'short' }) : 'Unknown';
+    const month = p.pay_period_end ? format(new Date(p.pay_period_end), 'MM.yy') : t('unknown');
     monthlyData[month] = (monthlyData[month] || 0) + (p.net_pay || 0);
   });
   const chartData = Object.entries(monthlyData).slice(-6).map(([month, amount]) => ({ month, amount }));
@@ -289,10 +333,15 @@ export default function Payroll() {
               {payrollAnalysis.recommendations.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {payrollAnalysis.recommendations.map((rec, index) => (
-                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100">
+                    <button
+                      key={index}
+                      onClick={() => handleRecommendationClick(rec)}
+                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-purple-100 hover:bg-purple-50 hover:border-purple-300 transition-colors cursor-pointer"
+                      title={t('ask_ai_about_this')}
+                    >
                       <Lightbulb className="w-3 h-3 text-yellow-500" />
                       <span className="text-slate-700">{rec.action}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -387,13 +436,13 @@ export default function Payroll() {
                           <TableCell className="font-medium">{payroll.employee_name}</TableCell>
                           <TableCell className="text-sm">
                             {payroll.pay_period_start && payroll.pay_period_end ?
-                              `${format(new Date(payroll.pay_period_start), 'MMM dd')} - ${format(new Date(payroll.pay_period_end), 'MMM dd')}`
+                              `${format(new Date(payroll.pay_period_start), 'dd.MM')} - ${format(new Date(payroll.pay_period_end), 'dd.MM')}`
                               : '-'}
                           </TableCell>
                           <TableCell className="font-semibold">${(payroll.gross_pay || 0).toLocaleString()}</TableCell>
                           <TableCell className="font-semibold text-green-600">${(payroll.net_pay || 0).toLocaleString()}</TableCell>
                           <TableCell>
-                            <Badge className={getStatusColor(payroll.status)}>{payroll.status}</Badge>
+                            <Badge className={getStatusColor(payroll.status)}>{t(payroll.status)}</Badge>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -441,7 +490,14 @@ export default function Payroll() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
-                  <Select value={newPayroll.employee_name} onValueChange={(value) => setNewPayroll({...newPayroll, employee_name: value})}>
+                  <Select value={newPayroll.employee_name} onValueChange={(value) => {
+                    const selectedEmployee = employees.find(emp => emp.full_name === value);
+                    setNewPayroll({
+                      ...newPayroll,
+                      employee_name: value,
+                      basic_salary: selectedEmployee?.salary || 0
+                    });
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_employee')} />
                     </SelectTrigger>
