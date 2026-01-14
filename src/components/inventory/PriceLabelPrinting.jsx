@@ -46,52 +46,12 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 
-// Label template configurations
-const LABEL_TEMPLATES = {
-  small: {
-    name: "Kichik (30x20mm)",
-    width: 30,
-    height: 20,
-    fontSize: 8,
-    showBarcode: true,
-    showQR: false,
-    showPrice: true,
-    showName: true,
-    showSKU: true,
-  },
-  medium: {
-    name: "O'rtacha (50x30mm)",
-    width: 50,
-    height: 30,
-    fontSize: 10,
-    showBarcode: true,
-    showQR: false,
-    showPrice: true,
-    showName: true,
-    showSKU: true,
-  },
-  large: {
-    name: "Katta (70x40mm)",
-    width: 70,
-    height: 40,
-    fontSize: 12,
-    showBarcode: true,
-    showQR: true,
-    showPrice: true,
-    showName: true,
-    showSKU: true,
-  },
-  shelf: {
-    name: "Javon yorlig'i (100x50mm)",
-    width: 100,
-    height: 50,
-    fontSize: 14,
-    showBarcode: true,
-    showQR: true,
-    showPrice: true,
-    showName: true,
-    showSKU: true,
-  },
+// Label template configurations - keys for translation
+const LABEL_TEMPLATE_KEYS = {
+  small: { nameKey: "label_small", width: 30, height: 20, fontSize: 8, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  medium: { nameKey: "label_medium", width: 50, height: 30, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  large: { nameKey: "label_large", width: 70, height: 40, fontSize: 12, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
+  shelf: { nameKey: "label_shelf", width: 100, height: 50, fontSize: 14, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
 };
 
 // Barcode generator (simplified SVG barcode)
@@ -155,6 +115,14 @@ export default function PriceLabelPrinting() {
   const { t } = useTranslation(language);
   const { products, items } = useInventory();
   const printRef = useRef(null);
+
+  // Build LABEL_TEMPLATES with translated names
+  const LABEL_TEMPLATES = Object.fromEntries(
+    Object.entries(LABEL_TEMPLATE_KEYS).map(([key, config]) => [
+      key,
+      { ...config, name: t(config.nameKey) }
+    ])
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("medium");
@@ -281,7 +249,7 @@ export default function PriceLabelPrinting() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Narx yorliqlari - Genix ERP</title>
+        <title>${t('price_labels')} - Genix ERP</title>
         <style>
           @page {
             size: A4;
@@ -303,10 +271,10 @@ export default function PriceLabelPrinting() {
       <body>
         <div class="no-print" style="margin-bottom: 10px; padding: 10px; background: #f0f0f0;">
           <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; cursor: pointer;">
-            Chop etish
+            ${t('print')}
           </button>
           <button onclick="window.close()" style="padding: 10px 20px; font-size: 14px; cursor: pointer; margin-left: 10px;">
-            Yopish
+            ${t('close')}
           </button>
         </div>
         ${labelsHTML}
@@ -363,10 +331,10 @@ export default function PriceLabelPrinting() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--genix-navy)]">
-            Narx yorliqlari chop etish
+            {t('print_price_labels')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Mahsulotlarni tanlang va yorliqlarni chop eting
+            {t('select_products_print_labels')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -375,7 +343,7 @@ export default function PriceLabelPrinting() {
             onClick={() => setShowSettings(true)}
           >
             <Settings className="w-4 h-4 mr-2" />
-            Sozlamalar
+            {t('settings')}
           </Button>
           {labelQueue.length > 0 && (
             <>
@@ -384,11 +352,11 @@ export default function PriceLabelPrinting() {
                 onClick={() => setShowPreview(true)}
               >
                 <Eye className="w-4 h-4 mr-2" />
-                Ko'rib chiqish
+                {t('preview')}
               </Button>
               <Button onClick={handlePrint}>
                 <Printer className="w-4 h-4 mr-2" />
-                Chop etish ({totalLabels})
+                {t('print')} ({totalLabels})
               </Button>
             </>
           )}
@@ -401,12 +369,12 @@ export default function PriceLabelPrinting() {
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardHeader className="pb-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <CardTitle className="text-lg">Mahsulotlar</CardTitle>
+                <CardTitle className="text-lg">{t('products')}</CardTitle>
                 <div className="flex gap-2 w-full sm:w-auto">
                   <div className="relative flex-1 sm:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                      placeholder="Qidirish..."
+                      placeholder={t('search')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -433,17 +401,17 @@ export default function PriceLabelPrinting() {
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead className="w-12"></TableHead>
-                      <TableHead>Mahsulot</TableHead>
+                      <TableHead>{t('product')}</TableHead>
                       <TableHead>SKU/Barcode</TableHead>
-                      <TableHead className="text-right">Narx</TableHead>
-                      <TableHead className="w-32 text-center">Amal</TableHead>
+                      <TableHead className="text-right">{t('price')}</TableHead>
+                      <TableHead className="w-32 text-center">{t('action')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredProducts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                          Mahsulotlar topilmadi
+                          {t('no_products_found')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -496,7 +464,7 @@ export default function PriceLabelPrinting() {
                                     onClick={() => addToQueue(product)}
                                   >
                                     <Plus className="w-4 h-4 mr-1" />
-                                    Qo'shish
+                                    {t('add')}
                                   </Button>
                                 )}
                               </div>
@@ -510,7 +478,7 @@ export default function PriceLabelPrinting() {
               </div>
               {filteredProducts.length > 20 && (
                 <p className="text-center text-sm text-slate-500 mt-3">
-                  Ko'rsatilmoqda: 20 / {filteredProducts.length}
+                  {t('showing')}: 20 / {filteredProducts.length}
                 </p>
               )}
             </CardContent>
@@ -524,7 +492,7 @@ export default function PriceLabelPrinting() {
               <div className="flex justify-between items-center">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Tag className="w-5 h-5" />
-                  Chop etish navbati
+                  {t('print_queue')}
                 </CardTitle>
                 {labelQueue.length > 0 && (
                   <Button
@@ -534,7 +502,7 @@ export default function PriceLabelPrinting() {
                     onClick={clearQueue}
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
-                    Tozalash
+                    {t('clear')}
                   </Button>
                 )}
               </div>
@@ -543,9 +511,9 @@ export default function PriceLabelPrinting() {
               {labelQueue.length === 0 ? (
                 <div className="text-center py-8">
                   <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">Navbat bo'sh</p>
+                  <p className="text-slate-500">{t('queue_empty')}</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Mahsulotlarni qo'shing
+                    {t('add_products')}
                   </p>
                 </div>
               ) : (
@@ -577,18 +545,18 @@ export default function PriceLabelPrinting() {
 
                   <div className="border-t pt-3 mt-4">
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-600">Jami yorliqlar:</span>
+                      <span className="text-slate-600">{t('total_labels')}:</span>
                       <span className="font-bold text-lg">{totalLabels}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs text-slate-500 mt-1">
-                      <span>Shablon:</span>
+                      <span>{t('template')}:</span>
                       <span>{LABEL_TEMPLATES[selectedTemplate].name}</span>
                     </div>
                   </div>
 
                   <Button className="w-full mt-4" onClick={handlePrint}>
                     <Printer className="w-4 h-4 mr-2" />
-                    Chop etish
+                    {t('print')}
                   </Button>
                 </div>
               )}
@@ -601,12 +569,12 @@ export default function PriceLabelPrinting() {
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Yorliqlarni ko'rib chiqish</DialogTitle>
+            <DialogTitle>{t('preview_labels')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-slate-500">
-                Jami: {totalLabels} ta yorliq
+                {t('total')}: {totalLabels} {t('labels_count')}
               </p>
               <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
                 <SelectTrigger className="w-44">
@@ -634,18 +602,18 @@ export default function PriceLabelPrinting() {
               ))}
               {totalLabels > labelQueue.length * 3 && (
                 <div className="flex items-center justify-center p-4 text-slate-500">
-                  ... va yana {totalLabels - labelQueue.length * 3} ta
+                  ... {t('and_more')} {totalLabels - labelQueue.length * 3}
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowPreview(false)}>
-                Yopish
+                {t('close')}
               </Button>
               <Button onClick={() => { handlePrint(); setShowPreview(false); }}>
                 <Printer className="w-4 h-4 mr-2" />
-                Chop etish
+                {t('print')}
               </Button>
             </div>
           </div>
@@ -656,14 +624,14 @@ export default function PriceLabelPrinting() {
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Yorliq sozlamalari</DialogTitle>
+            <DialogTitle>{t('label_settings')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Ko'rsatiladigan ma'lumotlar</Label>
+              <Label className="text-sm font-medium">{t('display_information')}</Label>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="showName" className="text-sm">Mahsulot nomi</Label>
+                  <Label htmlFor="showName" className="text-sm">{t('product_name')}</Label>
                   <Checkbox
                     id="showName"
                     checked={customSettings.showName}
@@ -683,7 +651,7 @@ export default function PriceLabelPrinting() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="showPrice" className="text-sm">Narx</Label>
+                  <Label htmlFor="showPrice" className="text-sm">{t('price')}</Label>
                   <Checkbox
                     id="showPrice"
                     checked={customSettings.showPrice}
@@ -693,7 +661,7 @@ export default function PriceLabelPrinting() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="showCategory" className="text-sm">Kategoriya</Label>
+                  <Label htmlFor="showCategory" className="text-sm">{t('category')}</Label>
                   <Checkbox
                     id="showCategory"
                     checked={customSettings.showCategory}
@@ -703,7 +671,7 @@ export default function PriceLabelPrinting() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="showBarcode" className="text-sm">Shtrix-kod</Label>
+                  <Label htmlFor="showBarcode" className="text-sm">{t('barcode')}</Label>
                   <Checkbox
                     id="showBarcode"
                     checked={customSettings.showBarcode}
@@ -713,7 +681,7 @@ export default function PriceLabelPrinting() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="showQR" className="text-sm">QR kod</Label>
+                  <Label htmlFor="showQR" className="text-sm">{t('qr_code')}</Label>
                   <Checkbox
                     id="showQR"
                     checked={customSettings.showQR}
@@ -726,7 +694,7 @@ export default function PriceLabelPrinting() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Valyuta</Label>
+              <Label className="text-sm font-medium">{t('currency')}</Label>
               <Select
                 value={customSettings.currency}
                 onValueChange={(value) => setCustomSettings(prev => ({ ...prev, currency: value }))}
@@ -735,16 +703,16 @@ export default function PriceLabelPrinting() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UZS">UZS (So'm)</SelectItem>
-                  <SelectItem value="USD">USD (Dollar)</SelectItem>
-                  <SelectItem value="EUR">EUR (Yevro)</SelectItem>
-                  <SelectItem value="RUB">RUB (Rubl)</SelectItem>
+                  <SelectItem value="UZS">{t('uzs_som')}</SelectItem>
+                  <SelectItem value="USD">{t('usd_dollar')}</SelectItem>
+                  <SelectItem value="EUR">{t('eur_euro')}</SelectItem>
+                  <SelectItem value="RUB">{t('rub_ruble')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Narx formati</Label>
+              <Label className="text-sm font-medium">{t('price_format')}</Label>
               <Select
                 value={customSettings.priceFormat}
                 onValueChange={(value) => setCustomSettings(prev => ({ ...prev, priceFormat: value }))}
@@ -753,18 +721,18 @@ export default function PriceLabelPrinting() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="full">To'liq (12,500.50)</SelectItem>
-                  <SelectItem value="rounded">Yaxlitlangan (12,501)</SelectItem>
+                  <SelectItem value="full">{t('full_format')}</SelectItem>
+                  <SelectItem value="rounded">{t('rounded_format')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setShowSettings(false)}>
-                Yopish
+                {t('close')}
               </Button>
               <Button onClick={() => setShowSettings(false)}>
-                Saqlash
+                {t('save')}
               </Button>
             </div>
           </div>

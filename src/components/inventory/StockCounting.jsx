@@ -121,13 +121,13 @@ export default function StockCounting() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'draft':
-        return <Badge className="bg-gray-100 text-gray-700"><Clock className="w-3 h-3 mr-1" /> Qoralama</Badge>;
+        return <Badge className="bg-gray-100 text-gray-700"><Clock className="w-3 h-3 mr-1" /> {t('draft')}</Badge>;
       case 'in_progress':
-        return <Badge className="bg-blue-100 text-blue-700"><Edit className="w-3 h-3 mr-1" /> Jarayonda</Badge>;
+        return <Badge className="bg-blue-100 text-blue-700"><Edit className="w-3 h-3 mr-1" /> {t('in_progress')}</Badge>;
       case 'completed':
-        return <Badge className="bg-green-100 text-green-700"><CheckCircle className="w-3 h-3 mr-1" /> Yakunlangan</Badge>;
+        return <Badge className="bg-green-100 text-green-700"><CheckCircle className="w-3 h-3 mr-1" /> {t('completed')}</Badge>;
       case 'cancelled':
-        return <Badge className="bg-red-100 text-red-700"><X className="w-3 h-3 mr-1" /> Bekor qilingan</Badge>;
+        return <Badge className="bg-red-100 text-red-700"><X className="w-3 h-3 mr-1" /> {t('cancelled')}</Badge>;
       default:
         return null;
     }
@@ -147,7 +147,7 @@ export default function StockCounting() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">Jami Hisob-Kitoblar</p>
+                <p className="text-sm text-blue-600 font-medium">{t('total_stocktakes')}</p>
                 <p className="text-2xl font-bold text-blue-800">{summary.total}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
@@ -161,7 +161,7 @@ export default function StockCounting() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600 font-medium">Yakunlangan</p>
+                <p className="text-sm text-green-600 font-medium">{t('completed')}</p>
                 <p className="text-2xl font-bold text-green-800">{summary.completed}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
@@ -175,7 +175,7 @@ export default function StockCounting() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-orange-600 font-medium">Jarayonda</p>
+                <p className="text-sm text-orange-600 font-medium">{t('in_progress')}</p>
                 <p className="text-2xl font-bold text-orange-800">{summary.inProgress}</p>
               </div>
               <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
@@ -189,9 +189,9 @@ export default function StockCounting() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-purple-600 font-medium">Umumiy Farq</p>
+                <p className="text-sm text-purple-600 font-medium">{t('total_variance')}</p>
                 <p className="text-2xl font-bold text-purple-800">{summary.totalVariance}</p>
-                <p className="text-xs text-purple-500">birlik</p>
+                <p className="text-xs text-purple-500">{t('units')}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-purple-600" />
@@ -207,11 +207,11 @@ export default function StockCounting() {
           <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200">
             <TabsTrigger value="list" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <FileText className="w-4 h-4 mr-2" />
-              Ro'yxat
+              {t('list')}
             </TabsTrigger>
             <TabsTrigger value="count" disabled={!selectedCount} className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <ClipboardCheck className="w-4 h-4 mr-2" />
-              Sanash
+              {t('count')}
             </TabsTrigger>
           </TabsList>
 
@@ -221,7 +221,7 @@ export default function StockCounting() {
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Yangi Hisob-Kitob
+              {t('new_stocktake')}
             </Button>
           )}
         </div>
@@ -233,7 +233,7 @@ export default function StockCounting() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Qidirish..."
+                placeholder={t('search')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -241,14 +241,14 @@ export default function StockCounting() {
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Holat" />
+                <SelectValue placeholder={t('status')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Barchasi</SelectItem>
-                <SelectItem value="draft">Qoralama</SelectItem>
-                <SelectItem value="in_progress">Jarayonda</SelectItem>
-                <SelectItem value="completed">Yakunlangan</SelectItem>
-                <SelectItem value="cancelled">Bekor qilingan</SelectItem>
+                <SelectItem value="all">{t('all')}</SelectItem>
+                <SelectItem value="draft">{t('draft')}</SelectItem>
+                <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
+                <SelectItem value="completed">{t('completed')}</SelectItem>
+                <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -258,14 +258,14 @@ export default function StockCounting() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Hisob №</TableHead>
-                    <TableHead>Ombor</TableHead>
-                    <TableHead>Sana</TableHead>
-                    <TableHead>Sanagan</TableHead>
-                    <TableHead>Mahsulotlar</TableHead>
-                    <TableHead>Farq</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead className="text-right">Amallar</TableHead>
+                    <TableHead>{t('count_number')}</TableHead>
+                    <TableHead>{t('warehouse')}</TableHead>
+                    <TableHead>{t('date')}</TableHead>
+                    <TableHead>{t('counted_by')}</TableHead>
+                    <TableHead>{t('products')}</TableHead>
+                    <TableHead>{t('variance')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead className="text-right">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -280,7 +280,7 @@ export default function StockCounting() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Warehouse className="w-4 h-4 text-slate-400" />
-                            {warehouse?.name || 'Noma\'lum'}
+                            {warehouse?.name || t('unknown')}
                           </div>
                         </TableCell>
                         <TableCell>{format(new Date(count.count_date), 'dd.MM.yyyy')}</TableCell>
@@ -297,7 +297,7 @@ export default function StockCounting() {
                         <TableCell>
                           {count.status === 'completed' ? (
                             <Badge variant={totalVariance > 0 ? 'destructive' : 'secondary'}>
-                              {totalVariance > 0 ? `±${totalVariance}` : 'Mos'}
+                              {totalVariance > 0 ? `±${totalVariance}` : t('matched')}
                             </Badge>
                           ) : (
                             <span className="text-slate-400">-</span>
@@ -315,7 +315,7 @@ export default function StockCounting() {
                               }}
                             >
                               <Edit className="w-4 h-4 mr-1" />
-                              Davom etish
+                              {t('continue')}
                             </Button>
                           )}
                           {count.status === 'completed' && (
@@ -328,7 +328,7 @@ export default function StockCounting() {
                               }}
                             >
                               <Eye className="w-4 h-4 mr-1" />
-                              Ko'rish
+                              {t('view')}
                             </Button>
                           )}
                         </TableCell>
@@ -338,7 +338,7 @@ export default function StockCounting() {
                   {filteredCounts.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                        Hisob-kitoblar mavjud emas
+                        {t('no_stocktakes_found')}
                       </TableCell>
                     </TableRow>
                   )}
@@ -368,7 +368,7 @@ export default function StockCounting() {
                         <>
                           <Button variant="outline" size="sm" onClick={handleCancel}>
                             <X className="w-4 h-4 mr-1" />
-                            Bekor qilish
+                            {t('cancel')}
                           </Button>
                           <Button
                             size="sm"
@@ -377,7 +377,7 @@ export default function StockCounting() {
                             disabled={selectedCount.lines?.some(l => l.counted_qty === null)}
                           >
                             <Check className="w-4 h-4 mr-1" />
-                            Yakunlash
+                            {t('complete')}
                           </Button>
                         </>
                       )}
@@ -389,17 +389,17 @@ export default function StockCounting() {
               {/* Count Lines */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Mahsulotlar</CardTitle>
+                  <CardTitle className="text-lg">{t('products')}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Mahsulot</TableHead>
-                        <TableHead className="text-center">Tizim Miqdori</TableHead>
-                        <TableHead className="text-center">Hisoblangan</TableHead>
-                        <TableHead className="text-center">Farq</TableHead>
-                        <TableHead>Sabab</TableHead>
+                        <TableHead>{t('product')}</TableHead>
+                        <TableHead className="text-center">{t('system_qty')}</TableHead>
+                        <TableHead className="text-center">{t('counted')}</TableHead>
+                        <TableHead className="text-center">{t('variance')}</TableHead>
+                        <TableHead>{t('reason')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -412,7 +412,7 @@ export default function StockCounting() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Package className="w-4 h-4 text-slate-400" />
-                                <span className="font-medium">{product?.name || 'Noma\'lum'}</span>
+                                <span className="font-medium">{product?.name || t('unknown')}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-center font-semibold">{line.system_qty}</TableCell>
@@ -445,7 +445,7 @@ export default function StockCounting() {
                                 <Input
                                   value={line.variance_reason || ''}
                                   onChange={(e) => handleUpdateLine(line.product_id, line.counted_qty, e.target.value)}
-                                  placeholder="Sabab kiriting"
+                                  placeholder={t('enter_reason')}
                                   className="w-full"
                                 />
                               ) : (
@@ -468,18 +468,18 @@ export default function StockCounting() {
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yangi Inventarizatsiya</DialogTitle>
-            <DialogDescription>Ombor va sanash ma'lumotlarini kiriting</DialogDescription>
+            <DialogTitle>{t('new_stocktake')}</DialogTitle>
+            <DialogDescription>{t('enter_stocktake_details')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Ombor</label>
+              <label className="text-sm font-medium">{t('warehouse')}</label>
               <Select
                 value={newCount.warehouse_id}
                 onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Omborni tanlang" />
+                  <SelectValue placeholder={t('select_warehouse')} />
                 </SelectTrigger>
                 <SelectContent>
                   {warehouses.map(w => (
@@ -489,7 +489,7 @@ export default function StockCounting() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">Sana</label>
+              <label className="text-sm font-medium">{t('date')}</label>
               <Input
                 type="date"
                 value={newCount.count_date}
@@ -497,30 +497,30 @@ export default function StockCounting() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Sanagan Xodim</label>
+              <label className="text-sm font-medium">{t('counted_by')}</label>
               <Input
                 value={newCount.counted_by}
                 onChange={(e) => setNewCount({ ...newCount, counted_by: e.target.value })}
-                placeholder="Xodim ismi"
+                placeholder={t('employee_name')}
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Izoh</label>
+              <label className="text-sm font-medium">{t('notes')}</label>
               <Textarea
                 value={newCount.notes}
                 onChange={(e) => setNewCount({ ...newCount, notes: e.target.value })}
-                placeholder="Qo'shimcha izoh"
+                placeholder={t('additional_notes')}
                 rows={2}
               />
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleCreateCount}
                 disabled={isSaving || !newCount.warehouse_id}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Yaratilmoqda...' : 'Boshlash'}
+                {isSaving ? t('creating') : t('start')}
               </Button>
             </div>
           </div>
@@ -531,34 +531,34 @@ export default function StockCounting() {
       <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Inventarizatsiyani Yakunlash</DialogTitle>
+            <DialogTitle>{t('complete_stocktake')}</DialogTitle>
             <DialogDescription>
-              Barcha farqlar omborga tatbiq etiladi. Tasdiqlash uchun mas'ul shaxs ismini kiriting.
+              {t('complete_stocktake_description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
               <p className="text-sm text-orange-700">
                 <AlertCircle className="w-4 h-4 inline mr-2" />
-                Bu amal bekor qilib bo'lmaydi. Barcha farqlar ombor qoldiqlariga tatbiq etiladi.
+                {t('stocktake_warning')}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium">Tasdiqlagan Xodim</label>
+              <label className="text-sm font-medium">{t('approved_by')}</label>
               <Input
                 value={approvedBy}
                 onChange={(e) => setApprovedBy(e.target.value)}
-                placeholder="Xodim ismi"
+                placeholder={t('employee_name')}
               />
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCompleteModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCompleteModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleComplete}
                 disabled={isSaving || !approvedBy}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
-                {isSaving ? 'Yakunlanmoqda...' : 'Tasdiqlash'}
+                {isSaving ? t('completing') : t('confirm')}
               </Button>
             </div>
           </div>
