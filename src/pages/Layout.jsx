@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/sidebar";
 import LanguageSelector from "@/components/ui/language-selector";
 import CompanySwitcher from "@/components/ui/company-switcher";
+import AIChatBox from "@/components/ai/AIChatBox";
 import { LanguageProvider, useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { CustomersProvider } from "@/components/contexts/CustomersContext";
@@ -70,7 +71,21 @@ function LayoutContent({ children, currentPageName }) {
   const { t } = useTranslation(language);
   const { installedApps, isAppInstalled } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
+  const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
+
+  // Expose AI chatbox opener globally
+  React.useEffect(() => {
+    window.openAIChat = (prompt = null) => {
+      setAIInitialPrompt(prompt);
+      setIsAIChatOpen(true);
+    };
+
+    return () => {
+      delete window.openAIChat;
+    };
+  }, []);
 
   // Get data for dynamic AI insights
   const { items: inventory } = useInventory();
@@ -412,6 +427,15 @@ function LayoutContent({ children, currentPageName }) {
               </div>
               <div className="flex items-center gap-2 md:gap-3">
                 <LanguageSelector />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsAIChatOpen(!isAIChatOpen)}
+                  className="relative hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:text-white rounded-full transition-all duration-200"
+                  title={t('ai_assistant')}
+                >
+                  <Bot className="w-4 h-4 md:w-5 md:h-5" />
+                </Button>
                 <Link to={createPageUrl("Notifications")}>
                   <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
@@ -431,6 +455,16 @@ function LayoutContent({ children, currentPageName }) {
           </div>
         </main>
       </div>
+
+      {/* AI ChatBox */}
+      <AIChatBox
+        isOpen={isAIChatOpen}
+        onClose={() => {
+          setIsAIChatOpen(false);
+          setAIInitialPrompt(null);
+        }}
+        initialPrompt={aiInitialPrompt}
+      />
     </SidebarProvider>
   );
 }

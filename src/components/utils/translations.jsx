@@ -1353,6 +1353,7 @@ export const translations = {
     "days_until_expiry": "Days Until Expiry",
     "renewed": "Renewed",
     "delete_contract_confirm": "Are you sure you want to delete this contract? This action cannot be undone.",
+    "no_expiring_contracts": "No contracts are expiring soon",
 
     // Warehouse Management
     "edit_warehouse": "Edit Warehouse",
@@ -2738,6 +2739,7 @@ export const translations = {
     "days_until_expiry": "Tugashigacha kunlar",
     "renewed": "Yangilangan",
     "delete_contract_confirm": "Ushbu shartnomani o'chirishni xohlaysizmi? Bu amalni bekor qilib bo'lmaydi.",
+    "no_expiring_contracts": "Tez orada muddati tugaydigan shartnomalar yo'q",
 
     // Warehouse Management
     "edit_warehouse": "Omborni tahrirlash",
