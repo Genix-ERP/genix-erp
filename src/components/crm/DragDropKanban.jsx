@@ -3,7 +3,14 @@ import ReactDOM from 'react-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle } from "lucide-react";
+import { Kanban, DollarSign, Calendar, TrendingUp, Target, Percent, Loader2, AlertCircle, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTranslation } from "@/components/utils/translations";
 
 // Portal component for dragging items
@@ -77,7 +84,7 @@ const stageConfig = [
   }
 ];
 
-export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, language = 'en' }) {
+export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, onEditOpportunity, onDeleteOpportunity, language = 'en' }) {
   const { t } = useTranslation(language);
   
   const [kanbanState, setKanbanState] = useState({
@@ -204,7 +211,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
   }, [kanbanState.opportunities, onUpdateOpportunity]);
 
   const OpportunityCard = useCallback(({ opportunity, stage, isUpdating }) => (
-    <Card className="bg-white hover:shadow-xl transition-all duration-200 cursor-grab active:cursor-grabbing relative shadow-md hover:scale-[1.02]">
+    <Card className="bg-white hover:shadow-xl transition-all duration-200 cursor-grab active:cursor-grabbing relative shadow-md hover:scale-[1.02] group">
       {isUpdating && (
         <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center rounded-lg z-10">
           <div className="flex flex-col items-center gap-2">
@@ -214,14 +221,52 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
         </div>
       )}
       <CardContent className="p-4">
-        <h4 className="font-semibold text-sm text-slate-900 mb-3 line-clamp-2 leading-tight">
-          {opportunity.name}
-        </h4>
+        <div className="flex items-start justify-between mb-3">
+          <h4 className="font-semibold text-sm text-slate-900 line-clamp-2 leading-tight flex-1 pr-2">
+            {opportunity.name}
+          </h4>
+          {(onEditOpportunity || onDeleteOpportunity) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <MoreVertical className="w-4 h-4 text-slate-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {onEditOpportunity && (
+                  <DropdownMenuItem onClick={(e) => {
+                    e.stopPropagation();
+                    onEditOpportunity(opportunity);
+                  }}>
+                    <Pencil className="w-4 h-4 mr-2" />
+                    {t('edit')}
+                  </DropdownMenuItem>
+                )}
+                {onDeleteOpportunity && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteOpportunity(opportunity);
+                    }}
+                    className="text-red-600 focus:text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {t('delete')}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 flex items-center gap-1.5 font-medium">
               <DollarSign className="w-3.5 h-3.5" />
-              <span>Value</span>
+              <span>{t('value')}</span>
             </span>
             <span className="font-bold text-green-600 text-sm">
               ${(opportunity.expected_value || 0).toLocaleString()}
@@ -230,11 +275,11 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 flex items-center gap-1.5 font-medium">
               <Percent className="w-3.5 h-3.5" />
-              <span>Probability</span>
+              <span>{t('probability')}</span>
             </span>
             <div className="flex items-center gap-2 flex-1 ml-3 max-w-[120px]">
               <div className="flex-1 bg-slate-200 rounded-full h-2">
-                <div 
+                <div
                   className={`bg-gradient-to-r ${stage.colorClass} h-2 rounded-full transition-all duration-300`}
                   style={{ width: `${opportunity.probability || 0}%` }}
                 />
@@ -253,7 +298,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
         </div>
       </CardContent>
     </Card>
-  ), []);
+  ), [onEditOpportunity, onDeleteOpportunity, t]);
 
   if (!kanbanState.opportunities || kanbanState.opportunities.length === 0) {
     return (
@@ -293,9 +338,9 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                 <Kanban className="w-5 h-5 text-white" />
               </div>
               <div>
-                <span className="text-xl font-bold">Sales Pipeline</span>
+                <span className="text-xl font-bold">{t('sales_pipeline')}</span>
                 <p className="text-sm text-slate-500 font-normal mt-0.5">
-                  {kanbanState.isDragging ? '🎯 Dragging...' : 'Drag cards to update stages'}
+                  {kanbanState.isDragging ? t('dragging') : t('drag_to_update')}
                 </p>
               </div>
             </CardTitle>
@@ -304,7 +349,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                 <div className="text-2xl font-bold text-green-700">
                   ${totalPipelineValue.toLocaleString()}
                 </div>
-                <div className="text-xs text-slate-600 font-medium">Total Pipeline Value</div>
+                <div className="text-xs text-slate-600 font-medium">{t('total_pipeline_value')}</div>
               </div>
             </div>
           </div>
@@ -372,13 +417,13 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                           {stageOpps.length === 0 && !snapshot.isDraggingOver && (
                             <div className="text-center py-8 text-slate-400 text-xs">
                               <Target className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                              <p>Drop here</p>
+                              <p>{t('drop_here')}</p>
                             </div>
                           )}
                           {snapshot.isDraggingOver && stageOpps.length === 0 && (
                             <div className="text-center py-8 text-blue-500 text-xs font-medium animate-pulse">
                               <Target className="w-8 h-8 mx-auto mb-2" />
-                              <p>Release to drop</p>
+                              <p>{t('release_to_drop')}</p>
                             </div>
                           )}
                         </div>
@@ -396,32 +441,32 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-[var(--genix-blue)]" />
-            Lead Summary
+            {t('lead_summary')}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
               <div className="text-2xl sm:text-3xl font-bold text-blue-600">{leads.length}</div>
-              <div className="text-xs sm:text-sm text-slate-600 mt-1">Total Leads</div>
+              <div className="text-xs sm:text-sm text-slate-600 mt-1">{t('total_leads')}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border border-green-200">
               <div className="text-2xl sm:text-3xl font-bold text-green-600">
                 {leads.filter(l => l.status === 'qualified').length}
               </div>
-              <div className="text-xs sm:text-sm text-slate-600 mt-1">Qualified</div>
+              <div className="text-xs sm:text-sm text-slate-600 mt-1">{t('qualified')}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200">
               <div className="text-2xl sm:text-3xl font-bold text-purple-600">
                 {kanbanState.opportunities.filter(o => !['closed_won', 'closed_lost'].includes(o.stage)).length}
               </div>
-              <div className="text-xs sm:text-sm text-slate-600 mt-1">Active Opps</div>
+              <div className="text-xs sm:text-sm text-slate-600 mt-1">{t('active_opportunities')}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl border border-orange-200">
               <div className="text-2xl sm:text-3xl font-bold text-orange-600">
                 {leads.length > 0 ? Math.round(kanbanState.opportunities.filter(o => o.stage === 'closed_won').length / leads.length * 100) : 0}%
               </div>
-              <div className="text-xs sm:text-sm text-slate-600 mt-1">Win Rate</div>
+              <div className="text-xs sm:text-sm text-slate-600 mt-1">{t('win_rate')}</div>
             </div>
           </div>
         </CardContent>

@@ -10,6 +10,7 @@ import {
   Plus,
   TrendingUp,
   Phone,
+  PhoneCall,
   Mail,
   UserPlus,
   Building,
@@ -39,13 +40,20 @@ import {
 import CustomerForm from "@/components/customers/CustomerForm";
 import CustomerMetrics from "@/components/customers/CustomerMetrics";
 import DragDropKanban from "@/components/crm/DragDropKanban";
+import LeadsKanban from "@/components/crm/LeadsKanban";
+import LeadForm from "@/components/crm/LeadForm";
+import OpportunityForm from "@/components/crm/OpportunityForm";
+import CallInterface from "@/components/crm/CallInterface";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
+import { useCompany } from "@/components/contexts/CompanyContext";
+import { pbxService } from "@/api/services";
 
 export default function Customers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { activeCompany } = useCompany();
   const {
     customers,
     leads,
@@ -54,7 +62,12 @@ export default function Customers() {
     createCustomer,
     updateCustomer,
     deleteCustomer,
-    updateOpportunity
+    createLead,
+    updateLead,
+    deleteLead,
+    createOpportunity,
+    updateOpportunity,
+    deleteOpportunity
   } = useCustomers();
 
   const [filteredCustomers, setFilteredCustomers] = useState([]);
@@ -65,6 +78,36 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("customers");
   const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [showOpportunityForm, setShowOpportunityForm] = useState(false);
+  const [editingOpportunity, setEditingOpportunity] = useState(null);
+  const [opportunityToDelete, setOpportunityToDelete] = useState(null);
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [editingLead, setEditingLead] = useState(null);
+  const [leadToDelete, setLeadToDelete] = useState(null);
+  const [customerToCall, setCustomerToCall] = useState(null);
+  const [callLogs, setCallLogs] = useState([]);
+
+  // Load call logs
+  useEffect(() => {
+    const loadCallLogs = async () => {
+      try {
+        const logs = await pbxService.getCallLogs(activeCompany?.id);
+        setCallLogs(logs || []);
+      } catch (error) {
+        console.error('Failed to load call logs:', error);
+        setCallLogs([]);
+      }
+    };
+    loadCallLogs();
+  }, [activeCompany]);
+
+  // Handle call customer
+  const handleCallCustomer = async (customer) => {
+    if (customer.phone) {
+      setCustomerToCall(customer);
+      setActiveTab("calls");
+    }
+  };
 
   // AI Analysis
   const crmAnalysis = useMemo(() => analyzeCRM(customers, leads, opportunities), [customers, leads, opportunities]);
@@ -106,6 +149,68 @@ export default function Customers() {
     updateOpportunity(updatedOpportunity.id, updatedOpportunity);
   };
 
+  const handleOpportunitySave = (opportunityData) => {
+    if (editingOpportunity) {
+      updateOpportunity(editingOpportunity.id, opportunityData);
+    } else {
+      createOpportunity(opportunityData);
+    }
+    setShowOpportunityForm(false);
+    setEditingOpportunity(null);
+  };
+
+  const handleOpportunityEdit = (opportunity) => {
+    setEditingOpportunity(opportunity);
+    setShowOpportunityForm(true);
+  };
+
+  const handleOpportunityDeleteConfirm = () => {
+    if (opportunityToDelete) {
+      deleteOpportunity(opportunityToDelete.id);
+      setOpportunityToDelete(null);
+    }
+  };
+
+  // Lead handlers
+  const handleLeadUpdate = (updatedLead) => {
+    updateLead(updatedLead.id, updatedLead);
+  };
+
+  const handleLeadEdit = (lead) => {
+    setEditingLead(lead);
+    setShowLeadForm(true);
+  };
+
+  const handleLeadSave = (leadData) => {
+    if (editingLead) {
+      updateLead(editingLead.id, leadData);
+    } else {
+      createLead(leadData);
+    }
+    setShowLeadForm(false);
+    setEditingLead(null);
+  };
+
+  const handleLeadDeleteConfirm = () => {
+    if (leadToDelete) {
+      deleteLead(leadToDelete.id);
+      setLeadToDelete(null);
+    }
+  };
+
+  const handleCallLead = (lead) => {
+    if (lead.phone) {
+      setCustomerToCall({
+        id: lead.id,
+        company_name: lead.company_name,
+        contact_name: lead.contact_name || lead.name,
+        phone: lead.phone,
+        email: lead.email
+      });
+      setActiveTab("calls");
+    }
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       prospect: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -125,19 +230,6 @@ export default function Customers() {
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-[var(--genix-navy)] mb-2">{t('crm_title')}</h1>
             <p className="text-base md:text-lg text-slate-600">{t('crm_subtitle')}</p>
-          </div>
-          <div className="flex gap-3 w-full md:w-auto">
-            <Button
-              onClick={() => {
-                setEditingCustomer(null);
-                setShowForm(true);
-              }}
-              className="flex-1 md:flex-none bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:from-[var(--genix-blue)]/90 hover:to-[var(--genix-purple)]/90 shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">{t('add_customer')}</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
           </div>
         </div>
 
@@ -231,7 +323,7 @@ export default function Customers() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm p-1 md:p-2 rounded-xl border border-slate-200/60 shadow-lg">
+          <TabsList className="grid w-full grid-cols-4 bg-white/80 backdrop-blur-sm p-1 md:p-2 rounded-xl border border-slate-200/60 shadow-lg">
             <TabsTrigger
               value="customers"
               className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
@@ -247,6 +339,14 @@ export default function Customers() {
               <Target className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
               <span className="hidden sm:inline">{t('leads_pipeline')}</span>
               <span className="sm:hidden">Pipeline</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="calls"
+              className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
+            >
+              <PhoneCall className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">{t('calls')}</span>
+              <span className="sm:hidden">Calls</span>
             </TabsTrigger>
             <TabsTrigger
               value="analytics"
@@ -277,7 +377,7 @@ export default function Customers() {
                       <SelectValue placeholder={t('status')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All {t('status')}</SelectItem>
+                      <SelectItem value="all">{t('all')} {t('status')}</SelectItem>
                       <SelectItem value="prospect">{t('prospect')}</SelectItem>
                       <SelectItem value="active">{t('active')}</SelectItem>
                       <SelectItem value="inactive">{t('inactive')}</SelectItem>
@@ -289,7 +389,7 @@ export default function Customers() {
                       <SelectValue placeholder={t('industry')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All {t('industry')}</SelectItem>
+                      <SelectItem value="all">{t('all')} {t('industry')}</SelectItem>
                       <SelectItem value="technology">{t('technology')}</SelectItem>
                       <SelectItem value="healthcare">{t('healthcare')}</SelectItem>
                       <SelectItem value="retail">{t('retail')}</SelectItem>
@@ -304,7 +404,7 @@ export default function Customers() {
             {/* Customers Table */}
             <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
               <CardHeader>
-                <CardTitle>{t('customers')} Directory</CardTitle>
+                <CardTitle>{t('customers_directory')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -312,11 +412,11 @@ export default function Customers() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t('company_name')}</TableHead>
-                        <TableHead>Contact</TableHead>
+                        <TableHead>{t('contact')}</TableHead>
                         <TableHead>{t('industry')}</TableHead>
                         <TableHead>{t('status')}</TableHead>
                         <TableHead>{t('value')}</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -373,6 +473,17 @@ export default function Customers() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
+                              {customer.phone && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-green-600 hover:text-green-700 hover:bg-green-50 hover:border-green-200"
+                                  onClick={() => handleCallCustomer(customer)}
+                                  title={t('call')}
+                                >
+                                  <PhoneCall className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -421,11 +532,34 @@ export default function Customers() {
           </TabsContent>
 
           <TabsContent value="leads">
-            <DragDropKanban
-              opportunities={opportunities}
+            <LeadsKanban
               leads={leads}
-              onUpdateOpportunity={handleOpportunityUpdate}
+              onUpdateLead={handleLeadUpdate}
+              onEditLead={handleLeadEdit}
+              onDeleteLead={(lead) => setLeadToDelete(lead)}
+              onCallLead={handleCallLead}
+              onAddLead={() => {
+                setEditingLead(null);
+                setShowLeadForm(true);
+              }}
               language={language}
+            />
+          </TabsContent>
+
+          <TabsContent value="calls">
+            <CallInterface
+              callLogs={callLogs}
+              customer={customerToCall}
+              language={language}
+              companyId={activeCompany?.id}
+              onUpdate={async () => {
+                try {
+                  const logs = await pbxService.getCallLogs(activeCompany?.id);
+                  setCallLogs(logs || []);
+                } catch (error) {
+                  console.error('Failed to refresh call logs:', error);
+                }
+              }}
             />
           </TabsContent>
 
@@ -487,6 +621,19 @@ export default function Customers() {
           />
         )}
 
+        {/* Lead Form Modal */}
+        {showLeadForm && (
+          <LeadForm
+            lead={editingLead}
+            onSave={handleLeadSave}
+            onCancel={() => {
+              setShowLeadForm(false);
+              setEditingLead(null);
+            }}
+            language={language}
+          />
+        )}
+
         {/* Delete Confirmation Modal */}
         <AlertDialog open={!!customerToDelete} onOpenChange={(open) => !open && setCustomerToDelete(null)}>
           <AlertDialogContent className="sm:max-w-md">
@@ -518,6 +665,83 @@ export default function Customers() {
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete Customer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Opportunity Form Modal */}
+        {showOpportunityForm && (
+          <OpportunityForm
+            opportunity={editingOpportunity}
+            onSave={handleOpportunitySave}
+            onCancel={() => {
+              setShowOpportunityForm(false);
+              setEditingOpportunity(null);
+            }}
+            language={language}
+          />
+        )}
+
+        {/* Opportunity Delete Confirmation Modal */}
+        <AlertDialog open={!!opportunityToDelete} onOpenChange={(open) => !open && setOpportunityToDelete(null)}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader className="text-center sm:text-center">
+              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+                {t('delete_opportunity')}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-600 mt-2">
+                {t('delete_opportunity_confirm')} <span className="font-semibold text-slate-900">{opportunityToDelete?.name}</span>?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+              <AlertDialogCancel
+                onClick={() => setOpportunityToDelete(null)}
+                className="flex-1 sm:flex-none"
+              >
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+                onClick={handleOpportunityDeleteConfirm}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Lead Delete Confirmation Modal */}
+        <AlertDialog open={!!leadToDelete} onOpenChange={(open) => !open && setLeadToDelete(null)}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader className="text-center sm:text-center">
+              <div className="mx-auto mb-4 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <AlertDialogTitle className="text-xl font-semibold text-slate-900">
+                {t('delete_lead')}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-600 mt-2">
+                {t('delete_lead_confirm')} <span className="font-semibold text-slate-900">{leadToDelete?.contact_name || leadToDelete?.name}</span>?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-6 sm:justify-center gap-3">
+              <AlertDialogCancel
+                onClick={() => setLeadToDelete(null)}
+                className="flex-1 sm:flex-none"
+              >
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
+                onClick={handleLeadDeleteConfirm}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('delete')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
