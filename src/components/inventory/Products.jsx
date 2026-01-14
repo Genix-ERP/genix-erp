@@ -35,6 +35,7 @@ export default function Products() {
     createProduct,
     updateProduct,
     deleteProduct,
+    createCategory,
     isLoading
   } = useInventory();
 
@@ -49,8 +50,10 @@ export default function Products() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const { addAuditLog } = useAuditTrail('products');
 
   // Export columns configuration
@@ -283,6 +286,22 @@ export default function Products() {
     setShowDetailModal(true);
   };
 
+  const handleCreateCategory = () => {
+    if (!newCategoryName.trim()) return;
+
+    const categoryData = {
+      code: newCategoryName.toUpperCase().replace(/\s+/g, '-').substring(0, 10),
+      name: newCategoryName.trim(),
+      description: '',
+      parent_id: null,
+      is_active: true
+    };
+
+    createCategory(categoryData);
+    setNewCategoryName('');
+    setShowCategoryModal(false);
+  };
+
   const getTypeColor = (type) => {
     const colors = {
       product: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -489,15 +508,15 @@ export default function Products() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">{t('product')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('sku_code')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('category')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">{t('cost')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">{t('price')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">{t('stock')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('sku_code')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('stock')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('status')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-center min-w-[100px] whitespace-nowrap">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -615,28 +634,28 @@ export default function Products() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Package className="w-5 h-5 text-[var(--genix-blue)]" />
-              {showEditModal ? 'Edit Product' : 'New Product'}
+              {showEditModal ? t('edit_product') : t('new_product')}
             </DialogTitle>
             <DialogDescription>
-              {showEditModal ? 'Update product information' : 'Add a new product or service'}
+              {showEditModal ? t('update_product_info') : t('add_product_description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Basic Info */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-3">Basic Information</h4>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Code *</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
                   <Input
-                    placeholder="e.g., PROD-001"
+                    placeholder={t('code_placeholder')}
                     value={formData.code}
                     onChange={(e) => setFormData({...formData, code: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Type *</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('type')} *</label>
                   <Select
                     value={formData.type}
                     onValueChange={(value) => setFormData({
@@ -650,17 +669,17 @@ export default function Products() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="product">Product</SelectItem>
-                      <SelectItem value="service">Service</SelectItem>
-                      <SelectItem value="bundle">Bundle</SelectItem>
+                      <SelectItem value="product">{t('product')}</SelectItem>
+                      <SelectItem value="service">{t('service')}</SelectItem>
+                      <SelectItem value="bundle">{t('bundle')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="mt-4">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Name *</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
                 <Input
-                  placeholder="Product name"
+                  placeholder={t('product_name_placeholder')}
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
@@ -668,44 +687,55 @@ export default function Products() {
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">SKU</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('sku')}</label>
                   <Input
-                    placeholder="SKU"
+                    placeholder={t('sku')}
                     value={formData.sku}
                     onChange={(e) => setFormData({...formData, sku: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Barcode</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('barcode')}</label>
                   <Input
-                    placeholder="Barcode"
+                    placeholder={t('barcode')}
                     value={formData.barcode}
                     onChange={(e) => setFormData({...formData, barcode: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Category</label>
-                  <Select
-                    value={formData.category_id}
-                    onValueChange={(value) => setFormData({...formData, category_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map(category => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('category')}</label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.category_id}
+                      onValueChange={(value) => setFormData({...formData, category_id: value})}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder={t('select_category')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowCategoryModal(true)}
+                      title={t('add_category')}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="mt-4">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Description</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description')}</label>
                 <Textarea
-                  placeholder="Product description"
+                  placeholder={t('product_description_placeholder')}
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                   rows={2}
@@ -715,10 +745,10 @@ export default function Products() {
 
             {/* Pricing */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-3">Pricing</h4>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('pricing')}</h4>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Cost Price</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('cost_price')}</label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -732,7 +762,7 @@ export default function Products() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">List Price *</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('list_price')} *</label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -747,7 +777,7 @@ export default function Products() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Min Price</label>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('min_price')}</label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -766,10 +796,10 @@ export default function Products() {
             {/* Inventory Settings */}
             {formData.type === 'product' && (
               <div>
-                <h4 className="font-semibold text-slate-900 mb-3">Inventory Settings</h4>
+                <h4 className="font-semibold text-slate-900 mb-3">{t('inventory_settings')}</h4>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">Min Stock Level</label>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('min_stock_level')}</label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -778,7 +808,7 @@ export default function Products() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">Reorder Point</label>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reorder_point')}</label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -787,7 +817,7 @@ export default function Products() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">Reorder Qty</label>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reorder_qty')}</label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -802,14 +832,14 @@ export default function Products() {
                       checked={formData.is_stockable}
                       onCheckedChange={(checked) => setFormData({...formData, is_stockable: checked})}
                     />
-                    <span className="text-sm text-slate-700">Stockable</span>
+                    <span className="text-sm text-slate-700">{t('stockable')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={formData.track_inventory}
                       onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
                     />
-                    <span className="text-sm text-slate-700">Track Inventory</span>
+                    <span className="text-sm text-slate-700">{t('track_inventory')}</span>
                   </div>
                 </div>
               </div>
@@ -817,28 +847,28 @@ export default function Products() {
 
             {/* Options */}
             <div>
-              <h4 className="font-semibold text-slate-900 mb-3">Options</h4>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('options')}</h4>
               <div className="flex flex-wrap gap-6">
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={formData.is_purchasable}
                     onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked})}
                   />
-                  <span className="text-sm text-slate-700">Can be Purchased</span>
+                  <span className="text-sm text-slate-700">{t('can_be_purchased')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={formData.is_sellable}
                     onCheckedChange={(checked) => setFormData({...formData, is_sellable: checked})}
                   />
-                  <span className="text-sm text-slate-700">Can be Sold</span>
+                  <span className="text-sm text-slate-700">{t('can_be_sold')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={formData.is_active}
                     onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
                   />
-                  <span className="text-sm text-slate-700">Active</span>
+                  <span className="text-sm text-slate-700">{t('active')}</span>
                 </div>
               </div>
             </div>
@@ -853,14 +883,14 @@ export default function Products() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={showEditModal ? handleUpdate : handleCreate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !formData.name || !formData.code}
               >
-                {isSaving ? 'Saving...' : showEditModal ? 'Update Product' : 'Create Product'}
+                {isSaving ? t('saving') : showEditModal ? t('update_product') : t('create_product')}
               </Button>
             </div>
           </div>
@@ -1026,6 +1056,54 @@ export default function Products() {
         entityName="Mahsulotlar"
         title="Mahsulotlar ro'yxati"
       />
+
+      {/* Create Category Modal */}
+      <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Tag className="w-5 h-5 text-[var(--genix-blue)]" />
+              {t('add_category')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('add_category_description')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('category_name')} *
+              </label>
+              <Input
+                placeholder={t('category_name_placeholder')}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setNewCategoryName('');
+                }}
+                className="flex-1"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleCreateCategory}
+                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                disabled={!newCategoryName.trim()}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t('create')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

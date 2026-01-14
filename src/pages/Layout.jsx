@@ -415,7 +415,6 @@ function LayoutContent({ children, currentPageName }) {
                 <Link to={createPageUrl("Notifications")}>
                   <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
                   </Button>
                 </Link>
                 <Link to={createPageUrl("Settings")} className="hidden md:inline-block">

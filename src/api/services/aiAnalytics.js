@@ -337,6 +337,174 @@ const aiTranslations = {
     startRenewalProcess: (count) => `${count} ta tugayotgan shartnoma uchun yangilash jarayonini boshlang`,
     contractReview: "Shartnomalarni ko'rib chiqish",
     regularlyReview: "Shartnoma shartlari va muvofiqligini muntazam ko'rib chiqing"
+  },
+  ru: {
+    // Sales
+    noSalesData: "Данные о продажах недоступны.",
+    revenueGrowing: "Рост выручки",
+    salesRevenueIncreased: (rate) => `Выручка от продаж выросла на ${rate}% по сравнению с прошлым месяцем`,
+    revenueDeclining: "Снижение выручки",
+    salesRevenueDecreased: (rate) => `Выручка от продаж снизилась на ${rate}% по сравнению с прошлым месяцем`,
+    outstandingPayments: "Неоплаченные платежи",
+    ordersUnpaid: (count, total) => `${count} заказов на сумму $${total} не оплачены`,
+    pendingQuotations: "Ожидающие предложения",
+    quotationsAwaiting: (count) => `${count} предложений ожидают подтверждения клиента`,
+    focusTopCustomers: "Фокус на ключевых клиентах",
+    topCustomerGenerates: (name, revenue) => `Ваш лучший клиент ${name} приносит $${revenue}. Рассмотрите программы лояльности.`,
+    followUpPayments: "Отслеживание платежей",
+    sendPaymentReminders: (count) => `Отправьте напоминания об оплате для ${count} неоплаченных заказов`,
+    increaseOrderValue: "Увеличение стоимости заказа",
+    avgOrderValueLow: (avg) => `Средняя стоимость заказа $${avg}. Рассмотрите допродажи или пакетные предложения.`,
+
+    // Inventory
+    noInventoryData: "Данные об инвентаре недоступны.",
+    lowStockAlert: "Предупреждение о низком запасе",
+    itemsBelowReorder: (count) => `${count} товаров ниже уровня перезаказа`,
+    deadStockDetected: "Обнаружен мёртвый запас",
+    itemsNotMoving: (count, value) => `${count} товаров на сумму $${value} не продаются`,
+    itemsExpiringSoon: "Скоро истекает срок",
+    willExpireWithin: (count) => `У ${count} товаров срок годности истекает в течение 30 дней`,
+    overstockItems: "Избыточный запас",
+    itemsOverstocked: (count) => `${count} товаров в избытке - рассмотрите акции`,
+    generatePurchaseOrders: "Создать заказы на закупку",
+    createPOsFor: (count) => `Создайте заказы для ${count} товаров с низким запасом`,
+    liquidateDeadStock: "Ликвидация мёртвого запаса",
+    considerPromotional: "Рассмотрите акционные цены для продажи мёртвого запаса",
+    prioritizeAClass: "Приоритет товарам класса A",
+    aClassContribute: (count) => `${count} товаров класса A приносят наибольший доход. Обеспечьте достаточный запас.`,
+
+    // Financial
+    noFinancialData: "Финансовые данные недоступны.",
+    healthyProfitMargin: "Здоровая маржа прибыли",
+    profitMarginAbove: (margin) => `Ваша маржа прибыли ${margin}% выше среднеотраслевой`,
+    lowProfitMargin: "Низкая маржа прибыли",
+    profitMarginBelow: (margin) => `Маржа прибыли ${margin}% ниже оптимального уровня`,
+    operatingAtLoss: "Работа в убыток",
+    expensesExceedIncome: "Расходы превышают доходы - требуются срочные меры",
+    expenseConcentration: "Концентрация расходов",
+    categoryAccountsFor: (cat, pct) => `${cat} составляет ${pct}% расходов`,
+    reviewExpenseCategories: "Анализ категорий расходов",
+    analyzeTopExpense: "Проанализируйте основные категории расходов для сокращения затрат",
+    cashFlowForecast: "Прогноз денежного потока",
+    projectNextMonth: "На основе текущих тенденций спрогнозируйте денежную позицию на следующий месяц",
+
+    // HR
+    noEmployeeData: "Данные о сотрудниках недоступны.",
+    turnoverRiskAlert: "Предупреждение о риске текучести",
+    employeesHighRisk: (count) => `${count} сотрудников с высоким риском увольнения`,
+    highPerformanceTeam: "Высокоэффективная команда",
+    avgPerformanceAbove: (avg) => `Средняя оценка производительности ${avg} - отлично`,
+    performanceIssues: "Проблемы с производительностью",
+    employeesBelow: (count) => `${count} сотрудников нуждаются в улучшении показателей`,
+    retainKeyTalent: "Удержание ключевых талантов",
+    engageHighRisk: "Проведите беседы с сотрудниками группы риска",
+    performanceReviews: "Оценка производительности",
+    considerReviews: (count) => `${count} сотрудников требуют оценки производительности`,
+
+    // Projects
+    noProjectData: "Данные о проектах недоступны.",
+    onTimeDelivery: "Своевременная доставка",
+    projectsOnTrack: (count) => `${count} проектов идут по плану`,
+    atRiskProjects: "Проекты под угрозой",
+    projectsBehind: (count) => `${count} проектов отстают от графика`,
+    budgetOverrun: "Превышение бюджета",
+    projectsOverBudget: (count) => `${count} проектов превысили бюджет`,
+    reviewProjectTimelines: "Анализ сроков проектов",
+    addressDelays: "Устраните задержки в проектах под угрозой",
+    resourceAllocation: "Оптимизация распределения ресурсов",
+    redistributeResources: "Рассмотрите перераспределение ресурсов из завершённых проектов",
+
+    // CRM
+    noCRMData: "Данные CRM недоступны.",
+    highValueLeads: "Ценные лиды",
+    leadsAbove: (count, value) => `${count} лидов с потенциалом выше $${value}`,
+    stagnantLeads: "Застойные лиды",
+    leadsNoActivity: (count) => `${count} лидов не контактировались более 30 дней`,
+    conversionOpportunity: "Возможность конверсии",
+    qualifiedLeads: (count) => `${count} квалифицированных лидов готовы к закрытию`,
+    followUpStagnant: "Работа с застойными лидами",
+    reachOutTo: (count) => `Свяжитесь с ${count} неактивными лидами`,
+    focusQualified: "Фокус на квалифицированных лидах",
+    prioritizeQualified: "Приоритизируйте квалифицированных лидов для быстрой конверсии",
+
+    // Manufacturing
+    noManufacturingData: "Данные о производстве недоступны.",
+    delayedOrders: "Задержанные заказы",
+    ordersPastDue: (count) => `${count} рабочих заказов просрочены`,
+    highProductionEfficiency: "Высокая эффективность производства",
+    productionEfficiencyAt: (rate) => `Эффективность производства составляет ${rate}%`,
+    highWorkLoad: "Высокая загрузка",
+    ordersInProgress: (count) => `${count} заказов в процессе выполнения`,
+    prioritizeDelayed: "Приоритет задержанным заказам",
+    allocateResources: "Выделите ресурсы для завершения просроченных заказов",
+    optimizeScheduling: "Оптимизация планирования",
+    reviewProduction: "Проверьте график производства на узкие места",
+    predictiveMaintenance: "Предиктивное обслуживание",
+    scheduleMaintenance: "Запланируйте обслуживание на основе использования оборудования",
+
+    // Procurement
+    noProcurementData: "Данные о закупках недоступны.",
+    pendingOrders: "Ожидающие заказы",
+    ordersAwaiting: (count) => `${count} заказов ожидают выполнения`,
+    vendorConcentration: "Концентрация поставщиков",
+    vendorRepresents: (name, pct) => `${name} составляет ${pct}% расходов`,
+    diversifySuppliers: "Диверсификация поставщиков",
+    addBackupVendors: "Рассмотрите добавление резервных поставщиков",
+    negotiateBulkPricing: "Переговоры об оптовых ценах",
+    leverageVolume: "Используйте объём для получения лучших цен",
+
+    // Assets
+    noAssetData: "Данные об активах недоступны.",
+    maintenanceDue: "Требуется обслуживание",
+    assetsRequireMaintenance: (count) => `${count} активов требуют обслуживания в течение 30 дней`,
+    fullyDepreciated: "Полностью амортизированы",
+    assetsFullyDepreciated: (count) => `${count} активов полностью амортизированы`,
+    netBookValue: "Чистая балансовая стоимость",
+    currentValueAfter: "Текущая стоимость всех активов после амортизации",
+    scheduleMaintenance2: "Планирование обслуживания",
+    planMaintenance: (count) => `Запланируйте обслуживание для ${count} активов`,
+    assetReplacementPlan: "План замены активов",
+    considerReplacement: "Рассмотрите стратегию замены устаревших активов",
+
+    // Expenses
+    noExpenseData: "Данные о расходах недоступны.",
+    pendingApprovals: "Ожидающие одобрения",
+    expensesAwaiting: (count, amount) => `${count} расходов на сумму $${amount} ожидают одобрения`,
+    topExpenseCategory: "Основная категория расходов",
+    largestExpense: (cat) => `${cat} - ваша крупнейшая категория расходов`,
+    highRejectionRate: "Высокий процент отклонений",
+    expensesRejected: (rate) => `${rate}% расходов отклоняются`,
+    reviewPendingExpenses: "Проверка ожидающих расходов",
+    clearBacklog: "Очистите очередь на одобрение расходов",
+    setCategoryBudgets: "Установка бюджетов по категориям",
+    establishLimits: "Установите лимиты расходов по категориям",
+
+    // Payroll
+    noPayrollData: "Данные о зарплате недоступны.",
+    pendingPayroll: "Ожидающая зарплата",
+    payrollPending: (count) => `${count} записей о зарплате ожидают обработки`,
+    totalPayrollCost: "Общие затраты на зарплату",
+    grossPayroll: "Валовая зарплата за текущий период",
+    deductionRate: "Ставка удержаний",
+    ofGrossSalary: (rate) => `${rate}% валовой зарплаты идёт на удержания`,
+    processPendingPayroll: "Обработка ожидающей зарплаты",
+    completeProcessing: "Завершите обработку зарплаты до срока",
+    reviewTaxCompliance: "Проверка налогового соответствия",
+    ensureWithholdings: "Убедитесь в правильности всех налоговых удержаний",
+
+    // Contracts
+    noContractData: "Данные о контрактах недоступны.",
+    contractsExpiringSoon: "Контракты скоро истекают",
+    contractsExpire: (count) => `${count} контрактов истекают в течение 30 дней`,
+    activeContractValue: "Стоимость активных контрактов",
+    totalValueActive: "Общая стоимость активных контрактов",
+    activeContracts: "Активные контракты",
+    contractsActive: (count) => `${count} контрактов активны`,
+    contractsSummary: (count, value) => `${count} Активных | $${value} Стоимость`,
+    initiateRenewals: "Начать продление",
+    startRenewalProcess: (count) => `Начните процесс продления для ${count} истекающих контрактов`,
+    contractReview: "Проверка контрактов",
+    regularlyReview: "Регулярно проверяйте условия и соответствие контрактов"
   }
 };
 
@@ -979,7 +1147,7 @@ export const analyzeProjects = (projects, language = 'en') => {
  * Generates overall business health score and insights
  */
 export const analyzeBusinessHealth = (data) => {
-  const { salesOrders, inventory, transactions, employees, projects } = data;
+  const { salesOrders, inventory, transactions, employees, projects, language = 'en' } = data;
 
   let healthScore = 70; // Base score
   const factors = [];
@@ -987,7 +1155,7 @@ export const analyzeBusinessHealth = (data) => {
 
   // Sales health
   if (salesOrders && salesOrders.length > 0) {
-    const salesAnalysis = analyzeSales(salesOrders);
+    const salesAnalysis = analyzeSales(salesOrders, [], language);
     if (salesAnalysis.metrics.growthRate > 5) {
       healthScore += 10;
       factors.push({ name: 'Sales Growth', impact: '+10', status: 'positive' });
@@ -1000,7 +1168,7 @@ export const analyzeBusinessHealth = (data) => {
 
   // Inventory health
   if (inventory && inventory.length > 0) {
-    const invAnalysis = analyzeInventory(inventory);
+    const invAnalysis = analyzeInventory(inventory, [], language);
     if (invAnalysis.metrics.lowStockCount > 3) {
       healthScore -= 5;
       factors.push({ name: 'Low Stock Issues', impact: '-5', status: 'warning' });
@@ -1014,7 +1182,7 @@ export const analyzeBusinessHealth = (data) => {
 
   // Financial health
   if (transactions && transactions.length > 0) {
-    const finAnalysis = analyzeFinancials(transactions);
+    const finAnalysis = analyzeFinancials(transactions, [], [], language);
     if (finAnalysis.metrics.profitMargin > 15) {
       healthScore += 10;
       factors.push({ name: 'Healthy Margins', impact: '+10', status: 'positive' });
@@ -1027,7 +1195,7 @@ export const analyzeBusinessHealth = (data) => {
 
   // HR health
   if (employees && employees.length > 0) {
-    const hrAnalysis = analyzeHR(employees);
+    const hrAnalysis = analyzeHR(employees, [], language);
     if (hrAnalysis.metrics.highRiskCount > 0) {
       healthScore -= 5;
       factors.push({ name: 'Turnover Risk', impact: '-5', status: 'warning' });
@@ -1041,7 +1209,7 @@ export const analyzeBusinessHealth = (data) => {
 
   // Project health
   if (projects && projects.length > 0) {
-    const projAnalysis = analyzeProjects(projects);
+    const projAnalysis = analyzeProjects(projects, language);
     if (projAnalysis.overBudgetProjects.length > 0) {
       healthScore -= 5;
       factors.push({ name: 'Project Overruns', impact: '-5', status: 'warning' });

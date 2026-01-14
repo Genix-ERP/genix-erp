@@ -88,7 +88,7 @@ export default function StockMovementTracker({ movements, items }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Movements</p>
+                <p className="text-sm text-slate-500">{t('total_movements')}</p>
                 <p className="text-2xl font-bold text-slate-900">{movementStats.totalMovements}</p>
               </div>
               <Activity className="w-6 h-6 text-[var(--genix-blue)]" />
@@ -100,7 +100,7 @@ export default function StockMovementTracker({ movements, items }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Inbound Value</p>
+                <p className="text-sm text-slate-500">{t('inbound_value')}</p>
                 <p className="text-2xl font-bold text-green-600">${movementStats.inboundValue.toLocaleString()}</p>
               </div>
               <TrendingUp className="w-6 h-6 text-green-600" />
@@ -112,7 +112,7 @@ export default function StockMovementTracker({ movements, items }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Outbound Value</p>
+                <p className="text-sm text-slate-500">{t('outbound_value')}</p>
                 <p className="text-2xl font-bold text-red-600">${movementStats.outboundValue.toLocaleString()}</p>
               </div>
               <TrendingDown className="w-6 h-6 text-red-600" />
@@ -124,7 +124,7 @@ export default function StockMovementTracker({ movements, items }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Net Movement</p>
+                <p className="text-sm text-slate-500">{t('net_movement')}</p>
                 <p className={`text-2xl font-bold ${movementStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   ${movementStats.netValue.toLocaleString()}
                 </p>
@@ -141,13 +141,13 @@ export default function StockMovementTracker({ movements, items }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-[var(--genix-blue)]" />
-              <CardTitle>Stock Movement History</CardTitle>
+              <CardTitle>{t('stock_movement_history')}</CardTitle>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Search movements..."
+                  placeholder={t('search_movements')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 w-64"
@@ -155,7 +155,7 @@ export default function StockMovementTracker({ movements, items }) {
               </div>
               <Button className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                 <Plus className="w-4 h-4 mr-2" />
-                New Movement
+                {t('new_movement')}
               </Button>
             </div>
           </div>
@@ -165,14 +165,14 @@ export default function StockMovementTracker({ movements, items }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date/Time</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Unit Cost</TableHead>
-                  <TableHead>Total Value</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>COGS</TableHead>
+                  <TableHead>{t('date_time')}</TableHead>
+                  <TableHead>{t('item')}</TableHead>
+                  <TableHead>{t('type')}</TableHead>
+                  <TableHead>{t('quantity')}</TableHead>
+                  <TableHead>{t('unit_cost')}</TableHead>
+                  <TableHead>{t('total_value')}</TableHead>
+                  <TableHead>{t('reference')}</TableHead>
+                  <TableHead>{t('cogs')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,7 +193,7 @@ export default function StockMovementTracker({ movements, items }) {
                             <p className="text-sm text-slate-500">{getItemSku(movement.inventory_item_id)}</p>
                             {movement.batch_number && (
                               <Badge variant="outline" className="text-xs mt-1">
-                                Batch: {movement.batch_number}
+                                {t('batch')}: {movement.batch_number}
                               </Badge>
                             )}
                           </div>

@@ -65,11 +65,11 @@ export default function Dashboard() {
   }, []);
 
   // Run AI analytics on actual data
-  const salesAnalysis = useMemo(() => analyzeSales(salesOrders, customers), [salesOrders, customers]);
-  const inventoryAnalysis = useMemo(() => analyzeInventory(inventory, stockMovements), [inventory, stockMovements]);
-  const financialAnalysis = useMemo(() => analyzeFinancials(financialTransactions), [financialTransactions]);
-  const hrAnalysis = useMemo(() => analyzeHR(employees, payrolls), [employees, payrolls]);
-  const projectAnalysis = useMemo(() => analyzeProjects(projects), [projects]);
+  const salesAnalysis = useMemo(() => analyzeSales(salesOrders, customers, language), [salesOrders, customers, language]);
+  const inventoryAnalysis = useMemo(() => analyzeInventory(inventory, stockMovements, language), [inventory, stockMovements, language]);
+  const financialAnalysis = useMemo(() => analyzeFinancials(financialTransactions, [], [], language), [financialTransactions, language]);
+  const hrAnalysis = useMemo(() => analyzeHR(employees, payrolls, language), [employees, payrolls, language]);
+  const projectAnalysis = useMemo(() => analyzeProjects(projects, language), [projects, language]);
 
   // Business health score
   const businessHealth = useMemo(() => analyzeBusinessHealth({
@@ -77,8 +77,9 @@ export default function Dashboard() {
     inventory,
     transactions: financialTransactions,
     employees,
-    projects
-  }), [salesOrders, inventory, financialTransactions, employees, projects]);
+    projects,
+    language
+  }), [salesOrders, inventory, financialTransactions, employees, projects, language]);
 
   // Calculate metrics from real data
   const metrics = useMemo(() => {
