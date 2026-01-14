@@ -62,14 +62,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
+import { PERMISSION_MATRIX } from "@/config/permissions";
 
 export default function HR() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { coreModules, appModules, getEmployeePermissions, setEmployeePermissions } = useModules();
   const { isAppInstalled } = useInstalledApps();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -92,26 +95,28 @@ export default function HR() {
 
   // Export columns configuration
   const exportColumns = [
-    { key: 'full_name', label: "To'liq ismi" },
-    { key: 'email', label: 'Email' },
-    { key: 'phone', label: 'Telefon' },
-    { key: 'job_title', label: 'Lavozimi' },
-    { key: 'department', label: "Bo'lim" },
-    { key: 'hire_date', label: 'Ishga kirgan sana' },
-    { key: 'salary', label: 'Maosh', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'status', label: 'Holat' },
-    { key: 'performance_score', label: 'Samaradorlik bali' },
+    { key: 'full_name', label: t('full_name') || "To'liq ismi" },
+    { key: 'email', label: t('email') || 'Email' },
+    { key: 'phone', label: t('phone') || 'Telefon' },
+    { key: 'job_title', label: t('job_title') || 'Lavozimi' },
+    { key: 'department', label: t('department') || "Bo'lim" },
+    { key: 'hire_date', label: t('hire_date') || 'Ishga kirgan sana', render: (v) => v || '-' },
+    { key: 'salary', label: t('salary') || 'Maosh', render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'status', label: t('status') || 'Holat' },
+    { key: 'performance_score', label: t('performance_score') || 'Samaradorlik bali' },
   ];
 
   // Import columns configuration
   const importColumns = [
-    { key: 'full_name', label: "To'liq ismi", required: true },
-    { key: 'email', label: 'Email', required: true },
-    { key: 'phone', label: 'Telefon' },
-    { key: 'job_title', label: 'Lavozimi', required: true },
-    { key: 'department', label: "Bo'lim", required: true },
-    { key: 'hire_date', label: 'Ishga kirgan sana' },
-    { key: 'salary', label: 'Maosh' },
+    { key: 'full_name', label: t('full_name') || "To'liq ismi", required: true },
+    { key: 'email', label: t('email') || 'Email', required: true },
+    { key: 'phone', label: t('phone') || 'Telefon' },
+    { key: 'job_title', label: t('job_title') || 'Lavozimi', required: true },
+    { key: 'department', label: t('department') || "Bo'lim", required: true },
+    { key: 'hire_date', label: t('hire_date') || 'Ishga kirgan sana' },
+    { key: 'salary', label: t('salary') || 'Maosh' },
+    { key: 'status', label: t('status') || 'Holat' },
+    { key: 'performance_score', label: t('performance_score') || 'Samaradorlik bali' },
   ];
 
   const handleImport = async (data) => {
@@ -124,9 +129,9 @@ export default function HR() {
         department: row.department || 'general',
         hire_date: row.hire_date || new Date().toISOString().split('T')[0],
         salary: parseFloat(row.salary) || 0,
-        status: 'active',
-        performance_score: 3,
-        turnover_risk: 'low',
+        status: row.status || 'active',
+        performance_score: row.performance_score ? parseFloat(row.performance_score) : 3,
+        turnover_risk: row.turnover_risk || 'low',
       };
       hrService.createEmployee(employeeData);
     }
@@ -164,7 +169,8 @@ export default function HR() {
     salary: '',
     status: 'active',
     performance_score: 3,
-    turnover_risk: 'low'
+    turnover_risk: 'low',
+    permission: 'basic'
   });
 
   // AI-based turnover risk assessment
@@ -254,10 +260,11 @@ Only return the JSON, no other text.`;
         job_title: emp.job_title || '',
         department: emp.department || 'other',
         hire_date: emp.hire_date,
-        salary: emp.base_salary || 0,
+        salary: emp.salary || 0,
         status: emp.status || 'active',
         performance_score: emp.performance_score || 3,
-        turnover_risk: emp.turnover_risk || 'low'
+        turnover_risk: emp.turnover_risk || 'low',
+        permission: emp.permission || 'basic'
       }));
 
       // Run AI turnover risk assessment
@@ -319,10 +326,11 @@ Only return the JSON, no other text.`;
         job_title: newEmployee.job_title,
         department: newEmployee.department,
         hire_date: newEmployee.hire_date,
-        base_salary: parseFloat(newEmployee.salary) || 0,
+        salary: parseFloat(newEmployee.salary) || 0,
         status: newEmployee.status,
         performance_score: parseFloat(newEmployee.performance_score) || 3,
-        turnover_risk: newEmployee.turnover_risk
+        turnover_risk: newEmployee.turnover_risk,
+        permission: newEmployee.permission
       };
 
       console.log("Creating employee with data:", employeeData);
@@ -340,7 +348,8 @@ Only return the JSON, no other text.`;
         salary: '',
         status: 'active',
         performance_score: 3,
-        turnover_risk: 'low'
+        turnover_risk: 'low',
+        permission: 'basic'
       });
       await loadEmployees();
     } catch (error) {
@@ -376,10 +385,11 @@ Only return the JSON, no other text.`;
         job_title: selectedEmployee.job_title,
         department: selectedEmployee.department,
         hire_date: selectedEmployee.hire_date,
-        base_salary: parseFloat(selectedEmployee.salary) || 0,
+        salary: parseFloat(selectedEmployee.salary) || 0,
         status: selectedEmployee.status,
         performance_score: parseFloat(selectedEmployee.performance_score) || 3,
-        turnover_risk: selectedEmployee.turnover_risk
+        turnover_risk: selectedEmployee.turnover_risk,
+        permission: selectedEmployee.permission
       };
 
       await hrService.updateEmployee(selectedEmployee.id, employeeData);
@@ -403,13 +413,78 @@ Only return the JSON, no other text.`;
   const [editingPermissions, setEditingPermissions] = useState({});
   const [permissionsSaved, setPermissionsSaved] = useState(false);
 
+  // Get default permissions based on employee permission level
+  const getDefaultPermissionsForLevel = useCallback((permissionLevel) => {
+    const modules = {};
+
+    // Get all available modules
+    const availableModules = [];
+    coreModules.forEach(m => {
+      if (!m.adminOnly) availableModules.push(m);
+    });
+    appModules.forEach(m => {
+      if (isAppInstalled(m.appId)) availableModules.push(m);
+    });
+    const adminModule = coreModules.find(m => m.adminOnly);
+    if (adminModule) availableModules.push(adminModule);
+
+    // Map module IDs to permission module keys
+    const moduleIdMapping = {
+      'dashboard': 'dashboard',
+      'inventory': 'inventory',
+      'customers': 'customers',
+      'vendors': 'vendors',
+      'sales': 'sales',
+      'purchases': 'purchases',
+      'financials': 'financials',
+      'hr': 'hr',
+      'contracts': 'contracts',
+      'projects': 'projects',
+      'reports': 'reports',
+      'settings': 'settings',
+      'company': 'company',
+      'admin': 'admin'
+    };
+
+    // Build permissions object based on permission level
+    availableModules.forEach(module => {
+      const moduleKey = moduleIdMapping[module.id];
+      if (moduleKey && PERMISSION_MATRIX[permissionLevel]?.[moduleKey]) {
+        const ops = PERMISSION_MATRIX[permissionLevel][moduleKey];
+        modules[module.id] = {
+          create: ops.includes('create'),
+          read: ops.includes('read'),
+          update: ops.includes('update'),
+          delete: ops.includes('delete')
+        };
+      }
+    });
+
+    return modules;
+  }, [coreModules, appModules, isAppInstalled]);
+
   const handleManagePermissions = (employee) => {
-    setSelectedEmployee(employee);
-    // Load current permissions into editing state
-    const currentPerms = getEmployeePermissions(employee.id);
-    setEditingPermissions(currentPerms);
-    setPermissionsSaved(false);
-    setShowPermissionsModal(true);
+    try {
+      setSelectedEmployee(employee);
+      // Load current permissions into editing state
+      let currentPerms = getEmployeePermissions(employee.id);
+
+      // If no permissions set yet, initialize based on employee's permission level
+      if (Object.keys(currentPerms).length === 0 && employee.permission) {
+        currentPerms = getDefaultPermissionsForLevel(employee.permission);
+      }
+
+      setEditingPermissions(currentPerms);
+      setPermissionsSaved(false);
+      setShowPermissionsModal(true);
+    } catch (error) {
+      console.error('Error opening permissions modal:', error);
+      // Still open the modal even if there's an error initializing permissions
+      setSelectedEmployee(employee);
+      setEditingPermissions({});
+      setPermissionsSaved(false);
+      setShowPermissionsModal(true);
+    }
   };
 
   // Get available modules (only modules visible in sidebar)
@@ -568,13 +643,15 @@ Only return the JSON, no other text.`;
               onImport={() => setShowImportModal(true)}
               onExport={() => setShowExportModal(true)}
             />
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {t('add_employee')}
-            </Button>
+            {canCreate(MODULES.HR) && (
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t('add_employee')}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -657,21 +734,27 @@ Only return the JSON, no other text.`;
                             <Eye className="mr-2 h-4 w-4" />
                             {t('view') || 'View Details'}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditEmployee(e)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            {t('edit') || 'Edit'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleManagePermissions(e)}>
-                            <Shield className="mr-2 h-4 w-4" />
-                            {t('manage_permissions') || 'Manage Permissions'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteClick(e)}
-                            className="text-red-600 focus:text-red-600"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            {t('delete') || 'Delete'}
-                          </DropdownMenuItem>
+                          {canUpdate(MODULES.HR) && (
+                            <DropdownMenuItem onClick={() => handleEditEmployee(e)}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              {t('edit') || 'Edit'}
+                            </DropdownMenuItem>
+                          )}
+                          {canUpdate(MODULES.HR) && (
+                            <DropdownMenuItem onClick={() => handleManagePermissions(e)}>
+                              <Shield className="mr-2 h-4 w-4" />
+                              {t('manage_permissions') || 'Manage Permissions'}
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete(MODULES.HR) && (
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteClick(e)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              {t('delete') || 'Delete'}
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -807,6 +890,22 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('permission')}</Label>
+                <Select
+                  value={newEmployee.permission}
+                  onValueChange={value => setNewEmployee({...newEmployee, permission: value})}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="learner">{t('learner')}</SelectItem>
+                    <SelectItem value="basic">{t('basic')}</SelectItem>
+                    <SelectItem value="important">{t('important')}</SelectItem>
+                    <SelectItem value="grant">{t('grant')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -1066,6 +1165,22 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label>{t('permission')}</Label>
+                  <Select
+                    value={selectedEmployee.permission || 'basic'}
+                    onValueChange={value => setSelectedEmployee({...selectedEmployee, permission: value})}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="learner">{t('learner')}</SelectItem>
+                      <SelectItem value="basic">{t('basic')}</SelectItem>
+                      <SelectItem value="important">{t('important')}</SelectItem>
+                      <SelectItem value="grant">{t('grant')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4">
                   <Button variant="outline" onClick={() => setShowEditModal(false)}>
                     {t('cancel')}
@@ -1135,7 +1250,7 @@ Only return the JSON, no other text.`;
                       className="text-green-600 border-green-200 hover:bg-green-50"
                     >
                       <Check className="w-4 h-4 mr-1" />
-                      Grant All
+                      {t('grant_all') || 'Grant All'}
                     </Button>
                     <Button
                       variant="outline"
@@ -1144,14 +1259,14 @@ Only return the JSON, no other text.`;
                       className="text-red-600 border-red-200 hover:bg-red-50"
                     >
                       <XIcon className="w-4 h-4 mr-1" />
-                      Revoke All
+                      {t('revoke_all') || 'Revoke All'}
                     </Button>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-slate-500">
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> Create</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> Read</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Update</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> Delete</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> {t('create') || 'Create'}</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> {t('read') || 'Read'}</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> {t('update') || 'Update'}</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> {t('delete') || 'Delete'}</span>
                   </div>
                 </div>
 
@@ -1161,7 +1276,7 @@ Only return the JSON, no other text.`;
                     <TableHeader className="sticky top-0 bg-white z-10">
                       <TableRow className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2">
                         <TableHead className="font-semibold text-slate-700 py-4">{t('module') || 'Module'}</TableHead>
-                        <TableHead className="text-center w-28 font-semibold text-slate-700">Full Access</TableHead>
+                        <TableHead className="text-center w-28 font-semibold text-slate-700">{t('full_access') || 'Full Access'}</TableHead>
                         <TableHead className="text-center w-16">
                           <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 mx-auto flex items-center justify-center font-bold text-sm">C</div>
                         </TableHead>
@@ -1204,7 +1319,7 @@ Only return the JSON, no other text.`;
                                       'bg-blue-50 text-blue-600 border-blue-200'
                                     }`}
                                   >
-                                    {module.isCore ? 'Core' : module.adminOnly ? 'Admin' : 'App'}
+                                    {module.isCore ? t('core') || 'Core' : module.adminOnly ? t('admin') || 'Admin' : t('app') || 'App'}
                                   </Badge>
                                 </div>
                               </div>
@@ -1274,12 +1389,12 @@ Only return the JSON, no other text.`;
                 {/* Footer with Save Button */}
                 <div className="flex items-center justify-between pt-4 mt-4 border-t bg-white">
                   <p className="text-xs text-slate-500">
-                    {getAvailableModules().length} modules available
+                    {getAvailableModules().length} {t('modules_available') || 'modules available'}
                   </p>
                   <div className="flex items-center gap-3">
                     {permissionsSaved && (
                       <span className="text-sm text-green-600 flex items-center gap-1 animate-pulse">
-                        <Check className="w-4 h-4" /> Saved!
+                        <Check className="w-4 h-4" /> {t('permissions_saved') || 'Saved!'}
                       </span>
                     )}
                     <Button variant="outline" onClick={() => setShowPermissionsModal(false)}>
@@ -1305,7 +1420,7 @@ Only return the JSON, no other text.`;
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
           columns={importColumns}
-          entityName="Xodimlar"
+          entityName={t('employees') || 'Xodimlar'}
         />
 
         {/* Export Modal */}
@@ -1314,8 +1429,8 @@ Only return the JSON, no other text.`;
           onClose={() => setShowExportModal(false)}
           data={filteredEmployees}
           columns={exportColumns}
-          entityName="Xodimlar"
-          title="Xodimlar ro'yxati"
+          entityName={t('employees') || 'Xodimlar'}
+          title={t('employees_list') || "Xodimlar ro'yxati"}
         />
 
         {/* Print Preview Modal */}
