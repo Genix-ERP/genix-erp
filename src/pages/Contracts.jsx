@@ -18,15 +18,22 @@ export default function Contracts() {
   const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
 
   // AI Analysis
-  const contractAnalysis = useMemo(() => analyzeContracts(contracts), [contracts]);
+  const contractAnalysis = useMemo(() => analyzeContracts(contracts, language), [contracts, language]);
   const [filteredContracts, setFilteredContracts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRenewalConfirmModal, setShowRenewalConfirmModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showNoExpiringModal, setShowNoExpiringModal] = useState(false);
   const [selectedContract, setSelectedContract] = useState(null);
   const [editContract, setEditContract] = useState(null);
+  const [contractToDelete, setContractToDelete] = useState(null);
+  const [renewalData, setRenewalData] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newContract, setNewContract] = useState({
@@ -142,14 +149,139 @@ export default function Contracts() {
     }
   };
 
-  const handleDeleteContract = (contractId) => {
-    if (window.confirm(t('delete_contract_confirm'))) {
-      deleteContract(contractId);
+  const handleDeleteContract = (contract) => {
+    setContractToDelete(contract);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (contractToDelete) {
+      deleteContract(contractToDelete.id);
+      setShowDeleteModal(false);
+      setContractToDelete(null);
     }
   };
 
   const updateContractStatus = (contractId, newStatus) => {
     updateContract(contractId, { status: newStatus });
+  };
+
+  // Handle renewal action
+  const handleInitiateRenewals = () => {
+    // Find expiring contracts from ALL contracts (not just filtered ones)
+    const allContractsWithExpiry = contracts.map(contract => {
+      if (!contract.end_date) return contract;
+
+      const today = new Date();
+      const endDate = new Date(contract.end_date);
+      const daysUntilExpiry = differenceInDays(endDate, today);
+
+      return { ...contract, daysUntilExpiry };
+    });
+
+    const expiringContracts = allContractsWithExpiry.filter(c =>
+      c.status === 'active' && c.daysUntilExpiry >= 0 && c.daysUntilExpiry <= 30
+    );
+
+    if (expiringContracts.length === 0) {
+      setShowNoExpiringModal(true);
+      return;
+    }
+
+    setRenewalData(expiringContracts);
+    setShowRenewalConfirmModal(true);
+  };
+
+  const confirmRenewal = () => {
+    if (renewalData) {
+      // Bulk renew expiring contracts
+      renewalData.forEach(contract => {
+        updateContractStatus(contract.id, 'renewed');
+      });
+
+      const successMsg = language === 'uz'
+        ? `${renewalData.length} ta shartnoma muvaffaqiyatli yangilandi`
+        : `${renewalData.length} contracts successfully renewed`;
+
+      setSuccessMessage(successMsg);
+      setShowRenewalConfirmModal(false);
+      setRenewalData(null);
+      setShowSuccessModal(true);
+    }
+  };
+
+  // Handle contract review action - Trigger AI chatbox
+  const handleContractReview = () => {
+    // Reset filters to show all contracts
+    setStatusFilter('all');
+    setSearchQuery('');
+
+    // Prepare contract data summary
+    const activeCount = contracts.filter(c => c.status === 'active').length;
+    const expiringCount = contracts.filter(c => {
+      if (!c.end_date || c.status !== 'active') return false;
+      const daysUntil = differenceInDays(new Date(c.end_date), new Date());
+      return daysUntil >= 0 && daysUntil <= 30;
+    }).length;
+    const totalValue = contracts.reduce((sum, c) => sum + (c.contract_value || 0), 0);
+
+    // Get detailed contract information for expiring contracts
+    const expiringDetails = contracts
+      .filter(c => {
+        if (!c.end_date || c.status !== 'active') return false;
+        const daysUntil = differenceInDays(new Date(c.end_date), new Date());
+        return daysUntil >= 0 && daysUntil <= 30;
+      })
+      .map(c => {
+        const daysUntil = differenceInDays(new Date(c.end_date), new Date());
+        const formattedValue = (c.contract_value || 0).toLocaleString();
+        return language === 'uz'
+          ? `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} kun qoldi, qiymat: $${formattedValue})`
+          : `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} days left, value: $${formattedValue})`;
+      })
+      .join('\n');
+
+    // Create AI prompt with more explicit instructions
+    const prompt = language === 'uz'
+      ? `Siz biznes tahlilchisi sifatida ishlayapsiz. Quyidagi shartnoma ma'lumotlarini tahlil qiling va aniq tavsiyalar bering:
+
+UMUMIY MA'LUMOTLAR:
+- Jami shartnomalar: ${contracts.length} ta
+- Faol shartnomalar: ${activeCount} ta
+- Tez orada tugaydi: ${expiringCount} ta
+- Jami qiymat: $${totalValue.toLocaleString()}
+
+${expiringCount > 0 ? `TUGAYOTGAN SHARTNOMALAR:\n${expiringDetails}\n` : ''}
+
+Iltimos, quyidagilarni tahlil qiling:
+1. Tugayotgan shartnomalar xavfi va ta'siri
+2. Shartnoma portfelining umumiy salomatligi
+3. Aniq harakatlar va tavsiyalar
+4. Oldini olish choralari
+
+Faqat tahlil natijalarini bering, umumiy ma'lumot emas. Raqamlar va aniq shartnoma ma'lumotlariga asoslaning.`
+      : `You are acting as a business analyst. Analyze the following contract data and provide specific recommendations:
+
+SUMMARY:
+- Total contracts: ${contracts.length}
+- Active contracts: ${activeCount}
+- Expiring soon: ${expiringCount}
+- Total value: $${totalValue.toLocaleString()}
+
+${expiringCount > 0 ? `EXPIRING CONTRACTS:\n${expiringDetails}\n` : ''}
+
+Please analyze:
+1. Risk and impact of expiring contracts
+2. Overall contract portfolio health
+3. Specific actions and recommendations
+4. Preventive measures
+
+Provide only analysis results based on the numbers and specific contract data, not general information.`;
+
+    // Open AI chatbox with the prompt
+    if (window.openAIChat) {
+      window.openAIChat(prompt);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -284,12 +416,35 @@ export default function Contracts() {
               </div>
               {contractAnalysis.recommendations.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {contractAnalysis.recommendations.map((rec, index) => (
-                    <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-rose-100">
-                      <Lightbulb className="w-3 h-3 text-yellow-500" />
-                      <span className="text-slate-700">{rec.action}</span>
-                    </div>
-                  ))}
+                  {contractAnalysis.recommendations.map((rec, index) => {
+                    // Map recommendation actions to handlers
+                    const getActionHandler = (action) => {
+                      const actionKey = action.toLowerCase();
+                      if (actionKey.includes('renewal') || actionKey.includes('yangilash')) {
+                        return handleInitiateRenewals;
+                      }
+                      if (actionKey.includes('review') || actionKey.includes('ko\'rib chiqish')) {
+                        return handleContractReview;
+                      }
+                      return null;
+                    };
+
+                    const handler = getActionHandler(rec.action);
+
+                    return (
+                      <button
+                        key={index}
+                        onClick={handler}
+                        disabled={!handler}
+                        className={`flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-rose-100 transition-all ${
+                          handler ? 'hover:bg-rose-50 hover:border-rose-300 cursor-pointer' : 'cursor-default'
+                        }`}
+                      >
+                        <Lightbulb className="w-3 h-3 text-yellow-500" />
+                        <span className="text-slate-700">{rec.action}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -349,9 +504,9 @@ export default function Contracts() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="font-bold text-lg">{contract.contract_name}</h3>
-                            <Badge className={getStatusColor(contract.status)}>{contract.status}</Badge>
+                            <Badge className={getStatusColor(contract.status)}>{t(contract.status)}</Badge>
                             <Badge className={getTypeColor(contract.contract_type)} variant="outline">
-                              {contract.contract_type}
+                              {t(contract.contract_type)}
                             </Badge>
                             {contract.auto_renew && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700">
@@ -408,7 +563,7 @@ export default function Contracts() {
                           <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
                             <Edit2 className="w-4 h-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract.id)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
                             <Trash2 className="w-4 h-4" />
                           </Button>
                           {contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
@@ -777,6 +932,147 @@ export default function Contracts() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="w-5 h-5" />
+                {language === 'uz' ? 'Shartnomani o\'chirish' : 'Delete Contract'}
+              </DialogTitle>
+            </DialogHeader>
+            {contractToDelete && (
+              <div className="space-y-4 py-4">
+                <p className="text-slate-600">
+                  {language === 'uz'
+                    ? `"${contractToDelete.contract_name}" shartnomani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`
+                    : `Are you sure you want to delete "${contractToDelete.contract_name}"? This action cannot be undone.`}
+                </p>
+                <div className="bg-slate-50 p-3 rounded-lg text-sm space-y-1">
+                  <p><strong>{language === 'uz' ? 'Shartnoma №' : 'Contract Number'}:</strong> {contractToDelete.contract_number}</p>
+                  <p><strong>{language === 'uz' ? 'Tomon' : 'Party'}:</strong> {contractToDelete.party_name}</p>
+                  <p><strong>{language === 'uz' ? 'Qiymat' : 'Value'}:</strong> ${(contractToDelete.contract_value || 0).toLocaleString()}</p>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setContractToDelete(null);
+                    }}
+                    className="flex-1"
+                  >
+                    {language === 'uz' ? 'Bekor qilish' : 'Cancel'}
+                  </Button>
+                  <Button
+                    onClick={confirmDelete}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {language === 'uz' ? 'O\'chirish' : 'Delete'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Renewal Confirmation Modal */}
+        <Dialog open={showRenewalConfirmModal} onOpenChange={setShowRenewalConfirmModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <CheckCircle className="w-5 h-5" />
+                {language === 'uz' ? 'Shartnomalarni yangilash' : 'Renew Contracts'}
+              </DialogTitle>
+            </DialogHeader>
+            {renewalData && (
+              <div className="space-y-4 py-4">
+                <p className="text-slate-600">
+                  {language === 'uz'
+                    ? `${renewalData.length} ta muddati tugayotgan shartnomani yangilamoqchimisiz?`
+                    : `Do you want to renew ${renewalData.length} expiring contracts?`}
+                </p>
+                <div className="bg-blue-50 p-3 rounded-lg text-sm max-h-48 overflow-y-auto">
+                  {renewalData.map((contract, idx) => (
+                    <div key={idx} className="py-1 border-b border-blue-100 last:border-0">
+                      <p className="font-medium">{contract.contract_name}</p>
+                      <p className="text-xs text-slate-600">
+                        {contract.contract_number} • {contract.daysUntilExpiry} {language === 'uz' ? 'kun qoldi' : 'days left'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRenewalConfirmModal(false);
+                      setRenewalData(null);
+                    }}
+                    className="flex-1"
+                  >
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    onClick={confirmRenewal}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
+                  >
+                    {language === 'uz' ? 'Yangilash' : 'Renew'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Success Modal */}
+        <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="w-5 h-5" />
+                {language === 'uz' ? 'Muvaffaqiyatli' : 'Success'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-slate-600 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                {successMessage}
+              </p>
+              <Button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full mt-4 bg-gradient-to-r from-green-600 to-emerald-600"
+              >
+                {t('close')}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* No Expiring Contracts Modal */}
+        <Dialog open={showNoExpiringModal} onOpenChange={setShowNoExpiringModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-slate-600">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                {language === 'uz' ? 'Hech qanday shartnoma tugamaydi' : 'No Expiring Contracts'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-slate-600">
+                {t('no_expiring_contracts')}
+              </p>
+              <Button
+                onClick={() => setShowNoExpiringModal(false)}
+                className="w-full mt-4"
+                variant="outline"
+              >
+                {t('close')}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 
