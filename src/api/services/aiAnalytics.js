@@ -135,7 +135,7 @@ const aiTranslations = {
     pendingApprovals: "Pending Approvals",
     expensesAwaiting: (count, amount) => `${count} expenses totaling $${amount} awaiting approval`,
     topExpenseCategory: "Top Expense Category",
-    largestExpense: (cat) => `${cat} is your largest expense category`,
+    largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'en')} is your largest expense category`,
     highRejectionRate: "High Rejection Rate",
     expensesRejected: (rate) => `${rate}% of expenses are being rejected`,
     reviewPendingExpenses: "Review Pending Expenses",
@@ -303,7 +303,7 @@ const aiTranslations = {
     pendingApprovals: "Kutilayotgan tasdiqlar",
     expensesAwaiting: (count, amount) => `${count} ta xarajat, jami $${amount} tasdiqlashni kutmoqda`,
     topExpenseCategory: "Eng katta xarajat toifasi",
-    largestExpense: (cat) => `${cat} sizning eng katta xarajat toifangiz`,
+    largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'uz')} sizning eng katta xarajat toifangiz`,
     highRejectionRate: "Yuqori rad etish darajasi",
     expensesRejected: (rate) => `Xarajatlarning ${rate}%i rad etilmoqda`,
     reviewPendingExpenses: "Kutilayotgan xarajatlarni ko'rib chiqish",
@@ -471,7 +471,7 @@ const aiTranslations = {
     pendingApprovals: "Ожидающие одобрения",
     expensesAwaiting: (count, amount) => `${count} расходов на сумму $${amount} ожидают одобрения`,
     topExpenseCategory: "Основная категория расходов",
-    largestExpense: (cat) => `${cat} - ваша крупнейшая категория расходов`,
+    largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'ru')} - ваша крупнейшая категория расходов`,
     highRejectionRate: "Высокий процент отклонений",
     expensesRejected: (rate) => `${rate}% расходов отклоняются`,
     reviewPendingExpenses: "Проверка ожидающих расходов",
@@ -510,6 +510,42 @@ const aiTranslations = {
 
 // Helper to get translations
 const getT = (language = 'en') => aiTranslations[language] || aiTranslations.en;
+
+// Helper to translate category names
+const translateCategory = (category, language = 'en') => {
+  const categoryTranslations = {
+    en: {
+      travel: 'Travel',
+      meals: 'Meals',
+      office_supplies: 'Office Supplies',
+      equipment: 'Equipment',
+      utilities: 'Utilities',
+      marketing: 'Marketing',
+      other: 'Other'
+    },
+    uz: {
+      travel: 'Safar',
+      meals: 'Ovqat',
+      office_supplies: 'Ofis anjomlari',
+      equipment: 'Uskunalar',
+      utilities: 'Kommunal xizmatlar',
+      marketing: 'Marketing',
+      other: 'Boshqa'
+    },
+    ru: {
+      travel: 'Командировки',
+      meals: 'Питание',
+      office_supplies: 'Офисные принадлежности',
+      equipment: 'Оборудование',
+      utilities: 'Коммунальные услуги',
+      marketing: 'Маркетинг',
+      other: 'Прочее'
+    }
+  };
+
+  const translations = categoryTranslations[language] || categoryTranslations.en;
+  return translations[category] || category;
+};
 
 /**
  * Analyzes sales data and provides insights
@@ -1679,7 +1715,7 @@ export const analyzeExpenses = (expenses = [], language = 'en') => {
     insights.push({
       type: 'info',
       title: t.topExpenseCategory,
-      description: t.largestExpense(topCategories[0].name),
+      description: t.largestExpense(topCategories[0].name, language),
       metric: `$${topCategories[0].amount.toLocaleString()}`,
       priority: 'medium'
     });
