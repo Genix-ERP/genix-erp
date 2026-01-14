@@ -18,11 +18,20 @@ export default function ReorderOptimizer({ items, movements }) {
 
   const generateReorderRecommendations = useCallback(async () => {
     setIsOptimizing(true);
-    
+
     try {
+      // Guard against empty items array
+      if (!items || items.length === 0) {
+        setReorderRecommendations([]);
+        setOptimizationInsights(null);
+        setIsOptimizing(false);
+        return;
+      }
+
       // Calculate basic metrics for each item
+      const safeMovements = movements || [];
       const itemsWithMetrics = items.map(item => {
-        const itemMovements = movements.filter(m => m.inventory_item_id === item.id);
+        const itemMovements = safeMovements.filter(m => m.inventory_item_id === item.id);
         const outboundMovements = itemMovements.filter(m => m.movement_type === 'outbound');
         
         // Calculate sales velocity (units per day)

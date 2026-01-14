@@ -87,9 +87,9 @@ export default function COGSCalculator({ items, movements }) {
 
   const getComplianceStatus = (method) => {
     if (method === 'lifo') {
-      return { status: 'warning', text: 'US GAAP Only', icon: AlertCircle };
+      return { status: 'warning', text: t('us_gaap_only'), icon: AlertCircle };
     }
-    return { status: 'compliant', text: 'IFRS Compliant', icon: CheckCircle };
+    return { status: 'compliant', text: t('ifrs_compliant'), icon: CheckCircle };
   };
 
   return (
@@ -133,13 +133,13 @@ export default function COGSCalculator({ items, movements }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Sale Qty</TableHead>
-                  <TableHead>Current Method</TableHead>
-                  <TableHead>FIFO COGS</TableHead>
-                  <TableHead>WAC COGS</TableHead>
-                  <TableHead>LIFO COGS</TableHead>
-                  <TableHead>Impact</TableHead>
+                  <TableHead>{t('item')}</TableHead>
+                  <TableHead>{t('sale_qty')}</TableHead>
+                  <TableHead>{t('current_method')}</TableHead>
+                  <TableHead>{t('fifo_cogs')}</TableHead>
+                  <TableHead>{t('wac_cogs')}</TableHead>
+                  <TableHead>{t('lifo_cogs')}</TableHead>
+                  <TableHead>{t('impact')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -213,23 +213,23 @@ export default function COGSCalculator({ items, movements }) {
             <div className="mt-6 p-4 bg-slate-50 rounded-lg">
               <h4 className="font-semibold mb-2 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
-                Financial Impact Summary
+                {t('financial_impact_summary')}
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="font-medium">Total FIFO COGS</div>
+                  <div className="font-medium">{t('total_fifo_cogs')}</div>
                   <div className="text-lg text-green-600">
                     ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.fifo.totalCost, 0).toFixed(2)}
                   </div>
                 </div>
                 <div>
-                  <div className="font-medium">Total WAC COGS</div>
+                  <div className="font-medium">{t('total_wac_cogs')}</div>
                   <div className="text-lg text-blue-600">
                     ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.wac.totalCost, 0).toFixed(2)}
                   </div>
                 </div>
                 <div>
-                  <div className="font-medium">Total LIFO COGS</div>
+                  <div className="font-medium">{t('total_lifo_cogs')}</div>
                   <div className="text-lg text-orange-600">
                     ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.lifo.totalCost, 0).toFixed(2)}
                   </div>

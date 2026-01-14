@@ -83,16 +83,16 @@ export default function Inventory() {
 
   // Generate AI-powered insights based on current data
   const generateInsights = useCallback(() => {
-    const analysis = analyzeInventory(items, stockMovements);
+    const analysis = analyzeInventory(items, stockMovements, language);
 
     // Convert AI analytics insights to the expected format
     const aiInsights = analysis.insights.map(insight => ({
       title: insight.title,
       description: insight.description,
-      recommendation: insight.items ? `Items: ${insight.items.slice(0, 3).join(', ')}${insight.items.length > 3 ? '...' : ''}` : 'Review and take action',
-      financial_impact: insight.metric || 'See details',
+      recommendation: insight.items ? `${t('items')}: ${insight.items.slice(0, 3).join(', ')}${insight.items.length > 3 ? '...' : ''}` : t('review_and_take_action'),
+      financial_impact: insight.metric || t('see_details'),
       priority: insight.priority,
-      action_required: insight.type === 'warning' || insight.type === 'negative' ? 'Immediate action required' : 'Monitor regularly'
+      action_required: insight.type === 'warning' || insight.type === 'negative' ? t('immediate_action_required') : t('monitor_regularly')
     }));
 
     // Add recommendations as insights
@@ -100,13 +100,13 @@ export default function Inventory() {
       title: rec.action,
       description: rec.description,
       recommendation: rec.action,
-      financial_impact: `Impact: ${rec.impact}`,
+      financial_impact: `${t('impact')}: ${rec.impact}`,
       priority: rec.impact === 'high' ? 'high' : 'medium',
       action_required: rec.action
     }));
 
     setInsights([...aiInsights, ...recInsights].slice(0, 6));
-  }, [items, stockMovements]);
+  }, [items, stockMovements, language, t]);
 
   // Generate static compliance check
   const checkCompliance = useCallback(() => {
@@ -121,18 +121,18 @@ export default function Inventory() {
       standard_detected: hasLifo ? "US_GAAP" : "IFRS",
       issues: hasLifo ? [
         {
-          issue: "LIFO costing method detected",
+          issue: t('lifo_costing_detected'),
           severity: "warning",
-          solution: "Consider switching to FIFO or Weighted Average for IFRS compliance"
+          solution: t('lifo_switch_recommendation')
         }
       ] : [],
       recommendations: [
-        "Regular inventory audits recommended",
-        "Maintain proper documentation for all stock movements",
-        "Review costing methods annually"
+        t('regular_inventory_audits_recommended'),
+        t('maintain_proper_documentation'),
+        t('review_costing_methods_annually')
       ]
     });
-  }, [items]);
+  }, [items, t]);
 
   const filterItems = useCallback(() => {
     let filtered = items;

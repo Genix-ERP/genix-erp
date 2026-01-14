@@ -34,8 +34,21 @@ export const Core = {
             }
             return JSON.parse(result);
           } catch {
-            // If parsing fails, return a default structure
+            // If parsing fails, return a default structure based on schema
             console.log('Could not parse AI response as JSON, returning default structure');
+            const schemaProps = options.response_json_schema.properties || {};
+
+            // Reorder optimization schema
+            if (schemaProps.priority_actions || schemaProps.cost_savings_potential) {
+              return {
+                summary: 'Unable to parse AI response. Please try again.',
+                priority_actions: [],
+                cost_savings_potential: 'N/A',
+                recommendations: []
+              };
+            }
+
+            // MRP planning schema (default)
             return {
               procurement_needs: [],
               production_schedule: [],
@@ -52,6 +65,20 @@ export const Core = {
       console.error('InvokeLLM error:', error);
       // Return default structure on error so UI doesn't break
       if (options.response_json_schema) {
+        // Check schema properties to determine which default to return
+        const schemaProps = options.response_json_schema.properties || {};
+
+        // Reorder optimization schema
+        if (schemaProps.priority_actions || schemaProps.cost_savings_potential) {
+          return {
+            summary: 'Unable to generate AI analysis at this time. Please check your connection and try again.',
+            priority_actions: [],
+            cost_savings_potential: 'N/A',
+            recommendations: []
+          };
+        }
+
+        // MRP planning schema (default)
         return {
           procurement_needs: [],
           production_schedule: [],

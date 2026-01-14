@@ -385,14 +385,14 @@ export default function Warehouses() {
                             <h3 className="font-semibold text-slate-900">{warehouse.name}</h3>
                             {warehouse.is_default && (
                               <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">
-                                Default
+                                {t('default')}
                               </Badge>
                             )}
                             <Badge className={warehouse.is_active
                               ? 'bg-green-100 text-green-800 border-green-200'
                               : 'bg-slate-100 text-slate-600 border-slate-200'
                             }>
-                              {warehouse.is_active ? 'Active' : 'Inactive'}
+                              {warehouse.is_active ? t('active') : t('inactive')}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 mt-1">
@@ -408,11 +408,11 @@ export default function Warehouses() {
                         <div className="flex items-center gap-6">
                           <div className="text-center">
                             <p className="text-lg font-bold text-slate-900">{locationCount}</p>
-                            <p className="text-xs text-slate-500">Locations</p>
+                            <p className="text-xs text-slate-500">{t('locations')}</p>
                           </div>
                           <div className="text-center">
                             <p className="text-lg font-bold text-slate-900">{stockCount.toLocaleString()}</p>
-                            <p className="text-xs text-slate-500">Items</p>
+                            <p className="text-xs text-slate-500">{t('items')}</p>
                           </div>
                           <div className="flex items-center gap-1">
                             <Button
@@ -449,13 +449,13 @@ export default function Warehouses() {
                       <div className="bg-slate-50 px-4 pb-4">
                         <div className="ml-12 mt-2">
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-slate-700">Locations</h4>
+                            <h4 className="font-medium text-slate-700">{t('locations')}</h4>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleAddLocation(warehouse)}
                             >
-                              <Plus className="w-3 h-3 mr-1" /> Add Location
+                              <Plus className="w-3 h-3 mr-1" /> {t('add_location')}
                             </Button>
                           </div>
                           {warehouse.locations?.length > 0 ? (
@@ -468,21 +468,21 @@ export default function Warehouses() {
                                   <div>
                                     <p className="font-medium text-slate-900">{location.name}</p>
                                     <p className="text-xs text-slate-500">
-                                      Code: {location.code} {location.zone && `| Zone: ${location.zone}`}
+                                      {t('code')}: {location.code} {location.zone && `| ${t('zone')}: ${location.zone}`}
                                     </p>
                                   </div>
                                   <Badge className={location.is_active
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-slate-100 text-slate-600'
                                   }>
-                                    {location.is_active ? 'Active' : 'Inactive'}
+                                    {location.is_active ? t('active') : t('inactive')}
                                   </Badge>
                                 </div>
                               ))}
                             </div>
                           ) : (
                             <p className="text-sm text-slate-500 py-4 text-center bg-white rounded-lg border border-slate-200">
-                              No locations configured for this warehouse
+                              {t('no_locations_configured')}
                             </p>
                           )}
                         </div>
@@ -507,27 +507,27 @@ export default function Warehouses() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Warehouse className="w-5 h-5 text-[var(--genix-purple)]" />
-              {showEditModal ? 'Edit Warehouse' : 'New Warehouse'}
+              {showEditModal ? t('edit_warehouse') : t('new_warehouse')}
             </DialogTitle>
             <DialogDescription>
-              {showEditModal ? 'Update warehouse information' : 'Add a new warehouse location'}
+              {showEditModal ? t('update_warehouse_info') : t('add_warehouse_description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Code *</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
                 <Input
-                  placeholder="e.g., WH-001"
+                  placeholder={t('warehouse_code_placeholder')}
                   value={formData.code}
                   onChange={(e) => setFormData({...formData, code: e.target.value})}
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Name *</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
                 <Input
-                  placeholder="Warehouse name"
+                  placeholder={t('warehouse_name_placeholder')}
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
@@ -536,9 +536,9 @@ export default function Warehouses() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Address</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('address')}</label>
               <Input
-                placeholder="Street address"
+                placeholder={t('street_address')}
                 value={formData.address}
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
               />
@@ -546,33 +546,33 @@ export default function Warehouses() {
 
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">City</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('city')}</label>
                 <Input
-                  placeholder="City"
+                  placeholder={t('city')}
                   value={formData.city}
                   onChange={(e) => setFormData({...formData, city: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">State</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('state')}</label>
                 <Input
-                  placeholder="State"
+                  placeholder={t('state')}
                   value={formData.state}
                   onChange={(e) => setFormData({...formData, state: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Country</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('country')}</label>
                 <Input
-                  placeholder="Country"
+                  placeholder={t('country')}
                   value={formData.country}
                   onChange={(e) => setFormData({...formData, country: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Postal Code</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('postal_code')}</label>
                 <Input
-                  placeholder="ZIP"
+                  placeholder={t('zip')}
                   value={formData.postal_code}
                   onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
                 />
@@ -581,26 +581,26 @@ export default function Warehouses() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Phone</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('phone')}</label>
                 <Input
-                  placeholder="Phone number"
+                  placeholder={t('phone_number')}
                   value={formData.phone}
                   onChange={(e) => setFormData({...formData, phone: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Email</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('email')}</label>
                 <Input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t('email')}
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Manager</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('manager')}</label>
                 <Input
-                  placeholder="Manager name"
+                  placeholder={t('manager_name')}
                   value={formData.manager_name}
                   onChange={(e) => setFormData({...formData, manager_name: e.target.value})}
                 />
@@ -613,14 +613,14 @@ export default function Warehouses() {
                   checked={formData.is_active}
                   onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
                 />
-                <span className="text-sm text-slate-700">Active</span>
+                <span className="text-sm text-slate-700">{t('active')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={formData.is_default}
                   onCheckedChange={(checked) => setFormData({...formData, is_default: checked})}
                 />
-                <span className="text-sm text-slate-700">Default Warehouse</span>
+                <span className="text-sm text-slate-700">{t('default_warehouse')}</span>
               </div>
             </div>
 
@@ -634,14 +634,14 @@ export default function Warehouses() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={showEditModal ? handleUpdate : handleCreate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !formData.name || !formData.code}
               >
-                {isSaving ? 'Saving...' : showEditModal ? 'Update Warehouse' : 'Create Warehouse'}
+                {isSaving ? t('saving') : showEditModal ? t('update_warehouse') : t('create_warehouse')}
               </Button>
             </div>
           </div>
@@ -654,36 +654,36 @@ export default function Warehouses() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />
-              Add Location
+              {t('add_location')}
             </DialogTitle>
             <DialogDescription>
-              Add a new location to {selectedWarehouse?.name}
+              {t('add_location_to')} {selectedWarehouse?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Code *</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
                 <Input
-                  placeholder="e.g., A-1"
+                  placeholder={t('location_code_placeholder')}
                   value={locationForm.code}
                   onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Zone</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('zone')}</label>
                 <Input
-                  placeholder="e.g., A"
+                  placeholder={t('zone_placeholder')}
                   value={locationForm.zone}
                   onChange={(e) => setLocationForm({...locationForm, zone: e.target.value})}
                 />
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Name *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
               <Input
-                placeholder="Location name"
+                placeholder={t('location_name_placeholder')}
                 value={locationForm.name}
                 onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
                 required
@@ -694,7 +694,7 @@ export default function Warehouses() {
                 checked={locationForm.is_active}
                 onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}
               />
-              <span className="text-sm text-slate-700">Active</span>
+              <span className="text-sm text-slate-700">{t('active')}</span>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -704,14 +704,14 @@ export default function Warehouses() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleCreateLocation}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !locationForm.name || !locationForm.code}
               >
-                {isSaving ? 'Saving...' : 'Add Location'}
+                {isSaving ? t('saving') : t('add_location')}
               </Button>
             </div>
           </div>
@@ -724,7 +724,7 @@ export default function Warehouses() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Warehouse className="w-5 h-5 text-[var(--genix-purple)]" />
-              Warehouse Details
+              {t('warehouse_details')}
             </DialogTitle>
           </DialogHeader>
           {selectedWarehouse && (
@@ -737,7 +737,7 @@ export default function Warehouses() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-xl font-bold text-slate-900">{selectedWarehouse.name}</h3>
                     {selectedWarehouse.is_default && (
-                      <Badge className="bg-blue-100 text-blue-800">Default</Badge>
+                      <Badge className="bg-blue-100 text-blue-800">{t('default')}</Badge>
                     )}
                   </div>
                   <p className="text-slate-500 font-mono">{selectedWarehouse.code}</p>
@@ -746,7 +746,7 @@ export default function Warehouses() {
                   ? 'bg-green-100 text-green-800'
                   : 'bg-slate-100 text-slate-600'
                 }>
-                  {selectedWarehouse.is_active ? 'Active' : 'Inactive'}
+                  {selectedWarehouse.is_active ? t('active') : t('inactive')}
                 </Badge>
               </div>
 
@@ -754,7 +754,7 @@ export default function Warehouses() {
                 {selectedWarehouse.address && (
                   <div className="p-3 bg-slate-50 rounded-lg col-span-2">
                     <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> Address
+                      <MapPin className="w-3 h-3" /> {t('address')}
                     </p>
                     <p className="text-sm font-medium text-slate-900">
                       {selectedWarehouse.address}
@@ -767,7 +767,7 @@ export default function Warehouses() {
                 {selectedWarehouse.phone && (
                   <div className="p-3 bg-slate-50 rounded-lg">
                     <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> Phone
+                      <Phone className="w-3 h-3" /> {t('phone')}
                     </p>
                     <p className="text-sm font-medium text-slate-900">{selectedWarehouse.phone}</p>
                   </div>
@@ -775,7 +775,7 @@ export default function Warehouses() {
                 {selectedWarehouse.email && (
                   <div className="p-3 bg-slate-50 rounded-lg">
                     <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                      <Mail className="w-3 h-3" /> Email
+                      <Mail className="w-3 h-3" /> {t('email')}
                     </p>
                     <p className="text-sm font-medium text-slate-900">{selectedWarehouse.email}</p>
                   </div>
@@ -783,7 +783,7 @@ export default function Warehouses() {
                 {selectedWarehouse.manager_name && (
                   <div className="p-3 bg-slate-50 rounded-lg">
                     <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                      <User className="w-3 h-3" /> Manager
+                      <User className="w-3 h-3" /> {t('manager')}
                     </p>
                     <p className="text-sm font-medium text-slate-900">{selectedWarehouse.manager_name}</p>
                   </div>
@@ -792,11 +792,11 @@ export default function Warehouses() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="text-xs text-blue-600 mb-1">Locations</p>
+                  <p className="text-xs text-blue-600 mb-1">{t('locations')}</p>
                   <p className="text-lg font-bold text-blue-700">{selectedWarehouse.locations?.length || 0}</p>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-xs text-green-600 mb-1">Stock Items</p>
+                  <p className="text-xs text-green-600 mb-1">{t('stock_items')}</p>
                   <p className="text-lg font-bold text-green-700">{getWarehouseStockCount(selectedWarehouse.id).toLocaleString()}</p>
                 </div>
               </div>
@@ -810,14 +810,14 @@ export default function Warehouses() {
                   }}
                   className="flex-1"
                 >
-                  <Pencil className="w-4 h-4 mr-2" /> Edit
+                  <Pencil className="w-4 h-4 mr-2" /> {t('edit')}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowDetailModal(false)}
                   className="flex-1"
                 >
-                  Close
+                  {t('close')}
                 </Button>
               </div>
             </div>
@@ -831,20 +831,20 @@ export default function Warehouses() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
-              Delete Warehouse
+              {t('delete_warehouse')}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="text-slate-600 mb-4">
-              Are you sure you want to delete{' '}
+              {t('delete_warehouse_confirm')}{' '}
               <span className="font-semibold text-slate-900">"{selectedWarehouse?.name}"</span>?
-              This action cannot be undone.
+              {t('action_cannot_be_undone')}
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">
-                  Deleting this warehouse will affect all associated inventory records and locations.
+                  {t('delete_warehouse_warning')}
                 </p>
               </div>
             </div>
@@ -854,14 +854,14 @@ export default function Warehouses() {
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1"
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleDelete}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {t('delete')}
               </Button>
             </div>
           </div>

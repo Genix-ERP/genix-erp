@@ -2,16 +2,20 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Brain, TrendingUp, Target, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function InventoryInsights({ insights }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const icons = [Brain, TrendingUp, Target, DollarSign];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-        <h3 className="text-xl font-bold text-[var(--genix-navy)]">AI Inventory Insights</h3>
-        <Badge className="bg-[var(--genix-purple)]/10 text-[var(--genix-purple)]">Live Analysis</Badge>
+        <h3 className="text-xl font-bold text-[var(--genix-navy)]">{t('ai_inventory_insights')}</h3>
+        <Badge className="bg-[var(--genix-purple)]/10 text-[var(--genix-purple)]">{t('live_analysis')}</Badge>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -34,7 +38,7 @@ export default function InventoryInsights({ insights }) {
                 </div>
                 {insight.impact && (
                   <p className="text-xs text-slate-500">
-                    <strong>Expected Impact:</strong> {insight.impact}
+                    <strong>{t('expected_impact')}:</strong> {insight.impact}
                   </p>
                 )}
               </CardContent>
