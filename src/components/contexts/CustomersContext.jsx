@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { contactsService } from '@/api/services';
+import { contactsService, leadsService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
@@ -126,12 +126,41 @@ export function CustomersProvider({ children }) {
 
       if (isAvailable) {
         try {
-          // TODO: Add company_id filter to API call when backend supports it
-          const contacts = await contactsService.list();
-          // Filter contacts by type (customers vs vendors)
-          const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
+          const companyId = activeCompany?.id;
           const demoMode = isDemoMode();
-          setCustomers(customerContacts.length > 0 ? customerContacts : (demoMode ? sampleCustomers : []));
+
+          // Load contacts (customers) from API
+          const contacts = await contactsService.list();
+          const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
+
+          // If API returns empty, check localStorage for any locally stored customers
+          if (customerContacts.length === 0) {
+            const customersKey = getStorageKey(STORAGE_KEY, companyId);
+            const localCustomers = localStorage.getItem(customersKey);
+            if (localCustomers) {
+              setCustomers(JSON.parse(localCustomers));
+            } else {
+              setCustomers(demoMode ? sampleCustomers : []);
+            }
+          } else {
+            setCustomers(customerContacts);
+          }
+
+          // Load leads from API
+          const apiLeads = await leadsService.list(companyId);
+
+          // If API returns empty, check localStorage for any locally stored leads
+          if (apiLeads.length === 0) {
+            const leadsKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+            const localLeads = localStorage.getItem(leadsKey);
+            if (localLeads) {
+              setLeads(JSON.parse(localLeads));
+            } else {
+              setLeads(demoMode ? sampleLeads : []);
+            }
+          } else {
+            setLeads(apiLeads);
+          }
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -162,31 +191,36 @@ export function CustomersProvider({ children }) {
     return () => window.removeEventListener('companyChanged', handleCompanyChange);
   }, [loadData]);
 
-  // Customer CRUD
+  // Customer CRUD - always saves to localStorage for persistence
   const createCustomer = useCallback(async (customerData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
+    let newCustomer;
+
     if (backendAvailable) {
       try {
-        const newContact = await contactsService.create({
+        newCustomer = await contactsService.create({
           ...customerData,
           contact_type: 'customer',
           company_id: companyId
         });
-        setCustomers(prev => [...prev, newContact]);
-        return newContact;
       } catch (err) {
         console.error('API error, falling back to local:', err);
       }
     }
 
-    const newCustomer = {
-      id: `cust_${Date.now()}`,
-      ...customerData,
-      company_id: companyId,
-      created_date: new Date().toISOString()
-    };
+    // If API call failed or backend not available, create local customer
+    if (!newCustomer) {
+      newCustomer = {
+        id: `cust_${Date.now()}`,
+        ...customerData,
+        company_id: companyId,
+        created_date: new Date().toISOString()
+      };
+    }
+
+    // Always update state and localStorage
     const updated = [...customers, newCustomer];
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setCustomers(updated);
@@ -227,39 +261,62 @@ export function CustomersProvider({ children }) {
     setCustomers(updated);
   }, [backendAvailable, customers, activeCompany]);
 
-  // Lead CRUD (local only for now - backend doesn't have leads endpoint)
-  const createLead = useCallback((leadData) => {
+  // Lead CRUD - uses leadsService for API calls with localStorage fallback
+  const createLead = useCallback(async (leadData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const newLead = {
-      id: `lead_${Date.now()}`,
-      ...leadData,
-      company_id: companyId,
-      created_date: new Date().toISOString()
-    };
-    const updated = [...leads, newLead];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
-    return newLead;
+    try {
+      const newLead = await leadsService.create(leadData, companyId);
+      setLeads(prev => [newLead, ...prev]);
+      return newLead;
+    } catch (error) {
+      console.error('Failed to create lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const localLead = {
+        id: `lead_${Date.now()}`,
+        ...leadData,
+        company_id: companyId,
+        created_at: new Date().toISOString()
+      };
+      const updated = [localLead, ...leads];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+      return localLead;
+    }
   }, [leads, activeCompany]);
 
-  const updateLead = useCallback((id, leadData) => {
+  const updateLead = useCallback(async (id, leadData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const updated = leads.map(l => l.id === id ? { ...l, ...leadData } : l);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
+    try {
+      const updatedLead = await leadsService.update(id, leadData, companyId);
+      setLeads(prev => prev.map(l => l.id === id ? { ...l, ...leadData, ...updatedLead } : l));
+      return updatedLead;
+    } catch (error) {
+      console.error('Failed to update lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const updated = leads.map(l => l.id === id ? { ...l, ...leadData } : l);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+    }
   }, [leads, activeCompany]);
 
-  const deleteLead = useCallback((id) => {
+  const deleteLead = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const updated = leads.filter(l => l.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
+    try {
+      await leadsService.delete(id, companyId);
+      setLeads(prev => prev.filter(l => l.id !== id));
+    } catch (error) {
+      console.error('Failed to delete lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const updated = leads.filter(l => l.id !== id);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+    }
   }, [leads, activeCompany]);
 
   // Opportunity CRUD (local only for now)
