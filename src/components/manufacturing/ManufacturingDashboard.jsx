@@ -1,70 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { ProductionOrder, WorkCenter, QualityCheck } from '@/api/entities';
 import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Factory,
-  Package,
-  AlertTriangle,
   CheckCircle,
-  Clock,
   TrendingUp,
   Cog,
   Brain
 } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function ManufacturingDashboard() {
-  const [metrics, setMetrics] = useState({
-    activeOrders: 0,
-    completedToday: 0,
-    avgOEE: 0,
-    qualityRate: 0
-  });
+  const {
+    productionOrders,
+    workCenters,
+    loading,
+    activeProductionOrders,
+    completedToday,
+    averageOEE,
+    qualityRate
+  } = useManufacturing();
+
   const [productionData, setProductionData] = useState([]);
   const [workCenterUtilization, setWorkCenterUtilization] = useState([]);
   const [aiInsights, setAiInsights] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
     generateAIInsights();
   }, []);
 
-  const loadDashboardData = async () => {
-    try {
-      const [orders, workCenters, qualityChecks] = await Promise.all([
-        ProductionOrder.list('-created_date'),
-        WorkCenter.list(),
-        QualityCheck.list('-created_date')
-      ]);
-
-      // Calculate metrics
-      const activeOrders = orders.filter(o => o.status === 'in_progress').length;
-      const completedToday = orders.filter(o => {
-        if (!o.actual_end_date) return false;
-        const today = new Date().toDateString();
-        return new Date(o.actual_end_date).toDateString() === today;
-      }).length;
-
-      const avgOEE = workCenters.reduce((sum, wc) => sum + (wc.oee_score || 0), 0) / (workCenters.length || 1);
-      
-      const passedChecks = qualityChecks.filter(qc => qc.result === 'pass').length;
-      const qualityRate = (passedChecks / (qualityChecks.length || 1)) * 100;
-
-      setMetrics({
-        activeOrders,
-        completedToday,
-        avgOEE: Math.round(avgOEE),
-        qualityRate: Math.round(qualityRate)
-      });
-
+  useEffect(() => {
+    if (!loading) {
       // Production trend data
       const productionByDay = {};
-      orders.forEach(order => {
+      productionOrders.forEach(order => {
         if (order.actual_end_date) {
           const day = new Date(order.actual_end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           productionByDay[day] = (productionByDay[day] || 0) + (order.quantity_produced || 0);
@@ -79,12 +52,8 @@ export default function ManufacturingDashboard() {
         oee: wc.oee_score || 0
       }));
       setWorkCenterUtilization(utilization);
-
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
     }
-    setIsLoading(false);
-  };
+  }, [productionOrders, workCenters, loading]);
 
   const generateAIInsights = async () => {
     try {
@@ -120,7 +89,7 @@ export default function ManufacturingDashboard() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
@@ -144,7 +113,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{metrics.activeOrders}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{activeProductionOrders}</p>
             <p className="text-sm text-slate-600">Production Orders</p>
           </CardContent>
         </Card>
@@ -157,7 +126,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-green-50 text-green-700 border-green-200">Today</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{metrics.completedToday}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday}</p>
             <p className="text-sm text-slate-600">Orders Completed</p>
           </CardContent>
         </Card>
@@ -170,7 +139,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-purple-50 text-purple-700 border-purple-200">OEE</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{metrics.avgOEE}%</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{averageOEE}%</p>
             <p className="text-sm text-slate-600">Avg Equipment Efficiency</p>
           </CardContent>
         </Card>
@@ -183,7 +152,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-orange-50 text-orange-700 border-orange-200">Quality</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{metrics.qualityRate}%</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{qualityRate}%</p>
             <p className="text-sm text-slate-600">Quality Pass Rate</p>
           </CardContent>
         </Card>

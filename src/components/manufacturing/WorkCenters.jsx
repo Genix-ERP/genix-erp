@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { WorkCenter } from '@/api/entities';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +9,15 @@ import { Plus, Cog, AlertTriangle, CheckCircle, Wrench } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
 export default function WorkCenters() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const [workCenters, setWorkCenters] = useState([]);
+  const { workCenters, loading, createWorkCenter } = useManufacturing();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   const [newWorkCenter, setNewWorkCenter] = useState({
     work_center_code: '',
@@ -31,20 +30,6 @@ export default function WorkCenters() {
     status: 'operational'
   });
 
-  useEffect(() => {
-    loadWorkCenters();
-  }, []);
-
-  const loadWorkCenters = async () => {
-    try {
-      const data = await WorkCenter.list();
-      setWorkCenters(data);
-    } catch (error) {
-      console.error('Error loading work centers:', error);
-    }
-    setIsLoading(false);
-  };
-
   const handleCreateWorkCenter = async () => {
     try {
       const wcData = {
@@ -56,10 +41,9 @@ export default function WorkCenters() {
         utilization_rate: 0,
         oee_score: 85 // Default OEE
       };
-      
-      await WorkCenter.create(wcData);
+
+      await createWorkCenter(wcData);
       setShowCreateModal(false);
-      loadWorkCenters();
       resetForm();
     } catch (error) {
       console.error('Error creating work center:', error);
@@ -118,7 +102,7 @@ export default function WorkCenters() {
         </CardHeader>
       </Card>
 
-      {isLoading ? (
+      {loading ? (
         <div className="flex items-center justify-center py-16">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>

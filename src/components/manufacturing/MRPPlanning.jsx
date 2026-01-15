@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { InventoryItem, ProductionOrder, BillOfMaterials } from '@/api/entities';
+import { InventoryItem, BillOfMaterials } from '@/api/entities';
 import { InvokeLLM } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 export default function MRPPlanning() {
+  const { productionOrders } = useManufacturing();
   const [isGenerating, setIsGenerating] = useState(false);
   const [mrpResults, setMrpResults] = useState(null);
   const [error, setError] = useState(null);
@@ -15,12 +17,13 @@ export default function MRPPlanning() {
     setIsGenerating(true);
     setError(null);
     try {
-      // Get inventory and production data - handle errors gracefully
-      const [inventory, orders, boms] = await Promise.all([
+      // Get inventory and BOM data - handle errors gracefully
+      // Production orders come from context
+      const [inventory, boms] = await Promise.all([
         InventoryItem.list().catch(() => []),
-        ProductionOrder.list().catch(() => []),
         BillOfMaterials.list().catch(() => [])
       ]);
+      const orders = productionOrders;
 
       // Build more detailed prompt with actual data
       const inventoryDetails = inventory.slice(0, 10).map(i =>

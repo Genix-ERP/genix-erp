@@ -1,38 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ProductionOrder } from '@/api/entities';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, ChevronLeft, ChevronRight, Clock, Factory, AlertTriangle } from 'lucide-react';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 const STATUS_COLORS = {
   draft: { bg: 'bg-slate-200', text: 'text-slate-700', bar: 'bg-slate-400' },
   confirmed: { bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500' },
   in_progress: { bg: 'bg-amber-100', text: 'text-amber-700', bar: 'bg-amber-500' },
   done: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
+  completed: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
   cancelled: { bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-400' }
 };
 
 export default function ProductionSchedule() {
-  const [orders, setOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { productionOrders, loading } = useManufacturing();
   const [viewMode, setViewMode] = useState('week'); // week, month
   const [currentDate, setCurrentDate] = useState(new Date());
-
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  const loadOrders = async () => {
-    try {
-      const data = await ProductionOrder.list('-scheduled_start_date');
-      setOrders(data || []);
-    } catch (error) {
-      console.error('Error loading production orders:', error);
-    }
-    setIsLoading(false);
-  };
 
   // Calculate date range based on view mode
   const dateRange = useMemo(() => {
@@ -71,7 +57,7 @@ export default function ProductionSchedule() {
 
   // Filter and map orders to the schedule
   const scheduledOrders = useMemo(() => {
-    return orders
+    return productionOrders
       .filter(order => {
         if (!order.scheduled_start_date) return false;
         const orderStart = new Date(order.scheduled_start_date);
@@ -98,7 +84,7 @@ export default function ProductionSchedule() {
           isOverdue: orderEnd < new Date() && order.status !== 'done' && order.status !== 'cancelled'
         };
       });
-  }, [orders, dateRange, dates]);
+  }, [productionOrders, dateRange, dates]);
 
   const navigatePeriod = (direction) => {
     const newDate = new Date(currentDate);
@@ -130,7 +116,7 @@ export default function ProductionSchedule() {
     return day === 0 || day === 6;
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">

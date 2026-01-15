@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { BillOfMaterials } from '@/api/entities';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,18 +8,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Search, FileText, Trash2, Edit } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 export default function BOMManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const [boms, setBoms] = useState([]);
-  const [filteredBoms, setFilteredBoms] = useState([]);
+  const { boms, loading, createBOM, updateBOM } = useManufacturing();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedBom, setSelectedBom] = useState(null);
   const [editBom, setEditBom] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newBom, setNewBom] = useState({
@@ -42,51 +40,30 @@ export default function BOMManagement() {
     cost: 0
   });
 
-  useEffect(() => {
-    loadBoms();
-  }, []);
-
-  useEffect(() => {
-    let filtered = boms;
-    if (searchQuery) {
-      filtered = boms.filter(b =>
-        b.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.bom_reference?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    setFilteredBoms(filtered);
+  // Filter BOMs based on search query
+  const filteredBoms = useMemo(() => {
+    if (!searchQuery) return boms;
+    return boms.filter(b =>
+      b.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.bom_reference?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   }, [boms, searchQuery]);
 
-  const loadBoms = async () => {
-    try {
-      const data = await BillOfMaterials.list('-created_date');
-      setBoms(data);
-      setFilteredBoms(data);
-    } catch (error) {
-      console.error('Error loading BOMs:', error);
-    }
-    setIsLoading(false);
-  };
-
   const handleCreateBom = async () => {
+    setIsSubmitting(true);
     try {
-      const total_material_cost = newBom.components.reduce((sum, c) => sum + (c.cost * c.quantity), 0);
-      const total_operation_cost = newBom.operations.reduce((sum, op) => sum + ((op.duration_minutes / 60) * op.cost_per_hour), 0);
-      
       const bomData = {
         ...newBom,
-        bom_reference: newBom.bom_reference || `BOM-${Date.now()}`,
-        total_material_cost,
-        total_operation_cost,
-        total_cost: total_material_cost + total_operation_cost
+        bom_reference: newBom.bom_reference || `BOM-${Date.now()}`
       };
-      
-      await BillOfMaterials.create(bomData);
+
+      await createBOM(bomData);
       setShowCreateModal(false);
-      loadBoms();
       resetForm();
     } catch (error) {
       console.error('Error creating BOM:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -134,20 +111,9 @@ export default function BOMManagement() {
 
     setIsSubmitting(true);
     try {
-      const total_material_cost = editBom.components.reduce((sum, c) => sum + (c.cost * c.quantity), 0);
-      const total_operation_cost = editBom.operations.reduce((sum, op) => sum + ((op.duration_minutes / 60) * op.cost_per_hour), 0);
-
-      const bomData = {
-        ...editBom,
-        total_material_cost,
-        total_operation_cost,
-        total_cost: total_material_cost + total_operation_cost
-      };
-
-      await BillOfMaterials.update(editBom.id, bomData);
+      await updateBOM(editBom.id, editBom);
       setShowEditModal(false);
       setEditBom(null);
-      loadBoms();
     } catch (error) {
       console.error('Error updating BOM:', error);
       alert('Failed to update BOM: ' + (error.message || 'Unknown error'));
@@ -225,7 +191,7 @@ export default function BOMManagement() {
         </CardHeader>
 
         <CardContent className="p-0">
-          {isLoading ? (
+          {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>

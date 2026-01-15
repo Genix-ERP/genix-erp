@@ -22,7 +22,6 @@ import {
   Box,
   ShoppingCart,
   ClipboardList,
-  Layers,
   DollarSign,
   Bell,
   Trash2
@@ -41,7 +40,7 @@ import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
 import InventoryManagement from "@/components/inventory/InventoryManagement";
 import StockCounting from "@/components/inventory/StockCounting";
-import BillOfMaterials from "@/components/inventory/BillOfMaterials";
+// BOM moved to Manufacturing module - it's a manufacturing concept, not inventory
 import InventoryValuation from "@/components/inventory/InventoryValuation";
 import ReorderRules from "@/components/inventory/ReorderRules";
 import ScrapManagement from "@/components/inventory/ScrapManagement";
@@ -303,14 +302,6 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="bom"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Layers className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('bom') || 'BOM'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="valuation"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
@@ -495,11 +486,6 @@ export default function Inventory() {
           {/* Stock Counting Tab */}
           <TabsContent value="counting" className="mt-6">
             <StockCounting />
-          </TabsContent>
-
-          {/* Bill of Materials Tab */}
-          <TabsContent value="bom" className="mt-6">
-            <BillOfMaterials />
           </TabsContent>
 
           {/* Inventory Valuation Tab */}
