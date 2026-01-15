@@ -157,11 +157,11 @@ export default function Payments() {
 
   const getPaymentMethodLabel = (method) => {
     const labels = {
-      bank_transfer: 'Bank Transfer',
-      cash: 'Cash',
-      check: 'Check',
-      credit_card: 'Credit Card',
-      wire: 'Wire Transfer'
+      bank_transfer: t('bank_transfer') || 'Bank Transfer',
+      cash: t('cash') || 'Cash',
+      check: t('check') || 'Check',
+      credit_card: t('credit_card') || 'Credit Card',
+      wire: t('wire_transfer') || 'Wire Transfer'
     };
     return labels[method] || method;
   };
@@ -330,24 +330,24 @@ export default function Payments() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">Type</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
                     <TableHead className="font-semibold text-slate-700">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
-                        Date
+                        {t('date')}
                       </div>
                     </TableHead>
-                    <TableHead className="font-semibold text-slate-700">Reference</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Party</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Method</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('party')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('method')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <DollarSign className="w-4 h-4" />
-                        Amount
+                        {t('amount')}
                       </div>
                     </TableHead>
-                    <TableHead className="font-semibold text-slate-700">Status</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">Actions</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -398,7 +398,7 @@ export default function Payments() {
                         <TableCell>
                           <Badge className={`${getStatusColor(payment.status)} flex items-center gap-1 w-fit`}>
                             {getStatusIcon(payment.status)}
-                            {payment.status}
+                            {t(payment.status) || payment.status}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -439,17 +439,17 @@ export default function Payments() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-[var(--genix-purple)]" />
-              New Payment
+              {t('new_payment')}
             </DialogTitle>
             <DialogDescription>
-              Record a new payment transaction
+              {t('record_first_payment')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Payment Type *
+                  {t('payment_type')} *
                 </label>
                 <Select
                   value={newPayment.payment_type}
@@ -462,13 +462,13 @@ export default function Payments() {
                     <SelectItem value="inbound">
                       <div className="flex items-center gap-2">
                         <ArrowDownLeft className="w-4 h-4 text-green-600" />
-                        Money Received
+                        {t('money_received')}
                       </div>
                     </SelectItem>
                     <SelectItem value="outbound">
                       <div className="flex items-center gap-2">
                         <ArrowUpRight className="w-4 h-4 text-red-600" />
-                        Money Paid
+                        {t('money_paid')}
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -476,7 +476,7 @@ export default function Payments() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Payment Date *
+                  {t('payment_date')} *
                 </label>
                 <Input
                   type="date"
@@ -490,7 +490,7 @@ export default function Payments() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Party Type
+                  {t('party_type')}
                 </label>
                 <Select
                   value={newPayment.party_type}
@@ -500,19 +500,19 @@ export default function Payments() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
-                    <SelectItem value="employee">Employee</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="customer">{t('customer')}</SelectItem>
+                    <SelectItem value="vendor">{t('vendor')}</SelectItem>
+                    <SelectItem value="employee">{t('employee')}</SelectItem>
+                    <SelectItem value="other">{t('other')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Party Name *
+                  {t('party_name')} *
                 </label>
                 <Input
-                  placeholder="Enter name"
+                  placeholder={t('enter_name')}
                   value={newPayment.party_name}
                   onChange={(e) => setNewPayment({...newPayment, party_name: e.target.value})}
                   required
@@ -523,7 +523,7 @@ export default function Payments() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Payment Method *
+                  {t('payment_method')} *
                 </label>
                 <Select
                   value={newPayment.payment_method}
@@ -533,24 +533,24 @@ export default function Payments() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="credit_card">Credit Card</SelectItem>
-                    <SelectItem value="wire">Wire Transfer</SelectItem>
+                    <SelectItem value="bank_transfer">{t('bank_transfer')}</SelectItem>
+                    <SelectItem value="cash">{t('cash')}</SelectItem>
+                    <SelectItem value="check">{t('check')}</SelectItem>
+                    <SelectItem value="credit_card">{t('credit_card')}</SelectItem>
+                    <SelectItem value="wire">{t('wire_transfer')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Bank Account
+                  {t('bank_account')}
                 </label>
                 <Select
                   value={newPayment.account_id}
                   onValueChange={(value) => setNewPayment({...newPayment, account_id: value})}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
+                    <SelectValue placeholder={t('select_account')} />
                   </SelectTrigger>
                   <SelectContent>
                     {bankAccounts.map(account => (
@@ -566,7 +566,7 @@ export default function Payments() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Amount *
+                  {t('amount')} *
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -582,10 +582,10 @@ export default function Payments() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Reference
+                  {t('reference')}
                 </label>
                 <Input
-                  placeholder="Payment reference"
+                  placeholder={t('payment_reference')}
                   value={newPayment.reference}
                   onChange={(e) => setNewPayment({...newPayment, reference: e.target.value})}
                 />
@@ -594,10 +594,10 @@ export default function Payments() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Description
+                {t('description')}
               </label>
               <Input
-                placeholder="Payment description"
+                placeholder={t('payment_description')}
                 value={newPayment.description}
                 onChange={(e) => setNewPayment({...newPayment, description: e.target.value})}
               />
@@ -610,14 +610,14 @@ export default function Payments() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !newPayment.amount || !newPayment.party_name || !newPayment.payment_date}
               >
-                {isSaving ? 'Saving...' : 'Create Payment'}
+                {isSaving ? t('saving') : t('create_payment')}
               </Button>
             </div>
           </div>
@@ -630,7 +630,7 @@ export default function Payments() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Wallet className="w-5 h-5 text-[var(--genix-purple)]" />
-              Payment Details
+              {t('payment_details')}
             </DialogTitle>
           </DialogHeader>
           {selectedPayment && (
@@ -650,7 +650,7 @@ export default function Payments() {
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">
-                      {selectedPayment.payment_type === 'inbound' ? 'Money Received' : 'Money Paid'}
+                      {selectedPayment.payment_type === 'inbound' ? t('money_received') : t('money_paid')}
                     </p>
                     <p className={`text-2xl font-bold ${
                       selectedPayment.payment_type === 'inbound' ? 'text-green-600' : 'text-red-600'
@@ -660,13 +660,13 @@ export default function Payments() {
                   </div>
                 </div>
                 <Badge className={getStatusColor(selectedPayment.status)}>
-                  {selectedPayment.status}
+                  {t(selectedPayment.status) || selectedPayment.status}
                 </Badge>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Date</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('date')}</p>
                   <p className="text-sm font-semibold text-slate-900">
                     {selectedPayment.payment_date
                       ? format(new Date(selectedPayment.payment_date), 'MMM dd, yyyy')
@@ -674,7 +674,7 @@ export default function Payments() {
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Reference</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('reference')}</p>
                   <p className="text-sm font-semibold text-slate-900 font-mono">
                     {selectedPayment.reference || '-'}
                   </p>
@@ -683,7 +683,7 @@ export default function Payments() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Party</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('party')}</p>
                   <div className="flex items-center gap-2">
                     {selectedPayment.party_type === 'customer' ? (
                       <User className="w-4 h-4 text-slate-400" />
@@ -696,7 +696,7 @@ export default function Payments() {
                   </div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Method</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('method')}</p>
                   <p className="text-sm font-semibold text-slate-900">
                     {getPaymentMethodLabel(selectedPayment.payment_method)}
                   </p>
@@ -705,7 +705,7 @@ export default function Payments() {
 
               {selectedPayment.description && (
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Description</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('description')}</p>
                   <p className="text-sm text-slate-700">
                     {selectedPayment.description}
                   </p>
@@ -722,7 +722,7 @@ export default function Payments() {
                     className="flex-1 bg-green-600 hover:bg-green-700"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Confirm Payment
+                    {t('confirm_payment')}
                   </Button>
                 )}
                 <Button
@@ -730,7 +730,7 @@ export default function Payments() {
                   onClick={() => setShowDetailModal(false)}
                   className="flex-1"
                 >
-                  Close
+                  {t('close')}
                 </Button>
               </div>
             </div>

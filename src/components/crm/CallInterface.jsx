@@ -18,7 +18,9 @@ import {
   Check,
   X,
   Loader2,
-  Delete
+  Delete,
+  Users,
+  Search
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -27,15 +29,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { pbxService } from '@/api/services';
 import { useTranslation } from "@/components/utils/translations";
+import { useCustomers } from "@/components/contexts/CustomersContext";
 
 export default function CallInterface({ callLogs = [], onUpdate, customer, language = 'en', companyId }) {
   const { t } = useTranslation(language);
+  const { customers, leads } = useCustomers();
   const [activeCall, setActiveCall] = useState(null);
   const [dialNumber, setDialNumber] = useState(customer?.phone || '');
+  const [selectedContact, setSelectedContact] = useState(customer || null);
   const [isMuted, setIsMuted] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isCallInProgress, setIsCallInProgress] = useState(false);
@@ -45,6 +55,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [localCallLogs, setLocalCallLogs] = useState([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [showContactPicker, setShowContactPicker] = useState(false);
   const timerRef = useRef(null);
 
   // Load PBX config on mount
@@ -67,12 +79,42 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
     loadCallLogs();
   }, [companyId]);
 
-  // Update dial number when customer changes
+  // Update dial number and selected contact when customer prop changes
   useEffect(() => {
     if (customer?.phone) {
       setDialNumber(customer.phone);
+      setSelectedContact(customer);
     }
   }, [customer]);
+
+  // Filter contacts for the picker
+  const filteredContacts = [...(Array.isArray(customers) ? customers : []), ...(Array.isArray(leads) ? leads : [])]
+    .filter(c => c.phone) // Only contacts with phone numbers
+    .filter(c => {
+      if (!contactSearch) return true;
+      const searchLower = contactSearch.toLowerCase();
+      return (
+        c.company_name?.toLowerCase().includes(searchLower) ||
+        c.contact_name?.toLowerCase().includes(searchLower) ||
+        c.name?.toLowerCase().includes(searchLower) ||
+        c.phone?.includes(contactSearch)
+      );
+    })
+    .slice(0, 10); // Limit to 10 results
+
+  // Handle contact selection
+  const handleSelectContact = (contact) => {
+    setSelectedContact(contact);
+    setDialNumber(contact.phone || '');
+    setShowContactPicker(false);
+    setContactSearch('');
+  };
+
+  // Clear selected contact
+  const handleClearContact = () => {
+    setSelectedContact(null);
+    setDialNumber('');
+  };
 
   // Call timer
   useEffect(() => {
@@ -129,8 +171,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
 
     try {
       const result = await pbxService.makeCall(dialNumber, {
-        customerId: customer?.id,
-        customerName: customer?.company_name || customer?.contact_name,
+        customerId: selectedContact?.id,
+        customerName: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name,
         companyId
       });
 
@@ -229,13 +271,74 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Customer Info (if provided) */}
-          {customer && (
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="font-medium text-blue-900">{customer.company_name || customer.contact_name}</p>
-              <p className="text-sm text-blue-700">{customer.phone}</p>
-            </div>
-          )}
+          {/* Contact Selector */}
+          <div className="space-y-2">
+            <Label className="text-sm text-slate-600">{t('select_contact')}</Label>
+            {selectedContact ? (
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-blue-900">
+                    {selectedContact.company_name || selectedContact.contact_name || selectedContact.name}
+                  </p>
+                  <p className="text-sm text-blue-700">{selectedContact.phone}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearContact}
+                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <Popover open={showContactPicker} onOpenChange={setShowContactPicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-slate-500 font-normal"
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    {t('choose_customer_lead')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="start">
+                  <div className="p-3 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        placeholder={t('search_contacts')}
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                        className="pl-9"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {filteredContacts.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-slate-500">
+                        {t('no_contacts_found')}
+                      </div>
+                    ) : (
+                      filteredContacts.map((contact) => (
+                        <button
+                          key={contact.id}
+                          className="w-full p-3 text-left hover:bg-slate-50 border-b last:border-b-0 transition-colors"
+                          onClick={() => handleSelectContact(contact)}
+                        >
+                          <p className="font-medium text-slate-900">
+                            {contact.company_name || contact.contact_name || contact.name}
+                          </p>
+                          <p className="text-sm text-slate-500">{contact.phone}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
 
           {/* Active Call Display */}
           {activeCall && (
