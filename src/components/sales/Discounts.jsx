@@ -50,8 +50,12 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function Discounts() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     discounts,
     createDiscount,
@@ -182,7 +186,7 @@ export default function Discounts() {
   };
 
   const handleDelete = async (discount) => {
-    if (window.confirm("Ushbu chegirmani o'chirmoqchimisiz?")) {
+    if (window.confirm(t('confirm_delete_discount'))) {
       await deleteDiscount(discount.id);
     }
   };
@@ -195,14 +199,21 @@ export default function Discounts() {
 
   const handleTestDiscount = () => {
     const result = applyDiscount(testData.code, testData.amount, testData.isNewCustomer);
+    // Convert messageKey to message for display
+    if (result && result.messageKey) {
+      result.message = t(result.messageKey);
+      if (result.minAmount) {
+        result.message = `${t('min_order_amount')}: ${result.minAmount.toLocaleString()}`;
+      }
+    }
     setTestData({ ...testData, result });
   };
 
   const getStatusBadge = (status) => {
     const variants = {
-      active: { color: "bg-green-100 text-green-800", label: "Faol" },
-      inactive: { color: "bg-slate-100 text-slate-800", label: "Nofaol" },
-      expired: { color: "bg-red-100 text-red-800", label: "Muddati tugagan" },
+      active: { color: "bg-green-100 text-green-800", label: t('active') },
+      inactive: { color: "bg-slate-100 text-slate-800", label: t('inactive') },
+      expired: { color: "bg-red-100 text-red-800", label: t('expired') },
     };
     const variant = variants[status] || variants.inactive;
     return <Badge className={variant.color}>{variant.label}</Badge>;
@@ -213,29 +224,29 @@ export default function Discounts() {
       return (
         <Badge className="bg-blue-100 text-blue-800">
           <Percent className="w-3 h-3 mr-1" />
-          Foiz
+          {t('percentage')}
         </Badge>
       );
     }
     return (
       <Badge className="bg-purple-100 text-purple-800">
         <Tag className="w-3 h-3 mr-1" />
-        Qat'iy summa
+        {t('fixed_amount')}
       </Badge>
     );
   };
 
   const getAppliesTo = (appliesTo) => {
     const labels = {
-      all: "Barcha mijozlar",
-      new_customers: "Yangi mijozlar",
-      vip: "VIP mijozlar",
+      all: t('all_customers'),
+      new_customers: t('new_customers'),
+      vip: t('vip_customers'),
     };
     return labels[appliesTo] || appliesTo;
   };
 
   const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} so'm`;
+    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const getUsageProgress = (discount) => {
@@ -248,9 +259,9 @@ export default function Discounts() {
     const days = Math.ceil(
       (new Date(validUntil) - new Date()) / (1000 * 60 * 60 * 24)
     );
-    if (days < 0) return { text: "Muddati tugagan", expired: true };
-    if (days === 0) return { text: "Bugun tugaydi", expired: false };
-    return { text: `${days} kun qoldi`, expired: false };
+    if (days < 0) return { text: t('expired'), expired: true };
+    if (days === 0) return { text: t('expires_today'), expired: false };
+    return { text: `${days} ${t('days_left')}`, expired: false };
   };
 
   return (
@@ -264,7 +275,7 @@ export default function Discounts() {
                 <Tag className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-green-600 font-medium">Faol chegirmalar</p>
+                <p className="text-xs text-green-600 font-medium">{t('active_discounts')}</p>
                 <p className="text-lg font-bold text-green-900">{stats.active}</p>
               </div>
             </div>
@@ -277,7 +288,7 @@ export default function Discounts() {
                 <TrendingUp className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-blue-600 font-medium">Jami foydalanish</p>
+                <p className="text-xs text-blue-600 font-medium">{t('total_usage')}</p>
                 <p className="text-lg font-bold text-blue-900">{stats.totalUsage}</p>
               </div>
             </div>
@@ -290,7 +301,7 @@ export default function Discounts() {
                 <Calendar className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-yellow-600 font-medium">Tez tugaydiganlar</p>
+                <p className="text-xs text-yellow-600 font-medium">{t('expiring_soon_label')}</p>
                 <p className="text-lg font-bold text-yellow-900">{stats.expiringSoon}</p>
               </div>
             </div>
@@ -303,7 +314,7 @@ export default function Discounts() {
                 <Gift className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-purple-600 font-medium">Jami chegirmalar</p>
+                <p className="text-xs text-purple-600 font-medium">{t('total_discounts')}</p>
                 <p className="text-lg font-bold text-purple-900">{stats.total}</p>
               </div>
             </div>
@@ -315,20 +326,20 @@ export default function Discounts() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--genix-navy)]">
-            Chegirmalar va aksiyalar
+            {t('discounts_and_promotions')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Chegirma kodlari va kampaniyalarni boshqaring
+            {t('manage_discounts_desc')}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowTestModal(true)}>
             <Tag className="w-4 h-4 mr-2" />
-            Kodni tekshirish
+            {t('test_code')}
           </Button>
           <Button onClick={() => setShowForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Yangi chegirma
+            {t('new_discount')}
           </Button>
         </div>
       </div>
@@ -338,7 +349,7 @@ export default function Discounts() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Chegirma qidirish..."
+            placeholder={t('search_discount') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -346,12 +357,12 @@ export default function Discounts() {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Holat" />
+            <SelectValue placeholder={t('status')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Barchasi</SelectItem>
-            <SelectItem value="active">Faol</SelectItem>
-            <SelectItem value="inactive">Nofaol</SelectItem>
+            <SelectItem value="all">{t('all')}</SelectItem>
+            <SelectItem value="active">{t('active')}</SelectItem>
+            <SelectItem value="inactive">{t('inactive')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -366,20 +377,20 @@ export default function Discounts() {
           ) : filteredDiscounts.length === 0 ? (
             <div className="text-center py-12">
               <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Chegirmalar topilmadi</p>
+              <p className="text-slate-500">{t('no_discounts_found')}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Kod</TableHead>
-                    <TableHead>Nomi</TableHead>
-                    <TableHead>Turi</TableHead>
-                    <TableHead>Qiymati</TableHead>
-                    <TableHead>Muddat</TableHead>
-                    <TableHead>Foydalanish</TableHead>
-                    <TableHead>Holat</TableHead>
+                    <TableHead>{t('code')}</TableHead>
+                    <TableHead>{t('name')}</TableHead>
+                    <TableHead>{t('type')}</TableHead>
+                    <TableHead>{t('value')}</TableHead>
+                    <TableHead>{t('valid_until')}</TableHead>
+                    <TableHead>{t('usage')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -448,7 +459,7 @@ export default function Discounts() {
                             </div>
                           ) : (
                             <span className="text-sm text-slate-500">
-                              {discount.used_count} marta
+                              {discount.used_count} {t('times')}
                             </span>
                           )}
                         </TableCell>
@@ -463,22 +474,22 @@ export default function Discounts() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => handleView(discount)}>
                                 <Eye className="w-4 h-4 mr-2" />
-                                Ko'rish
+                                {t('view')}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleEdit(discount)}>
                                 <Pencil className="w-4 h-4 mr-2" />
-                                Tahrirlash
+                                {t('edit')}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleStatus(discount)}>
                                 {discount.status === "active" ? (
                                   <>
                                     <Tag className="w-4 h-4 mr-2" />
-                                    Nofaol qilish
+                                    {t('deactivate')}
                                   </>
                                 ) : (
                                   <>
                                     <CheckCircle className="w-4 h-4 mr-2" />
-                                    Faollashtirish
+                                    {t('activate')}
                                   </>
                                 )}
                               </DropdownMenuItem>
@@ -487,7 +498,7 @@ export default function Discounts() {
                                 className="text-red-600"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
-                                O'chirish
+                                {t('delete')}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -507,12 +518,12 @@ export default function Discounts() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editMode ? "Chegirmani tahrirlash" : "Yangi chegirma"}
+              {editMode ? t('edit_discount') : t('new_discount')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Chegirma kodi *</Label>
+              <Label>{t('discount_code')} *</Label>
               <div className="flex gap-2">
                 <Input
                   value={formData.code}
@@ -523,23 +534,23 @@ export default function Discounts() {
                   className="font-mono"
                 />
                 <Button type="button" variant="outline" onClick={generateCode}>
-                  Generatsiya
+                  {t('generate')}
                 </Button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Nomi *</Label>
+              <Label>{t('name')} *</Label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Yozgi chegirma"
+                placeholder={t('summer_discount')}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Turi</Label>
+                <Label>{t('type')}</Label>
                 <Select
                   value={formData.type}
                   onValueChange={(value) => setFormData({ ...formData, type: value })}
@@ -548,13 +559,13 @@ export default function Discounts() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="percentage">Foiz (%)</SelectItem>
-                    <SelectItem value="fixed">Qat'iy summa</SelectItem>
+                    <SelectItem value="percentage">{t('percentage')} (%)</SelectItem>
+                    <SelectItem value="fixed">{t('fixed_amount')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Qiymati *</Label>
+                <Label>{t('value')} *</Label>
                 <Input
                   type="number"
                   min="0"
@@ -568,7 +579,7 @@ export default function Discounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Min. buyurtma summasi</Label>
+                <Label>{t('min_order_amount')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -582,7 +593,7 @@ export default function Discounts() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Max. chegirma summasi</Label>
+                <Label>{t('max_discount_amount')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -599,7 +610,7 @@ export default function Discounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Boshlanish sanasi *</Label>
+                <Label>{t('start_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.valid_from}
@@ -609,7 +620,7 @@ export default function Discounts() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tugash sanasi *</Label>
+                <Label>{t('end_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.valid_until}
@@ -622,11 +633,11 @@ export default function Discounts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Foydalanish limiti</Label>
+                <Label>{t('usage_limit')}</Label>
                 <Input
                   type="number"
                   min="0"
-                  placeholder="Cheksiz"
+                  placeholder={t('unlimited')}
                   value={formData.usage_limit || ""}
                   onChange={(e) =>
                     setFormData({
@@ -637,7 +648,7 @@ export default function Discounts() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Kimlar uchun</Label>
+                <Label>{t('applies_to')}</Label>
                 <Select
                   value={formData.applies_to}
                   onValueChange={(value) =>
@@ -648,9 +659,9 @@ export default function Discounts() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Barcha mijozlar</SelectItem>
-                    <SelectItem value="new_customers">Yangi mijozlar</SelectItem>
-                    <SelectItem value="vip">VIP mijozlar</SelectItem>
+                    <SelectItem value="all">{t('all_customers')}</SelectItem>
+                    <SelectItem value="new_customers">{t('new_customers')}</SelectItem>
+                    <SelectItem value="vip">{t('vip_customers')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -658,13 +669,13 @@ export default function Discounts() {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!formData.code || !formData.name || !formData.valid_until}
               >
-                {editMode ? "Saqlash" : "Yaratish"}
+                {editMode ? t('save') : t('create')}
               </Button>
             </div>
           </div>
@@ -677,12 +688,12 @@ export default function Discounts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="w-5 h-5" />
-              Chegirma kodini tekshirish
+              {t('test_discount_code')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Chegirma kodi</Label>
+              <Label>{t('discount_code')}</Label>
               <Input
                 value={testData.code}
                 onChange={(e) =>
@@ -694,7 +705,7 @@ export default function Discounts() {
             </div>
 
             <div className="space-y-2">
-              <Label>Buyurtma summasi</Label>
+              <Label>{t('order_amount')}</Label>
               <Input
                 type="number"
                 min="0"
@@ -715,11 +726,11 @@ export default function Discounts() {
                   setTestData({ ...testData, isNewCustomer: checked })
                 }
               />
-              <Label>Yangi mijoz</Label>
+              <Label>{t('new_customer')}</Label>
             </div>
 
             <Button className="w-full" onClick={handleTestDiscount}>
-              Tekshirish
+              {t('test')}
             </Button>
 
             {testData.result && (
@@ -734,12 +745,12 @@ export default function Discounts() {
                   <div>
                     <div className="flex items-center gap-2 text-green-700 font-medium">
                       <CheckCircle className="w-4 h-4" />
-                      Chegirma yaroqli!
+                      {t('discount_valid')}
                     </div>
                     <p className="text-green-600 mt-2">{testData.result.message}</p>
                     <div className="mt-2 pt-2 border-t border-green-200">
                       <p className="text-sm text-green-700">
-                        Chegirma summasi:{" "}
+                        {t('discount_amount')}:{" "}
                         <span className="font-semibold">
                           {formatCurrency(testData.result.discountAmount)}
                         </span>
@@ -748,7 +759,7 @@ export default function Discounts() {
                   </div>
                 ) : (
                   <div className="text-red-700">
-                    <p className="font-medium">Chegirma qo'llanilmadi</p>
+                    <p className="font-medium">{t('discount_not_applied')}</p>
                     <p className="text-sm mt-1">{testData.result.message}</p>
                   </div>
                 )}
@@ -764,7 +775,7 @@ export default function Discounts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="w-5 h-5" />
-              Chegirma tafsilotlari
+              {t('discount_details')}
             </DialogTitle>
           </DialogHeader>
           {selectedDiscount && (
@@ -783,13 +794,13 @@ export default function Discounts() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Turi:</span>
+                  <span className="text-slate-500">{t('type')}:</span>
                   <p className="font-medium mt-1">
                     {getTypeBadge(selectedDiscount.type)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">Qiymati:</span>
+                  <span className="text-slate-500">{t('value')}:</span>
                   <p className="font-semibold text-lg mt-1">
                     {selectedDiscount.type === "percentage"
                       ? `${selectedDiscount.value}%`
@@ -800,30 +811,30 @@ export default function Discounts() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Min. buyurtma:</span>
+                  <span className="text-slate-500">{t('min_order')}:</span>
                   <p className="font-medium">
                     {formatCurrency(selectedDiscount.min_order_amount)}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">Max. chegirma:</span>
+                  <span className="text-slate-500">{t('max_discount')}:</span>
                   <p className="font-medium">
                     {selectedDiscount.max_discount > 0
                       ? formatCurrency(selectedDiscount.max_discount)
-                      : "Cheksiz"}
+                      : t('unlimited')}
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Boshlanish:</span>
+                  <span className="text-slate-500">{t('start_date')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedDiscount.valid_from), "dd.MM.yyyy")}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">Tugash:</span>
+                  <span className="text-slate-500">{t('end_date')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedDiscount.valid_until), "dd.MM.yyyy")}
                   </p>
@@ -832,7 +843,7 @@ export default function Discounts() {
 
               <div className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Foydalanish:</span>
+                  <span className="text-slate-600">{t('usage')}:</span>
                   <span className="font-medium">
                     {selectedDiscount.used_count} /{" "}
                     {selectedDiscount.usage_limit || "∞"}

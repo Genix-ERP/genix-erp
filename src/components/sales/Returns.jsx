@@ -49,8 +49,12 @@ import {
 import { format } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function Returns() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     returns,
     invoices,
@@ -184,10 +188,10 @@ export default function Returns() {
 
   const getStatusBadge = (status) => {
     const variants = {
-      pending: { color: "bg-yellow-100 text-yellow-800", label: "Kutilmoqda" },
-      approved: { color: "bg-green-100 text-green-800", label: "Tasdiqlangan" },
-      rejected: { color: "bg-red-100 text-red-800", label: "Rad etilgan" },
-      completed: { color: "bg-blue-100 text-blue-800", label: "Yakunlangan" },
+      pending: { color: "bg-yellow-100 text-yellow-800", label: t('pending') },
+      approved: { color: "bg-green-100 text-green-800", label: t('approved') },
+      rejected: { color: "bg-red-100 text-red-800", label: t('rejected') },
+      completed: { color: "bg-blue-100 text-blue-800", label: t('completed') },
     };
     const variant = variants[status] || variants.pending;
     return <Badge className={variant.color}>{variant.label}</Badge>;
@@ -195,8 +199,8 @@ export default function Returns() {
 
   const getRefundStatusBadge = (status) => {
     const variants = {
-      pending: { color: "bg-slate-100 text-slate-800", label: "Kutilmoqda" },
-      processed: { color: "bg-green-100 text-green-800", label: "Qaytarildi" },
+      pending: { color: "bg-slate-100 text-slate-800", label: t('pending') },
+      processed: { color: "bg-green-100 text-green-800", label: t('refunded') },
     };
     const variant = variants[status] || variants.pending;
     return <Badge className={variant.color}>{variant.label}</Badge>;
@@ -204,28 +208,28 @@ export default function Returns() {
 
   const getReasonLabel = (reason) => {
     const reasons = {
-      defective: "Nosoz mahsulot",
-      wrong_item: "Noto'g'ri mahsulot",
-      damaged: "Shikastlangan",
-      not_as_described: "Tavsifga mos emas",
-      changed_mind: "Fikr o'zgardi",
-      other: "Boshqa",
+      defective: t('defective_product'),
+      wrong_item: t('wrong_item'),
+      damaged: t('damaged'),
+      not_as_described: t('not_as_described'),
+      changed_mind: t('changed_mind'),
+      other: t('other'),
     };
     return reasons[reason] || reason;
   };
 
   const getConditionLabel = (condition) => {
     const conditions = {
-      damaged: "Shikastlangan",
-      opened: "Ochilgan",
-      sealed: "Muhrli",
-      used: "Ishlatilgan",
+      damaged: t('damaged'),
+      opened: t('opened'),
+      sealed: t('sealed'),
+      used: t('used'),
     };
     return conditions[condition] || condition;
   };
 
   const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} so'm`;
+    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const totalAmount = formData.items.reduce(
@@ -244,7 +248,7 @@ export default function Returns() {
                 <RotateCcw className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-slate-600 font-medium">Jami qaytarishlar</p>
+                <p className="text-xs text-slate-600 font-medium">{t('total_returns')}</p>
                 <p className="text-lg font-bold text-slate-900">{stats.total}</p>
               </div>
             </div>
@@ -257,7 +261,7 @@ export default function Returns() {
                 <AlertTriangle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-yellow-600 font-medium">Kutilmoqda</p>
+                <p className="text-xs text-yellow-600 font-medium">{t('pending')}</p>
                 <p className="text-lg font-bold text-yellow-900">{stats.pending}</p>
               </div>
             </div>
@@ -270,7 +274,7 @@ export default function Returns() {
                 <CheckCircle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-green-600 font-medium">Tasdiqlangan</p>
+                <p className="text-xs text-green-600 font-medium">{t('approved')}</p>
                 <p className="text-lg font-bold text-green-900">{stats.approved}</p>
               </div>
             </div>
@@ -283,7 +287,7 @@ export default function Returns() {
                 <DollarSign className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-blue-600 font-medium">Qaytarilgan summa</p>
+                <p className="text-xs text-blue-600 font-medium">{t('refunded_amount')}</p>
                 <p className="text-lg font-bold text-blue-900">
                   {formatCurrency(stats.refundedAmount)}
                 </p>
@@ -296,14 +300,14 @@ export default function Returns() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[var(--genix-navy)]">Qaytarishlar</h2>
+          <h2 className="text-xl font-bold text-[var(--genix-navy)]">{t('returns')}</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Mahsulot qaytarishlarini boshqaring
+            {t('manage_returns_desc')}
           </p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Yangi qaytarish
+          {t('new_return')}
         </Button>
       </div>
 
@@ -312,7 +316,7 @@ export default function Returns() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Qaytarish qidirish..."
+            placeholder={t('search_return') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -320,13 +324,13 @@ export default function Returns() {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Holat" />
+            <SelectValue placeholder={t('status')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Barchasi</SelectItem>
-            <SelectItem value="pending">Kutilmoqda</SelectItem>
-            <SelectItem value="approved">Tasdiqlangan</SelectItem>
-            <SelectItem value="rejected">Rad etilgan</SelectItem>
+            <SelectItem value="all">{t('all')}</SelectItem>
+            <SelectItem value="pending">{t('pending')}</SelectItem>
+            <SelectItem value="approved">{t('approved')}</SelectItem>
+            <SelectItem value="rejected">{t('rejected')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -341,20 +345,20 @@ export default function Returns() {
           ) : filteredReturns.length === 0 ? (
             <div className="text-center py-12">
               <RotateCcw className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Qaytarishlar topilmadi</p>
+              <p className="text-slate-500">{t('no_returns_found')}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Qaytarish №</TableHead>
-                    <TableHead>Mijoz</TableHead>
-                    <TableHead>Sabab</TableHead>
-                    <TableHead>Sana</TableHead>
-                    <TableHead className="text-right">Summa</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead>Qaytarish</TableHead>
+                    <TableHead>{t('return_number')}</TableHead>
+                    <TableHead>{t('customer')}</TableHead>
+                    <TableHead>{t('reason')}</TableHead>
+                    <TableHead>{t('date')}</TableHead>
+                    <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead>{t('refund')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -394,20 +398,20 @@ export default function Returns() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleView(returnItem)}>
                               <Eye className="w-4 h-4 mr-2" />
-                              Ko'rish
+                              {t('view')}
                             </DropdownMenuItem>
                             {returnItem.status === "pending" && (
                               <>
                                 <DropdownMenuItem onClick={() => handleApprove(returnItem)}>
                                   <CheckCircle className="w-4 h-4 mr-2" />
-                                  Tasdiqlash
+                                  {t('approve')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => handleReject(returnItem)}
                                   className="text-red-600"
                                 >
                                   <XCircle className="w-4 h-4 mr-2" />
-                                  Rad etish
+                                  {t('reject')}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -418,13 +422,13 @@ export default function Returns() {
                                     onClick={() => handleProcessRefund(returnItem, "cash")}
                                   >
                                     <DollarSign className="w-4 h-4 mr-2" />
-                                    Naqd qaytarish
+                                    {t('cash_refund')}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleProcessRefund(returnItem, "credit_note")}
                                   >
                                     <FileText className="w-4 h-4 mr-2" />
-                                    Kredit nota berish
+                                    {t('issue_credit_note')}
                                   </DropdownMenuItem>
                                 </>
                               )}
@@ -444,18 +448,18 @@ export default function Returns() {
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Yangi qaytarish</DialogTitle>
+            <DialogTitle>{t('new_return')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Invoice Selection */}
             <div className="space-y-2">
-              <Label>Faktura *</Label>
+              <Label>{t('invoice')} *</Label>
               <Select
                 value={formData.invoice_id}
                 onValueChange={handleInvoiceSelect}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Fakturani tanlang" />
+                  <SelectValue placeholder={t('select_invoice')} />
                 </SelectTrigger>
                 <SelectContent>
                   {invoices
@@ -471,14 +475,14 @@ export default function Returns() {
 
             {formData.customer_name && (
               <div className="p-3 bg-slate-50 rounded-lg">
-                <p className="text-sm text-slate-600">Mijoz:</p>
+                <p className="text-sm text-slate-600">{t('customer')}:</p>
                 <p className="font-medium">{formData.customer_name}</p>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Qaytarish sanasi *</Label>
+                <Label>{t('return_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.return_date}
@@ -488,7 +492,7 @@ export default function Returns() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Sabab *</Label>
+                <Label>{t('reason')} *</Label>
                 <Select
                   value={formData.reason}
                   onValueChange={(value) =>
@@ -499,12 +503,12 @@ export default function Returns() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="defective">Nosoz mahsulot</SelectItem>
-                    <SelectItem value="wrong_item">Noto'g'ri mahsulot</SelectItem>
-                    <SelectItem value="damaged">Shikastlangan</SelectItem>
-                    <SelectItem value="not_as_described">Tavsifga mos emas</SelectItem>
-                    <SelectItem value="changed_mind">Fikr o'zgardi</SelectItem>
-                    <SelectItem value="other">Boshqa</SelectItem>
+                    <SelectItem value="defective">{t('defective_product')}</SelectItem>
+                    <SelectItem value="wrong_item">{t('wrong_item')}</SelectItem>
+                    <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                    <SelectItem value="not_as_described">{t('not_as_described')}</SelectItem>
+                    <SelectItem value="changed_mind">{t('changed_mind')}</SelectItem>
+                    <SelectItem value="other">{t('other')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -513,15 +517,15 @@ export default function Returns() {
             {/* Items */}
             {formData.items.length > 0 && formData.items[0].product_name && (
               <div className="space-y-3">
-                <Label className="text-base font-semibold">Qaytariladigan mahsulotlar</Label>
+                <Label className="text-base font-semibold">{t('return_products')}</Label>
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Mahsulot</TableHead>
-                        <TableHead className="w-24">Miqdor</TableHead>
-                        <TableHead className="w-36">Holati</TableHead>
-                        <TableHead className="w-32 text-right">Summa</TableHead>
+                        <TableHead>{t('product')}</TableHead>
+                        <TableHead className="w-24">{t('quantity')}</TableHead>
+                        <TableHead className="w-36">{t('condition')}</TableHead>
+                        <TableHead className="w-32 text-right">{t('amount')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -556,10 +560,10 @@ export default function Returns() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="damaged">Shikastlangan</SelectItem>
-                                <SelectItem value="opened">Ochilgan</SelectItem>
-                                <SelectItem value="sealed">Muhrli</SelectItem>
-                                <SelectItem value="used">Ishlatilgan</SelectItem>
+                                <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                                <SelectItem value="opened">{t('opened')}</SelectItem>
+                                <SelectItem value="sealed">{t('sealed')}</SelectItem>
+                                <SelectItem value="used">{t('used')}</SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -576,30 +580,30 @@ export default function Returns() {
 
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex justify-between font-semibold text-lg">
-                <span>Jami qaytarish summasi:</span>
+                <span>{t('total_return_amount')}:</span>
                 <span>{formatCurrency(totalAmount)}</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Izohlar</Label>
+              <Label>{t('notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Qo'shimcha ma'lumotlar..."
+                placeholder={t('additional_info') + '...'}
                 rows={3}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!formData.invoice_id || totalAmount === 0}
               >
-                Yaratish
+                {t('create')}
               </Button>
             </div>
           </div>
@@ -632,13 +636,13 @@ export default function Returns() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Qaytarish sanasi:</span>
+                  <span className="text-slate-500">{t('return_date')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedReturn.return_date), "dd.MM.yyyy")}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">Sabab:</span>
+                  <span className="text-slate-500">{t('reason')}:</span>
                   <p className="font-medium">{getReasonLabel(selectedReturn.reason)}</p>
                 </div>
               </div>
@@ -647,10 +651,10 @@ export default function Returns() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead className="text-center">Miqdor</TableHead>
-                      <TableHead>Holati</TableHead>
-                      <TableHead className="text-right">Summa</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="text-center">{t('quantity')}</TableHead>
+                      <TableHead>{t('condition')}</TableHead>
+                      <TableHead className="text-right">{t('amount')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -674,16 +678,16 @@ export default function Returns() {
 
               <div className="bg-slate-50 rounded-lg p-4">
                 <div className="flex justify-between font-semibold text-lg">
-                  <span>Jami:</span>
+                  <span>{t('total')}:</span>
                   <span>{formatCurrency(selectedReturn.total_amount)}</span>
                 </div>
                 {selectedReturn.refund_status === "processed" && (
                   <div className="flex justify-between text-sm text-green-600 mt-2">
-                    <span>Qaytarish usuli:</span>
+                    <span>{t('refund_method')}:</span>
                     <span>
                       {selectedReturn.refund_method === "cash"
-                        ? "Naqd pul"
-                        : "Kredit nota"}
+                        ? t('cash')
+                        : t('credit_note')}
                     </span>
                   </div>
                 )}

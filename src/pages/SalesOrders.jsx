@@ -17,6 +17,8 @@ import {
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { analyzeSales } from '@/api/services/aiAnalytics';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 // Import sales components
 import Quotations from '@/components/sales/Quotations';
@@ -35,9 +37,18 @@ import {
 } from '@/components/shared';
 
 export default function SalesOrders() {
-  const { salesOrders, createSalesOrder, updateSalesOrder, isLoading: ordersLoading } = useModules();
-  const { customers } = useCustomers();
-  const { quotations, invoices, returns, discounts, getAIInsights, isLoading: salesLoading } = useSales();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading } = useModules();
+  const { customers = [] } = useCustomers();
+  const {
+    quotations = [],
+    invoices = [],
+    returns = [],
+    discounts = [],
+    getAIInsights,
+    isLoading: salesLoading
+  } = useSales();
 
   const [activeTab, setActiveTab] = useState("orders");
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -53,21 +64,21 @@ export default function SalesOrders() {
 
   // Export columns configuration
   const exportColumns = [
-    { key: 'order_number', label: 'Buyurtma raqami' },
-    { key: 'customer_name', label: 'Mijoz' },
-    { key: 'order_date', label: 'Sana', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'delivery_date', label: 'Yetkazish sanasi', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'total_amount', label: 'Summa', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'status', label: 'Holat' },
-    { key: 'payment_status', label: "To'lov holati" },
+    { key: 'order_number', label: t('order_number') },
+    { key: 'customer_name', label: t('customer') },
+    { key: 'order_date', label: t('date'), render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
+    { key: 'delivery_date', label: t('delivery_date'), render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
+    { key: 'total_amount', label: t('amount'), render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'status', label: t('status') },
+    { key: 'payment_status', label: t('payment_status') },
   ];
 
   // Import columns configuration
   const importColumns = [
-    { key: 'customer_name', label: 'Mijoz', required: true },
-    { key: 'order_date', label: 'Sana', required: true },
-    { key: 'delivery_date', label: 'Yetkazish sanasi' },
-    { key: 'subtotal', label: 'Summa', required: true },
+    { key: 'customer_name', label: t('customer'), required: true },
+    { key: 'order_date', label: t('date'), required: true },
+    { key: 'delivery_date', label: t('delivery_date') },
+    { key: 'subtotal', label: t('amount'), required: true },
   ];
 
   const handleImport = async (data) => {
@@ -93,32 +104,49 @@ export default function SalesOrders() {
 
   const generatePrintConfig = (order) => ({
     template: 'order',
-    title: 'Sotuv buyurtmasi',
+    title: t('sales_order'),
     documentNumber: order.order_number,
     documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
     headerFields: [
-      { label: 'Mijoz', value: order.customer_name },
-      { label: 'Yetkazish sanasi', value: order.delivery_date ? format(new Date(order.delivery_date), 'dd.MM.yyyy') : '-' },
-      { label: 'Holat', value: order.status },
-      { label: "To'lov holati", value: order.payment_status },
+      { label: t('customer'), value: order.customer_name },
+      { label: t('delivery_date'), value: order.delivery_date ? format(new Date(order.delivery_date), 'dd.MM.yyyy') : '-' },
+      { label: t('status'), value: t(order.status) },
+      { label: t('payment_status'), value: t(order.payment_status) },
     ],
     tableColumns: [
-      { key: 'description', label: 'Tavsif' },
-      { key: 'amount', label: 'Summa', align: 'right' },
+      { key: 'description', label: t('description') },
+      { key: 'amount', label: t('amount'), align: 'right' },
     ],
     tableData: [
-      { description: 'Asosiy summa', amount: `${(order.subtotal || 0).toLocaleString()} UZS` },
-      { description: 'Soliq (12%)', amount: `${(order.tax_amount || 0).toLocaleString()} UZS` },
-      { description: 'Yetkazib berish', amount: `${(order.shipping_cost || 0).toLocaleString()} UZS` },
+      { description: t('subtotal'), amount: `${(order.subtotal || 0).toLocaleString()} UZS` },
+      { description: t('tax') + ' (12%)', amount: `${(order.tax_amount || 0).toLocaleString()} UZS` },
+      { description: t('shipping'), amount: `${(order.shipping_cost || 0).toLocaleString()} UZS` },
     ],
     totals: [
-      { label: 'Jami', value: `${(order.total_amount || 0).toLocaleString()} UZS`, bold: true },
+      { label: t('total'), value: `${(order.total_amount || 0).toLocaleString()} UZS`, bold: true },
     ],
   });
 
   // AI Analysis - combining both contexts
-  const salesAnalysis = useMemo(() => analyzeSales(salesOrders, customers), [salesOrders, customers]);
-  const aiInsights = getAIInsights;
+  const salesAnalysis = useMemo(() => {
+    try {
+      return analyzeSales(salesOrders, customers, language) || {
+        insights: [],
+        recommendations: [],
+        topCustomers: [],
+        metrics: {}
+      };
+    } catch (error) {
+      console.error('Error analyzing sales:', error);
+      return {
+        insights: [],
+        recommendations: [],
+        topCustomers: [],
+        metrics: {}
+      };
+    }
+  }, [salesOrders, customers, language]);
+  const aiInsights = getAIInsights || { insights: [], recommendations: [], metrics: {} };
 
   const [newOrder, setNewOrder] = useState({
     order_number: '',
@@ -188,23 +216,29 @@ export default function SalesOrders() {
 
   // Combined metrics from both contexts
   const metrics = useMemo(() => ({
-    totalOrders: salesOrders.length,
-    totalRevenue: salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0),
-    activeOrders: salesOrders.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length,
-    avgOrderValue: salesOrders.length > 0 ? salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / salesOrders.length : 0,
-    totalQuotations: quotations.length,
-    pendingQuotations: quotations.filter(q => q.status === 'sent').length,
-    totalInvoices: invoices.length,
-    unpaidInvoices: invoices.filter(i => i.payment_status !== 'paid').length,
-    totalReturns: returns.length,
-    pendingReturns: returns.filter(r => r.status === 'pending').length,
-    activeDiscounts: discounts.filter(d => d.status === 'active').length,
+    totalOrders: salesOrders?.length || 0,
+    totalRevenue: salesOrders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0,
+    activeOrders: salesOrders?.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length || 0,
+    avgOrderValue: salesOrders?.length > 0 ? salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / salesOrders.length : 0,
+    totalQuotations: quotations?.length || 0,
+    pendingQuotations: quotations?.filter(q => q.status === 'sent').length || 0,
+    totalInvoices: invoices?.length || 0,
+    unpaidInvoices: invoices?.filter(i => i.payment_status !== 'paid').length || 0,
+    totalReturns: returns?.length || 0,
+    pendingReturns: returns?.filter(r => r.status === 'pending').length || 0,
+    activeDiscounts: discounts?.filter(d => d.status === 'active').length || 0,
   }), [salesOrders, quotations, invoices, returns, discounts]);
 
   const salesData = {};
-  salesOrders.forEach(o => {
-    const month = new Date(o.order_date).toLocaleDateString('en-US', { month: 'short' });
-    salesData[month] = (salesData[month] || 0) + (o.total_amount || 0);
+  salesOrders?.forEach(o => {
+    if (o.order_date) {
+      try {
+        const month = new Date(o.order_date).toLocaleDateString('en-US', { month: 'short' });
+        salesData[month] = (salesData[month] || 0) + (o.total_amount || 0);
+      } catch (e) {
+        // Skip invalid dates
+      }
+    }
   });
   const chartData = Object.entries(salesData).slice(-6).map(([month, revenue]) => ({ month, revenue }));
 
@@ -218,8 +252,20 @@ export default function SalesOrders() {
   };
 
   const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} so'm`;
+    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
+
+  // Loading state
+  if (ordersLoading || salesLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">{t('loading')}...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -229,13 +275,13 @@ export default function SalesOrders() {
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <ShoppingBag className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Sotuvlar va CRM</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('sales_and_crm')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
               AI-Powered
             </Badge>
           </div>
-          <p className="text-white/90">Buyurtmalar, taklifnomalar, fakturalar va chegirmalarni AI yordamida boshqaring</p>
+          <p className="text-white/90">{t('sales_description')}</p>
         </div>
 
         {/* Quick Stats */}
@@ -247,7 +293,7 @@ export default function SalesOrders() {
                   <ShoppingBag className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">Buyurtmalar</p>
+                  <p className="text-xs text-slate-600">{t('orders')}</p>
                   <p className="text-lg font-bold text-slate-900">{metrics.totalOrders}</p>
                 </div>
               </div>
@@ -261,7 +307,7 @@ export default function SalesOrders() {
                   <DollarSign className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">Daromad</p>
+                  <p className="text-xs text-slate-600">{t('revenue')}</p>
                   <p className="text-lg font-bold text-slate-900">{formatCurrency(metrics.totalRevenue)}</p>
                 </div>
               </div>
@@ -275,7 +321,7 @@ export default function SalesOrders() {
                   <FileText className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">Taklifnomalar</p>
+                  <p className="text-xs text-slate-600">{t('quotations')}</p>
                   <p className="text-lg font-bold text-slate-900">{metrics.totalQuotations}</p>
                 </div>
               </div>
@@ -289,7 +335,7 @@ export default function SalesOrders() {
                   <Receipt className="w-5 h-5 text-yellow-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">To'lanmagan</p>
+                  <p className="text-xs text-slate-600">{t('unpaid')}</p>
                   <p className="text-lg font-bold text-slate-900">{metrics.unpaidInvoices}</p>
                 </div>
               </div>
@@ -303,7 +349,7 @@ export default function SalesOrders() {
                   <RotateCcw className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">Qaytarishlar</p>
+                  <p className="text-xs text-slate-600">{t('returns')}</p>
                   <p className="text-lg font-bold text-slate-900">{metrics.totalReturns}</p>
                 </div>
               </div>
@@ -317,7 +363,7 @@ export default function SalesOrders() {
                   <Tag className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">Faol chegirmalar</p>
+                  <p className="text-xs text-slate-600">{t('active_discounts')}</p>
                   <p className="text-lg font-bold text-slate-900">{metrics.activeDiscounts}</p>
                 </div>
               </div>
@@ -326,19 +372,19 @@ export default function SalesOrders() {
         </div>
 
         {/* AI Insights Panel */}
-        {(salesAnalysis.insights.length > 0 || aiInsights.insights.length > 0 || aiInsights.recommendations.length > 0) && (
+        {((salesAnalysis?.insights?.length > 0) || (aiInsights?.insights?.length > 0) || (aiInsights?.recommendations?.length > 0)) && (
           <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200/50">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-emerald-600" />
-                AI Sotuvlar Tahlili
-                <Badge className="bg-emerald-100 text-emerald-700 text-xs">Jonli</Badge>
+                {t('ai_sales_analysis')}
+                <Badge className="bg-emerald-100 text-emerald-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Sales Context Insights */}
-                {aiInsights.insights.slice(0, 2).map((insight, index) => (
+                {(aiInsights?.insights || []).slice(0, 2).map((insight, index) => (
                   <div key={`sales-${index}`} className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
                     <div className="flex items-start gap-3">
                       {insight.type === 'positive' ? (
@@ -349,10 +395,16 @@ export default function SalesOrders() {
                         <Target className="w-5 h-5 text-blue-500 mt-0.5" />
                       )}
                       <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-1">{insight.description}</p>
+                        <h4 className="font-medium text-slate-900 text-sm">
+                          {insight.titleKey ? t(insight.titleKey) : insight.title}
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-1">
+                          {insight.descriptionKey ? t(insight.descriptionKey) : insight.description}
+                        </p>
                         {insight.metric && (
-                          <p className="text-lg font-bold text-emerald-600 mt-2">{insight.metric}</p>
+                          <p className="text-lg font-bold text-emerald-600 mt-2">
+                            {typeof insight.metric === 'number' ? formatCurrency(insight.metric) : insight.metric}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -360,12 +412,12 @@ export default function SalesOrders() {
                 ))}
 
                 {/* Top Customer from orders analysis */}
-                {salesAnalysis.topCustomers.length > 0 && (
+                {salesAnalysis?.topCustomers?.length > 0 && (
                   <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
                     <div className="flex items-start gap-3">
                       <Target className="w-5 h-5 text-purple-500 mt-0.5" />
                       <div>
-                        <h4 className="font-medium text-slate-900 text-sm">Eng yaxshi mijoz</h4>
+                        <h4 className="font-medium text-slate-900 text-sm">{t('top_customer')}</h4>
                         <p className="text-xs text-slate-600 mt-1">{salesAnalysis.topCustomers[0].name}</p>
                         <p className="text-lg font-bold text-purple-600 mt-2">
                           {formatCurrency(salesAnalysis.topCustomers[0].revenue)}
@@ -376,19 +428,21 @@ export default function SalesOrders() {
                 )}
 
                 {/* Recommendations */}
-                {aiInsights.recommendations.length > 0 && (
+                {aiInsights?.recommendations?.length > 0 && (
                   <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100 md:col-span-2 lg:col-span-3">
                     <div className="flex items-start gap-3">
                       <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                       <div className="flex-1">
-                        <h4 className="font-medium text-slate-900 text-sm">AI Tavsiyalari</h4>
+                        <h4 className="font-medium text-slate-900 text-sm">{t('ai_recommendations')}</h4>
                         <div className="flex flex-wrap gap-3 mt-2">
-                          {aiInsights.recommendations.slice(0, 4).map((rec, index) => (
+                          {(aiInsights?.recommendations || []).slice(0, 4).map((rec, index) => (
                             <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1">
                               <span className={`w-2 h-2 rounded-full ${
                                 rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
                               }`} />
-                              <span className="text-slate-700">{rec.action}</span>
+                              <span className="text-slate-700">
+                                {rec.actionKey ? t(rec.actionKey) : rec.action}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -406,42 +460,42 @@ export default function SalesOrders() {
           <TabsList className="bg-white/80 p-1 rounded-xl shadow-sm border">
             <TabsTrigger value="orders" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <ShoppingBag className="w-4 h-4 mr-2" />
-              Buyurtmalar
+              {t('orders')}
               {tabCounts.orders > 0 && (
                 <Badge className="ml-2 bg-green-100 text-green-800">{tabCounts.orders}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="quotations" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <FileText className="w-4 h-4 mr-2" />
-              Taklifnomalar
+              {t('quotations')}
               {tabCounts.quotations > 0 && (
                 <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.quotations}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="invoices" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <Receipt className="w-4 h-4 mr-2" />
-              Fakturalar
+              {t('invoices')}
               {tabCounts.invoices > 0 && (
                 <Badge className="ml-2 bg-yellow-100 text-yellow-800">{tabCounts.invoices}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="returns" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <RotateCcw className="w-4 h-4 mr-2" />
-              Qaytarishlar
+              {t('returns')}
               {tabCounts.returns > 0 && (
                 <Badge className="ml-2 bg-red-100 text-red-800">{tabCounts.returns}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="discounts" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <Tag className="w-4 h-4 mr-2" />
-              Chegirmalar
+              {t('discounts')}
               {tabCounts.discounts > 0 && (
                 <Badge className="ml-2 bg-emerald-100 text-emerald-800">{tabCounts.discounts}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="analytics" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
               <BarChart3 className="w-4 h-4 mr-2" />
-              Tahlil
+              {t('analytics')}
             </TabsTrigger>
           </TabsList>
 
@@ -452,7 +506,7 @@ export default function SalesOrders() {
               {chartData.length > 0 && (
                 <Card className="bg-white/80 backdrop-blur-sm">
                   <CardHeader>
-                    <CardTitle className="text-lg">Sotuvlar trendi</CardTitle>
+                    <CardTitle className="text-lg">{t('sales_trend')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={250}>
@@ -472,7 +526,7 @@ export default function SalesOrders() {
               <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
                 <CardHeader className="border-b">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <CardTitle className="text-lg">Buyurtmalar</CardTitle>
+                    <CardTitle className="text-lg">{t('orders')}</CardTitle>
                     <div className="flex gap-2 flex-wrap">
                       <ImportExportButtons
                         onImport={() => setShowImportModal(true)}
@@ -480,10 +534,10 @@ export default function SalesOrders() {
                       />
                       <Button variant="outline" size="sm" onClick={() => setShowBatchPrint(true)} disabled={filteredOrders.length === 0}>
                         <Printer className="w-4 h-4 mr-1" />
-                        Chop etish
+                        {t('print')}
                       </Button>
                       <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-green-600 to-emerald-600">
-                        <Plus className="w-4 h-4 mr-2" /> Yangi buyurtma
+                        <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
                       </Button>
                     </div>
                   </div>
@@ -491,7 +545,7 @@ export default function SalesOrders() {
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
-                        placeholder="Qidirish..."
+                        placeholder={t('search') + '...'}
                         className="pl-9"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -502,12 +556,12 @@ export default function SalesOrders() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Barchasi</SelectItem>
-                        <SelectItem value="quotation">Taklif</SelectItem>
-                        <SelectItem value="confirmed">Tasdiqlangan</SelectItem>
-                        <SelectItem value="processing">Jarayonda</SelectItem>
-                        <SelectItem value="shipped">Yetkazilmoqda</SelectItem>
-                        <SelectItem value="delivered">Yetkazildi</SelectItem>
+                        <SelectItem value="all">{t('all')}</SelectItem>
+                        <SelectItem value="quotation">{t('quotation')}</SelectItem>
+                        <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
+                        <SelectItem value="processing">{t('processing')}</SelectItem>
+                        <SelectItem value="shipped">{t('shipped')}</SelectItem>
+                        <SelectItem value="delivered">{t('delivered')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -520,20 +574,20 @@ export default function SalesOrders() {
                   ) : filteredOrders.length === 0 ? (
                     <div className="text-center py-16">
                       <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                      <p className="text-slate-500">Buyurtmalar topilmadi</p>
-                      <Button onClick={() => setShowCreateModal(true)} className="mt-4">Birinchi buyurtmani yarating</Button>
+                      <p className="text-slate-500">{t('no_orders_found')}</p>
+                      <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_order')}</Button>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-slate-50">
-                            <TableHead>Buyurtma №</TableHead>
-                            <TableHead>Mijoz</TableHead>
-                            <TableHead>Sana</TableHead>
-                            <TableHead>Summa</TableHead>
-                            <TableHead>Holat</TableHead>
-                            <TableHead>Amallar</TableHead>
+                            <TableHead>{t('order_number')}</TableHead>
+                            <TableHead>{t('customer')}</TableHead>
+                            <TableHead>{t('date')}</TableHead>
+                            <TableHead>{t('amount')}</TableHead>
+                            <TableHead>{t('status')}</TableHead>
+                            <TableHead>{t('actions')}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -546,18 +600,18 @@ export default function SalesOrders() {
                               </TableCell>
                               <TableCell className="font-semibold">{formatCurrency(order.total_amount)}</TableCell>
                               <TableCell>
-                                <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                                <Badge className={getStatusColor(order.status)}>{t(order.status)}</Badge>
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-1">
                                   {order.status === 'quotation' && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')}>
-                                      Tasdiqlash
+                                      {t('confirm')}
                                     </Button>
                                   )}
                                   {order.status === 'confirmed' && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')}>
-                                      Jarayonga
+                                      {t('to_processing')}
                                     </Button>
                                   )}
                                   {order.status === 'processing' && (
@@ -606,7 +660,7 @@ export default function SalesOrders() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-green-600" />
-                    Oylik daromad
+                    {t('monthly_revenue')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -627,29 +681,29 @@ export default function SalesOrders() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-blue-600" />
-                    Sotuvlar ko'rsatkichlari
+                    {t('sales_metrics')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">O'rtacha buyurtma qiymati</p>
+                      <p className="text-sm text-slate-600">{t('average_order_value')}</p>
                       <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.avgOrderValue)}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">Konversiya darajasi</p>
+                      <p className="text-sm text-slate-600">{t('conversion_rate')}</p>
                       <p className="text-2xl font-bold text-slate-900">
                         {aiInsights.metrics?.conversionRate?.toFixed(1) || 0}%
                       </p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">Qaytarish darajasi</p>
+                      <p className="text-sm text-slate-600">{t('return_rate')}</p>
                       <p className="text-2xl font-bold text-slate-900">
                         {aiInsights.metrics?.returnRate?.toFixed(1) || 0}%
                       </p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">To'lanmagan summa</p>
+                      <p className="text-sm text-slate-600">{t('outstanding_amount')}</p>
                       <p className="text-2xl font-bold text-red-600">
                         {formatCurrency(aiInsights.metrics?.totalOutstanding || 0)}
                       </p>
@@ -657,11 +711,11 @@ export default function SalesOrders() {
                   </div>
 
                   {/* Top Customers */}
-                  {salesAnalysis.topCustomers.length > 0 && (
+                  {salesAnalysis?.topCustomers?.length > 0 && (
                     <div className="pt-4 border-t">
-                      <h4 className="font-medium text-slate-900 mb-3">Top mijozlar</h4>
+                      <h4 className="font-medium text-slate-900 mb-3">{t('top_customers')}</h4>
                       <div className="space-y-2">
-                        {salesAnalysis.topCustomers.slice(0, 5).map((customer, index) => (
+                        {(salesAnalysis?.topCustomers || []).slice(0, 5).map((customer, index) => (
                           <div key={index} className="flex justify-between items-center p-2 bg-slate-50 rounded">
                             <span className="text-sm">{customer.name}</span>
                             <span className="font-medium text-green-600">{formatCurrency(customer.revenue)}</span>
@@ -680,22 +734,22 @@ export default function SalesOrders() {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Yangi buyurtma yaratish</DialogTitle>
+              <DialogTitle>{t('create_new_order')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Buyurtma raqami</label>
+                  <label className="text-sm font-medium mb-1 block">{t('order_number')}</label>
                   <Input
-                    placeholder="Avtomatik"
+                    placeholder={t('automatic')}
                     value={newOrder.order_number}
                     onChange={(e) => setNewOrder({...newOrder, order_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Mijoz *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
                   <Input
-                    placeholder="Mijoz nomi"
+                    placeholder={t('customer_name')}
                     value={newOrder.customer_name}
                     onChange={(e) => setNewOrder({...newOrder, customer_name: e.target.value})}
                     required
@@ -705,7 +759,7 @@ export default function SalesOrders() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Buyurtma sanasi *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('order_date')} *</label>
                   <Input
                     type="date"
                     value={newOrder.order_date}
@@ -714,7 +768,7 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Yetkazish sanasi</label>
+                  <label className="text-sm font-medium mb-1 block">{t('delivery_date')}</label>
                   <Input
                     type="date"
                     value={newOrder.delivery_date}
@@ -725,7 +779,7 @@ export default function SalesOrders() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Summa *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -735,7 +789,7 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Soliq</label>
+                  <label className="text-sm font-medium mb-1 block">{t('tax')}</label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -744,7 +798,7 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Yetkazish</label>
+                  <label className="text-sm font-medium mb-1 block">{t('shipping')}</label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -756,7 +810,7 @@ export default function SalesOrders() {
 
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-lg">Jami summa</span>
+                  <span className="font-semibold text-lg">{t('total_amount')}</span>
                   <span className="text-2xl font-bold text-green-600">
                     {formatCurrency(parseFloat(newOrder.subtotal || 0) + parseFloat(newOrder.tax_amount || 0) + parseFloat(newOrder.shipping_cost || 0))}
                   </span>
@@ -765,14 +819,14 @@ export default function SalesOrders() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Bekor qilish
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateOrder}
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
                   disabled={!newOrder.customer_name || !newOrder.subtotal}
                 >
-                  Yaratish
+                  {t('create')}
                 </Button>
               </div>
             </div>
@@ -785,7 +839,7 @@ export default function SalesOrders() {
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
           columns={importColumns}
-          entityName="Sotuv buyurtmasi"
+          entityName={t('sales_order')}
         />
 
         {/* Export Modal */}
@@ -794,8 +848,8 @@ export default function SalesOrders() {
           onClose={() => setShowExportModal(false)}
           data={filteredOrders}
           columns={exportColumns}
-          entityName="Sotuv_buyurtmalari"
-          title="Sotuv buyurtmalari"
+          entityName={t('sales_orders')}
+          title={t('sales_orders')}
         />
 
         {/* Print Preview Modal */}
@@ -822,7 +876,7 @@ export default function SalesOrders() {
             date: o.order_date ? format(new Date(o.order_date), 'dd.MM.yyyy') : '',
           }))}
           generateConfig={generatePrintConfig}
-          entityName="Buyurtma"
+          entityName={t('order')}
         />
 
       </div>
