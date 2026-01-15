@@ -11,7 +11,10 @@ import {
   Percent,
   Landmark,
   Wallet,
-  Globe
+  Globe,
+  Calendar,
+  PiggyBank,
+  Building2
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -25,6 +28,9 @@ import TaxRates from "@/components/finance/TaxRates";
 import BankReconciliation from "@/components/finance/BankReconciliation";
 import CashRegister from "@/components/finance/CashRegister";
 import CurrencyManagement from "@/components/finance/CurrencyManagement";
+import FiscalPeriods from "@/components/finance/FiscalPeriods";
+import BudgetManagement from "@/components/finance/BudgetManagement";
+import FixedAssets from "@/components/finance/FixedAssets";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -129,6 +135,32 @@ export default function Financials() {
             </TabsTrigger>
 
             <TabsTrigger
+              value="fiscal"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('fiscal_periods') || 'Fiscal Periods'}</span>
+              <span className="sm:hidden">FP</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="budgets"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
+            >
+              <PiggyBank className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('budgets') || 'Budgets'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="assets"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
+            >
+              <Building2 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('fixed_assets') || 'Fixed Assets'}</span>
+              <span className="sm:hidden">FA</span>
+            </TabsTrigger>
+
+            <TabsTrigger
               value="reports"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
             >
@@ -166,6 +198,15 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="currency" className="mt-6">
             <CurrencyManagement />
+          </TabsContent>
+          <TabsContent value="fiscal" className="mt-6">
+            <FiscalPeriods />
+          </TabsContent>
+          <TabsContent value="budgets" className="mt-6">
+            <BudgetManagement />
+          </TabsContent>
+          <TabsContent value="assets" className="mt-6">
+            <FixedAssets />
           </TabsContent>
           <TabsContent value="reports" className="mt-6">
             <FinancialReports />
