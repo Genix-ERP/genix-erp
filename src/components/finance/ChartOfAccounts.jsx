@@ -4,19 +4,59 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale } from "lucide-react";
+import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 
 const getAccountTypes = (t) => [
-  { value: 'asset', label: t('asset'), icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
-  { value: 'liability', label: t('liability'), icon: TrendingDown, color: 'bg-red-100 text-red-800' },
-  { value: 'equity', label: t('equity'), icon: Scale, color: 'bg-purple-100 text-purple-800' },
-  { value: 'revenue', label: t('revenue'), icon: TrendingUp, color: 'bg-green-100 text-green-800' },
-  { value: 'expense', label: t('expense'), icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
+  { value: 'asset', label: t('asset') || 'Asset', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
+  { value: 'liability', label: t('liability') || 'Liability', icon: TrendingDown, color: 'bg-red-100 text-red-800' },
+  { value: 'equity', label: t('equity') || 'Equity', icon: Scale, color: 'bg-purple-100 text-purple-800' },
+  { value: 'revenue', label: t('revenue') || 'Revenue', icon: TrendingUp, color: 'bg-green-100 text-green-800' },
+  { value: 'expense', label: t('expense') || 'Expense', icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
+];
+
+// Odoo-like internal types for more detailed classification
+const getInternalTypes = (t) => ({
+  asset: [
+    { value: 'asset_receivable', label: t('receivable') || 'Receivable', icon: FileText },
+    { value: 'asset_cash', label: t('bank_and_cash') || 'Bank and Cash', icon: Banknote },
+    { value: 'asset_current', label: t('current_assets') || 'Current Assets', icon: Wallet },
+    { value: 'asset_non_current', label: t('non_current_assets') || 'Non-current Assets', icon: Building2 },
+    { value: 'asset_prepayments', label: t('prepayments') || 'Prepayments', icon: CreditCard },
+    { value: 'asset_fixed', label: t('fixed_assets') || 'Fixed Assets', icon: Building2 },
+  ],
+  liability: [
+    { value: 'liability_payable', label: t('payable') || 'Payable', icon: Receipt },
+    { value: 'liability_credit_card', label: t('credit_card') || 'Credit Card', icon: CreditCard },
+    { value: 'liability_current', label: t('current_liabilities') || 'Current Liabilities', icon: FileText },
+    { value: 'liability_non_current', label: t('non_current_liabilities') || 'Non-current Liabilities', icon: FileText },
+  ],
+  equity: [
+    { value: 'equity', label: t('equity') || 'Equity', icon: Scale },
+    { value: 'equity_unaffected', label: t('current_year_earnings') || 'Current Year Earnings', icon: TrendingUp },
+  ],
+  revenue: [
+    { value: 'income', label: t('income') || 'Income', icon: TrendingUp },
+    { value: 'income_other', label: t('other_income') || 'Other Income', icon: Coins },
+  ],
+  expense: [
+    { value: 'expense', label: t('expenses') || 'Expenses', icon: TrendingDown },
+    { value: 'expense_depreciation', label: t('depreciation') || 'Depreciation', icon: TrendingDown },
+    { value: 'expense_direct_cost', label: t('cost_of_revenue') || 'Cost of Revenue', icon: Receipt },
+  ],
+});
+
+const getCurrencies = () => [
+  { value: 'UZS', label: 'UZS - Узбекский сум', symbol: "so'm" },
+  { value: 'USD', label: 'USD - US Dollar', symbol: '$' },
+  { value: 'EUR', label: 'EUR - Euro', symbol: '€' },
+  { value: 'RUB', label: 'RUB - Российский рубль', symbol: '₽' },
 ];
 
 export default function ChartOfAccounts() {
@@ -25,6 +65,8 @@ export default function ChartOfAccounts() {
   const { accounts, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
 
   const accountTypes = getAccountTypes(t);
+  const internalTypes = getInternalTypes(t);
+  const currencies = getCurrencies();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -38,8 +80,13 @@ export default function ChartOfAccounts() {
     code: '',
     name: '',
     type: 'asset',
+    internal_type: 'asset_current',
     parent_id: '',
+    currency: 'UZS',
+    allow_reconciliation: false,
+    deprecated: false,
     description: '',
+    default_tax_id: '',
   });
 
   // Build hierarchical structure
@@ -113,8 +160,13 @@ export default function ChartOfAccounts() {
         code: formData.code,
         name: formData.name,
         type: formData.type,
+        internal_type: formData.internal_type,
         parent_id: formData.parent_id || null,
+        currency: formData.currency,
+        allow_reconciliation: formData.allow_reconciliation,
+        deprecated: formData.deprecated,
         description: formData.description || null,
+        default_tax_id: formData.default_tax_id || null,
       });
       setShowCreateModal(false);
       resetForm();
@@ -132,8 +184,13 @@ export default function ChartOfAccounts() {
       await updateAccount(selectedAccount.id, {
         name: formData.name,
         type: formData.type,
+        internal_type: formData.internal_type,
         parent_id: formData.parent_id || null,
+        currency: formData.currency,
+        allow_reconciliation: formData.allow_reconciliation,
+        deprecated: formData.deprecated,
         description: formData.description || null,
+        default_tax_id: formData.default_tax_id || null,
       });
       setShowEditModal(false);
       setSelectedAccount(null);
@@ -161,8 +218,13 @@ export default function ChartOfAccounts() {
       code: account.code || '',
       name: account.name || '',
       type: account.type || 'asset',
+      internal_type: account.internal_type || 'asset_current',
       parent_id: account.parent_id || '',
+      currency: account.currency || 'UZS',
+      allow_reconciliation: account.allow_reconciliation || false,
+      deprecated: account.deprecated || false,
       description: account.description || '',
+      default_tax_id: account.default_tax_id || '',
     });
     setShowEditModal(true);
   };
@@ -172,8 +234,24 @@ export default function ChartOfAccounts() {
       code: '',
       name: '',
       type: 'asset',
+      internal_type: 'asset_current',
       parent_id: '',
+      currency: 'UZS',
+      allow_reconciliation: false,
+      deprecated: false,
       description: '',
+      default_tax_id: '',
+    });
+  };
+
+  // Update internal type when main type changes
+  const handleTypeChange = (newType) => {
+    const defaultInternalType = internalTypes[newType]?.[0]?.value || newType;
+    setFormData({
+      ...formData,
+      type: newType,
+      internal_type: defaultInternalType,
+      category: '' // Reset parent when type changes
     });
   };
 
@@ -374,7 +452,7 @@ export default function ChartOfAccounts() {
 
       {/* Create Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Landmark className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -382,6 +460,7 @@ export default function ChartOfAccounts() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Row 1: Code and Name */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
@@ -393,8 +472,21 @@ export default function ChartOfAccounts() {
                 />
               </div>
               <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
+                <Input
+                  placeholder={t('account_name') || 'Account name'}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Type and Internal Type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('type') || 'Type'} *</label>
-                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                <Select value={formData.type} onValueChange={handleTypeChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -405,49 +497,112 @@ export default function ChartOfAccounts() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('account_type') || 'Account Type'} *</label>
+                <Select value={formData.internal_type} onValueChange={(v) => setFormData({ ...formData, internal_type: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(internalTypes[formData.type] || []).map(itype => (
+                      <SelectItem key={itype.value} value={itype.value}>{itype.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
-              <Input
-                placeholder={t('account_name') || 'Account name'}
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+
+            {/* Row 3: Currency and Parent Account */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('currency') || 'Currency'}</label>
+                <Select value={formData.currency} onValueChange={(v) => setFormData({ ...formData, currency: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map(curr => (
+                      <SelectItem key={curr.value} value={curr.value}>{curr.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
+                <Select value={formData.parent_id || 'none'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === 'none' ? '' : v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('none') || 'None (Root Account)'}</SelectItem>
+                    {accounts.filter(a => a.type === formData.type).map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {/* Row 4: Default Tax (optional) */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
-              <Select value={formData.parent_id} onValueChange={(v) => setFormData({ ...formData, parent_id: v })}>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('default_tax') || 'Default Tax'}</label>
+              <Select value={formData.default_tax_id || 'none'} onValueChange={(v) => setFormData({ ...formData, default_tax_id: v === 'none' ? '' : v })}>
                 <SelectTrigger>
-                  <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
+                  <SelectValue placeholder={t('select_tax') || 'Select tax (optional)'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('none') || 'None (Root Account)'}</SelectItem>
-                  {accounts.filter(a => a.type === formData.type).map(acc => (
-                    <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                  ))}
+                  <SelectItem value="none">{t('no_tax') || 'No Tax'}</SelectItem>
+                  <SelectItem value="vat_12">НДС 12%</SelectItem>
+                  <SelectItem value="vat_0">НДС 0%</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Row 5: Description */}
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description') || 'Description'}</label>
-              <Input
+              <Textarea
                 placeholder={t('optional_description') || 'Optional description'}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={2}
               />
+            </div>
+
+            {/* Row 6: Checkboxes */}
+            <div className="flex flex-wrap gap-6 pt-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="allow_reconciliation"
+                  checked={formData.allow_reconciliation}
+                  onCheckedChange={(checked) => setFormData({ ...formData, allow_reconciliation: checked })}
+                />
+                <label htmlFor="allow_reconciliation" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  {t('allow_reconciliation') || 'Allow Reconciliation'}
+                </label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="deprecated"
+                  checked={formData.deprecated}
+                  onCheckedChange={(checked) => setFormData({ ...formData, deprecated: checked })}
+                />
+                <label htmlFor="deprecated" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  {t('deprecated') || 'Deprecated'}
+                </label>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)} disabled={isSaving}>
-              {t('cancel')}
+              {t('cancel') || 'Cancel'}
             </Button>
             <Button
               onClick={handleCreate}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
               disabled={isSaving || !formData.code || !formData.name}
             >
-              {isSaving ? t('saving') : t('create')}
+              {isSaving ? (t('saving') || 'Saving...') : (t('create') || 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -455,7 +610,7 @@ export default function ChartOfAccounts() {
 
       {/* Edit Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Edit2 className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -463,14 +618,28 @@ export default function ChartOfAccounts() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Row 1: Code and Name */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'}</label>
                 <Input value={formData.code} disabled className="bg-slate-100" />
               </div>
               <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
+                <Input
+                  placeholder={t('account_name') || 'Account name'}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Type and Internal Type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('type') || 'Type'} *</label>
-                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                <Select value={formData.type} onValueChange={handleTypeChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -481,49 +650,112 @@ export default function ChartOfAccounts() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('account_type') || 'Account Type'} *</label>
+                <Select value={formData.internal_type} onValueChange={(v) => setFormData({ ...formData, internal_type: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(internalTypes[formData.type] || []).map(itype => (
+                      <SelectItem key={itype.value} value={itype.value}>{itype.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
-              <Input
-                placeholder={t('account_name') || 'Account name'}
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+
+            {/* Row 3: Currency and Parent Account */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('currency') || 'Currency'}</label>
+                <Select value={formData.currency} onValueChange={(v) => setFormData({ ...formData, currency: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map(curr => (
+                      <SelectItem key={curr.value} value={curr.value}>{curr.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
+                <Select value={formData.parent_id || 'none'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === 'none' ? '' : v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('none') || 'None (Root Account)'}</SelectItem>
+                    {accounts.filter(a => a.type === formData.type && a.id !== selectedAccount?.id).map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {/* Row 4: Default Tax */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
-              <Select value={formData.parent_id} onValueChange={(v) => setFormData({ ...formData, parent_id: v })}>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('default_tax') || 'Default Tax'}</label>
+              <Select value={formData.default_tax_id || 'none'} onValueChange={(v) => setFormData({ ...formData, default_tax_id: v === 'none' ? '' : v })}>
                 <SelectTrigger>
-                  <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
+                  <SelectValue placeholder={t('select_tax') || 'Select tax (optional)'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('none') || 'None (Root Account)'}</SelectItem>
-                  {accounts.filter(a => a.type === formData.type && a.id !== selectedAccount?.id).map(acc => (
-                    <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                  ))}
+                  <SelectItem value="none">{t('no_tax') || 'No Tax'}</SelectItem>
+                  <SelectItem value="vat_12">НДС 12%</SelectItem>
+                  <SelectItem value="vat_0">НДС 0%</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Row 5: Description */}
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description') || 'Description'}</label>
-              <Input
+              <Textarea
                 placeholder={t('optional_description') || 'Optional description'}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={2}
               />
+            </div>
+
+            {/* Row 6: Checkboxes */}
+            <div className="flex flex-wrap gap-6 pt-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit_allow_reconciliation"
+                  checked={formData.allow_reconciliation}
+                  onCheckedChange={(checked) => setFormData({ ...formData, allow_reconciliation: checked })}
+                />
+                <label htmlFor="edit_allow_reconciliation" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  {t('allow_reconciliation') || 'Allow Reconciliation'}
+                </label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit_deprecated"
+                  checked={formData.deprecated}
+                  onCheckedChange={(checked) => setFormData({ ...formData, deprecated: checked })}
+                />
+                <label htmlFor="edit_deprecated" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  {t('deprecated') || 'Deprecated'}
+                </label>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)} disabled={isSaving}>
-              {t('cancel')}
+              {t('cancel') || 'Cancel'}
             </Button>
             <Button
               onClick={handleEdit}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
               disabled={isSaving || !formData.name}
             >
-              {isSaving ? t('saving') : t('save')}
+              {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
             </Button>
           </DialogFooter>
         </DialogContent>

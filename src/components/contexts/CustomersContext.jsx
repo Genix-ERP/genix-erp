@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { contactsService } from '@/api/services';
+import { contactsService, leadsService, opportunitiesService, activitiesService, tasksService, leadConversionService, pipelineStagesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
@@ -7,6 +7,9 @@ const STORAGE_KEY = 'genix_customers';
 const PARTNERS_STORAGE_KEY = 'genix_partners';
 const LEADS_STORAGE_KEY = 'genix_leads';
 const OPPORTUNITIES_STORAGE_KEY = 'genix_opportunities';
+const ACTIVITIES_STORAGE_KEY = 'genix_activities';
+const TASKS_STORAGE_KEY = 'genix_tasks';
+const PIPELINE_STAGES_STORAGE_KEY = 'genix_pipeline_stages';
 
 const CustomersContext = createContext();
 
@@ -79,11 +82,38 @@ const sampleOpportunities = [
   { id: 'opp_5', name: 'New Market Expansion', stage: 'needs_analysis', expected_value: 100000, probability: 30, expected_close_date: '2025-03-01', created_date: new Date().toISOString() }
 ];
 
+// Sample activities for demo
+const sampleActivities = [
+  { id: 'act_1', activity_type: 'call', subject: 'Follow-up call with Tech Solutions', status: 'completed', start_datetime: new Date().toISOString() },
+  { id: 'act_2', activity_type: 'meeting', subject: 'Demo presentation', status: 'planned', start_datetime: new Date(Date.now() + 86400000).toISOString() },
+  { id: 'act_3', activity_type: 'email', subject: 'Send proposal document', status: 'completed', start_datetime: new Date().toISOString() }
+];
+
+// Sample tasks for demo
+const sampleTasks = [
+  { id: 'task_1', title: 'Prepare quarterly report', task_type: 'general', priority: 'high', status: 'in_progress', due_date: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
+  { id: 'task_2', title: 'Review contract terms', task_type: 'review', priority: 'medium', status: 'pending', due_date: new Date(Date.now() + 172800000).toISOString().split('T')[0] },
+  { id: 'task_3', title: 'Schedule client meeting', task_type: 'meeting', priority: 'high', status: 'pending', due_date: new Date().toISOString().split('T')[0] }
+];
+
+// Default pipeline stages
+const defaultPipelineStages = [
+  { id: 'stage_1', name: 'Qualification', code: 'qualification', sequence: 1, probability: 10, is_won: false, is_lost: false, color: '#6B7280' },
+  { id: 'stage_2', name: 'Needs Analysis', code: 'needs_analysis', sequence: 2, probability: 25, is_won: false, is_lost: false, color: '#3B82F6' },
+  { id: 'stage_3', name: 'Proposal', code: 'proposal', sequence: 3, probability: 50, is_won: false, is_lost: false, color: '#8B5CF6' },
+  { id: 'stage_4', name: 'Negotiation', code: 'negotiation', sequence: 4, probability: 75, is_won: false, is_lost: false, color: '#F59E0B' },
+  { id: 'stage_5', name: 'Closed Won', code: 'closed_won', sequence: 5, probability: 100, is_won: true, is_lost: false, color: '#10B981' },
+  { id: 'stage_6', name: 'Closed Lost', code: 'closed_lost', sequence: 6, probability: 0, is_won: false, is_lost: true, color: '#EF4444' },
+];
+
 export function CustomersProvider({ children }) {
   const { activeCompany } = useCompany();
   const [customers, setCustomers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [pipelineStages, setPipelineStages] = useState(defaultPipelineStages);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
@@ -95,6 +125,9 @@ export function CustomersProvider({ children }) {
     const customersKey = getStorageKey(STORAGE_KEY, companyId);
     const leadsKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
     const opportunitiesKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
+    const activitiesKey = getStorageKey(ACTIVITIES_STORAGE_KEY, companyId);
+    const tasksKey = getStorageKey(TASKS_STORAGE_KEY, companyId);
+    const pipelineKey = getStorageKey(PIPELINE_STAGES_STORAGE_KEY, companyId);
 
     const getData = (storageKey, sampleData) => {
       const stored = localStorage.getItem(storageKey);
@@ -105,12 +138,18 @@ export function CustomersProvider({ children }) {
     setCustomers(getData(customersKey, sampleCustomers));
     setLeads(getData(leadsKey, sampleLeads));
     setOpportunities(getData(opportunitiesKey, sampleOpportunities));
+    setActivities(getData(activitiesKey, sampleActivities));
+    setTasks(getData(tasksKey, sampleTasks));
+    setPipelineStages(getData(pipelineKey, defaultPipelineStages));
 
     // Initialize localStorage if empty - only in demo mode
     if (demoMode) {
       if (!localStorage.getItem(customersKey)) localStorage.setItem(customersKey, JSON.stringify(sampleCustomers));
       if (!localStorage.getItem(leadsKey)) localStorage.setItem(leadsKey, JSON.stringify(sampleLeads));
       if (!localStorage.getItem(opportunitiesKey)) localStorage.setItem(opportunitiesKey, JSON.stringify(sampleOpportunities));
+      if (!localStorage.getItem(activitiesKey)) localStorage.setItem(activitiesKey, JSON.stringify(sampleActivities));
+      if (!localStorage.getItem(tasksKey)) localStorage.setItem(tasksKey, JSON.stringify(sampleTasks));
+      if (!localStorage.getItem(pipelineKey)) localStorage.setItem(pipelineKey, JSON.stringify(defaultPipelineStages));
     }
   }, [activeCompany]);
 
@@ -126,12 +165,96 @@ export function CustomersProvider({ children }) {
 
       if (isAvailable) {
         try {
-          // TODO: Add company_id filter to API call when backend supports it
-          const contacts = await contactsService.list();
-          // Filter contacts by type (customers vs vendors)
-          const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
+          const companyId = activeCompany?.id;
           const demoMode = isDemoMode();
-          setCustomers(customerContacts.length > 0 ? customerContacts : (demoMode ? sampleCustomers : []));
+
+          // Load contacts (customers) from API
+          const contacts = await contactsService.list();
+          const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
+
+          // If API returns empty, check localStorage for any locally stored customers
+          if (customerContacts.length === 0) {
+            const customersKey = getStorageKey(STORAGE_KEY, companyId);
+            const localCustomers = localStorage.getItem(customersKey);
+            if (localCustomers) {
+              setCustomers(JSON.parse(localCustomers));
+            } else {
+              setCustomers(demoMode ? sampleCustomers : []);
+            }
+          } else {
+            setCustomers(customerContacts);
+          }
+
+          // Load leads from API
+          const apiLeads = await leadsService.list(companyId);
+          const leadsArray = Array.isArray(apiLeads) ? apiLeads : [];
+
+          // If API returns empty, check localStorage for any locally stored leads
+          if (leadsArray.length === 0) {
+            const leadsKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+            const localLeads = localStorage.getItem(leadsKey);
+            if (localLeads) {
+              setLeads(JSON.parse(localLeads));
+            } else {
+              setLeads(demoMode ? sampleLeads : []);
+            }
+          } else {
+            setLeads(leadsArray);
+          }
+
+          // Load opportunities from API
+          const apiOpportunities = await opportunitiesService.list(companyId);
+          const opportunitiesArray = Array.isArray(apiOpportunities) ? apiOpportunities : [];
+          if (opportunitiesArray.length === 0) {
+            const opportunitiesKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
+            const localOpportunities = localStorage.getItem(opportunitiesKey);
+            if (localOpportunities) {
+              setOpportunities(JSON.parse(localOpportunities));
+            } else {
+              setOpportunities(demoMode ? sampleOpportunities : []);
+            }
+          } else {
+            setOpportunities(opportunitiesArray);
+          }
+
+          // Load activities from API
+          const apiActivities = await activitiesService.list(companyId);
+          const activitiesArray = Array.isArray(apiActivities) ? apiActivities : [];
+          if (activitiesArray.length === 0) {
+            const activitiesKey = getStorageKey(ACTIVITIES_STORAGE_KEY, companyId);
+            const localActivities = localStorage.getItem(activitiesKey);
+            if (localActivities) {
+              setActivities(JSON.parse(localActivities));
+            } else {
+              setActivities(demoMode ? sampleActivities : []);
+            }
+          } else {
+            setActivities(activitiesArray);
+          }
+
+          // Load tasks from API
+          const apiTasks = await tasksService.list(companyId, { include_completed: true });
+          const tasksArray = Array.isArray(apiTasks) ? apiTasks : [];
+          if (tasksArray.length === 0) {
+            const tasksKey = getStorageKey(TASKS_STORAGE_KEY, companyId);
+            const localTasks = localStorage.getItem(tasksKey);
+            if (localTasks) {
+              setTasks(JSON.parse(localTasks));
+            } else {
+              setTasks(demoMode ? sampleTasks : []);
+            }
+          } else {
+            setTasks(tasksArray);
+          }
+
+          // Load pipeline stages from API
+          const apiStages = await pipelineStagesService.list(companyId);
+          const stagesArray = Array.isArray(apiStages) ? apiStages : [];
+          if (stagesArray.length > 0) {
+            setPipelineStages(stagesArray);
+          } else {
+            setPipelineStages(defaultPipelineStages);
+          }
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -162,31 +285,36 @@ export function CustomersProvider({ children }) {
     return () => window.removeEventListener('companyChanged', handleCompanyChange);
   }, [loadData]);
 
-  // Customer CRUD
+  // Customer CRUD - always saves to localStorage for persistence
   const createCustomer = useCallback(async (customerData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
+    let newCustomer;
+
     if (backendAvailable) {
       try {
-        const newContact = await contactsService.create({
+        newCustomer = await contactsService.create({
           ...customerData,
           contact_type: 'customer',
           company_id: companyId
         });
-        setCustomers(prev => [...prev, newContact]);
-        return newContact;
       } catch (err) {
         console.error('API error, falling back to local:', err);
       }
     }
 
-    const newCustomer = {
-      id: `cust_${Date.now()}`,
-      ...customerData,
-      company_id: companyId,
-      created_date: new Date().toISOString()
-    };
+    // If API call failed or backend not available, create local customer
+    if (!newCustomer) {
+      newCustomer = {
+        id: `cust_${Date.now()}`,
+        ...customerData,
+        company_id: companyId,
+        created_date: new Date().toISOString()
+      };
+    }
+
+    // Always update state and localStorage
     const updated = [...customers, newCustomer];
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setCustomers(updated);
@@ -227,93 +355,299 @@ export function CustomersProvider({ children }) {
     setCustomers(updated);
   }, [backendAvailable, customers, activeCompany]);
 
-  // Lead CRUD (local only for now - backend doesn't have leads endpoint)
-  const createLead = useCallback((leadData) => {
+  // Lead CRUD - uses leadsService for API calls with localStorage fallback
+  const createLead = useCallback(async (leadData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const newLead = {
-      id: `lead_${Date.now()}`,
-      ...leadData,
-      company_id: companyId,
-      created_date: new Date().toISOString()
-    };
-    const updated = [...leads, newLead];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
-    return newLead;
+    try {
+      const newLead = await leadsService.create(leadData, companyId);
+      setLeads(prev => [newLead, ...prev]);
+      return newLead;
+    } catch (error) {
+      console.error('Failed to create lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const localLead = {
+        id: `lead_${Date.now()}`,
+        ...leadData,
+        company_id: companyId,
+        created_at: new Date().toISOString()
+      };
+      const updated = [localLead, ...leads];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+      return localLead;
+    }
   }, [leads, activeCompany]);
 
-  const updateLead = useCallback((id, leadData) => {
+  const updateLead = useCallback(async (id, leadData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const updated = leads.map(l => l.id === id ? { ...l, ...leadData } : l);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
+    try {
+      const updatedLead = await leadsService.update(id, leadData, companyId);
+      setLeads(prev => prev.map(l => l.id === id ? { ...l, ...leadData, ...updatedLead } : l));
+      return updatedLead;
+    } catch (error) {
+      console.error('Failed to update lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const updated = leads.map(l => l.id === id ? { ...l, ...leadData } : l);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+    }
   }, [leads, activeCompany]);
 
-  const deleteLead = useCallback((id) => {
+  const deleteLead = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
 
-    const updated = leads.filter(l => l.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setLeads(updated);
+    try {
+      await leadsService.delete(id, companyId);
+      setLeads(prev => prev.filter(l => l.id !== id));
+    } catch (error) {
+      console.error('Failed to delete lead:', error);
+      // Fallback to local storage
+      const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);
+      const updated = leads.filter(l => l.id !== id);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setLeads(updated);
+    }
   }, [leads, activeCompany]);
 
-  // Opportunity CRUD (local only for now)
-  const createOpportunity = useCallback((oppData) => {
+  // Opportunity CRUD - uses opportunitiesService for API calls with localStorage fallback
+  const createOpportunity = useCallback(async (oppData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
 
-    const newOpp = {
-      id: `opp_${Date.now()}`,
-      ...oppData,
-      company_id: companyId,
-      created_date: new Date().toISOString()
-    };
-    const updated = [...opportunities, newOpp];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setOpportunities(updated);
-    return newOpp;
+    try {
+      const newOpp = await opportunitiesService.create(oppData, companyId);
+      setOpportunities(prev => [newOpp, ...prev]);
+      return newOpp;
+    } catch (error) {
+      console.error('Failed to create opportunity:', error);
+      const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
+      const localOpp = {
+        id: `opp_${Date.now()}`,
+        ...oppData,
+        company_id: companyId,
+        created_at: new Date().toISOString()
+      };
+      const updated = [localOpp, ...opportunities];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setOpportunities(updated);
+      return localOpp;
+    }
   }, [opportunities, activeCompany]);
 
-  const updateOpportunity = useCallback((id, oppData) => {
+  const updateOpportunity = useCallback(async (id, oppData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
 
-    const updated = opportunities.map(o => o.id === id ? { ...o, ...oppData } : o);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setOpportunities(updated);
+    try {
+      const updatedOpp = await opportunitiesService.update(id, oppData, companyId);
+      setOpportunities(prev => prev.map(o => o.id === id ? { ...o, ...oppData, ...updatedOpp } : o));
+      return updatedOpp;
+    } catch (error) {
+      console.error('Failed to update opportunity:', error);
+      const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
+      const updated = opportunities.map(o => o.id === id ? { ...o, ...oppData } : o);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setOpportunities(updated);
+    }
   }, [opportunities, activeCompany]);
 
-  const deleteOpportunity = useCallback((id) => {
+  const deleteOpportunity = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
 
-    const updated = opportunities.filter(o => o.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setOpportunities(updated);
+    try {
+      await opportunitiesService.delete(id, companyId);
+      setOpportunities(prev => prev.filter(o => o.id !== id));
+    } catch (error) {
+      console.error('Failed to delete opportunity:', error);
+      const storageKey = getStorageKey(OPPORTUNITIES_STORAGE_KEY, companyId);
+      const updated = opportunities.filter(o => o.id !== id);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setOpportunities(updated);
+    }
   }, [opportunities, activeCompany]);
+
+  // Activity CRUD - uses activitiesService for API calls with localStorage fallback
+  const createActivity = useCallback(async (activityData) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const newActivity = await activitiesService.create(activityData, companyId);
+      setActivities(prev => [newActivity, ...prev]);
+      return newActivity;
+    } catch (error) {
+      console.error('Failed to create activity:', error);
+      const storageKey = getStorageKey(ACTIVITIES_STORAGE_KEY, companyId);
+      const localActivity = {
+        id: `act_${Date.now()}`,
+        ...activityData,
+        company_id: companyId,
+        created_at: new Date().toISOString()
+      };
+      const updated = [localActivity, ...activities];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setActivities(updated);
+      return localActivity;
+    }
+  }, [activities, activeCompany]);
+
+  const updateActivity = useCallback(async (id, activityData) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const updatedActivity = await activitiesService.update(id, activityData, companyId);
+      setActivities(prev => prev.map(a => a.id === id ? { ...a, ...activityData, ...updatedActivity } : a));
+      return updatedActivity;
+    } catch (error) {
+      console.error('Failed to update activity:', error);
+      const storageKey = getStorageKey(ACTIVITIES_STORAGE_KEY, companyId);
+      const updated = activities.map(a => a.id === id ? { ...a, ...activityData } : a);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setActivities(updated);
+    }
+  }, [activities, activeCompany]);
+
+  const deleteActivity = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      await activitiesService.delete(id, companyId);
+      setActivities(prev => prev.filter(a => a.id !== id));
+    } catch (error) {
+      console.error('Failed to delete activity:', error);
+      const storageKey = getStorageKey(ACTIVITIES_STORAGE_KEY, companyId);
+      const updated = activities.filter(a => a.id !== id);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setActivities(updated);
+    }
+  }, [activities, activeCompany]);
+
+  const completeActivity = useCallback(async (id, outcome) => {
+    return updateActivity(id, { status: 'completed', outcome });
+  }, [updateActivity]);
+
+  // Task CRUD - uses tasksService for API calls with localStorage fallback
+  const createTask = useCallback(async (taskData) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const newTask = await tasksService.create(taskData, companyId);
+      setTasks(prev => [newTask, ...prev]);
+      return newTask;
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      const storageKey = getStorageKey(TASKS_STORAGE_KEY, companyId);
+      const localTask = {
+        id: `task_${Date.now()}`,
+        ...taskData,
+        status: taskData.status || 'pending',
+        priority: taskData.priority || 'medium',
+        company_id: companyId,
+        created_at: new Date().toISOString()
+      };
+      const updated = [localTask, ...tasks];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setTasks(updated);
+      return localTask;
+    }
+  }, [tasks, activeCompany]);
+
+  const updateTask = useCallback(async (id, taskData) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const updatedTask = await tasksService.update(id, taskData, companyId);
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, ...taskData, ...updatedTask } : t));
+      return updatedTask;
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      const storageKey = getStorageKey(TASKS_STORAGE_KEY, companyId);
+      const updated = tasks.map(t => t.id === id ? { ...t, ...taskData } : t);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setTasks(updated);
+    }
+  }, [tasks, activeCompany]);
+
+  const deleteTask = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      await tasksService.delete(id, companyId);
+      setTasks(prev => prev.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      const storageKey = getStorageKey(TASKS_STORAGE_KEY, companyId);
+      const updated = tasks.filter(t => t.id !== id);
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setTasks(updated);
+    }
+  }, [tasks, activeCompany]);
+
+  const completeTask = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const result = await tasksService.complete(id, companyId);
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed', progress_percent: 100, completed_at: new Date().toISOString() } : t));
+      return result;
+    } catch (error) {
+      console.error('Failed to complete task:', error);
+      return updateTask(id, { status: 'completed', progress_percent: 100, completed_at: new Date().toISOString() });
+    }
+  }, [activeCompany, updateTask]);
+
+  // Lead conversion
+  const convertLead = useCallback(async (leadId, options) => {
+    const companyId = activeCompany?.id;
+
+    try {
+      const result = await leadConversionService.convert(leadId, options, companyId);
+      // Refresh data after conversion
+      await loadData();
+      return result;
+    } catch (error) {
+      console.error('Failed to convert lead:', error);
+      throw error;
+    }
+  }, [activeCompany, loadData]);
 
   return (
     <CustomersContext.Provider value={{
+      // State
       customers,
       leads,
       opportunities,
+      activities,
+      tasks,
+      pipelineStages,
       isLoading,
       backendAvailable,
       error,
+      // Customer CRUD
       createCustomer,
       updateCustomer,
       deleteCustomer,
+      // Lead CRUD
       createLead,
       updateLead,
       deleteLead,
+      convertLead,
+      // Opportunity CRUD
       createOpportunity,
       updateOpportunity,
       deleteOpportunity,
+      // Activity CRUD
+      createActivity,
+      updateActivity,
+      deleteActivity,
+      completeActivity,
+      // Task CRUD
+      createTask,
+      updateTask,
+      deleteTask,
+      completeTask,
+      // Refresh
       refreshData: loadData
     }}>
       {children}
