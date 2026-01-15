@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2 } from 'lucide-react';
+import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeAssets } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { format } from 'date-fns';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -20,7 +21,7 @@ export default function Assets() {
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
 
   // AI Analysis
-  const assetAnalysis = useMemo(() => analyzeAssets(rawAssets), [rawAssets]);
+  const assetAnalysis = useMemo(() => analyzeAssets(rawAssets, language), [rawAssets, language]);
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -154,7 +155,69 @@ export default function Assets() {
   assets.forEach(a => {
     categoryData[a.asset_category] = (categoryData[a.asset_category] || 0) + (a.current_value || 0);
   });
-  const chartData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
+  const chartData = Object.entries(categoryData).map(([name, value]) => ({
+    name: t(name), // Translate category name
+    value
+  }));
+
+  const handleExportAssets = () => {
+    if (filteredAssets.length === 0) {
+      return;
+    }
+
+    // Helper to format date
+    const formatDate = (dateStr) => {
+      if (!dateStr) return '';
+      try {
+        return format(new Date(dateStr), 'dd/MM/yyyy');
+      } catch {
+        return dateStr;
+      }
+    };
+
+    // Create CSV content
+    const headers = [
+      t('asset_code'),
+      t('asset_name'),
+      t('category'),
+      t('status'),
+      t('purchase_date'),
+      t('purchase_cost'),
+      t('useful_life_years'),
+      t('depreciation_method'),
+      t('salvage_value'),
+      t('current_value'),
+      t('location')
+    ];
+
+    const csvRows = [
+      headers.join(','),
+      ...filteredAssets.map(asset => [
+        `"${asset.asset_code || ''}"`,
+        `"${asset.asset_name || ''}"`,
+        `"${t(asset.asset_category || '')}"`,
+        `"${t(asset.status || '')}"`,
+        `"${formatDate(asset.purchase_date)}"`,
+        asset.purchase_cost || 0,
+        asset.useful_life_years || 0,
+        `"${t(asset.depreciation_method || '')}"`,
+        asset.salvage_value || 0,
+        asset.current_value || 0,
+        `"${asset.location || ''}"`
+      ].join(','))
+    ];
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `assets_export_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -309,9 +372,18 @@ export default function Assets() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('fixed_assets')}</CardTitle>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-orange-600 to-amber-600">
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleExportAssets}
+                    variant="outline"
+                    disabled={filteredAssets.length === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" /> {t('export')}
+                  </Button>
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-orange-600 to-amber-600">
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
+                  </Button>
+                </div>
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
@@ -358,8 +430,8 @@ export default function Assets() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="font-bold text-lg">{asset.asset_name}</h3>
-                              <Badge className={getStatusColor(asset.status)}>{asset.status}</Badge>
-                              <Badge variant="outline">{asset.asset_category}</Badge>
+                              <Badge className={getStatusColor(asset.status)}>{t(asset.status)}</Badge>
+                              <Badge variant="outline">{t(asset.asset_category)}</Badge>
                             </div>
                             <p className="text-sm text-slate-500 mb-3">{asset.asset_code}</p>
 
