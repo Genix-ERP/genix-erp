@@ -406,18 +406,18 @@ export function SalesProvider({ children }) {
       new Date(d.valid_until) >= new Date()
     );
 
-    if (!discount) return { valid: false, message: 'Kod topilmadi yoki muddati tugagan' };
+    if (!discount) return { valid: false, messageKey: 'code_not_found' };
 
     if (discount.min_order_amount && orderAmount < discount.min_order_amount) {
-      return { valid: false, message: `Minimal buyurtma summasi: ${discount.min_order_amount.toLocaleString()}` };
+      return { valid: false, messageKey: 'min_order_amount', minAmount: discount.min_order_amount };
     }
 
     if (discount.usage_limit && discount.used_count >= discount.usage_limit) {
-      return { valid: false, message: 'Chegirma limiti tugagan' };
+      return { valid: false, messageKey: 'discount_limit_reached' };
     }
 
     if (discount.applies_to === 'new_customers' && !isNewCustomer) {
-      return { valid: false, message: 'Faqat yangi mijozlar uchun' };
+      return { valid: false, messageKey: 'new_customers_only' };
     }
 
     let discountAmount = 0;
@@ -511,9 +511,9 @@ export function SalesProvider({ children }) {
     if (analytics.thisMonthRevenue > 0) {
       insights.push({
         type: 'positive',
-        title: 'Oylik daromad',
-        description: 'Joriy oy daromadi',
-        metric: `${analytics.thisMonthRevenue.toLocaleString()} so'm`,
+        titleKey: 'monthly_revenue',
+        descriptionKey: 'current_month_revenue',
+        metric: analytics.thisMonthRevenue,
         priority: 'high',
       });
     }
@@ -522,9 +522,10 @@ export function SalesProvider({ children }) {
     if (analytics.totalOutstanding > 0) {
       insights.push({
         type: analytics.overdueInvoices > 0 ? 'warning' : 'info',
-        title: "To'lanmagan fakturalar",
-        description: `${analytics.overdueInvoices} ta muddati o'tgan faktura`,
-        metric: `${analytics.totalOutstanding.toLocaleString()} so'm`,
+        titleKey: 'outstanding_invoices',
+        descriptionKey: 'overdue_invoices_count',
+        overdueCount: analytics.overdueInvoices,
+        metric: analytics.totalOutstanding,
         priority: analytics.overdueInvoices > 0 ? 'high' : 'medium',
       });
     }
@@ -533,14 +534,14 @@ export function SalesProvider({ children }) {
     if (analytics.conversionRate < 50 && analytics.totalQuotations > 5) {
       insights.push({
         type: 'warning',
-        title: 'Konversiya past',
-        description: "Takliflarni buyurtmaga o'tkazish foizi past",
+        titleKey: 'low_conversion',
+        descriptionKey: 'conversion_low_desc',
         metric: `${analytics.conversionRate.toFixed(1)}%`,
         priority: 'medium',
       });
       recommendations.push({
-        action: "Takliflarni ko'rib chiqing",
-        description: 'Rad etilgan takliflar sabablarini tahlil qiling',
+        actionKey: 'review_quotations',
+        descriptionKey: 'analyze_rejected',
         impact: 'high',
       });
     }
@@ -549,14 +550,14 @@ export function SalesProvider({ children }) {
     if (analytics.returnRate > 5) {
       insights.push({
         type: 'negative',
-        title: 'Qaytarishlar ko\'p',
-        description: 'Mahsulot qaytarish foizi yuqori',
+        titleKey: 'high_returns',
+        descriptionKey: 'return_rate_high',
         metric: `${analytics.returnRate.toFixed(1)}%`,
         priority: 'high',
       });
       recommendations.push({
-        action: 'Sifatni tekshiring',
-        description: 'Qaytarish sabablarini tahlil qiling',
+        actionKey: 'check_quality',
+        descriptionKey: 'analyze_return_reasons',
         impact: 'high',
       });
     }
@@ -564,16 +565,17 @@ export function SalesProvider({ children }) {
     // Recommendations
     if (analytics.overdueAmount > 0) {
       recommendations.push({
-        action: "To'lovlarni undiring",
-        description: `${analytics.overdueAmount.toLocaleString()} so'm muddati o'tgan`,
+        actionKey: 'collect_payments',
+        descriptionKey: 'amount_overdue',
+        overdueAmount: analytics.overdueAmount,
         impact: 'high',
       });
     }
 
     if (analytics.activeDiscounts < 2) {
       recommendations.push({
-        action: "Chegirma kampaniyasi o'tkazing",
-        description: 'Faol chegirmalar kam, sotuvni oshiring',
+        actionKey: 'run_discount_campaign',
+        descriptionKey: 'few_active_discounts',
         impact: 'medium',
       });
     }

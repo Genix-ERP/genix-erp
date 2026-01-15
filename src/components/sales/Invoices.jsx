@@ -412,19 +412,19 @@ export default function Invoices() {
           ) : filteredInvoices.length === 0 ? (
             <div className="text-center py-12">
               <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Fakturalar topilmadi</p>
+              <p className="text-slate-500">{t('no_invoices_found')}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Faktura №</TableHead>
-                    <TableHead>Mijoz</TableHead>
-                    <TableHead>To'lov muddati</TableHead>
-                    <TableHead className="text-right">Summa</TableHead>
-                    <TableHead className="text-right">Qoldiq</TableHead>
-                    <TableHead>Holat</TableHead>
+                    <TableHead>{t('invoice_number')}</TableHead>
+                    <TableHead>{t('customer')}</TableHead>
+                    <TableHead>{t('due_date')}</TableHead>
+                    <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead className="text-right">{t('balance')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -482,30 +482,30 @@ export default function Invoices() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => handleView(invoice)}>
                                 <Eye className="w-4 h-4 mr-2" />
-                                Ko'rish
+                                {t('view')}
                               </DropdownMenuItem>
                               {invoice.payment_status !== "paid" && (
                                 <DropdownMenuItem onClick={() => handlePayment(invoice)}>
                                   <DollarSign className="w-4 h-4 mr-2" />
-                                  To'lov qilish
+                                  {t('make_payment')}
                                 </DropdownMenuItem>
                               )}
                               {invoice.status === "draft" && (
                                 <>
                                   <DropdownMenuItem onClick={() => handleEdit(invoice)}>
                                     <Pencil className="w-4 h-4 mr-2" />
-                                    Tahrirlash
+                                    {t('edit')}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleSend(invoice)}>
                                     <Send className="w-4 h-4 mr-2" />
-                                    Yuborish
+                                    {t('send')}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleDelete(invoice)}
                                     className="text-red-600"
                                   >
                                     <Trash2 className="w-4 h-4 mr-2" />
-                                    O'chirish
+                                    {t('delete')}
                                   </DropdownMenuItem>
                                 </>
                               )}
@@ -527,20 +527,20 @@ export default function Invoices() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editMode ? "Fakturani tahrirlash" : "Yangi faktura"}
+              {editMode ? t('edit_invoice') : t('new_invoice')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Customer & Dates */}
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Mijoz *</Label>
+                <Label>{t('customer')} *</Label>
                 <Select
                   value={formData.customer_id}
                   onValueChange={handleCustomerSelect}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Mijozni tanlang" />
+                    <SelectValue placeholder={t('select_customer')} />
                   </SelectTrigger>
                   <SelectContent>
                     {customers.map((customer) => (
@@ -552,7 +552,7 @@ export default function Invoices() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Faktura sanasi *</Label>
+                <Label>{t('invoice_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.invoice_date}
@@ -562,7 +562,7 @@ export default function Invoices() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>To'lov muddati *</Label>
+                <Label>{t('due_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.due_date}
@@ -576,7 +576,7 @@ export default function Invoices() {
             {/* Items */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <Label className="text-base font-semibold">Mahsulotlar</Label>
+                <Label className="text-base font-semibold">{t('products')}</Label>
                 <Button
                   type="button"
                   variant="outline"
@@ -584,17 +584,17 @@ export default function Invoices() {
                   onClick={handleAddItem}
                 >
                   <Plus className="w-4 h-4 mr-1" />
-                  Qo'shish
+                  {t('add')}
                 </Button>
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead className="w-24">Miqdor</TableHead>
-                      <TableHead className="w-36">Narx</TableHead>
-                      <TableHead className="w-36 text-right">Jami</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="w-24">{t('quantity')}</TableHead>
+                      <TableHead className="w-36">{t('price')}</TableHead>
+                      <TableHead className="w-36 text-right">{t('total')}</TableHead>
                       <TableHead className="w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -607,7 +607,7 @@ export default function Invoices() {
                             onChange={(e) =>
                               handleItemChange(index, "product_name", e.target.value)
                             }
-                            placeholder="Mahsulot nomi"
+                            placeholder={t('product_name')}
                           />
                         </TableCell>
                         <TableCell>
@@ -655,7 +655,7 @@ export default function Invoices() {
             {/* Totals */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Chegirma summasi</Label>
+                <Label>{t('discount_amount')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -669,7 +669,7 @@ export default function Invoices() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Soliq (%)</Label>
+                <Label>{t('tax')} (%)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -687,38 +687,38 @@ export default function Invoices() {
 
             <div className="bg-slate-50 rounded-lg p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Oraliq summa:</span>
+                <span>{t('subtotal')}:</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               {formData.discount_amount > 0 && (
                 <div className="flex justify-between text-sm text-red-600">
-                  <span>Chegirma:</span>
+                  <span>{t('discount')}:</span>
                   <span>-{formatCurrency(formData.discount_amount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span>Soliq ({formData.tax_percent}%):</span>
+                <span>{t('tax')} ({formData.tax_percent}%):</span>
                 <span>{formatCurrency(taxAmount)}</span>
               </div>
               <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-                <span>Jami:</span>
+                <span>{t('total')}:</span>
                 <span>{formatCurrency(total)}</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Izohlar</Label>
+              <Label>{t('notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Qo'shimcha ma'lumotlar..."
+                placeholder={t('additional_info')}
                 rows={3}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -728,7 +728,7 @@ export default function Invoices() {
                   formData.items.length === 0
                 }
               >
-                {editMode ? "Saqlash" : "Yaratish"}
+                {editMode ? t('save') : t('create')}
               </Button>
             </div>
           </div>
@@ -741,24 +741,24 @@ export default function Invoices() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5" />
-              To'lov qilish
+              {t('make_payment')}
             </DialogTitle>
           </DialogHeader>
           {selectedInvoice && (
             <div className="space-y-4 py-4">
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex justify-between mb-2">
-                  <span className="text-slate-600">Faktura:</span>
+                  <span className="text-slate-600">{t('invoice')}:</span>
                   <span className="font-medium">{selectedInvoice.invoice_number}</span>
                 </div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-slate-600">Jami summa:</span>
+                  <span className="text-slate-600">{t('total_amount')}:</span>
                   <span className="font-medium">
                     {formatCurrency(selectedInvoice.total_amount)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-600">Qoldiq:</span>
+                  <span className="text-slate-600">{t('balance')}:</span>
                   <span className="font-semibold text-red-600">
                     {formatCurrency(selectedInvoice.balance)}
                   </span>
@@ -766,7 +766,7 @@ export default function Invoices() {
               </div>
 
               <div className="space-y-2">
-                <Label>To'lov summasi *</Label>
+                <Label>{t('payment_amount')} *</Label>
                 <Input
                   type="number"
                   min="0"
@@ -782,7 +782,7 @@ export default function Invoices() {
               </div>
 
               <div className="space-y-2">
-                <Label>To'lov usuli</Label>
+                <Label>{t('payment_method')}</Label>
                 <Select
                   value={paymentData.method}
                   onValueChange={(value) =>
@@ -796,19 +796,19 @@ export default function Invoices() {
                     <SelectItem value="cash">
                       <div className="flex items-center gap-2">
                         <Banknote className="w-4 h-4" />
-                        Naqd pul
+                        {t('cash')}
                       </div>
                     </SelectItem>
                     <SelectItem value="bank_transfer">
                       <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4" />
-                        Bank o'tkazmasi
+                        {t('bank_transfer')}
                       </div>
                     </SelectItem>
                     <SelectItem value="card">
                       <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4" />
-                        Plastik karta
+                        {t('card')}
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -816,7 +816,7 @@ export default function Invoices() {
               </div>
 
               <div className="space-y-2">
-                <Label>To'lov sanasi</Label>
+                <Label>{t('payment_date')}</Label>
                 <Input
                   type="date"
                   value={paymentData.date}
@@ -828,13 +828,13 @@ export default function Invoices() {
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowPaymentModal(false)}>
-                  Bekor qilish
+                  {t('cancel')}
                 </Button>
                 <Button
                   onClick={handlePaymentSubmit}
                   disabled={paymentData.amount <= 0}
                 >
-                  To'lovni qayd etish
+                  {t('record_payment')}
                 </Button>
               </div>
             </div>
@@ -864,20 +864,20 @@ export default function Invoices() {
 
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Faktura sanasi:</span>
+                  <span className="text-slate-500">{t('invoice_date')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedInvoice.invoice_date), "dd.MM.yyyy")}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">To'lov muddati:</span>
+                  <span className="text-slate-500">{t('due_date')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedInvoice.due_date), "dd.MM.yyyy")}
                   </p>
                 </div>
                 {selectedInvoice.payment_date && (
                   <div>
-                    <span className="text-slate-500">To'lov sanasi:</span>
+                    <span className="text-slate-500">{t('payment_date')}:</span>
                     <p className="font-medium">
                       {format(new Date(selectedInvoice.payment_date), "dd.MM.yyyy")}
                     </p>
@@ -889,10 +889,10 @@ export default function Invoices() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead className="text-center">Miqdor</TableHead>
-                      <TableHead className="text-right">Narx</TableHead>
-                      <TableHead className="text-right">Jami</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="text-center">{t('quantity')}</TableHead>
+                      <TableHead className="text-right">{t('price')}</TableHead>
+                      <TableHead className="text-right">{t('total')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -914,31 +914,31 @@ export default function Invoices() {
 
               <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Oraliq summa:</span>
+                  <span>{t('subtotal')}:</span>
                   <span>{formatCurrency(selectedInvoice.subtotal)}</span>
                 </div>
                 {selectedInvoice.discount_amount > 0 && (
                   <div className="flex justify-between text-sm text-red-600">
-                    <span>Chegirma:</span>
+                    <span>{t('discount')}:</span>
                     <span>-{formatCurrency(selectedInvoice.discount_amount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span>Soliq:</span>
+                  <span>{t('tax')}:</span>
                   <span>{formatCurrency(selectedInvoice.tax_amount)}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-                  <span>Jami:</span>
+                  <span>{t('total')}:</span>
                   <span>{formatCurrency(selectedInvoice.total_amount)}</span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t">
-                  <span>To'langan:</span>
+                  <span>{t('paid')}:</span>
                   <span className="text-green-600">
                     {formatCurrency(selectedInvoice.paid_amount)}
                   </span>
                 </div>
                 <div className="flex justify-between font-semibold">
-                  <span>Qoldiq:</span>
+                  <span>{t('balance')}:</span>
                   <span
                     className={
                       selectedInvoice.balance > 0 ? "text-red-600" : "text-green-600"

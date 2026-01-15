@@ -64,6 +64,7 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
@@ -451,7 +452,9 @@ function LayoutContent({ children, currentPageName }) {
           </header>
 
           <div className="flex-1 overflow-auto">
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </div>
         </main>
       </div>

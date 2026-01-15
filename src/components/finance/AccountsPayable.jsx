@@ -356,7 +356,7 @@ export default function AccountsPayable() {
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">{t('no_data')}</p>
               <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
-                <Plus className="w-4 h-4 mr-2" /> Create First Bill
+                <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
               </Button>
             </div>
           ) : (
@@ -365,7 +365,7 @@ export default function AccountsPayable() {
                 <TableHeader>
                   <TableRow className="bg-slate-50">
                     <TableHead>{t('invoice_number')}</TableHead>
-                    <TableHead>Vendor</TableHead>
+                    <TableHead>{t('vendor')}</TableHead>
                     <TableHead>{t('date')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead>{t('amount')}</TableHead>
