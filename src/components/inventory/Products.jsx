@@ -567,12 +567,12 @@ export default function Products() {
                 <Package className="w-10 h-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? 'No products found' : 'No products yet'}
+                {searchQuery ? t('no_products_found') || 'No products found' : t('no_products_yet') || 'No products yet'}
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {searchQuery
-                  ? 'Try adjusting your search or filters'
-                  : 'Start by adding your first product or service'}
+                  ? t('try_adjusting_search') || 'Try adjusting your search or filters'
+                  : t('start_by_adding_product') || 'Start by adding your first product or service'}
               </p>
               {!searchQuery && (
                 <Button
@@ -582,7 +582,7 @@ export default function Products() {
                   }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
-                  <Plus className="w-4 h-4 mr-2" /> Add First Product
+                  <Plus className="w-4 h-4 mr-2" /> {t('add_first_product') || 'Add First Product'}
                 </Button>
               )}
             </div>
@@ -665,7 +665,7 @@ export default function Products() {
                             ? 'bg-green-100 text-green-800 border-green-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                           }>
-                            {product.is_active ? 'Active' : 'Inactive'}
+                            {product.is_active ? t('active') || 'Active' : t('inactive') || 'Inactive'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -998,7 +998,7 @@ export default function Products() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Package className="w-5 h-5 text-[var(--genix-blue)]" />
-              Product Details
+              {t('product_details') || 'Product Details'}
             </DialogTitle>
           </DialogHeader>
           {selectedProduct && (
@@ -1017,7 +1017,7 @@ export default function Products() {
                       ? 'bg-green-100 text-green-800'
                       : 'bg-slate-100 text-slate-600'
                     }>
-                      {selectedProduct.is_active ? 'Active' : 'Inactive'}
+                      {selectedProduct.is_active ? t('active') || 'Active' : t('inactive') || 'Inactive'}
                     </Badge>
                   </div>
                 </div>
@@ -1025,34 +1025,34 @@ export default function Products() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Code</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('code') || 'Code'}</p>
                   <p className="text-sm font-semibold text-slate-900">{selectedProduct.code}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">SKU</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('sku') || 'SKU'}</p>
                   <p className="text-sm font-semibold text-slate-900">{selectedProduct.sku || '-'}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Category</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('category') || 'Category'}</p>
                   <p className="text-sm font-semibold text-slate-900">{getCategoryName(selectedProduct.category_id)}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Barcode</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('barcode') || 'Barcode'}</p>
                   <p className="text-sm font-semibold text-slate-900">{selectedProduct.barcode || '-'}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="text-xs text-blue-600 mb-1">Cost Price</p>
+                  <p className="text-xs text-blue-600 mb-1">{t('cost_price') || 'Cost Price'}</p>
                   <p className="text-lg font-bold text-blue-700">${(selectedProduct.cost_price || 0).toLocaleString()}</p>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-xs text-green-600 mb-1">List Price</p>
+                  <p className="text-xs text-green-600 mb-1">{t('list_price') || 'List Price'}</p>
                   <p className="text-lg font-bold text-green-700">${(selectedProduct.list_price || 0).toLocaleString()}</p>
                 </div>
                 <div className="p-3 bg-purple-50 rounded-lg">
-                  <p className="text-xs text-purple-600 mb-1">Current Stock</p>
+                  <p className="text-xs text-purple-600 mb-1">{t('current_stock') || 'Current Stock'}</p>
                   <p className="text-lg font-bold text-purple-700">
                     {selectedProduct.is_stockable ? getProductStock(selectedProduct.id) : 'N/A'}
                   </p>
@@ -1061,7 +1061,7 @@ export default function Products() {
 
               {selectedProduct.description && (
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Description</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('description') || 'Description'}</p>
                   <p className="text-sm text-slate-700">{selectedProduct.description}</p>
                 </div>
               )}
@@ -1075,14 +1075,14 @@ export default function Products() {
                   }}
                   className="flex-1"
                 >
-                  <Pencil className="w-4 h-4 mr-2" /> Edit
+                  <Pencil className="w-4 h-4 mr-2" /> {t('edit') || 'Edit'}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowDetailModal(false)}
                   className="flex-1"
                 >
-                  Close
+                  {t('close') || 'Close'}
                 </Button>
               </div>
             </div>
@@ -1096,20 +1096,20 @@ export default function Products() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
-              Delete Product
+              {t('delete_product') || 'Delete Product'}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="text-slate-600 mb-4">
-              Are you sure you want to delete{' '}
+              {t('confirm_delete_product') || 'Are you sure you want to delete'}{' '}
               <span className="font-semibold text-slate-900">"{selectedProduct?.name}"</span>?
-              This action cannot be undone.
+              {t('action_cannot_be_undone') || 'This action cannot be undone.'}
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">
-                  Deleting this product may affect existing inventory records and transactions.
+                  {t('delete_product_warning') || 'Deleting this product may affect existing inventory records and transactions.'}
                 </p>
               </div>
             </div>
@@ -1119,14 +1119,14 @@ export default function Products() {
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1"
               >
-                Cancel
+                {t('cancel') || 'Cancel'}
               </Button>
               <Button
                 onClick={handleDelete}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {t('delete') || 'Delete'}
               </Button>
             </div>
           </div>

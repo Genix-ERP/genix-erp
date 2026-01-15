@@ -11,10 +11,14 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 
 export default function ManufacturingDashboard() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     productionOrders,
     workCenters,
@@ -114,7 +118,7 @@ export default function ManufacturingDashboard() {
               <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
             </div>
             <p className="text-3xl font-bold text-slate-900 mb-1">{activeProductionOrders}</p>
-            <p className="text-sm text-slate-600">Production Orders</p>
+            <p className="text-sm text-slate-600">{t('production_orders') || 'Production Orders'}</p>
           </CardContent>
         </Card>
 
@@ -124,10 +128,10 @@ export default function ManufacturingDashboard() {
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
-              <Badge className="bg-green-50 text-green-700 border-green-200">Today</Badge>
+              <Badge className="bg-green-50 text-green-700 border-green-200">{t('today') || 'Today'}</Badge>
             </div>
             <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday}</p>
-            <p className="text-sm text-slate-600">Orders Completed</p>
+            <p className="text-sm text-slate-600">{t('orders_completed') || 'Orders Completed'}</p>
           </CardContent>
         </Card>
 
@@ -140,7 +144,7 @@ export default function ManufacturingDashboard() {
               <Badge className="bg-purple-50 text-purple-700 border-purple-200">OEE</Badge>
             </div>
             <p className="text-3xl font-bold text-slate-900 mb-1">{averageOEE}%</p>
-            <p className="text-sm text-slate-600">Avg Equipment Efficiency</p>
+            <p className="text-sm text-slate-600">{t('avg_equipment_efficiency') || 'Avg Equipment Efficiency'}</p>
           </CardContent>
         </Card>
 
@@ -150,10 +154,10 @@ export default function ManufacturingDashboard() {
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-orange-600" />
               </div>
-              <Badge className="bg-orange-50 text-orange-700 border-orange-200">Quality</Badge>
+              <Badge className="bg-orange-50 text-orange-700 border-orange-200">{t('quality') || 'Quality'}</Badge>
             </div>
             <p className="text-3xl font-bold text-slate-900 mb-1">{qualityRate}%</p>
-            <p className="text-sm text-slate-600">Quality Pass Rate</p>
+            <p className="text-sm text-slate-600">{t('quality_pass_rate') || 'Quality Pass Rate'}</p>
           </CardContent>
         </Card>
       </div>
@@ -166,7 +170,7 @@ export default function ManufacturingDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
-              Production Trend (Last 7 Days)
+              {t('production_trend_last_7_days') || 'Production Trend (Last 7 Days)'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -182,7 +186,7 @@ export default function ManufacturingDashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-[250px] flex items-center justify-center text-slate-500">
-                No production data available
+                {t('no_production_data_available') || 'No production data available'}
               </div>
             )}
           </CardContent>
@@ -193,7 +197,7 @@ export default function ManufacturingDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Cog className="w-5 h-5 text-purple-600" />
-              Work Center Utilization
+              {t('work_center_utilization') || 'Work Center Utilization'}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -211,7 +215,7 @@ export default function ManufacturingDashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-[250px] flex items-center justify-center text-slate-500">
-                No work center data available
+                {t('no_work_center_data_available') || 'No work center data available'}
               </div>
             )}
           </CardContent>

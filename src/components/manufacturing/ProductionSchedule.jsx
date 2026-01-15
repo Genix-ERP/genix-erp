@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, ChevronLeft, ChevronRight, Clock, Factory, AlertTriangle } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const STATUS_COLORS = {
   draft: { bg: 'bg-slate-200', text: 'text-slate-700', bar: 'bg-slate-400' },
@@ -16,6 +18,8 @@ const STATUS_COLORS = {
 };
 
 export default function ProductionSchedule() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { productionOrders, loading } = useManufacturing();
   const [viewMode, setViewMode] = useState('week'); // week, month
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -135,7 +139,7 @@ export default function ProductionSchedule() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-[var(--genix-blue)]" />
-              <h3 className="text-lg font-semibold text-slate-800">Production Schedule</h3>
+              <h3 className="text-lg font-semibold text-slate-800">{t('production_schedule') || 'Production Schedule'}</h3>
             </div>
 
             <div className="flex items-center gap-3">
@@ -144,8 +148,8 @@ export default function ProductionSchedule() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="week">Week View</SelectItem>
-                  <SelectItem value="month">Month View</SelectItem>
+                  <SelectItem value="week">{t('week_view') || 'Week View'}</SelectItem>
+                  <SelectItem value="month">{t('month_view') || 'Month View'}</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -154,7 +158,7 @@ export default function ProductionSchedule() {
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
                 <Button variant="outline" size="sm" onClick={goToToday}>
-                  Today
+                  {t('today') || 'Today'}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => navigatePeriod(1)}>
                   <ChevronRight className="w-4 h-4" />
@@ -177,7 +181,7 @@ export default function ProductionSchedule() {
               {/* Date Headers */}
               <div className="flex border-b border-slate-200 bg-slate-50">
                 <div className="w-64 min-w-[256px] p-3 border-r border-slate-200 font-medium text-slate-700">
-                  Production Order
+                  {t('production_order') || 'Production Order'}
                 </div>
                 <div className="flex-1 flex">
                   {dates.map((date, idx) => {
@@ -203,9 +207,9 @@ export default function ProductionSchedule() {
               {scheduledOrders.length === 0 ? (
                 <div className="p-8 text-center">
                   <Factory className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No scheduled production orders for this period</p>
+                  <p className="text-slate-500">{t('no_scheduled_orders_for_this_period') || 'No scheduled production orders for this period'}</p>
                   <p className="text-sm text-slate-400 mt-1">
-                    Create production orders with scheduled dates to see them here
+                    {t('create_production_orders_with_scheduled_dates') || 'Create production orders with scheduled dates to see them here'}
                   </p>
                 </div>
               ) : (
@@ -291,7 +295,7 @@ export default function ProductionSchedule() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">{scheduledOrders.length}</p>
-                <p className="text-sm text-slate-500">Scheduled Orders</p>
+                <p className="text-sm text-slate-500">{t('scheduled_orders') || 'Scheduled Orders'}</p>
               </div>
             </div>
           </CardContent>
@@ -307,7 +311,7 @@ export default function ProductionSchedule() {
                 <p className="text-2xl font-bold text-slate-800">
                   {scheduledOrders.filter(o => o.status === 'in_progress').length}
                 </p>
-                <p className="text-sm text-slate-500">In Progress</p>
+                <p className="text-sm text-slate-500">{t('in_progress') || 'In Progress'}</p>
               </div>
             </div>
           </CardContent>
@@ -323,7 +327,7 @@ export default function ProductionSchedule() {
                 <p className="text-2xl font-bold text-slate-800">
                   {scheduledOrders.filter(o => o.status === 'done').length}
                 </p>
-                <p className="text-sm text-slate-500">Completed</p>
+                <p className="text-sm text-slate-500">{t('completed') || 'Completed'}</p>
               </div>
             </div>
           </CardContent>
@@ -339,7 +343,7 @@ export default function ProductionSchedule() {
                 <p className="text-2xl font-bold text-slate-800">
                   {scheduledOrders.filter(o => o.isOverdue).length}
                 </p>
-                <p className="text-sm text-slate-500">Overdue</p>
+                <p className="text-sm text-slate-500">{t('overdue') || 'Overdue'}</p>
               </div>
             </div>
           </CardContent>
