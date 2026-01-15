@@ -1,31 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { QualityCheck } from '@/api/entities';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PackageCheck, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 
 const COLORS = { pass: '#10b981', fail: '#ef4444', conditional_pass: '#f59e0b' };
 
 export default function QualityControl() {
-  const [qualityChecks, setQualityChecks] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    loadQualityChecks();
-  }, []);
-
-  const loadQualityChecks = async () => {
-    try {
-      const data = await QualityCheck.list('-created_date');
-      setQualityChecks(data);
-    } catch (error) {
-      console.error('Error loading quality checks:', error);
-    }
-    setIsLoading(false);
-  };
+  const { qualityChecks, loading } = useManufacturing();
 
   const getResultColor = (result) => {
     const colors = {
@@ -150,7 +134,7 @@ export default function QualityControl() {
             <CardTitle>Recent Quality Inspections</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {isLoading ? (
+            {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="text-center">
                   <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
