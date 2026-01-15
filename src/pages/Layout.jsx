@@ -59,6 +59,7 @@ import { CompanyProvider } from "@/components/contexts/CompanyContext";
 import { RolesProvider } from "@/components/contexts/RolesContext";
 import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
 import { SalesProvider } from "@/components/contexts/SalesContext";
+import { ManufacturingProvider } from "@/components/contexts/ManufacturingContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
@@ -486,9 +487,11 @@ export default function Layout({ children, currentPageName }) {
                     <ModulesProvider>
                       <ProcurementProvider>
                         <SalesProvider>
-                          <AIProvider>
-                            <LayoutContent children={children} currentPageName={currentPageName} />
-                          </AIProvider>
+                          <ManufacturingProvider>
+                            <AIProvider>
+                              <LayoutContent children={children} currentPageName={currentPageName} />
+                            </AIProvider>
+                          </ManufacturingProvider>
                         </SalesProvider>
                       </ProcurementProvider>
                     </ModulesProvider>
