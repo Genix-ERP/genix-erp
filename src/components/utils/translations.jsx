@@ -768,6 +768,10 @@ export const translations = {
     "cancelled": "Cancelled",
     "all_statuses": "All Statuses",
     "confirm_delete": "Are you sure you want to delete this?",
+    "confirm_deletion": "Confirm Deletion",
+    "delete_quotation_confirm": "Are you sure you want to delete this quotation?",
+    "delete_invoice_confirm": "Are you sure you want to delete this invoice?",
+    "delete_discount_confirm": "Are you sure you want to delete this discount?",
     "close": "Close",
     "create_order": "Create Order",
 
@@ -3610,6 +3614,10 @@ export const translations = {
     "scheduled_start": "Rejalashtirilgan boshlanish",
     "scheduled_end": "Rejalashtirilgan tugash",
     "create_order": "Buyurtma yaratish",
+    "confirm_deletion": "O'chirishni tasdiqlang",
+    "delete_quotation_confirm": "Bu taklif tayyorlamasini o'chirmoqchimisiz?",
+    "delete_invoice_confirm": "Bu fakturani o'chirmoqchimisiz?",
+    "delete_discount_confirm": "Bu chegirmani o'chirmoqchimisiz?",
     "loading_orders": "Buyurtmalar yuklanmoqda...",
     "progress": "Jarayon",
     "low": "Past",
@@ -4756,6 +4764,10 @@ export const translations = {
     "cancelled": "Отменен",
     "all_statuses": "Все статусы",
     "confirm_delete": "Вы уверены, что хотите удалить?",
+    "confirm_deletion": "Подтверждение удаления",
+    "delete_quotation_confirm": "Вы уверены, что хотите удалить это коммерческое предложение?",
+    "delete_invoice_confirm": "Вы уверены, что хотите удалить этот счёт?",
+    "delete_discount_confirm": "Вы уверены, что хотите удалить эту скидку?",
     "create_order": "Создать акт",
 
     // Financials

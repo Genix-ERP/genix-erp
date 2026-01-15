@@ -462,13 +462,11 @@ export default function Returns() {
                   <SelectValue placeholder={t('select_invoice')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {invoices
-                    .filter((inv) => inv.payment_status === "paid")
-                    .map((invoice) => (
-                      <SelectItem key={invoice.id} value={invoice.id}>
-                        {invoice.invoice_number} - {invoice.customer_name}
-                      </SelectItem>
-                    ))}
+                  {invoices.map((invoice) => (
+                    <SelectItem key={invoice.id} value={invoice.id}>
+                      {invoice.invoice_number} - {invoice.customer_name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
