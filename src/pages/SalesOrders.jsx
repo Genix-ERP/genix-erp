@@ -748,12 +748,21 @@ export default function SalesOrders() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
-                  <Input
-                    placeholder={t('customer_name')}
+                  <Select
                     value={newOrder.customer_name}
-                    onChange={(e) => setNewOrder({...newOrder, customer_name: e.target.value})}
-                    required
-                  />
+                    onValueChange={(value) => setNewOrder({...newOrder, customer_name: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_customer')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.company_name}>
+                          {customer.company_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
