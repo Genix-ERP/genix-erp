@@ -1030,7 +1030,14 @@ export function FinancialsProvider({ children }) {
   }, [budgetLines]);
 
   // ==================== FIXED ASSETS CRUD ====================
-  const createFixedAsset = useCallback((assetData) => {
+  const createFixedAsset = useCallback(async (assetData) => {
+    if (backendAvailable) {
+      try {
+        const newAsset = await financeService.createFixedAsset(assetData);
+        setFixedAssets(prev => [newAsset, ...prev]);
+        return newAsset;
+      } catch (err) { console.error('API error, falling back to local:', err); }
+    }
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
     const newAsset = {
@@ -1045,17 +1052,32 @@ export function FinancialsProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setFixedAssets(updated);
     return newAsset;
-  }, [fixedAssets, activeCompany]);
+  }, [backendAvailable, fixedAssets, activeCompany]);
 
-  const updateFixedAsset = useCallback((id, assetData) => {
+  const updateFixedAsset = useCallback(async (id, assetData) => {
+    if (backendAvailable) {
+      try {
+        const updated = await financeService.updateFixedAsset(id, assetData);
+        setFixedAssets(prev => prev.map(fa => fa.id === id ? updated : fa));
+        return updated;
+      } catch (err) { console.error('API error:', err); }
+    }
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
     const updated = fixedAssets.map(fa => fa.id === id ? { ...fa, ...assetData } : fa);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setFixedAssets(updated);
-  }, [fixedAssets, activeCompany]);
+  }, [backendAvailable, fixedAssets, activeCompany]);
 
-  const deleteFixedAsset = useCallback((id) => {
+  const deleteFixedAsset = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await financeService.deleteFixedAsset(id);
+        setFixedAssets(prev => prev.filter(fa => fa.id !== id));
+        setDepreciationEntries(prev => prev.filter(de => de.asset_id !== id));
+        return;
+      } catch (err) { console.error('API error:', err); }
+    }
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
     const depKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
@@ -1067,9 +1089,16 @@ export function FinancialsProvider({ children }) {
     const updated = fixedAssets.filter(fa => fa.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setFixedAssets(updated);
-  }, [fixedAssets, depreciationEntries, activeCompany]);
+  }, [backendAvailable, fixedAssets, depreciationEntries, activeCompany]);
 
-  const disposeFixedAsset = useCallback((id, disposalData) => {
+  const disposeFixedAsset = useCallback(async (id, disposalData) => {
+    if (backendAvailable) {
+      try {
+        const disposed = await financeService.disposeFixedAsset(id, disposalData);
+        setFixedAssets(prev => prev.map(fa => fa.id === id ? disposed : fa));
+        return disposed;
+      } catch (err) { console.error('API error:', err); }
+    }
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
     const updated = fixedAssets.map(fa => fa.id === id ? {
@@ -1081,10 +1110,10 @@ export function FinancialsProvider({ children }) {
     } : fa);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setFixedAssets(updated);
-  }, [fixedAssets, activeCompany]);
+  }, [backendAvailable, fixedAssets, activeCompany]);
 
   // ==================== DEPRECIATION ENTRIES CRUD ====================
-  const createDepreciationEntry = useCallback((entryData) => {
+  const createDepreciationEntry = useCallback(async (entryData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
     const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
@@ -1103,10 +1132,15 @@ export function FinancialsProvider({ children }) {
     return newEntry;
   }, [depreciationEntries, fixedAssets, activeCompany]);
 
-  const getDepreciationEntriesByAsset = useCallback((assetId) => {
+  const getDepreciationEntriesByAsset = useCallback(async (assetId) => {
+    if (backendAvailable) {
+      try {
+        return await financeService.getDepreciationEntries(assetId);
+      } catch (err) { console.error('API error:', err); }
+    }
     return depreciationEntries.filter(de => de.asset_id === assetId)
       .sort((a, b) => new Date(b.depreciation_date) - new Date(a.depreciation_date));
-  }, [depreciationEntries]);
+  }, [backendAvailable, depreciationEntries]);
 
   const calculateMonthlyDepreciation = useCallback((asset) => {
     if (!asset || asset.status !== 'active') return 0;
@@ -1139,7 +1173,16 @@ export function FinancialsProvider({ children }) {
     }
   }, []);
 
-  const runDepreciationForPeriod = useCallback((period) => {
+  const runDepreciationForPeriod = useCallback(async (period) => {
+    if (backendAvailable) {
+      try {
+        const result = await financeService.runDepreciation({ period });
+        // Reload fixed assets to get updated accumulated_depreciation
+        const assetsData = await financeService.listFixedAssets();
+        setFixedAssets(assetsData || []);
+        return result;
+      } catch (err) { console.error('API error:', err); }
+    }
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
     const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
@@ -1186,7 +1229,7 @@ export function FinancialsProvider({ children }) {
     }
 
     return newEntries;
-  }, [fixedAssets, depreciationEntries, calculateMonthlyDepreciation, activeCompany]);
+  }, [backendAvailable, fixedAssets, depreciationEntries, calculateMonthlyDepreciation, activeCompany]);
 
   return (
     <FinancialsContext.Provider value={{
