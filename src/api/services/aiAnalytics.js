@@ -556,7 +556,17 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
     return {
       summary: t.noSalesData,
       insights: [],
-      recommendations: []
+      recommendations: [],
+      topCustomers: [],
+      metrics: {
+        totalRevenue: 0,
+        orderCount: 0,
+        avgOrderValue: 0,
+        growthRate: 0,
+        unpaidTotal: 0
+      },
+      statusBreakdown: {},
+      monthlyTrend: {}
     };
   }
 
