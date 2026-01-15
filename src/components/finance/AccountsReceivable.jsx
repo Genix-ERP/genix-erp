@@ -301,7 +301,7 @@ export default function AccountsReceivable() {
               <div className="text-center py-16">
                 <p className="text-slate-500">{t('no_data')}</p>
                 <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
-                  <Plus className="w-4 h-4 mr-2" /> Create First Invoice
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_invoice')}
                 </Button>
               </div>
             ) : (
@@ -310,7 +310,7 @@ export default function AccountsReceivable() {
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead>{t('invoice_number')}</TableHead>
-                      <TableHead>Customer</TableHead>
+                      <TableHead>{t('customer')}</TableHead>
                       <TableHead>{t('date')}</TableHead>
                       <TableHead>{t('due_date')}</TableHead>
                       <TableHead>{t('amount')}</TableHead>

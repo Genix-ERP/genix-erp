@@ -51,8 +51,12 @@ import {
 import { format } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function Quotations() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     quotations,
     createQuotation,
@@ -208,25 +212,25 @@ export default function Quotations() {
   };
 
   const handleDelete = async (quotation) => {
-    if (window.confirm("Ushbu taklifnomani o'chirmoqchimisiz?")) {
+    if (window.confirm(t('confirm_delete_quotation'))) {
       await deleteQuotation(quotation.id);
     }
   };
 
   const getStatusBadge = (status) => {
     const variants = {
-      draft: { color: "bg-slate-100 text-slate-800", label: "Qoralama" },
-      sent: { color: "bg-blue-100 text-blue-800", label: "Yuborildi" },
-      accepted: { color: "bg-green-100 text-green-800", label: "Qabul qilindi" },
-      rejected: { color: "bg-red-100 text-red-800", label: "Rad etildi" },
-      expired: { color: "bg-orange-100 text-orange-800", label: "Muddati tugadi" },
+      draft: { color: "bg-slate-100 text-slate-800", label: t('draft') },
+      sent: { color: "bg-blue-100 text-blue-800", label: t('sent') },
+      accepted: { color: "bg-green-100 text-green-800", label: t('accepted') },
+      rejected: { color: "bg-red-100 text-red-800", label: t('rejected') },
+      expired: { color: "bg-orange-100 text-orange-800", label: t('expired') },
     };
     const variant = variants[status] || variants.draft;
     return <Badge className={variant.color}>{variant.label}</Badge>;
   };
 
   const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} so'm`;
+    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const { subtotal, discountAmount, taxAmount, total } = calculateTotals(
@@ -240,14 +244,14 @@ export default function Quotations() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[var(--genix-navy)]">Taklifnomalar</h2>
+          <h2 className="text-xl font-bold text-[var(--genix-navy)]">{t('quotations')}</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Mijozlarga narx takliflarini boshqaring
+            {t('manage_quotations_desc')}
           </p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          Yangi taklifnoma
+          {t('new_quotation')}
         </Button>
       </div>
 
@@ -256,7 +260,7 @@ export default function Quotations() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Taklifnoma qidirish..."
+            placeholder={t('search_quotation') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -264,14 +268,14 @@ export default function Quotations() {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Holat" />
+            <SelectValue placeholder={t('status')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Barchasi</SelectItem>
-            <SelectItem value="draft">Qoralama</SelectItem>
-            <SelectItem value="sent">Yuborildi</SelectItem>
-            <SelectItem value="accepted">Qabul qilindi</SelectItem>
-            <SelectItem value="rejected">Rad etildi</SelectItem>
+            <SelectItem value="all">{t('all')}</SelectItem>
+            <SelectItem value="draft">{t('draft')}</SelectItem>
+            <SelectItem value="sent">{t('sent')}</SelectItem>
+            <SelectItem value="accepted">{t('accepted')}</SelectItem>
+            <SelectItem value="rejected">{t('rejected')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -286,18 +290,18 @@ export default function Quotations() {
           ) : filteredQuotations.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Taklifnomalar topilmadi</p>
+              <p className="text-slate-500">{t('no_quotations_found')}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Taklifnoma №</TableHead>
-                    <TableHead>Mijoz</TableHead>
-                    <TableHead>Muddat</TableHead>
-                    <TableHead className="text-right">Summa</TableHead>
-                    <TableHead>Holat</TableHead>
+                    <TableHead>{t('quotation_number')}</TableHead>
+                    <TableHead>{t('customer')}</TableHead>
+                    <TableHead>{t('valid_until')}</TableHead>
+                    <TableHead className="text-right">{t('amount')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -338,24 +342,24 @@ export default function Quotations() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleView(quotation)}>
                               <Eye className="w-4 h-4 mr-2" />
-                              Ko'rish
+                              {t('view')}
                             </DropdownMenuItem>
                             {quotation.status === "draft" && (
                               <>
                                 <DropdownMenuItem onClick={() => handleEdit(quotation)}>
                                   <Pencil className="w-4 h-4 mr-2" />
-                                  Tahrirlash
+                                  {t('edit')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleSend(quotation)}>
                                   <Send className="w-4 h-4 mr-2" />
-                                  Yuborish
+                                  {t('send')}
                                 </DropdownMenuItem>
                               </>
                             )}
                             {quotation.status === "sent" && (
                               <DropdownMenuItem onClick={() => handleConvert(quotation)}>
                                 <ArrowRight className="w-4 h-4 mr-2" />
-                                Buyurtmaga aylantirish
+                                {t('convert_to_order')}
                               </DropdownMenuItem>
                             )}
                             {quotation.status === "draft" && (
@@ -364,7 +368,7 @@ export default function Quotations() {
                                 className="text-red-600"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
-                                O'chirish
+                                {t('delete')}
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -384,20 +388,20 @@ export default function Quotations() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editMode ? "Taklifnomani tahrirlash" : "Yangi taklifnoma"}
+              {editMode ? t('edit_quotation') : t('new_quotation')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Customer Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Mijoz *</Label>
+                <Label>{t('customer')} *</Label>
                 <Select
                   value={formData.customer_id}
                   onValueChange={handleCustomerSelect}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Mijozni tanlang" />
+                    <SelectValue placeholder={t('select_customer')} />
                   </SelectTrigger>
                   <SelectContent>
                     {customers.map((customer) => (
@@ -409,7 +413,7 @@ export default function Quotations() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Amal qilish muddati *</Label>
+                <Label>{t('valid_until')} *</Label>
                 <Input
                   type="date"
                   value={formData.valid_until}
@@ -420,15 +424,15 @@ export default function Quotations() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Aloqa shaxsi</Label>
+                <Label>{t('contact_person')}</Label>
                 <Input
                   value={formData.contact_person}
                   onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                  placeholder="Aloqa shaxsi ismi"
+                  placeholder={t('contact_person_name')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
+                <Label>{t('email')}</Label>
                 <Input
                   type="email"
                   value={formData.email}
@@ -441,20 +445,20 @@ export default function Quotations() {
             {/* Items */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <Label className="text-base font-semibold">Mahsulotlar</Label>
+                <Label className="text-base font-semibold">{t('products')}</Label>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Qo'shish
+                  {t('add')}
                 </Button>
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead className="w-24">Miqdor</TableHead>
-                      <TableHead className="w-36">Narx</TableHead>
-                      <TableHead className="w-36 text-right">Jami</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="w-24">{t('quantity')}</TableHead>
+                      <TableHead className="w-36">{t('price')}</TableHead>
+                      <TableHead className="w-36 text-right">{t('total')}</TableHead>
                       <TableHead className="w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -465,7 +469,7 @@ export default function Quotations() {
                           <Input
                             value={item.product_name}
                             onChange={(e) => handleItemChange(index, "product_name", e.target.value)}
-                            placeholder="Mahsulot nomi"
+                            placeholder={t('product_name')}
                           />
                         </TableCell>
                         <TableCell>
@@ -509,7 +513,7 @@ export default function Quotations() {
             {/* Totals */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Chegirma (%)</Label>
+                <Label>{t('discount')} (%)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -519,7 +523,7 @@ export default function Quotations() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Soliq (%)</Label>
+                <Label>{t('tax')} (%)</Label>
                 <Input
                   type="number"
                   min="0"
@@ -532,42 +536,42 @@ export default function Quotations() {
 
             <div className="bg-slate-50 rounded-lg p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Oraliq summa:</span>
+                <span>{t('subtotal')}:</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between text-sm text-red-600">
-                <span>Chegirma ({formData.discount_percent}%):</span>
+                <span>{t('discount')} ({formData.discount_percent}%):</span>
                 <span>-{formatCurrency(discountAmount)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>Soliq ({formData.tax_percent}%):</span>
+                <span>{t('tax')} ({formData.tax_percent}%):</span>
                 <span>{formatCurrency(taxAmount)}</span>
               </div>
               <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-                <span>Jami:</span>
+                <span>{t('total')}:</span>
                 <span>{formatCurrency(total)}</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Izohlar</Label>
+              <Label>{t('notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Qo'shimcha ma'lumotlar..."
+                placeholder={t('additional_info') + '...'}
                 rows={3}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!formData.customer_id || !formData.valid_until || formData.items.length === 0}
               >
-                {editMode ? "Saqlash" : "Yaratish"}
+                {editMode ? t('save') : t('create')}
               </Button>
             </div>
           </div>
@@ -596,13 +600,13 @@ export default function Quotations() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Yaratilgan:</span>
+                  <span className="text-slate-500">{t('created')}:</span>
                   <p className="font-medium">
                     {format(new Date(selectedQuotation.created_at), "dd.MM.yyyy")}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500">Amal qilish muddati:</span>
+                  <span className="text-slate-500">{t('valid_until')}:</span>
                   <p className="font-medium">
                     {selectedQuotation.valid_until
                       ? format(new Date(selectedQuotation.valid_until), "dd.MM.yyyy")
@@ -615,10 +619,10 @@ export default function Quotations() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead className="text-center">Miqdor</TableHead>
-                      <TableHead className="text-right">Narx</TableHead>
-                      <TableHead className="text-right">Jami</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="text-center">{t('quantity')}</TableHead>
+                      <TableHead className="text-right">{t('price')}</TableHead>
+                      <TableHead className="text-right">{t('total')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -636,21 +640,21 @@ export default function Quotations() {
 
               <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Oraliq summa:</span>
+                  <span>{t('subtotal')}:</span>
                   <span>{formatCurrency(selectedQuotation.subtotal)}</span>
                 </div>
                 {selectedQuotation.discount_amount > 0 && (
                   <div className="flex justify-between text-sm text-red-600">
-                    <span>Chegirma ({selectedQuotation.discount_percent}%):</span>
+                    <span>{t('discount')} ({selectedQuotation.discount_percent}%):</span>
                     <span>-{formatCurrency(selectedQuotation.discount_amount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span>Soliq ({selectedQuotation.tax_percent}%):</span>
+                  <span>{t('tax')} ({selectedQuotation.tax_percent}%):</span>
                   <span>{formatCurrency(selectedQuotation.tax_amount)}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-                  <span>Jami:</span>
+                  <span>{t('total')}:</span>
                   <span>{formatCurrency(selectedQuotation.total_amount)}</span>
                 </div>
               </div>
@@ -665,7 +669,7 @@ export default function Quotations() {
                 <div className="p-3 bg-green-50 rounded-lg flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
                   <span className="text-sm text-green-800">
-                    Buyurtmaga aylantrilgan: {selectedQuotation.converted_to_order}
+                    {t('converted_to_order')}: {selectedQuotation.converted_to_order}
                   </span>
                 </div>
               )}

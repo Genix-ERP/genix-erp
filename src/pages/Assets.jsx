@@ -21,7 +21,18 @@ export default function Assets() {
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
 
   // AI Analysis
-  const assetAnalysis = useMemo(() => analyzeAssets(rawAssets, language), [rawAssets, language]);
+  const assetAnalysis = useMemo(() => {
+    try {
+      return analyzeAssets(rawAssets || [], language) || {
+        insights: [],
+        recommendations: [],
+        metrics: {}
+      };
+    } catch (error) {
+      console.error('Error analyzing assets:', error);
+      return { insights: [], recommendations: [], metrics: {} };
+    }
+  }, [rawAssets, language]);
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -40,20 +51,22 @@ export default function Assets() {
     depreciation_method: 'straight_line'
   });
 
-  // Calculate depreciation for all assets
-  const assets = rawAssets.map(asset => {
-    const purchaseDate = new Date(asset.purchase_date);
-    const yearsElapsed = (new Date() - purchaseDate) / (1000 * 60 * 60 * 24 * 365);
-    const annualDepreciation = (asset.purchase_cost - (asset.salvage_value || 0)) / asset.useful_life_years;
-    const accumulated = Math.min(annualDepreciation * yearsElapsed, asset.purchase_cost - (asset.salvage_value || 0));
-    const currentValue = asset.purchase_cost - accumulated;
+  // Calculate depreciation for all assets - memoize to prevent infinite loops
+  const assets = useMemo(() => {
+    return (rawAssets || []).map(asset => {
+      const purchaseDate = new Date(asset.purchase_date);
+      const yearsElapsed = (new Date() - purchaseDate) / (1000 * 60 * 60 * 24 * 365);
+      const annualDepreciation = (asset.purchase_cost - (asset.salvage_value || 0)) / asset.useful_life_years;
+      const accumulated = Math.min(annualDepreciation * yearsElapsed, asset.purchase_cost - (asset.salvage_value || 0));
+      const currentValue = asset.purchase_cost - accumulated;
 
-    return {
-      ...asset,
-      accumulated_depreciation: accumulated,
-      current_value: currentValue
-    };
-  });
+      return {
+        ...asset,
+        accumulated_depreciation: accumulated,
+        current_value: currentValue
+      };
+    });
+  }, [rawAssets]);
 
   useEffect(() => {
     let filtered = assets;
@@ -288,7 +301,7 @@ export default function Assets() {
         </div>
 
         {/* AI Insights Panel */}
-        {(assetAnalysis.insights.length > 0 || assetAnalysis.recommendations.length > 0) && (
+        {((assetAnalysis?.insights?.length > 0) || (assetAnalysis?.recommendations?.length > 0)) && (
           <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200/50">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -299,7 +312,7 @@ export default function Assets() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {assetAnalysis.insights.slice(0, 3).map((insight, index) => (
+                {(assetAnalysis?.insights || []).slice(0, 3).map((insight, index) => (
                   <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-orange-100">
                     <div className="flex items-start gap-3">
                       {insight.type === 'positive' ? (
@@ -320,9 +333,9 @@ export default function Assets() {
                   </div>
                 ))}
               </div>
-              {assetAnalysis.recommendations.length > 0 && (
+              {assetAnalysis?.recommendations?.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {assetAnalysis.recommendations.map((rec, index) => (
+                  {(assetAnalysis?.recommendations || []).map((rec, index) => (
                     <div key={index} className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-orange-100">
                       <Lightbulb className="w-3 h-3 text-yellow-500" />
                       <span className="text-slate-700">{rec.action}</span>
