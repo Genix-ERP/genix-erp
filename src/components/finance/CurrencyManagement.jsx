@@ -185,9 +185,9 @@ export default function CurrencyManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-purple-600 font-medium">Valyutalar</p>
+                <p className="text-sm text-purple-600 font-medium">{t('currencies') || 'Currencies'}</p>
                 <p className="text-2xl font-bold text-purple-800">{currencies.length}</p>
-                <p className="text-xs text-purple-500">{currencies.filter(c => c.is_active).length} faol</p>
+                <p className="text-xs text-purple-500">{currencies.filter(c => c.is_active).length} {t('active_currencies') || 'active'}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
                 <Globe className="w-6 h-6 text-purple-600" />
@@ -249,11 +249,11 @@ export default function CurrencyManagement() {
           <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200">
             <TabsTrigger value="currencies" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <Coins className="w-4 h-4 mr-2" />
-              Valyutalar
+              {t('currencies') || 'Currencies'}
             </TabsTrigger>
             <TabsTrigger value="rates" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <History className="w-4 h-4 mr-2" />
-              Kurslar Tarixi
+              {t('rates_history') || 'Rate History'}
             </TabsTrigger>
           </TabsList>
 
@@ -264,7 +264,7 @@ export default function CurrencyManagement() {
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Yangi Valyuta
+                {t('new_currency') || 'New Currency'}
               </Button>
             )}
             {activeTab === 'rates' && (
@@ -273,7 +273,7 @@ export default function CurrencyManagement() {
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Kurs Kiritish
+                {t('set_rate') || 'Set Rate'}
               </Button>
             )}
           </div>
@@ -286,13 +286,13 @@ export default function CurrencyManagement() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Kod</TableHead>
-                    <TableHead>Nomi</TableHead>
-                    <TableHead>Belgi</TableHead>
-                    <TableHead>Joriy Kurs</TableHead>
-                    <TableHead>O'zgarish</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead className="text-right">Amallar</TableHead>
+                    <TableHead>{t('code') || 'Code'}</TableHead>
+                    <TableHead>{t('currency_name') || 'Name'}</TableHead>
+                    <TableHead>{t('symbol') || 'Symbol'}</TableHead>
+                    <TableHead>{t('current_rate') || 'Current Rate'}</TableHead>
+                    <TableHead>{t('change') || 'Change'}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead className="text-right">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -313,7 +313,7 @@ export default function CurrencyManagement() {
                         <TableCell className="text-lg">{currency.symbol}</TableCell>
                         <TableCell className="font-semibold">
                           {currency.is_base ? (
-                            <Badge variant="outline">Asosiy valyuta</Badge>
+                            <Badge variant="outline">{t('base_currency') || 'Base currency'}</Badge>
                           ) : (
                             latestRate ? `${new Intl.NumberFormat('uz-UZ').format(latestRate.rate)} so'm` : '-'
                           )}
@@ -327,7 +327,7 @@ export default function CurrencyManagement() {
                         </TableCell>
                         <TableCell>
                           <Badge className={currency.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                            {currency.is_active ? 'Faol' : 'Nofaol'}
+                            {currency.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -362,10 +362,10 @@ export default function CurrencyManagement() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Sana</TableHead>
-                    <TableHead>Valyuta</TableHead>
-                    <TableHead>Kurs</TableHead>
-                    <TableHead>Manba</TableHead>
+                    <TableHead>{t('date') || 'Date'}</TableHead>
+                    <TableHead>{t('currency') || 'Currency'}</TableHead>
+                    <TableHead>{t('rate') || 'Rate'}</TableHead>
+                    <TableHead>{t('source') || 'Source'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -392,7 +392,7 @@ export default function CurrencyManagement() {
                   {exchangeRates.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center py-8 text-slate-500">
-                        Kurslar tarixi mavjud emas
+                        {t('no_rates_history') || 'No rate history'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -407,13 +407,13 @@ export default function CurrencyManagement() {
       <Dialog open={showCreateCurrencyModal} onOpenChange={setShowCreateCurrencyModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yangi Valyuta</DialogTitle>
-            <DialogDescription>Yangi valyuta qo'shish</DialogDescription>
+            <DialogTitle>{t('new_currency') || 'New Currency'}</DialogTitle>
+            <DialogDescription>{t('add_new_currency') || 'Add new currency'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Kod</label>
+                <label className="text-sm font-medium">{t('code') || 'Code'}</label>
                 <Input
                   value={newCurrency.code}
                   onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value.toUpperCase() })}
@@ -422,7 +422,7 @@ export default function CurrencyManagement() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Belgi</label>
+                <label className="text-sm font-medium">{t('symbol') || 'Symbol'}</label>
                 <Input
                   value={newCurrency.symbol}
                   onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
@@ -431,7 +431,7 @@ export default function CurrencyManagement() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Nomi</label>
+              <label className="text-sm font-medium">{t('currency_name') || 'Name'}</label>
               <Input
                 value={newCurrency.name}
                 onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
@@ -439,7 +439,7 @@ export default function CurrencyManagement() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">O'nlik xonalar</label>
+              <label className="text-sm font-medium">{t('decimal_places') || 'Decimal places'}</label>
               <Select
                 value={String(newCurrency.decimal_places)}
                 onValueChange={(v) => setNewCurrency({ ...newCurrency, decimal_places: parseInt(v) })}
@@ -455,13 +455,13 @@ export default function CurrencyManagement() {
               </Select>
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateCurrencyModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateCurrencyModal(false)}>{t('cancel') || 'Cancel'}</Button>
               <Button
                 onClick={handleCreateCurrency}
                 disabled={isSaving || !newCurrency.code || !newCurrency.name}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
             </div>
           </div>
@@ -472,12 +472,12 @@ export default function CurrencyManagement() {
       <Dialog open={showSetRateModal} onOpenChange={setShowSetRateModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Kurs Kiritish</DialogTitle>
-            <DialogDescription>Valyuta kursini yangilash</DialogDescription>
+            <DialogTitle>{t('set_rate') || 'Set Rate'}</DialogTitle>
+            <DialogDescription>{t('update_currency_rate') || 'Update currency rate'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Valyuta</label>
+              <label className="text-sm font-medium">{t('currency') || 'Currency'}</label>
               <Select
                 value={newRate.from_currency}
                 onValueChange={(v) => setNewRate({ ...newRate, from_currency: v })}
@@ -493,7 +493,7 @@ export default function CurrencyManagement() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">Kurs (1 {newRate.from_currency} = ? UZS)</label>
+              <label className="text-sm font-medium">{t('rate') || 'Rate'} (1 {newRate.from_currency} = ? UZS)</label>
               <Input
                 type="number"
                 value={newRate.rate}
@@ -502,7 +502,7 @@ export default function CurrencyManagement() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Sana</label>
+              <label className="text-sm font-medium">{t('date') || 'Date'}</label>
               <Input
                 type="date"
                 value={newRate.date}
@@ -510,7 +510,7 @@ export default function CurrencyManagement() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Manba</label>
+              <label className="text-sm font-medium">{t('source') || 'Source'}</label>
               <Select
                 value={newRate.source}
                 onValueChange={(v) => setNewRate({ ...newRate, source: v })}
@@ -519,20 +519,20 @@ export default function CurrencyManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CBU">O'zbekiston Markaziy Banki</SelectItem>
-                  <SelectItem value="Manual">Qo'lda kiritilgan</SelectItem>
-                  <SelectItem value="Market">Bozor kursi</SelectItem>
+                  <SelectItem value="CBU">{t('central_bank') || 'Central Bank of Uzbekistan'}</SelectItem>
+                  <SelectItem value="Manual">{t('manual_entry') || 'Manual entry'}</SelectItem>
+                  <SelectItem value="Market">{t('market_rate') || 'Market rate'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowSetRateModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowSetRateModal(false)}>{t('cancel') || 'Cancel'}</Button>
               <Button
                 onClick={handleSetRate}
                 disabled={isSaving || !newRate.rate}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
             </div>
           </div>

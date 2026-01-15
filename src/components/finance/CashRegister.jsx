@@ -46,27 +46,29 @@ export default function CashRegister() {
     cashier: ''
   });
 
-  const categories = {
+  const getCategories = () => ({
     income: [
-      { value: 'sales', label: 'Sotuv' },
-      { value: 'services', label: 'Xizmatlar' },
-      { value: 'refund', label: 'Qaytarish' },
-      { value: 'other_income', label: 'Boshqa kirim' }
+      { value: 'sales', label: t('sales_category') || 'Sales' },
+      { value: 'services', label: t('services_category') || 'Services' },
+      { value: 'refund', label: t('refund_category') || 'Refund' },
+      { value: 'other_income', label: t('other_income_category') || 'Other Income' }
     ],
     expense: [
-      { value: 'purchase', label: 'Xarid' },
-      { value: 'salary', label: 'Ish haqi' },
-      { value: 'rent', label: 'Ijara' },
-      { value: 'utilities', label: 'Kommunal' },
-      { value: 'office', label: 'Ofis xarajatlari' },
-      { value: 'transport', label: 'Transport' },
-      { value: 'other_expense', label: 'Boshqa chiqim' }
+      { value: 'purchase', label: t('purchase_category') || 'Purchase' },
+      { value: 'salary', label: t('salary_category') || 'Salary' },
+      { value: 'rent', label: t('rent_category') || 'Rent' },
+      { value: 'utilities', label: t('utilities_category') || 'Utilities' },
+      { value: 'office', label: t('office_category') || 'Office' },
+      { value: 'transport', label: t('transport_category') || 'Transport' },
+      { value: 'other_expense', label: t('other_expense_category') || 'Other Expense' }
     ],
     transfer: [
-      { value: 'bank_deposit', label: 'Bankka topshirish' },
-      { value: 'bank_withdrawal', label: 'Bankdan olish' }
+      { value: 'bank_deposit', label: t('bank_deposit_category') || 'Bank Deposit' },
+      { value: 'bank_withdrawal', label: t('bank_withdrawal_category') || 'Bank Withdrawal' }
     ]
-  };
+  });
+
+  const categories = getCategories();
 
   // Calculate summaries
   const today = new Date().toISOString().split('T')[0];
@@ -159,11 +161,11 @@ export default function CashRegister() {
   const getTypeBadge = (type) => {
     switch (type) {
       case 'income':
-        return <Badge className="bg-green-100 text-green-700"><ArrowDownLeft className="w-3 h-3 mr-1" /> Kirim</Badge>;
+        return <Badge className="bg-green-100 text-green-700"><ArrowDownLeft className="w-3 h-3 mr-1" /> {t('income') || 'Income'}</Badge>;
       case 'expense':
-        return <Badge className="bg-red-100 text-red-700"><ArrowUpRight className="w-3 h-3 mr-1" /> Chiqim</Badge>;
+        return <Badge className="bg-red-100 text-red-700"><ArrowUpRight className="w-3 h-3 mr-1" /> {t('expense') || 'Expense'}</Badge>;
       case 'transfer':
-        return <Badge className="bg-blue-100 text-blue-700"><ArrowRightLeft className="w-3 h-3 mr-1" /> O'tkazma</Badge>;
+        return <Badge className="bg-blue-100 text-blue-700"><ArrowRightLeft className="w-3 h-3 mr-1" /> {t('transfer') || 'Transfer'}</Badge>;
       default:
         return null;
     }
@@ -183,9 +185,9 @@ export default function CashRegister() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-emerald-600 font-medium">Kassa Balansi</p>
+                <p className="text-sm text-emerald-600 font-medium">{t('cash_balance') || 'Cash Balance'}</p>
                 <p className="text-3xl font-bold text-emerald-800">{formatCurrency(summaryStats.currentBalance)}</p>
-                <p className="text-xs text-emerald-500 mt-1">Joriy holat</p>
+                <p className="text-xs text-emerald-500 mt-1">{t('current_state') || 'Current state'}</p>
               </div>
               <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center">
                 <PiggyBank className="w-7 h-7 text-emerald-600" />
@@ -198,7 +200,7 @@ export default function CashRegister() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600 font-medium">Bugungi Kirim</p>
+                <p className="text-sm text-green-600 font-medium">{t('today_income') || 'Today Income'}</p>
                 <p className="text-2xl font-bold text-green-800">{formatCurrency(summaryStats.todayIncome)}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
@@ -212,7 +214,7 @@ export default function CashRegister() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600 font-medium">Bugungi Chiqim</p>
+                <p className="text-sm text-red-600 font-medium">{t('today_expense') || 'Today Expense'}</p>
                 <p className="text-2xl font-bold text-red-800">{formatCurrency(summaryStats.todayExpense)}</p>
               </div>
               <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
@@ -226,9 +228,9 @@ export default function CashRegister() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">Bugungi</p>
+                <p className="text-sm text-blue-600 font-medium">{t('today') || 'Today'}</p>
                 <p className="text-2xl font-bold text-blue-800">{summaryStats.transactionCount}</p>
-                <p className="text-xs text-blue-500">tranzaksiya</p>
+                <p className="text-xs text-blue-500">{t('transaction') || 'transaction'}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
                 <Receipt className="w-6 h-6 text-blue-600" />
@@ -249,7 +251,7 @@ export default function CashRegister() {
             className="bg-green-600 hover:bg-green-700 text-white"
           >
             <ArrowDownLeft className="w-4 h-4 mr-2" />
-            Kirim
+            {t('income') || 'Income'}
           </Button>
           <Button
             onClick={() => {
@@ -259,7 +261,7 @@ export default function CashRegister() {
             className="bg-red-600 hover:bg-red-700 text-white"
           >
             <ArrowUpRight className="w-4 h-4 mr-2" />
-            Chiqim
+            {t('expense') || 'Expense'}
           </Button>
           <Button
             onClick={() => {
@@ -270,18 +272,18 @@ export default function CashRegister() {
             className="border-blue-300 text-blue-600 hover:bg-blue-50"
           >
             <ArrowRightLeft className="w-4 h-4 mr-2" />
-            O'tkazma
+            {t('transfer') || 'Transfer'}
           </Button>
         </div>
 
         <div className="flex gap-2">
           <Button variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" />
-            Chop etish
+            {t('print') || 'Print'}
           </Button>
           <Button variant="outline" size="sm">
             <Download className="w-4 h-4 mr-2" />
-            Export
+            {t('export') || 'Export'}
           </Button>
         </div>
       </div>
@@ -293,7 +295,7 @@ export default function CashRegister() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Tranzaksiya qidirish..."
+                placeholder={t('search_transaction') || 'Search transaction...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -301,24 +303,24 @@ export default function CashRegister() {
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Turi" />
+                <SelectValue placeholder={t('type') || 'Type'} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Barchasi</SelectItem>
-                <SelectItem value="income">Kirim</SelectItem>
-                <SelectItem value="expense">Chiqim</SelectItem>
-                <SelectItem value="transfer">O'tkazma</SelectItem>
+                <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                <SelectItem value="income">{t('income') || 'Income'}</SelectItem>
+                <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
+                <SelectItem value="transfer">{t('transfer') || 'Transfer'}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={setDateFilter}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Davr" />
+                <SelectValue placeholder={t('period') || 'Period'} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Barchasi</SelectItem>
-                <SelectItem value="today">Bugun</SelectItem>
-                <SelectItem value="week">Oxirgi hafta</SelectItem>
-                <SelectItem value="month">Oxirgi oy</SelectItem>
+                <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                <SelectItem value="today">{t('today') || 'Today'}</SelectItem>
+                <SelectItem value="week">{t('this_week') || 'This Week'}</SelectItem>
+                <SelectItem value="month">{t('this_month') || 'This Month'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -328,19 +330,19 @@ export default function CashRegister() {
       {/* Transactions Table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Kassa Tranzaksiyalari</CardTitle>
+          <CardTitle className="text-lg">{t('cash_transactions') || 'Cash Transactions'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
-                <TableHead>Sana</TableHead>
-                <TableHead>Referens</TableHead>
-                <TableHead>Tavsif</TableHead>
-                <TableHead>Kategoriya</TableHead>
-                <TableHead>Turi</TableHead>
-                <TableHead>Kassir</TableHead>
-                <TableHead className="text-right">Summa</TableHead>
+                <TableHead>{t('date') || 'Date'}</TableHead>
+                <TableHead>{t('reference') || 'Reference'}</TableHead>
+                <TableHead>{t('description') || 'Description'}</TableHead>
+                <TableHead>{t('category') || 'Category'}</TableHead>
+                <TableHead>{t('type') || 'Type'}</TableHead>
+                <TableHead>{t('cashier') || 'Cashier'}</TableHead>
+                <TableHead className="text-right">{t('amount') || 'Amount'}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -371,7 +373,7 @@ export default function CashRegister() {
               {filteredTransactions.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                    Tranzaksiyalar mavjud emas
+                    {t('no_transactions') || 'No transactions'}
                   </TableCell>
                 </TableRow>
               )}
@@ -385,16 +387,16 @@ export default function CashRegister() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {newTransaction.type === 'income' && 'Yangi Kirim'}
-              {newTransaction.type === 'expense' && 'Yangi Chiqim'}
-              {newTransaction.type === 'transfer' && 'Yangi O\'tkazma'}
+              {newTransaction.type === 'income' && (t('new_income') || 'New Income')}
+              {newTransaction.type === 'expense' && (t('new_expense') || 'New Expense')}
+              {newTransaction.type === 'transfer' && (t('new_transfer') || 'New Transfer')}
             </DialogTitle>
-            <DialogDescription>Kassa tranzaksiyasini kiritish</DialogDescription>
+            <DialogDescription>{t('enter_cash_transaction') || 'Enter cash transaction'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Sana</label>
+                <label className="text-sm font-medium">{t('date') || 'Date'}</label>
                 <Input
                   type="date"
                   value={newTransaction.transaction_date}
@@ -402,7 +404,7 @@ export default function CashRegister() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Turi</label>
+                <label className="text-sm font-medium">{t('type') || 'Type'}</label>
                 <Select
                   value={newTransaction.type}
                   onValueChange={(v) => setNewTransaction({
@@ -415,16 +417,16 @@ export default function CashRegister() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="income">Kirim</SelectItem>
-                    <SelectItem value="expense">Chiqim</SelectItem>
-                    <SelectItem value="transfer">O'tkazma</SelectItem>
+                    <SelectItem value="income">{t('income') || 'Income'}</SelectItem>
+                    <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
+                    <SelectItem value="transfer">{t('transfer') || 'Transfer'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium">Kategoriya</label>
+              <label className="text-sm font-medium">{t('category') || 'Category'}</label>
               <Select
                 value={newTransaction.category}
                 onValueChange={(v) => setNewTransaction({ ...newTransaction, category: v })}
@@ -442,7 +444,7 @@ export default function CashRegister() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Summa</label>
+                <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
                 <Input
                   type="number"
                   value={newTransaction.amount}
@@ -451,7 +453,7 @@ export default function CashRegister() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Valyuta</label>
+                <label className="text-sm font-medium">{t('currency') || 'Currency'}</label>
                 <Select
                   value={newTransaction.currency}
                   onValueChange={(v) => setNewTransaction({ ...newTransaction, currency: v })}
@@ -468,26 +470,26 @@ export default function CashRegister() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">Tavsif</label>
+              <label className="text-sm font-medium">{t('description') || 'Description'}</label>
               <Textarea
                 value={newTransaction.description}
                 onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
-                placeholder="Tranzaksiya tavsifi"
+                placeholder={t('transaction_description') || 'Transaction description'}
                 rows={2}
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium">Kassir</label>
+              <label className="text-sm font-medium">{t('cashier') || 'Cashier'}</label>
               <Input
                 value={newTransaction.cashier}
                 onChange={(e) => setNewTransaction({ ...newTransaction, cashier: e.target.value })}
-                placeholder="Kassir ismi"
+                placeholder={t('cashier_name') || 'Cashier name'}
               />
             </div>
 
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel') || 'Cancel'}</Button>
               <Button
                 onClick={handleCreateTransaction}
                 disabled={isSaving || !newTransaction.amount || !newTransaction.description}
@@ -497,7 +499,7 @@ export default function CashRegister() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
             </div>
           </div>

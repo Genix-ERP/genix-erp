@@ -92,7 +92,7 @@ export default function Customers() {
     const loadCallLogs = async () => {
       try {
         const logs = await pbxService.getCallLogs(activeCompany?.id);
-        setCallLogs(logs || []);
+        setCallLogs(Array.isArray(logs) ? logs : []);
       } catch (error) {
         console.error('Failed to load call logs:', error);
         setCallLogs([]);
@@ -242,8 +242,8 @@ export default function Customers() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Brain className="w-5 h-5 text-indigo-600" />
-                AI CRM Insights
-                <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
+                {t('ai_crm_insights')}
+                <Badge className="bg-indigo-100 text-indigo-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -255,7 +255,7 @@ export default function Customers() {
                       <DollarSign className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Monthly Recurring</p>
+                      <p className="text-xs text-slate-500">{t('monthly_recurring')}</p>
                       <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.totalMRR.toLocaleString()}</p>
                     </div>
                   </div>
@@ -267,7 +267,7 @@ export default function Customers() {
                       <Target className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Pipeline Value</p>
+                      <p className="text-xs text-slate-500">{t('pipeline_value')}</p>
                       <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.pipelineValue.toLocaleString()}</p>
                     </div>
                   </div>
@@ -302,7 +302,7 @@ export default function Customers() {
                   <div className="flex items-start gap-3">
                     <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="font-medium text-slate-900 text-sm mb-2">AI Recommendations</h4>
+                      <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations')}</h4>
                       <div className="flex flex-wrap gap-2">
                         {crmAnalysis.recommendations.map((rec, index) => (
                           <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
