@@ -125,7 +125,7 @@ export default function FinanceDashboard() {
               <p className="text-3xl font-bold text-green-600 tabular-nums">
                 ${metrics.totalIncome.toLocaleString()}
               </p>
-              <p className="text-xs text-slate-500 mt-2">vs last month</p>
+              <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-green-500/5 rounded-tl-full"></div>
           </CardContent>
@@ -147,7 +147,7 @@ export default function FinanceDashboard() {
               <p className="text-3xl font-bold text-red-600 tabular-nums">
                 ${metrics.totalExpenses.toLocaleString()}
               </p>
-              <p className="text-xs text-slate-500 mt-2">vs last month</p>
+              <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-red-500/5 rounded-tl-full"></div>
           </CardContent>
@@ -172,7 +172,7 @@ export default function FinanceDashboard() {
                 ${metrics.netProfit.toLocaleString()}
               </p>
               <p className="text-xs text-slate-500 mt-2">
-                {metrics.netProfit >= 0 ? 'Healthy profit' : 'Needs attention'}
+                {metrics.netProfit >= 0 ? t('healthy_profit') || 'Healthy profit' : t('needs_attention') || 'Needs attention'}
               </p>
             </div>
             <div className={`absolute bottom-0 right-0 w-24 h-24 ${metrics.netProfit >= 0 ? 'bg-emerald-500/5' : 'bg-red-500/5'} rounded-tl-full`}></div>
@@ -196,7 +196,7 @@ export default function FinanceDashboard() {
                 {metrics.profitMargin.toFixed(1)}%
               </p>
               <p className="text-xs text-slate-500 mt-2">
-                {metrics.profitMargin >= 30 ? 'Excellent margin' : metrics.profitMargin > 0 ? 'Good performance' : 'Below target'}
+                {metrics.profitMargin >= 30 ? t('excellent_margin') || 'Excellent margin' : metrics.profitMargin > 0 ? t('good_performance') || 'Good performance' : t('below_target') || 'Below target'}
               </p>
             </div>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-purple-500/5 rounded-tl-full"></div>
@@ -270,8 +270,8 @@ export default function FinanceDashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Brain className="w-5 h-5 text-green-600" />
-              AI Financial Intelligence
-              <Badge className="bg-green-100 text-green-700 text-xs">Live</Badge>
+              {t('ai_financial_intelligence') || 'AI Financial Intelligence'}
+              <Badge className="bg-green-100 text-green-700 text-xs">{t('live') || 'Live'}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -305,7 +305,7 @@ export default function FinanceDashboard() {
                 <div className="flex items-start gap-3">
                   <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="font-medium text-slate-900 text-sm mb-2">AI Recommendations</h4>
+                    <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations') || 'AI Recommendations'}</h4>
                     <div className="flex flex-wrap gap-2">
                       {financialAnalysis.recommendations.map((rec, index) => (
                         <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">

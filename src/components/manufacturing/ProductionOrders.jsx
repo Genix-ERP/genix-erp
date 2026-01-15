@@ -126,10 +126,10 @@ export default function ProductionOrders() {
   };
 
   const getPriorityLabel = (priority) => {
-    if (priority <= 2) return { label: 'Urgent', color: 'bg-red-100 text-red-700' };
-    if (priority <= 4) return { label: 'High', color: 'bg-orange-100 text-orange-700' };
-    if (priority <= 6) return { label: 'Normal', color: 'bg-blue-100 text-blue-700' };
-    return { label: 'Low', color: 'bg-slate-100 text-slate-700' };
+    if (priority <= 2) return { label: t('urgent') || 'Urgent', color: 'bg-red-100 text-red-700' };
+    if (priority <= 4) return { label: t('high') || 'High', color: 'bg-orange-100 text-orange-700' };
+    if (priority <= 6) return { label: t('normal') || 'Normal', color: 'bg-blue-100 text-blue-700' };
+    return { label: t('low') || 'Low', color: 'bg-slate-100 text-slate-700' };
   };
 
   return (
@@ -142,7 +142,7 @@ export default function ProductionOrders() {
               <CardTitle className="text-xl font-bold">{t('production_orders') || 'Production Orders'}</CardTitle>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={refreshData}>
-                  <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+                  <RefreshCw className="w-4 h-4 mr-2" /> {t('refresh') || 'Refresh'}
                 </Button>
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
                   <Plus className="w-4 h-4 mr-2" /> {t('new_production_order') || 'New Production Order'}
@@ -166,12 +166,12 @@ export default function ProductionOrders() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t('all_status') || 'All Statuses'}</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                  <SelectItem value="confirmed">{t('confirmed') || 'Confirmed'}</SelectItem>
+                  <SelectItem value="in_progress">{t('in_progress') || 'In Progress'}</SelectItem>
+                  <SelectItem value="paused">{t('paused') || 'Paused'}</SelectItem>
+                  <SelectItem value="completed">{t('completed') || 'Completed'}</SelectItem>
+                  <SelectItem value="cancelled">{t('cancelled') || 'Cancelled'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -202,14 +202,14 @@ export default function ProductionOrders() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="font-semibold">Order Code</TableHead>
-                    <TableHead className="font-semibold">Product</TableHead>
-                    <TableHead className="font-semibold">Quantity</TableHead>
-                    <TableHead className="font-semibold">Priority</TableHead>
-                    <TableHead className="font-semibold">Status</TableHead>
-                    <TableHead className="font-semibold">Schedule</TableHead>
-                    <TableHead className="font-semibold">Progress</TableHead>
-                    <TableHead className="font-semibold">Actions</TableHead>
+                    <TableHead className="font-semibold">{t('order_code') || 'Order Code'}</TableHead>
+                    <TableHead className="font-semibold">{t('product') || 'Product'}</TableHead>
+                    <TableHead className="font-semibold">{t('quantity') || 'Quantity'}</TableHead>
+                    <TableHead className="font-semibold">{t('priority') || 'Priority'}</TableHead>
+                    <TableHead className="font-semibold">{t('status') || 'Status'}</TableHead>
+                    <TableHead className="font-semibold">{t('schedule') || 'Schedule'}</TableHead>
+                    <TableHead className="font-semibold">{t('progress') || 'Progress'}</TableHead>
+                    <TableHead className="font-semibold">{t('actions') || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -306,34 +306,34 @@ export default function ProductionOrders() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Order Name</label>
+                <label className="text-sm font-medium mb-1 block">{t('order_name') || 'Order Name'}</label>
                 <Input
-                  placeholder="Enter order name"
+                  placeholder={t('enter_order_name') || 'Enter order name'}
                   value={newOrder.name}
                   onChange={(e) => setNewOrder({...newOrder, name: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Priority (1-10) *</label>
+                <label className="text-sm font-medium mb-1 block">{t('priority') || 'Priority'} (1-10) *</label>
                 <Select value={String(newOrder.priority)} onValueChange={(value) => setNewOrder({...newOrder, priority: parseInt(value)})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">1 - Urgent</SelectItem>
-                    <SelectItem value="3">3 - High</SelectItem>
-                    <SelectItem value="5">5 - Normal</SelectItem>
-                    <SelectItem value="7">7 - Low</SelectItem>
-                    <SelectItem value="10">10 - Lowest</SelectItem>
+                    <SelectItem value="1">1 - {t('urgent') || 'Urgent'}</SelectItem>
+                    <SelectItem value="3">3 - {t('high') || 'High'}</SelectItem>
+                    <SelectItem value="5">5 - {t('normal') || 'Normal'}</SelectItem>
+                    <SelectItem value="7">7 - {t('low') || 'Low'}</SelectItem>
+                    <SelectItem value="10">10 - {t('lowest') || 'Lowest'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-1 block">Product Name *</label>
+              <label className="text-sm font-medium mb-1 block">{t('product_name') || 'Product Name'} *</label>
               <Input
-                placeholder="Enter product name"
+                placeholder={t('enter_product_name') || 'Enter product name'}
                 value={newOrder.product_name}
                 onChange={(e) => setNewOrder({...newOrder, product_name: e.target.value})}
                 required
@@ -342,16 +342,16 @@ export default function ProductionOrders() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Product ID *</label>
+                <label className="text-sm font-medium mb-1 block">{t('product_id') || 'Product ID'} *</label>
                 <Input
-                  placeholder="Product ID"
+                  placeholder={t('product_id') || 'Product ID'}
                   value={newOrder.product_id}
                   onChange={(e) => setNewOrder({...newOrder, product_id: e.target.value})}
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Quantity *</label>
+                <label className="text-sm font-medium mb-1 block">{t('quantity') || 'Quantity'} *</label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -361,17 +361,17 @@ export default function ProductionOrders() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Unit</label>
+                <label className="text-sm font-medium mb-1 block">{t('unit') || 'Unit'}</label>
                 <Select value={newOrder.uom} onValueChange={(value) => setNewOrder({...newOrder, uom: value})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="units">Units</SelectItem>
-                    <SelectItem value="pcs">Pieces</SelectItem>
-                    <SelectItem value="kg">Kilograms</SelectItem>
-                    <SelectItem value="liters">Liters</SelectItem>
-                    <SelectItem value="boxes">Boxes</SelectItem>
+                    <SelectItem value="units">{t('units') || 'Units'}</SelectItem>
+                    <SelectItem value="pcs">{t('pieces') || 'Pieces'}</SelectItem>
+                    <SelectItem value="kg">{t('kg') || 'Kilograms'}</SelectItem>
+                    <SelectItem value="liters">{t('liters') || 'Liters'}</SelectItem>
+                    <SelectItem value="boxes">{t('boxes') || 'Boxes'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -379,7 +379,7 @@ export default function ProductionOrders() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Scheduled Start *</label>
+                <label className="text-sm font-medium mb-1 block">{t('scheduled_start') || 'Scheduled Start'} *</label>
                 <Input
                   type="date"
                   value={newOrder.scheduled_start}
@@ -388,7 +388,7 @@ export default function ProductionOrders() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Scheduled End</label>
+                <label className="text-sm font-medium mb-1 block">{t('scheduled_end') || 'Scheduled End'}</label>
                 <Input
                   type="date"
                   value={newOrder.scheduled_end}
@@ -399,14 +399,14 @@ export default function ProductionOrders() {
 
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                Cancel
+                {t('cancel') || 'Cancel'}
               </Button>
               <Button
                 onClick={handleCreateOrder}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
                 disabled={!newOrder.product_name || !newOrder.product_id || !newOrder.quantity_planned}
               >
-                Create Order
+                {t('create_order') || 'Create Order'}
               </Button>
             </div>
           </div>

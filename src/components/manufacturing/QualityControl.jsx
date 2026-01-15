@@ -5,10 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PackageCheck, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const COLORS = { pass: '#10b981', fail: '#ef4444', conditional_pass: '#f59e0b' };
 
 export default function QualityControl() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { qualityChecks, loading } = useManufacturing();
 
   const getResultColor = (result) => {
@@ -52,7 +56,7 @@ export default function QualityControl() {
               </div>
             </div>
             <p className="text-3xl font-bold text-slate-900">{qualityStats.total}</p>
-            <p className="text-sm text-slate-600">Total Inspections</p>
+            <p className="text-sm text-slate-600">{t('total_inspections') || 'Total Inspections'}</p>
           </CardContent>
         </Card>
 
@@ -64,7 +68,7 @@ export default function QualityControl() {
               </div>
             </div>
             <p className="text-3xl font-bold text-green-900">{qualityStats.passed}</p>
-            <p className="text-sm text-slate-600">Passed</p>
+            <p className="text-sm text-slate-600">{t('passed') || 'Passed'}</p>
           </CardContent>
         </Card>
 
@@ -76,7 +80,7 @@ export default function QualityControl() {
               </div>
             </div>
             <p className="text-3xl font-bold text-red-900">{qualityStats.failed}</p>
-            <p className="text-sm text-slate-600">Failed</p>
+            <p className="text-sm text-slate-600">{t('failed') || 'Failed'}</p>
           </CardContent>
         </Card>
 
@@ -90,7 +94,7 @@ export default function QualityControl() {
             <p className="text-3xl font-bold text-slate-900">
               {qualityStats.total > 0 ? Math.round((qualityStats.passed / qualityStats.total) * 100) : 0}%
             </p>
-            <p className="text-sm text-slate-600">Pass Rate</p>
+            <p className="text-sm text-slate-600">{t('pass_rate') || 'Pass Rate'}</p>
           </CardContent>
         </Card>
       </div>
@@ -101,7 +105,7 @@ export default function QualityControl() {
         {chartData.length > 0 && (
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardHeader>
-              <CardTitle>Quality Distribution</CardTitle>
+              <CardTitle>{t('quality_distribution') || 'Quality Distribution'}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={250}>
@@ -131,32 +135,32 @@ export default function QualityControl() {
         {/* Recent Inspections */}
         <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader>
-            <CardTitle>Recent Quality Inspections</CardTitle>
+            <CardTitle>{t('recent_quality_inspections') || 'Recent Quality Inspections'}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="text-center">
                   <div className="w-8 h-8 border-4 border-slate-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-slate-600">Loading quality checks...</p>
+                  <p className="text-slate-600">{t('loading') || 'Loading'}...</p>
                 </div>
               </div>
             ) : qualityChecks.length === 0 ? (
               <div className="text-center py-16">
                 <PackageCheck className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No quality checks recorded yet</p>
+                <p className="text-slate-500">{t('no_quality_checks_recorded_yet') || 'No quality checks recorded yet'}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50">
-                      <TableHead>Check #</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Sample Size</TableHead>
-                      <TableHead>Result</TableHead>
-                      <TableHead>Score</TableHead>
+                      <TableHead>{t('check_number') || 'Check #'}</TableHead>
+                      <TableHead>{t('product') || 'Product'}</TableHead>
+                      <TableHead>{t('type') || 'Type'}</TableHead>
+                      <TableHead>{t('sample_size') || 'Sample Size'}</TableHead>
+                      <TableHead>{t('result') || 'Result'}</TableHead>
+                      <TableHead>{t('score') || 'Score'}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

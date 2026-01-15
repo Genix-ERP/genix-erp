@@ -38,6 +38,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 const defaultStages = [
   { id: 'new_lead', name: 'New Lead', color: 'bg-slate-500', lightColor: 'bg-slate-100' },
@@ -49,6 +51,8 @@ const defaultStages = [
 ];
 
 export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, communications }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [stages, setStages] = useState(defaultStages);
   const [boardData, setBoardData] = useState({ columns: [] });
   const [draggedItem, setDraggedItem] = useState(null);
@@ -284,20 +288,20 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-[var(--genix-purple)]" />
-            Kanban AI Assistant
+            {t('kanban_ai_assistant') || 'Kanban AI Assistant'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="Ask me anything: 'Move ACME to negotiation' or 'Show stagnant deals'"
+              placeholder={t('ai_query_placeholder') || "Ask me anything: 'Move ACME to negotiation' or 'Show stagnant deals'"}
               value={aiQuery}
               onChange={(e) => setAiQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAIQuery()}
               className="flex-1"
             />
             <Button onClick={handleAIQuery} disabled={isProcessingAI}>
-              {isProcessingAI ? "Processing..." : "Ask AI"}
+              {isProcessingAI ? t('processing') || "Processing..." : t('ask_ai') || "Ask AI"}
             </Button>
             <Dialog>
               <DialogTrigger asChild>
@@ -307,14 +311,14 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Configure Kanban Stages</DialogTitle>
+                  <DialogTitle>{t('configure_kanban_stages') || 'Configure Kanban Stages'}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <p className="text-sm text-slate-600">
-                    Current stages: {stages.map(s => s.name).join(' → ')}
+                    {t('current_stages') || 'Current stages'}: {stages.map(s => s.name).join(' → ')}
                   </p>
-                  <Input placeholder="Add new stage (e.g., 'Demo Scheduled')" />
-                  <Button className="w-full">Add Stage</Button>
+                  <Input placeholder={t('add_new_stage_placeholder') || "Add new stage (e.g., 'Demo Scheduled')"} />
+                  <Button className="w-full">{t('add_stage') || 'Add Stage'}</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -336,7 +340,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
             <div className="space-y-2">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <Zap className="w-4 h-4 text-[var(--genix-purple)]" />
-                AI Recommendations
+                {t('ai_recommendations') || 'AI Recommendations'}
               </h4>
               {aiSuggestions.slice(0, 3).map((suggestion, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border">
@@ -349,7 +353,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                       {suggestion.urgency}
                     </Badge>
                     <Button size="sm" variant="outline">
-                      {suggestion.type === 'move_stage' ? 'Move' : 'Action'}
+                      {suggestion.type === 'move_stage' ? t('move') || 'Move' : t('action') || 'Action'}
                     </Button>
                   </div>
                 </div>
@@ -388,7 +392,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                       </div>
                       {column.avgProbability > 0 && (
                         <div className="flex items-center gap-2 text-xs">
-                          <span>Avg. Probability:</span>
+                          <span>{t('avg_probability') || 'Avg. Probability'}:</span>
                           <span className={getProbabilityColor(column.avgProbability)}>
                             {Math.round(column.avgProbability)}%
                           </span>
@@ -424,10 +428,10 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent>
-                                    <DropdownMenuItem>Edit Deal</DropdownMenuItem>
-                                    <DropdownMenuItem>Add Note</DropdownMenuItem>
-                                    <DropdownMenuItem>Schedule Call</DropdownMenuItem>
-                                    <DropdownMenuItem>View History</DropdownMenuItem>
+                                    <DropdownMenuItem>{t('edit_deal') || 'Edit Deal'}</DropdownMenuItem>
+                                    <DropdownMenuItem>{t('add_note') || 'Add Note'}</DropdownMenuItem>
+                                    <DropdownMenuItem>{t('schedule_call') || 'Schedule Call'}</DropdownMenuItem>
+                                    <DropdownMenuItem>{t('view_history') || 'View History'}</DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -445,7 +449,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                             {card.probability > 0 && (
                               <div className="space-y-1">
                                 <div className="flex justify-between text-xs">
-                                  <span>Win Probability</span>
+                                  <span>{t('win_probability') || 'Win Probability'}</span>
                                   <span className={getProbabilityColor(card.probability)}>
                                     {card.probability}%
                                   </span>
@@ -459,13 +463,13 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                               {card.expectedClose && (
                                 <div className="flex items-center gap-2">
                                   <Calendar className="w-3 h-3" />
-                                  <span>Close: {new Date(card.expectedClose).toLocaleDateString()}</span>
+                                  <span>{t('close') || 'Close'}: {new Date(card.expectedClose).toLocaleDateString()}</span>
                                 </div>
                               )}
                               {card.stagnationDays > 0 && (
                                 <div className="flex items-center gap-2">
                                   <Clock className="w-3 h-3" />
-                                  <span>Stagnant: {card.stagnationDays} days</span>
+                                  <span>{t('stagnant') || 'Stagnant'}: {card.stagnationDays} {t('days') || 'days'}</span>
                                 </div>
                               )}
                             </div>
@@ -481,7 +485,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                             {/* Next Action */}
                             {card.nextAction && (
                               <div className="p-2 bg-[var(--genix-light-blue)]/30 rounded text-xs">
-                                <span className="font-medium">Next: </span>
+                                <span className="font-medium">{t('next') || 'Next'}: </span>
                                 <span>{card.nextAction}</span>
                               </div>
                             )}
@@ -501,15 +505,15 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                             <div className="flex gap-1 pt-2">
                               <Button size="sm" variant="outline" className="h-6 text-xs flex-1">
                                 <Phone className="w-3 h-3 mr-1" />
-                                Call
+                                {t('call') || 'Call'}
                               </Button>
                               <Button size="sm" variant="outline" className="h-6 text-xs flex-1">
                                 <Mail className="w-3 h-3 mr-1" />
-                                Email
+                                {t('email') || 'Email'}
                               </Button>
                               <Button size="sm" variant="outline" className="h-6 text-xs flex-1">
                                 <MessageSquare className="w-3 h-3 mr-1" />
-                                Note
+                                {t('note') || 'Note'}
                               </Button>
                             </div>
                           </CardContent>
@@ -520,8 +524,8 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                     {column.cards.length === 0 && (
                       <div className="text-center py-8 text-slate-400">
                         <Target className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">No deals in this stage</p>
-                        <p className="text-xs">Drag deals here or use AI suggestions</p>
+                        <p className="text-sm">{t('no_deals_in_stage') || 'No deals in this stage'}</p>
+                        <p className="text-xs">{t('drag_deals_or_ai') || 'Drag deals here or use AI suggestions'}</p>
                       </div>
                     )}
                   </CardContent>
@@ -537,7 +541,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
-            Pipeline Analytics
+            {t('pipeline_analytics') || 'Pipeline Analytics'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -546,28 +550,28 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
               <div className="text-2xl font-bold text-blue-600">
                 {boardData.columns.reduce((sum, col) => sum + col.totalValue, 0).toLocaleString()}
               </div>
-              <div className="text-sm text-slate-600">Total Pipeline Value</div>
+              <div className="text-sm text-slate-600">{t('total_pipeline_value') || 'Total Pipeline Value'}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
               <div className="text-2xl font-bold text-green-600">
                 {boardData.columns.reduce((sum, col) => sum + col.cards.length, 0)}
               </div>
-              <div className="text-sm text-slate-600">Total Opportunities</div>
+              <div className="text-sm text-slate-600">{t('total_opportunities') || 'Total Opportunities'}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg">
               <div className="text-2xl font-bold text-yellow-600">
-                {Math.round(boardData.columns.reduce((sum, col) => sum + col.avgProbability * col.cards.length, 0) / 
+                {Math.round(boardData.columns.reduce((sum, col) => sum + col.avgProbability * col.cards.length, 0) /
                 boardData.columns.reduce((sum, col) => sum + col.cards.length, 0) || 0)}%
               </div>
-              <div className="text-sm text-slate-600">Avg Win Rate</div>
+              <div className="text-sm text-slate-600">{t('avg_win_rate') || 'Avg Win Rate'}</div>
             </div>
             <div className="text-center p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-lg">
               <div className="text-2xl font-bold text-red-600">
-                {boardData.columns.reduce((count, col) => 
+                {boardData.columns.reduce((count, col) =>
                   count + col.cards.filter(card => card.stagnationDays > 7).length, 0
                 )}
               </div>
-              <div className="text-sm text-slate-600">Stagnant Deals</div>
+              <div className="text-sm text-slate-600">{t('stagnant_deals') || 'Stagnant Deals'}</div>
             </div>
           </div>
         </CardContent>
