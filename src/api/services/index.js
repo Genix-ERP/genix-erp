@@ -21,6 +21,16 @@ export {
 } from './crm';
 export { default as crmService } from './crm';
 
+// Manufacturing Services
+export {
+  workCentersService,
+  productionOrdersService,
+  workOrdersService,
+  qualityChecksService,
+  bomsService
+} from './manufacturing';
+export { default as manufacturingService } from './manufacturing';
+
 // Re-export the API client
 export { default as apiClient } from '../client';
 export { setTokens, clearTokens, getAccessToken, getRefreshToken } from '../client';
