@@ -21,7 +21,11 @@ import {
   LayoutDashboard,
   Box,
   ShoppingCart,
-  ClipboardList
+  ClipboardList,
+  Layers,
+  DollarSign,
+  Bell,
+  Trash2
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -37,6 +41,10 @@ import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
 import InventoryManagement from "@/components/inventory/InventoryManagement";
 import StockCounting from "@/components/inventory/StockCounting";
+import BillOfMaterials from "@/components/inventory/BillOfMaterials";
+import InventoryValuation from "@/components/inventory/InventoryValuation";
+import ReorderRules from "@/components/inventory/ReorderRules";
+import ScrapManagement from "@/components/inventory/ScrapManagement";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -293,6 +301,39 @@ export default function Inventory() {
               <span className="hidden sm:inline">{t('stocktake')}</span>
               <span className="sm:hidden">{t('stocktake')}</span>
             </TabsTrigger>
+
+            <TabsTrigger
+              value="bom"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Layers className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('bom') || 'BOM'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="valuation"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <DollarSign className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('valuation') || 'Valuation'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="reorder-rules"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('reorder_rules') || 'Reorder Rules'}</span>
+              <span className="sm:hidden">{t('rules') || 'Rules'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="scrap"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('scrap') || 'Scrap'}</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -454,6 +495,26 @@ export default function Inventory() {
           {/* Stock Counting Tab */}
           <TabsContent value="counting" className="mt-6">
             <StockCounting />
+          </TabsContent>
+
+          {/* Bill of Materials Tab */}
+          <TabsContent value="bom" className="mt-6">
+            <BillOfMaterials />
+          </TabsContent>
+
+          {/* Inventory Valuation Tab */}
+          <TabsContent value="valuation" className="mt-6">
+            <InventoryValuation />
+          </TabsContent>
+
+          {/* Reorder Rules Tab */}
+          <TabsContent value="reorder-rules" className="mt-6">
+            <ReorderRules />
+          </TabsContent>
+
+          {/* Scrap Management Tab */}
+          <TabsContent value="scrap" className="mt-6">
+            <ScrapManagement />
           </TabsContent>
         </Tabs>
 

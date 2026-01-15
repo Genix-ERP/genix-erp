@@ -10,6 +10,10 @@ const INVENTORY_STORAGE_KEY = 'genix_inventory';
 const STOCK_MOVEMENTS_STORAGE_KEY = 'genix_stock_movements';
 const LOTS_STORAGE_KEY = 'genix_inventory_lots';
 const STOCK_COUNTS_STORAGE_KEY = 'genix_stock_counts';
+const BOMS_STORAGE_KEY = 'genix_boms';
+const BOM_LINES_STORAGE_KEY = 'genix_bom_lines';
+const REORDER_RULES_STORAGE_KEY = 'genix_reorder_rules';
+const SCRAP_ORDERS_STORAGE_KEY = 'genix_scrap_orders';
 
 const InventoryContext = createContext();
 
@@ -380,6 +384,85 @@ const sampleLots = [
   }
 ];
 
+// Sample BOMs (Bill of Materials)
+const sampleBOMs = [
+  {
+    id: 'bom_1',
+    code: 'BOM-DESKTOP-001',
+    name: 'Desktop Computer Assembly',
+    product_id: 'prod_1',
+    bom_type: 'manufacturing',
+    quantity: 1,
+    is_active: true,
+    notes: 'Standard desktop computer assembly BOM',
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample BOM Lines
+const sampleBOMLines = [
+  {
+    id: 'boml_1',
+    bom_id: 'bom_1',
+    component_id: 'prod_2',
+    quantity: 1,
+    unit_of_measure: 'pcs',
+    notes: 'Wireless mouse included',
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample Reorder Rules
+const sampleReorderRules = [
+  {
+    id: 'rr_1',
+    product_id: 'prod_1',
+    warehouse_id: 'wh_1',
+    min_qty: 10,
+    max_qty: 100,
+    reorder_qty: 50,
+    trigger_type: 'min_qty',
+    supplier_id: null,
+    lead_time_days: 7,
+    is_active: true,
+    auto_create_po: false,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'rr_2',
+    product_id: 'prod_2',
+    warehouse_id: 'wh_1',
+    min_qty: 20,
+    max_qty: 200,
+    reorder_qty: 100,
+    trigger_type: 'min_qty',
+    supplier_id: null,
+    lead_time_days: 5,
+    is_active: true,
+    auto_create_po: false,
+    created_at: new Date().toISOString()
+  }
+];
+
+// Sample Scrap Orders
+const sampleScrapOrders = [
+  {
+    id: 'scrap_1',
+    scrap_number: 'SCRAP-2025-001',
+    product_id: 'prod_2',
+    warehouse_id: 'wh_1',
+    quantity: 5,
+    reason: 'damaged',
+    reason_notes: 'Damaged during shipping',
+    scrap_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'completed',
+    scrapped_by: 'John Smith',
+    approved_by: 'Jane Doe',
+    cost_impact: 75,
+    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
+
 // Sample stock counts (inventarizatsiya)
 const sampleStockCounts = [
   {
@@ -425,6 +508,10 @@ export function InventoryProvider({ children }) {
   const [stockMovements, setStockMovements] = useState([]);
   const [lots, setLots] = useState([]);
   const [stockCounts, setStockCounts] = useState([]);
+  const [boms, setBOMs] = useState([]);
+  const [bomLines, setBOMLines] = useState([]);
+  const [reorderRules, setReorderRules] = useState([]);
+  const [scrapOrders, setScrapOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
@@ -448,6 +535,10 @@ export function InventoryProvider({ children }) {
     setStockMovements(getData(STOCK_MOVEMENTS_STORAGE_KEY, sampleStockMovements));
     setLots(getData(LOTS_STORAGE_KEY, sampleLots));
     setStockCounts(getData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
+    setBOMs(getData(BOMS_STORAGE_KEY, sampleBOMs));
+    setBOMLines(getData(BOM_LINES_STORAGE_KEY, sampleBOMLines));
+    setReorderRules(getData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
+    setScrapOrders(getData(SCRAP_ORDERS_STORAGE_KEY, sampleScrapOrders));
 
     // Only initialize localStorage with sample data in demo mode
     if (demoMode) {
@@ -465,6 +556,10 @@ export function InventoryProvider({ children }) {
       initIfEmpty(STOCK_MOVEMENTS_STORAGE_KEY, sampleStockMovements);
       initIfEmpty(LOTS_STORAGE_KEY, sampleLots);
       initIfEmpty(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts);
+      initIfEmpty(BOMS_STORAGE_KEY, sampleBOMs);
+      initIfEmpty(BOM_LINES_STORAGE_KEY, sampleBOMLines);
+      initIfEmpty(REORDER_RULES_STORAGE_KEY, sampleReorderRules);
+      initIfEmpty(SCRAP_ORDERS_STORAGE_KEY, sampleScrapOrders);
     }
   }, [activeCompany]);
 
@@ -1172,6 +1267,258 @@ export function InventoryProvider({ children }) {
     setStockCounts(updated);
   }, [stockCounts, activeCompany]);
 
+  // ================== BILL OF MATERIALS (BOM) ==================
+  const createBOM = useCallback(async (bomData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BOMS_STORAGE_KEY, companyId);
+
+    const newBOM = {
+      id: `bom_${Date.now()}`,
+      code: bomData.code || `BOM-${Date.now()}`,
+      ...bomData,
+      is_active: true,
+      created_at: new Date().toISOString()
+    };
+    const updated = [...boms, newBOM];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBOMs(updated);
+    return newBOM;
+  }, [boms, activeCompany]);
+
+  const updateBOM = useCallback(async (id, bomData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BOMS_STORAGE_KEY, companyId);
+    const updated = boms.map(b => b.id === id ? { ...b, ...bomData } : b);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBOMs(updated);
+  }, [boms, activeCompany]);
+
+  const deleteBOM = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const bomsKey = getStorageKey(BOMS_STORAGE_KEY, companyId);
+    const linesKey = getStorageKey(BOM_LINES_STORAGE_KEY, companyId);
+
+    // Delete BOM
+    const updatedBOMs = boms.filter(b => b.id !== id);
+    localStorage.setItem(bomsKey, JSON.stringify(updatedBOMs));
+    setBOMs(updatedBOMs);
+
+    // Delete associated lines
+    const updatedLines = bomLines.filter(l => l.bom_id !== id);
+    localStorage.setItem(linesKey, JSON.stringify(updatedLines));
+    setBOMLines(updatedLines);
+  }, [boms, bomLines, activeCompany]);
+
+  const createBOMLine = useCallback(async (lineData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BOM_LINES_STORAGE_KEY, companyId);
+
+    const newLine = {
+      id: `boml_${Date.now()}`,
+      ...lineData,
+      created_at: new Date().toISOString()
+    };
+    const updated = [...bomLines, newLine];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBOMLines(updated);
+    return newLine;
+  }, [bomLines, activeCompany]);
+
+  const updateBOMLine = useCallback(async (id, lineData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BOM_LINES_STORAGE_KEY, companyId);
+    const updated = bomLines.map(l => l.id === id ? { ...l, ...lineData } : l);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBOMLines(updated);
+  }, [bomLines, activeCompany]);
+
+  const deleteBOMLine = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BOM_LINES_STORAGE_KEY, companyId);
+    const updated = bomLines.filter(l => l.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBOMLines(updated);
+  }, [bomLines, activeCompany]);
+
+  const getBOMLinesByBOM = useCallback((bomId) => {
+    return bomLines.filter(l => l.bom_id === bomId);
+  }, [bomLines]);
+
+  const calculateBOMCost = useCallback((bomId) => {
+    const lines = getBOMLinesByBOM(bomId);
+    return lines.reduce((total, line) => {
+      const component = products.find(p => p.id === line.component_id);
+      return total + (line.quantity * (component?.cost_price || 0));
+    }, 0);
+  }, [getBOMLinesByBOM, products]);
+
+  // ================== REORDER RULES ==================
+  const createReorderRule = useCallback(async (ruleData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
+
+    const newRule = {
+      id: `rr_${Date.now()}`,
+      ...ruleData,
+      is_active: true,
+      created_at: new Date().toISOString()
+    };
+    const updated = [...reorderRules, newRule];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setReorderRules(updated);
+    return newRule;
+  }, [reorderRules, activeCompany]);
+
+  const updateReorderRule = useCallback(async (id, ruleData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
+    const updated = reorderRules.map(r => r.id === id ? { ...r, ...ruleData } : r);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setReorderRules(updated);
+  }, [reorderRules, activeCompany]);
+
+  const deleteReorderRule = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
+    const updated = reorderRules.filter(r => r.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setReorderRules(updated);
+  }, [reorderRules, activeCompany]);
+
+  const getReorderRulesByProduct = useCallback((productId) => {
+    return reorderRules.filter(r => r.product_id === productId);
+  }, [reorderRules]);
+
+  const checkReorderNeeded = useCallback(() => {
+    const productsNeedingReorder = [];
+
+    reorderRules.filter(r => r.is_active).forEach(rule => {
+      const productInventory = inventory.filter(i =>
+        i.product_id === rule.product_id &&
+        (!rule.warehouse_id || i.warehouse_id === rule.warehouse_id)
+      );
+      const totalStock = productInventory.reduce((sum, i) => sum + i.quantity, 0);
+
+      if (totalStock <= rule.min_qty) {
+        const product = products.find(p => p.id === rule.product_id);
+        productsNeedingReorder.push({
+          ...rule,
+          product,
+          current_stock: totalStock,
+          shortage: rule.min_qty - totalStock,
+          suggested_order: rule.reorder_qty
+        });
+      }
+    });
+
+    return productsNeedingReorder;
+  }, [reorderRules, inventory, products]);
+
+  // ================== SCRAP MANAGEMENT ==================
+  const createScrapOrder = useCallback(async (scrapData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
+    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    const product = products.find(p => p.id === scrapData.product_id);
+    const costImpact = scrapData.quantity * (product?.cost_price || 0);
+
+    const newScrap = {
+      id: `scrap_${Date.now()}`,
+      scrap_number: `SCRAP-${new Date().getFullYear()}-${String(scrapOrders.length + 1).padStart(3, '0')}`,
+      ...scrapData,
+      cost_impact: costImpact,
+      status: 'draft',
+      created_at: new Date().toISOString()
+    };
+    const updated = [...scrapOrders, newScrap];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setScrapOrders(updated);
+    return newScrap;
+  }, [scrapOrders, products, activeCompany]);
+
+  const updateScrapOrder = useCallback(async (id, scrapData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
+    const updated = scrapOrders.map(s => s.id === id ? { ...s, ...scrapData } : s);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setScrapOrders(updated);
+  }, [scrapOrders, activeCompany]);
+
+  const confirmScrapOrder = useCallback(async (id, approvedBy) => {
+    const companyId = activeCompany?.id;
+    const scrapKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
+    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
+    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    const scrap = scrapOrders.find(s => s.id === id);
+    if (!scrap) return;
+
+    // Reduce inventory
+    const updatedInventory = inventory.map(inv => {
+      if (inv.product_id === scrap.product_id && inv.warehouse_id === scrap.warehouse_id) {
+        return { ...inv, quantity: Math.max(0, inv.quantity - scrap.quantity) };
+      }
+      return inv;
+    });
+    localStorage.setItem(inventoryKey, JSON.stringify(updatedInventory));
+    setInventory(updatedInventory);
+
+    // Create scrap movement
+    const movement = {
+      id: `mov_${Date.now()}`,
+      product_id: scrap.product_id,
+      warehouse_id: scrap.warehouse_id,
+      movement_type: 'scrap',
+      quantity: -scrap.quantity,
+      reference: scrap.scrap_number,
+      notes: `Scrapped: ${scrap.reason} - ${scrap.reason_notes || ''}`,
+      created_at: new Date().toISOString()
+    };
+    const updatedMovements = [...stockMovements, movement];
+    localStorage.setItem(movementsKey, JSON.stringify(updatedMovements));
+    setStockMovements(updatedMovements);
+
+    // Update scrap status
+    const updatedScraps = scrapOrders.map(s =>
+      s.id === id
+        ? { ...s, status: 'completed', approved_by: approvedBy, completed_at: new Date().toISOString() }
+        : s
+    );
+    localStorage.setItem(scrapKey, JSON.stringify(updatedScraps));
+    setScrapOrders(updatedScraps);
+  }, [scrapOrders, inventory, stockMovements, activeCompany]);
+
+  const cancelScrapOrder = useCallback(async (id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
+    const updated = scrapOrders.map(s =>
+      s.id === id ? { ...s, status: 'cancelled' } : s
+    );
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setScrapOrders(updated);
+  }, [scrapOrders, activeCompany]);
+
+  const getScrapSummary = useCallback(() => {
+    const completed = scrapOrders.filter(s => s.status === 'completed');
+    const totalCost = completed.reduce((sum, s) => sum + (s.cost_impact || 0), 0);
+    const totalQuantity = completed.reduce((sum, s) => sum + s.quantity, 0);
+
+    const byReason = completed.reduce((acc, s) => {
+      acc[s.reason] = (acc[s.reason] || 0) + s.quantity;
+      return acc;
+    }, {});
+
+    return {
+      totalOrders: completed.length,
+      totalCost,
+      totalQuantity,
+      byReason,
+      pendingOrders: scrapOrders.filter(s => s.status === 'draft').length
+    };
+  }, [scrapOrders]);
+
   // Legacy compatibility - items mapped to products with stock info
   const items = products.map(p => {
     const stockItems = inventory.filter(i => i.product_id === p.id);
@@ -1231,6 +1578,34 @@ export function InventoryProvider({ children }) {
       updateStockCountLine,
       completeStockCount,
       cancelStockCount,
+
+      // Bill of Materials (BOM)
+      boms,
+      bomLines,
+      createBOM,
+      updateBOM,
+      deleteBOM,
+      createBOMLine,
+      updateBOMLine,
+      deleteBOMLine,
+      getBOMLinesByBOM,
+      calculateBOMCost,
+
+      // Reorder Rules
+      reorderRules,
+      createReorderRule,
+      updateReorderRule,
+      deleteReorderRule,
+      getReorderRulesByProduct,
+      checkReorderNeeded,
+
+      // Scrap Management
+      scrapOrders,
+      createScrapOrder,
+      updateScrapOrder,
+      confirmScrapOrder,
+      cancelScrapOrder,
+      getScrapSummary,
 
       // Legacy compatibility
       items,

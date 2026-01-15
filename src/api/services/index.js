@@ -11,6 +11,16 @@ export { default as aiService } from './ai';
 export { default as pbxService } from './pbx';
 export { default as leadsService } from './leads';
 
+// CRM Services
+export {
+  opportunitiesService,
+  pipelineStagesService,
+  activitiesService,
+  tasksService,
+  leadConversionService
+} from './crm';
+export { default as crmService } from './crm';
+
 // Re-export the API client
 export { default as apiClient } from '../client';
 export { setTokens, clearTokens, getAccessToken, getRefreshToken } from '../client';

@@ -16,6 +16,12 @@ const BANK_TRANSACTIONS_KEY = 'genix_bank_transactions';
 const CASH_TRANSACTIONS_KEY = 'genix_cash_transactions';
 const CURRENCIES_KEY = 'genix_currencies';
 const EXCHANGE_RATES_KEY = 'genix_exchange_rates';
+const FISCAL_YEARS_KEY = 'genix_fiscal_years';
+const FISCAL_PERIODS_KEY = 'genix_fiscal_periods';
+const BUDGETS_KEY = 'genix_budgets';
+const BUDGET_LINES_KEY = 'genix_budget_lines';
+const FIXED_ASSETS_KEY = 'genix_fixed_assets';
+const DEPRECIATION_ENTRIES_KEY = 'genix_depreciation_entries';
 
 const FinancialsContext = createContext();
 
@@ -55,19 +61,19 @@ const sampleFinancialTransactions = [
 ];
 
 const sampleAccounts = [
-  { id: 'acc_1', code: '1000', name: 'Cash and Cash Equivalents', type: 'asset', parent_id: null, balance: 50000, is_active: true },
-  { id: 'acc_2', code: '1100', name: 'Cash on Hand', type: 'asset', parent_id: 'acc_1', balance: 5000, is_active: true },
-  { id: 'acc_3', code: '1200', name: 'Bank Accounts', type: 'asset', parent_id: 'acc_1', balance: 45000, is_active: true },
-  { id: 'acc_4', code: '1300', name: 'Accounts Receivable', type: 'asset', parent_id: null, balance: 25000, is_active: true },
-  { id: 'acc_5', code: '2000', name: 'Current Liabilities', type: 'liability', parent_id: null, balance: 15000, is_active: true },
-  { id: 'acc_6', code: '2100', name: 'Accounts Payable', type: 'liability', parent_id: 'acc_5', balance: 10000, is_active: true },
-  { id: 'acc_7', code: '2200', name: 'Taxes Payable', type: 'liability', parent_id: 'acc_5', balance: 5000, is_active: true },
-  { id: 'acc_8', code: '3000', name: 'Equity', type: 'equity', parent_id: null, balance: 100000, is_active: true },
-  { id: 'acc_9', code: '4000', name: 'Revenue', type: 'revenue', parent_id: null, balance: 75000, is_active: true },
-  { id: 'acc_10', code: '5000', name: 'Expenses', type: 'expense', parent_id: null, balance: 35000, is_active: true },
-  { id: 'acc_11', code: '5100', name: 'Salaries Expense', type: 'expense', parent_id: 'acc_10', balance: 20000, is_active: true },
-  { id: 'acc_12', code: '5200', name: 'Rent Expense', type: 'expense', parent_id: 'acc_10', balance: 10000, is_active: true },
-  { id: 'acc_13', code: '5300', name: 'Utilities Expense', type: 'expense', parent_id: 'acc_10', balance: 5000, is_active: true },
+  { id: 'acc_1', code: '1000', name: 'Cash and Cash Equivalents', type: 'asset', internal_type: 'asset_cash', parent_id: null, currency: 'UZS', allow_reconciliation: true, deprecated: false, balance: 50000, is_active: true },
+  { id: 'acc_2', code: '1100', name: 'Cash on Hand', type: 'asset', internal_type: 'asset_cash', parent_id: 'acc_1', currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 5000, is_active: true },
+  { id: 'acc_3', code: '1200', name: 'Bank Accounts', type: 'asset', internal_type: 'asset_cash', parent_id: 'acc_1', currency: 'UZS', allow_reconciliation: true, deprecated: false, balance: 45000, is_active: true },
+  { id: 'acc_4', code: '1300', name: 'Accounts Receivable', type: 'asset', internal_type: 'asset_receivable', parent_id: null, currency: 'UZS', allow_reconciliation: true, deprecated: false, balance: 25000, is_active: true },
+  { id: 'acc_5', code: '2000', name: 'Current Liabilities', type: 'liability', internal_type: 'liability_current', parent_id: null, currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 15000, is_active: true },
+  { id: 'acc_6', code: '2100', name: 'Accounts Payable', type: 'liability', internal_type: 'liability_payable', parent_id: 'acc_5', currency: 'UZS', allow_reconciliation: true, deprecated: false, balance: 10000, is_active: true },
+  { id: 'acc_7', code: '2200', name: 'Taxes Payable', type: 'liability', internal_type: 'liability_current', parent_id: 'acc_5', currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 5000, is_active: true },
+  { id: 'acc_8', code: '3000', name: 'Equity', type: 'equity', internal_type: 'equity', parent_id: null, currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 100000, is_active: true },
+  { id: 'acc_9', code: '4000', name: 'Revenue', type: 'revenue', internal_type: 'income', parent_id: null, currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 75000, is_active: true },
+  { id: 'acc_10', code: '5000', name: 'Expenses', type: 'expense', internal_type: 'expense', parent_id: null, currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 35000, is_active: true },
+  { id: 'acc_11', code: '5100', name: 'Salaries Expense', type: 'expense', internal_type: 'expense', parent_id: 'acc_10', currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 20000, is_active: true },
+  { id: 'acc_12', code: '5200', name: 'Rent Expense', type: 'expense', internal_type: 'expense', parent_id: 'acc_10', currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 10000, is_active: true },
+  { id: 'acc_13', code: '5300', name: 'Utilities Expense', type: 'expense', internal_type: 'expense', parent_id: 'acc_10', currency: 'UZS', allow_reconciliation: false, deprecated: false, balance: 5000, is_active: true },
 ];
 
 const samplePayments = [
@@ -119,6 +125,41 @@ const sampleExchangeRates = [
   { id: 'er_5', from_currency: 'EUR', to_currency: 'UZS', rate: 13700, date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], source: 'CBU' },
 ];
 
+const sampleFiscalYears = [
+  { id: 'fy_1', code: 'FY2025', name: 'Fiscal Year 2025', start_date: '2025-01-01', end_date: '2025-12-31', status: 'open', created_at: new Date().toISOString() },
+  { id: 'fy_2', code: 'FY2024', name: 'Fiscal Year 2024', start_date: '2024-01-01', end_date: '2024-12-31', status: 'closed', created_at: new Date().toISOString() },
+];
+
+const sampleFiscalPeriods = [
+  { id: 'fp_1', fiscal_year_id: 'fy_1', code: 'FY2025-P01', name: 'January 2025', period_number: 1, start_date: '2025-01-01', end_date: '2025-01-31', status: 'closed' },
+  { id: 'fp_2', fiscal_year_id: 'fy_1', code: 'FY2025-P02', name: 'February 2025', period_number: 2, start_date: '2025-02-01', end_date: '2025-02-28', status: 'open' },
+  { id: 'fp_3', fiscal_year_id: 'fy_1', code: 'FY2025-P03', name: 'March 2025', period_number: 3, start_date: '2025-03-01', end_date: '2025-03-31', status: 'open' },
+];
+
+const sampleBudgets = [
+  { id: 'bud_1', code: 'BUD-2025-EXP', name: 'Operating Expenses 2025', budget_type: 'expense', start_date: '2025-01-01', end_date: '2025-12-31', total_amount: 500000000, status: 'active', description: 'Annual operating expense budget', created_at: new Date().toISOString() },
+  { id: 'bud_2', code: 'BUD-2025-REV', name: 'Revenue Budget 2025', budget_type: 'revenue', start_date: '2025-01-01', end_date: '2025-12-31', total_amount: 1000000000, status: 'active', description: 'Annual revenue target', created_at: new Date().toISOString() },
+];
+
+const sampleBudgetLines = [
+  { id: 'bl_1', budget_id: 'bud_1', account_id: 'acc_11', planned_amount: 200000000, actual_amount: 45000000, notes: 'Monthly salaries' },
+  { id: 'bl_2', budget_id: 'bud_1', account_id: 'acc_12', planned_amount: 100000000, actual_amount: 20000000, notes: 'Office rent' },
+  { id: 'bl_3', budget_id: 'bud_1', account_id: 'acc_13', planned_amount: 50000000, actual_amount: 8000000, notes: 'Utilities' },
+];
+
+const sampleFixedAssets = [
+  { id: 'fa_1', code: 'FA-001', name: 'Office Building', category: 'buildings', acquisition_date: '2020-01-15', acquisition_cost: 5000000000, salvage_value: 500000000, useful_life_months: 480, depreciation_method: 'straight_line', accumulated_depreciation: 468750000, status: 'active', location: 'Tashkent HQ', serial_number: '' },
+  { id: 'fa_2', code: 'FA-002', name: 'Company Vehicle - Toyota Camry', category: 'vehicles', acquisition_date: '2023-06-01', acquisition_cost: 350000000, salvage_value: 50000000, useful_life_months: 60, depreciation_method: 'straight_line', accumulated_depreciation: 95000000, status: 'active', location: 'Garage', serial_number: 'VIN123456789' },
+  { id: 'fa_3', code: 'FA-003', name: 'Server Equipment', category: 'computers', acquisition_date: '2024-01-10', acquisition_cost: 80000000, salvage_value: 5000000, useful_life_months: 36, depreciation_method: 'straight_line', accumulated_depreciation: 25000000, status: 'active', location: 'Server Room', serial_number: 'SRV-2024-001' },
+  { id: 'fa_4', code: 'FA-004', name: 'Office Furniture Set', category: 'furniture', acquisition_date: '2022-03-20', acquisition_cost: 45000000, salvage_value: 0, useful_life_months: 84, depreciation_method: 'straight_line', accumulated_depreciation: 18214286, status: 'active', location: 'Main Office', serial_number: '' },
+];
+
+const sampleDepreciationEntries = [
+  { id: 'de_1', asset_id: 'fa_1', period: '2025-01', amount: 9375000, depreciation_date: '2025-01-31', method: 'straight_line' },
+  { id: 'de_2', asset_id: 'fa_2', period: '2025-01', amount: 5000000, depreciation_date: '2025-01-31', method: 'straight_line' },
+  { id: 'de_3', asset_id: 'fa_3', period: '2025-01', amount: 2083333, depreciation_date: '2025-01-31', method: 'straight_line' },
+];
+
 export function FinancialsProvider({ children }) {
   const { activeCompany } = useCompany();
   const [journalEntries, setJournalEntries] = useState([]);
@@ -134,6 +175,12 @@ export function FinancialsProvider({ children }) {
   const [cashTransactions, setCashTransactions] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [fiscalPeriods, setFiscalPeriods] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [budgetLines, setBudgetLines] = useState([]);
+  const [fixedAssets, setFixedAssets] = useState([]);
+  const [depreciationEntries, setDepreciationEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
@@ -162,6 +209,13 @@ export function FinancialsProvider({ children }) {
     setCashTransactions(getData(CASH_TRANSACTIONS_KEY, sampleCashTransactions));
     setCurrencies(getData(CURRENCIES_KEY, sampleCurrencies));
     setExchangeRates(getData(EXCHANGE_RATES_KEY, sampleExchangeRates));
+    // New ERP modules
+    setFiscalYears(getData(FISCAL_YEARS_KEY, sampleFiscalYears));
+    setFiscalPeriods(getData(FISCAL_PERIODS_KEY, sampleFiscalPeriods));
+    setBudgets(getData(BUDGETS_KEY, sampleBudgets));
+    setBudgetLines(getData(BUDGET_LINES_KEY, sampleBudgetLines));
+    setFixedAssets(getData(FIXED_ASSETS_KEY, sampleFixedAssets));
+    setDepreciationEntries(getData(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries));
 
     // Only initialize localStorage with sample data in demo mode
     if (demoMode) {
@@ -185,6 +239,13 @@ export function FinancialsProvider({ children }) {
       initIfEmpty(CASH_TRANSACTIONS_KEY, sampleCashTransactions);
       initIfEmpty(CURRENCIES_KEY, sampleCurrencies);
       initIfEmpty(EXCHANGE_RATES_KEY, sampleExchangeRates);
+      // New ERP modules
+      initIfEmpty(FISCAL_YEARS_KEY, sampleFiscalYears);
+      initIfEmpty(FISCAL_PERIODS_KEY, sampleFiscalPeriods);
+      initIfEmpty(BUDGETS_KEY, sampleBudgets);
+      initIfEmpty(BUDGET_LINES_KEY, sampleBudgetLines);
+      initIfEmpty(FIXED_ASSETS_KEY, sampleFixedAssets);
+      initIfEmpty(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries);
     }
   }, [activeCompany]);
 
@@ -792,6 +853,341 @@ export function FinancialsProvider({ children }) {
     return null;
   }, [backendAvailable]);
 
+  // ==================== FISCAL YEARS CRUD ====================
+  const createFiscalYear = useCallback((yearData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
+    const newYear = { id: `fy_${Date.now()}`, ...yearData, status: 'open', created_at: new Date().toISOString() };
+    const updated = [newYear, ...fiscalYears];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalYears(updated);
+    return newYear;
+  }, [fiscalYears, activeCompany]);
+
+  const updateFiscalYear = useCallback((id, yearData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
+    const updated = fiscalYears.map(fy => fy.id === id ? { ...fy, ...yearData } : fy);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalYears(updated);
+  }, [fiscalYears, activeCompany]);
+
+  const closeFiscalYear = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
+    const periodsKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    // Close all periods in this fiscal year
+    const updatedPeriods = fiscalPeriods.map(fp =>
+      fp.fiscal_year_id === id ? { ...fp, status: 'closed' } : fp
+    );
+    localStorage.setItem(periodsKey, JSON.stringify(updatedPeriods));
+    setFiscalPeriods(updatedPeriods);
+    // Close the fiscal year
+    const updated = fiscalYears.map(fy => fy.id === id ? { ...fy, status: 'closed' } : fy);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalYears(updated);
+  }, [fiscalYears, fiscalPeriods, activeCompany]);
+
+  const deleteFiscalYear = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
+    const periodsKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    // Delete all periods in this fiscal year
+    const updatedPeriods = fiscalPeriods.filter(fp => fp.fiscal_year_id !== id);
+    localStorage.setItem(periodsKey, JSON.stringify(updatedPeriods));
+    setFiscalPeriods(updatedPeriods);
+    // Delete the fiscal year
+    const updated = fiscalYears.filter(fy => fy.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalYears(updated);
+  }, [fiscalYears, fiscalPeriods, activeCompany]);
+
+  // ==================== FISCAL PERIODS CRUD ====================
+  const createFiscalPeriod = useCallback((periodData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    const newPeriod = { id: `fp_${Date.now()}`, ...periodData, status: 'open' };
+    const updated = [...fiscalPeriods, newPeriod];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalPeriods(updated);
+    return newPeriod;
+  }, [fiscalPeriods, activeCompany]);
+
+  const createFiscalPeriods = useCallback((periods) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    const newPeriods = periods.map((p, idx) => ({ id: `fp_${Date.now()}_${idx}`, ...p, status: 'open' }));
+    const updated = [...fiscalPeriods, ...newPeriods];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalPeriods(updated);
+    return newPeriods;
+  }, [fiscalPeriods, activeCompany]);
+
+  const closeFiscalPeriod = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    const updated = fiscalPeriods.map(fp => fp.id === id ? { ...fp, status: 'closed' } : fp);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalPeriods(updated);
+  }, [fiscalPeriods, activeCompany]);
+
+  const reopenFiscalPeriod = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
+    const updated = fiscalPeriods.map(fp => fp.id === id ? { ...fp, status: 'open' } : fp);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFiscalPeriods(updated);
+  }, [fiscalPeriods, activeCompany]);
+
+  const getFiscalPeriodsByYear = useCallback((fiscalYearId) => {
+    return fiscalPeriods.filter(fp => fp.fiscal_year_id === fiscalYearId)
+      .sort((a, b) => a.period_number - b.period_number);
+  }, [fiscalPeriods]);
+
+  // ==================== BUDGETS CRUD ====================
+  const createBudget = useCallback((budgetData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
+    const newBudget = { id: `bud_${Date.now()}`, ...budgetData, status: 'draft', created_at: new Date().toISOString() };
+    const updated = [newBudget, ...budgets];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgets(updated);
+    return newBudget;
+  }, [budgets, activeCompany]);
+
+  const updateBudget = useCallback((id, budgetData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
+    const updated = budgets.map(b => b.id === id ? { ...b, ...budgetData } : b);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgets(updated);
+  }, [budgets, activeCompany]);
+
+  const deleteBudget = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
+    const linesKey = getStorageKey(BUDGET_LINES_KEY, companyId);
+    // Delete all budget lines
+    const updatedLines = budgetLines.filter(bl => bl.budget_id !== id);
+    localStorage.setItem(linesKey, JSON.stringify(updatedLines));
+    setBudgetLines(updatedLines);
+    // Delete the budget
+    const updated = budgets.filter(b => b.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgets(updated);
+  }, [budgets, budgetLines, activeCompany]);
+
+  const activateBudget = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
+    const updated = budgets.map(b => b.id === id ? { ...b, status: 'active' } : b);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgets(updated);
+  }, [budgets, activeCompany]);
+
+  // ==================== BUDGET LINES CRUD ====================
+  const createBudgetLine = useCallback((lineData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
+    const newLine = { id: `bl_${Date.now()}`, ...lineData, actual_amount: 0 };
+    const updated = [...budgetLines, newLine];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgetLines(updated);
+    return newLine;
+  }, [budgetLines, activeCompany]);
+
+  const updateBudgetLine = useCallback((id, lineData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
+    const updated = budgetLines.map(bl => bl.id === id ? { ...bl, ...lineData } : bl);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgetLines(updated);
+  }, [budgetLines, activeCompany]);
+
+  const deleteBudgetLine = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
+    const updated = budgetLines.filter(bl => bl.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setBudgetLines(updated);
+  }, [budgetLines, activeCompany]);
+
+  const getBudgetLinesByBudget = useCallback((budgetId) => {
+    return budgetLines.filter(bl => bl.budget_id === budgetId);
+  }, [budgetLines]);
+
+  const getBudgetVariance = useCallback((budgetId) => {
+    const lines = budgetLines.filter(bl => bl.budget_id === budgetId);
+    const totalPlanned = lines.reduce((sum, l) => sum + (l.planned_amount || 0), 0);
+    const totalActual = lines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
+    return {
+      planned: totalPlanned,
+      actual: totalActual,
+      variance: totalPlanned - totalActual,
+      variancePercent: totalPlanned > 0 ? ((totalPlanned - totalActual) / totalPlanned) * 100 : 0,
+      usagePercent: totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0
+    };
+  }, [budgetLines]);
+
+  // ==================== FIXED ASSETS CRUD ====================
+  const createFixedAsset = useCallback((assetData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+    const newAsset = {
+      id: `fa_${Date.now()}`,
+      code: `FA-${String(fixedAssets.length + 1).padStart(3, '0')}`,
+      ...assetData,
+      accumulated_depreciation: 0,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+    const updated = [newAsset, ...fixedAssets];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFixedAssets(updated);
+    return newAsset;
+  }, [fixedAssets, activeCompany]);
+
+  const updateFixedAsset = useCallback((id, assetData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+    const updated = fixedAssets.map(fa => fa.id === id ? { ...fa, ...assetData } : fa);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFixedAssets(updated);
+  }, [fixedAssets, activeCompany]);
+
+  const deleteFixedAsset = useCallback((id) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+    const depKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
+    // Delete depreciation entries
+    const updatedDep = depreciationEntries.filter(de => de.asset_id !== id);
+    localStorage.setItem(depKey, JSON.stringify(updatedDep));
+    setDepreciationEntries(updatedDep);
+    // Delete the asset
+    const updated = fixedAssets.filter(fa => fa.id !== id);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFixedAssets(updated);
+  }, [fixedAssets, depreciationEntries, activeCompany]);
+
+  const disposeFixedAsset = useCallback((id, disposalData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+    const updated = fixedAssets.map(fa => fa.id === id ? {
+      ...fa,
+      status: 'disposed',
+      disposal_date: disposalData.disposal_date,
+      disposal_amount: disposalData.disposal_amount,
+      disposal_reason: disposalData.reason
+    } : fa);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setFixedAssets(updated);
+  }, [fixedAssets, activeCompany]);
+
+  // ==================== DEPRECIATION ENTRIES CRUD ====================
+  const createDepreciationEntry = useCallback((entryData) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
+    const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+    const newEntry = { id: `de_${Date.now()}`, ...entryData, created_at: new Date().toISOString() };
+    const updatedEntries = [...depreciationEntries, newEntry];
+    localStorage.setItem(storageKey, JSON.stringify(updatedEntries));
+    setDepreciationEntries(updatedEntries);
+    // Update asset accumulated depreciation
+    const updatedAssets = fixedAssets.map(fa =>
+      fa.id === entryData.asset_id
+        ? { ...fa, accumulated_depreciation: (fa.accumulated_depreciation || 0) + entryData.amount }
+        : fa
+    );
+    localStorage.setItem(assetsKey, JSON.stringify(updatedAssets));
+    setFixedAssets(updatedAssets);
+    return newEntry;
+  }, [depreciationEntries, fixedAssets, activeCompany]);
+
+  const getDepreciationEntriesByAsset = useCallback((assetId) => {
+    return depreciationEntries.filter(de => de.asset_id === assetId)
+      .sort((a, b) => new Date(b.depreciation_date) - new Date(a.depreciation_date));
+  }, [depreciationEntries]);
+
+  const calculateMonthlyDepreciation = useCallback((asset) => {
+    if (!asset || asset.status !== 'active') return 0;
+    const depreciableAmount = asset.acquisition_cost - (asset.salvage_value || 0);
+    const remainingValue = depreciableAmount - (asset.accumulated_depreciation || 0);
+    if (remainingValue <= 0) return 0;
+
+    switch (asset.depreciation_method) {
+      case 'straight_line':
+        return depreciableAmount / asset.useful_life_months;
+      case 'declining_balance': {
+        const rate = 1 / asset.useful_life_months;
+        const currentValue = asset.acquisition_cost - (asset.accumulated_depreciation || 0);
+        return Math.min(currentValue * rate, remainingValue);
+      }
+      case 'double_declining': {
+        const rate = 2 / asset.useful_life_months;
+        const currentValue = asset.acquisition_cost - (asset.accumulated_depreciation || 0);
+        return Math.min(currentValue * rate, remainingValue);
+      }
+      case 'sum_of_years': {
+        const totalMonths = asset.useful_life_months;
+        const sumOfYears = (totalMonths * (totalMonths + 1)) / 2;
+        const monthsUsed = Math.floor((new Date() - new Date(asset.acquisition_date)) / (1000 * 60 * 60 * 24 * 30));
+        const remainingMonths = Math.max(totalMonths - monthsUsed, 1);
+        return (depreciableAmount * remainingMonths) / sumOfYears;
+      }
+      default:
+        return depreciableAmount / asset.useful_life_months;
+    }
+  }, []);
+
+  const runDepreciationForPeriod = useCallback((period) => {
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
+    const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
+
+    const activeAssets = fixedAssets.filter(fa => fa.status === 'active');
+    const newEntries = [];
+    const assetUpdates = {};
+
+    activeAssets.forEach(asset => {
+      // Check if depreciation already exists for this period
+      const existingEntry = depreciationEntries.find(
+        de => de.asset_id === asset.id && de.period === period
+      );
+      if (existingEntry) return;
+
+      const amount = calculateMonthlyDepreciation(asset);
+      if (amount > 0) {
+        const entry = {
+          id: `de_${Date.now()}_${asset.id}`,
+          asset_id: asset.id,
+          period: period,
+          amount: amount,
+          depreciation_date: new Date().toISOString().split('T')[0],
+          method: asset.depreciation_method,
+          created_at: new Date().toISOString()
+        };
+        newEntries.push(entry);
+        assetUpdates[asset.id] = (asset.accumulated_depreciation || 0) + amount;
+      }
+    });
+
+    if (newEntries.length > 0) {
+      const updatedEntries = [...depreciationEntries, ...newEntries];
+      localStorage.setItem(storageKey, JSON.stringify(updatedEntries));
+      setDepreciationEntries(updatedEntries);
+
+      const updatedAssets = fixedAssets.map(fa =>
+        assetUpdates[fa.id] !== undefined
+          ? { ...fa, accumulated_depreciation: assetUpdates[fa.id] }
+          : fa
+      );
+      localStorage.setItem(assetsKey, JSON.stringify(updatedAssets));
+      setFixedAssets(updatedAssets);
+    }
+
+    return newEntries;
+  }, [fixedAssets, depreciationEntries, calculateMonthlyDepreciation, activeCompany]);
+
   return (
     <FinancialsContext.Provider value={{
       journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
@@ -810,6 +1206,15 @@ export function FinancialsProvider({ children }) {
       vendorBills, createVendorBill, updateVendorBill, listVendorBills,
       customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices,
       financialTransactions, listFinancialTransactions,
+      // Fiscal Years & Periods
+      fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear,
+      fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear,
+      // Budgets & Budget Lines
+      budgets, createBudget, updateBudget, deleteBudget, activateBudget,
+      budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance,
+      // Fixed Assets & Depreciation
+      fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset,
+      depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
       // Reports
       getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
       isLoading, backendAvailable, error, refreshData: loadData
