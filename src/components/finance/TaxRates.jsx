@@ -320,18 +320,18 @@ export default function TaxRates() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">Code</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Name</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Type</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('code') || 'Code'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('name')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('type') || 'Type'}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Percent className="w-4 h-4" />
-                        Rate
+                        {t('rate') || 'Rate'}
                       </div>
                     </TableHead>
-                    <TableHead className="font-semibold text-slate-700">Compound</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Status</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">Actions</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('compound') || 'Compound'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -356,7 +356,7 @@ export default function TaxRates() {
                         <TableCell>
                           <Badge className={`${getTaxTypeColor(taxRate.tax_type)} flex items-center gap-1 w-fit`}>
                             <TypeIcon className="w-3 h-3" />
-                            {taxRate.tax_type === 'sales' ? 'Sales' : 'Purchase'}
+                            {taxRate.tax_type === 'sales' ? (t('sales') || 'Sales') : (t('purchase') || 'Purchase')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right font-bold text-lg text-slate-900 tabular-nums">
@@ -374,7 +374,7 @@ export default function TaxRates() {
                             ? 'bg-green-100 text-green-800 border-green-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                           }>
-                            {taxRate.is_active ? 'Active' : 'Inactive'}
+                            {taxRate.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -413,17 +413,17 @@ export default function TaxRates() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Percent className="w-5 h-5 text-[var(--genix-blue)]" />
-              New Tax Rate
+              {t('new_tax_rate') || 'New Tax Rate'}
             </DialogTitle>
             <DialogDescription>
-              Create a new tax rate for sales or purchases
+              {t('create_new_tax_rate_for_sales') || 'Create a new tax rate for sales or purchases'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Code *
+                  {t('code') || 'Code'} *
                 </label>
                 <Input
                   placeholder="e.g., VAT20"
@@ -434,7 +434,7 @@ export default function TaxRates() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Rate (%) *
+                  {t('rate_percent') || 'Rate (%)'} *
                 </label>
                 <div className="relative">
                   <Input
@@ -452,7 +452,7 @@ export default function TaxRates() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Name *
+                {t('name')} *
               </label>
               <Input
                 placeholder="e.g., VAT 20%"
@@ -464,7 +464,7 @@ export default function TaxRates() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Tax Type *
+                {t('tax_type') || 'Tax Type'} *
               </label>
               <Select
                 value={formData.tax_type}
@@ -477,13 +477,13 @@ export default function TaxRates() {
                   <SelectItem value="sales">
                     <div className="flex items-center gap-2">
                       <ShoppingCart className="w-4 h-4 text-blue-600" />
-                      Sales Tax
+                      {t('sales_tax') || 'Sales Tax'}
                     </div>
                   </SelectItem>
                   <SelectItem value="purchase">
                     <div className="flex items-center gap-2">
                       <Package className="w-4 h-4 text-purple-600" />
-                      Purchase Tax
+                      {t('purchase_tax') || 'Purchase Tax'}
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -492,10 +492,10 @@ export default function TaxRates() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Description
+                {t('description')}
               </label>
               <Input
-                placeholder="Optional description"
+                placeholder={t('optional') || 'Optional description'}
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
               />
@@ -503,8 +503,8 @@ export default function TaxRates() {
 
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-slate-700">Compound Tax</p>
-                <p className="text-xs text-slate-500">Apply on top of other taxes</p>
+                <p className="text-sm font-medium text-slate-700">{t('compound_tax') || 'Compound Tax'}</p>
+                <p className="text-xs text-slate-500">{t('apply_on_top') || 'Apply on top of other taxes'}</p>
               </div>
               <Switch
                 checked={formData.is_compound}
@@ -514,8 +514,8 @@ export default function TaxRates() {
 
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-slate-700">Active</p>
-                <p className="text-xs text-slate-500">Can be used in transactions</p>
+                <p className="text-sm font-medium text-slate-700">{t('active') || 'Active'}</p>
+                <p className="text-xs text-slate-500">{t('can_be_used_in_transactions') || 'Can be used in transactions'}</p>
               </div>
               <Switch
                 checked={formData.is_active}
@@ -530,14 +530,14 @@ export default function TaxRates() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleCreate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !formData.name || !formData.code || !formData.rate}
               >
-                {isSaving ? 'Saving...' : 'Create Tax Rate'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('create_tax_rate') || 'Create Tax Rate')}
               </Button>
             </div>
           </div>
@@ -550,14 +550,14 @@ export default function TaxRates() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Pencil className="w-5 h-5 text-[var(--genix-blue)]" />
-              Edit Tax Rate
+              {t('edit_tax_rate') || 'Edit Tax Rate'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Code *
+                  {t('code') || 'Code'} *
                 </label>
                 <Input
                   placeholder="e.g., VAT20"
@@ -568,7 +568,7 @@ export default function TaxRates() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Rate (%) *
+                  {t('rate_percent') || 'Rate (%)'} *
                 </label>
                 <div className="relative">
                   <Input
@@ -586,7 +586,7 @@ export default function TaxRates() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Name *
+                {t('name')} *
               </label>
               <Input
                 placeholder="e.g., VAT 20%"
@@ -598,7 +598,7 @@ export default function TaxRates() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Tax Type *
+                {t('tax_type') || 'Tax Type'} *
               </label>
               <Select
                 value={formData.tax_type}
@@ -608,18 +608,18 @@ export default function TaxRates() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sales">Sales Tax</SelectItem>
-                  <SelectItem value="purchase">Purchase Tax</SelectItem>
+                  <SelectItem value="sales">{t('sales_tax') || 'Sales Tax'}</SelectItem>
+                  <SelectItem value="purchase">{t('purchase_tax') || 'Purchase Tax'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                Description
+                {t('description')}
               </label>
               <Input
-                placeholder="Optional description"
+                placeholder={t('optional') || 'Optional description'}
                 value={formData.description}
                 onChange={(e) => setFormData({...formData, description: e.target.value})}
               />
@@ -627,8 +627,8 @@ export default function TaxRates() {
 
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-slate-700">Compound Tax</p>
-                <p className="text-xs text-slate-500">Apply on top of other taxes</p>
+                <p className="text-sm font-medium text-slate-700">{t('compound_tax') || 'Compound Tax'}</p>
+                <p className="text-xs text-slate-500">{t('apply_on_top') || 'Apply on top of other taxes'}</p>
               </div>
               <Switch
                 checked={formData.is_compound}
@@ -638,8 +638,8 @@ export default function TaxRates() {
 
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-slate-700">Active</p>
-                <p className="text-xs text-slate-500">Can be used in transactions</p>
+                <p className="text-sm font-medium text-slate-700">{t('active') || 'Active'}</p>
+                <p className="text-xs text-slate-500">{t('can_be_used_in_transactions') || 'Can be used in transactions'}</p>
               </div>
               <Switch
                 checked={formData.is_active}
@@ -654,14 +654,14 @@ export default function TaxRates() {
                 className="flex-1"
                 disabled={isSaving}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleUpdate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={isSaving || !formData.name || !formData.code || !formData.rate}
               >
-                {isSaving ? 'Saving...' : 'Update Tax Rate'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('update_tax_rate') || 'Update Tax Rate')}
               </Button>
             </div>
           </div>
@@ -674,20 +674,20 @@ export default function TaxRates() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
-              Delete Tax Rate
+              {t('delete_tax_rate') || 'Delete Tax Rate'}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="text-slate-600 mb-4">
-              Are you sure you want to delete the tax rate{' '}
+              {t('confirm_delete_tax_rate') || 'Are you sure you want to delete the tax rate'}{' '}
               <span className="font-semibold text-slate-900">"{selectedTaxRate?.name}"</span>?
-              This action cannot be undone.
+              {' '}{t('this_action_cannot_be_undone') || 'This action cannot be undone.'}
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">
-                  Deleting this tax rate may affect existing transactions that use it.
+                  {t('delete_tax_warning') || 'Deleting this tax rate may affect existing transactions that use it.'}
                 </p>
               </div>
             </div>
@@ -697,14 +697,14 @@ export default function TaxRates() {
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1"
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleDelete}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {t('delete')}
               </Button>
             </div>
           </div>

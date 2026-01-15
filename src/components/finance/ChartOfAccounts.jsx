@@ -417,12 +417,12 @@ export default function ChartOfAccounts() {
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
-              <Select value={formData.parent_id} onValueChange={(v) => setFormData({ ...formData, parent_id: v })}>
+              <Select value={formData.parent_id || 'none'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === 'none' ? '' : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('none') || 'None (Root Account)'}</SelectItem>
+                  <SelectItem value="none">{t('none') || 'None (Root Account)'}</SelectItem>
                   {accounts.filter(a => a.type === formData.type).map(acc => (
                     <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
                   ))}
@@ -493,12 +493,12 @@ export default function ChartOfAccounts() {
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_account') || 'Parent Account'}</label>
-              <Select value={formData.parent_id} onValueChange={(v) => setFormData({ ...formData, parent_id: v })}>
+              <Select value={formData.parent_id || 'none'} onValueChange={(v) => setFormData({ ...formData, parent_id: v === 'none' ? '' : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_parent') || 'Select parent (optional)'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('none') || 'None (Root Account)'}</SelectItem>
+                  <SelectItem value="none">{t('none') || 'None (Root Account)'}</SelectItem>
                   {accounts.filter(a => a.type === formData.type && a.id !== selectedAccount?.id).map(acc => (
                     <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
                   ))}

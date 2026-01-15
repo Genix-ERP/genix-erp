@@ -167,9 +167,9 @@ export default function BankReconciliation() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">Bank Hisoblar</p>
+                <p className="text-sm text-blue-600 font-medium">{t('bank_accounts') || 'Bank Accounts'}</p>
                 <p className="text-2xl font-bold text-blue-800">{accountSummary.totalAccounts}</p>
-                <p className="text-xs text-blue-500">{accountSummary.activeAccounts} faol</p>
+                <p className="text-xs text-blue-500">{accountSummary.activeAccounts} {t('active_accounts') || 'active'}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
                 <Landmark className="w-6 h-6 text-blue-600" />
@@ -182,7 +182,7 @@ export default function BankReconciliation() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-green-600 font-medium">UZS Balans</p>
+                <p className="text-sm text-green-600 font-medium">{t('uzs_balance') || 'UZS Balance'}</p>
                 <p className="text-2xl font-bold text-green-800">{formatCurrency(accountSummary.totalBalanceUZS, 'UZS')}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
@@ -196,7 +196,7 @@ export default function BankReconciliation() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-purple-600 font-medium">USD Balans</p>
+                <p className="text-sm text-purple-600 font-medium">{t('usd_balance') || 'USD Balance'}</p>
                 <p className="text-2xl font-bold text-purple-800">{formatCurrency(accountSummary.totalBalanceUSD, 'USD')}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
@@ -210,9 +210,9 @@ export default function BankReconciliation() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-orange-600 font-medium">Tasdiqlanmagan</p>
+                <p className="text-sm text-orange-600 font-medium">{t('unreconciled') || 'Unreconciled'}</p>
                 <p className="text-2xl font-bold text-orange-800">{transactionSummary.unreconciled}</p>
-                <p className="text-xs text-orange-500">tranzaksiyalar</p>
+                <p className="text-xs text-orange-500">{t('transactions_count') || 'transactions'}</p>
               </div>
               <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-orange-600" />
@@ -228,11 +228,11 @@ export default function BankReconciliation() {
           <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200">
             <TabsTrigger value="accounts" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <Landmark className="w-4 h-4 mr-2" />
-              Bank Hisoblar
+              {t('bank_accounts') || 'Bank Accounts'}
             </TabsTrigger>
             <TabsTrigger value="transactions" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
               <RefreshCw className="w-4 h-4 mr-2" />
-              Tranzaksiyalar
+              {t('transactions') || 'Transactions'}
             </TabsTrigger>
           </TabsList>
 
@@ -243,7 +243,7 @@ export default function BankReconciliation() {
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Yangi Hisob
+                {t('new_account') || 'New Account'}
               </Button>
             )}
             {activeTab === 'transactions' && selectedBankAccount && (
@@ -252,7 +252,7 @@ export default function BankReconciliation() {
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Yangi Tranzaksiya
+                {t('new_transaction') || 'New Transaction'}
               </Button>
             )}
           </div>
@@ -265,14 +265,14 @@ export default function BankReconciliation() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Hisob nomi</TableHead>
-                    <TableHead>Bank</TableHead>
-                    <TableHead>Hisob raqami</TableHead>
-                    <TableHead>Valyuta</TableHead>
-                    <TableHead>Balans</TableHead>
-                    <TableHead>Oxirgi solishtirish</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead className="text-right">Amallar</TableHead>
+                    <TableHead>{t('account_name') || 'Account Name'}</TableHead>
+                    <TableHead>{t('bank') || 'Bank'}</TableHead>
+                    <TableHead>{t('account_number') || 'Account Number'}</TableHead>
+                    <TableHead>{t('currency') || 'Currency'}</TableHead>
+                    <TableHead>{t('balance') || 'Balance'}</TableHead>
+                    <TableHead>{t('last_reconciliation') || 'Last Reconciliation'}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead className="text-right">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -304,7 +304,7 @@ export default function BankReconciliation() {
                       </TableCell>
                       <TableCell>
                         <Badge className={account.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                          {account.is_active ? 'Faol' : 'Nofaol'}
+                          {account.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -317,7 +317,7 @@ export default function BankReconciliation() {
                   {bankAccounts.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                        Bank hisoblar mavjud emas
+                        {t('no_bank_accounts') || 'No bank accounts'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -341,19 +341,19 @@ export default function BankReconciliation() {
                     </div>
                     <div className="flex gap-4">
                       <div className="text-center">
-                        <p className="text-xs text-slate-500">Balans</p>
+                        <p className="text-xs text-slate-500">{t('balance') || 'Balance'}</p>
                         <p className="text-lg font-bold text-green-600">
                           {formatCurrency(selectedBankAccount.balance, selectedBankAccount.currency)}
                         </p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-slate-500">Kirim</p>
+                        <p className="text-xs text-slate-500">{t('income') || 'Income'}</p>
                         <p className="text-lg font-bold text-blue-600">
                           {formatCurrency(transactionSummary.totalCredits, selectedBankAccount.currency)}
                         </p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-slate-500">Chiqim</p>
+                        <p className="text-xs text-slate-500">{t('expense') || 'Expense'}</p>
                         <p className="text-lg font-bold text-red-600">
                           {formatCurrency(transactionSummary.totalDebits, selectedBankAccount.currency)}
                         </p>
@@ -368,7 +368,7 @@ export default function BankReconciliation() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
-                    placeholder="Tranzaksiya qidirish..."
+                    placeholder={t('search_transactions') || 'Search transactions...'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -376,12 +376,12 @@ export default function BankReconciliation() {
                 </div>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Holat bo'yicha" />
+                    <SelectValue placeholder={t('filter_by_status') || 'Filter by status'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Barchasi</SelectItem>
-                    <SelectItem value="reconciled">Tasdiqlangan</SelectItem>
-                    <SelectItem value="unreconciled">Tasdiqlanmagan</SelectItem>
+                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                    <SelectItem value="reconciled">{t('reconciled') || 'Reconciled'}</SelectItem>
+                    <SelectItem value="unreconciled">{t('unreconciled') || 'Unreconciled'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -392,13 +392,13 @@ export default function BankReconciliation() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Sana</TableHead>
-                        <TableHead>Tavsif</TableHead>
-                        <TableHead>Referens</TableHead>
-                        <TableHead>Turi</TableHead>
-                        <TableHead className="text-right">Summa</TableHead>
-                        <TableHead>Holat</TableHead>
-                        <TableHead className="text-right">Amallar</TableHead>
+                        <TableHead>{t('date') || 'Date'}</TableHead>
+                        <TableHead>{t('description')}</TableHead>
+                        <TableHead>{t('reference')}</TableHead>
+                        <TableHead>{t('type') || 'Type'}</TableHead>
+                        <TableHead className="text-right">{t('amount') || 'Amount'}</TableHead>
+                        <TableHead>{t('status')}</TableHead>
+                        <TableHead className="text-right">{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -410,9 +410,9 @@ export default function BankReconciliation() {
                           <TableCell>
                             <Badge className={transaction.type === 'credit' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
                               {transaction.type === 'credit' ? (
-                                <><ArrowDownLeft className="w-3 h-3 mr-1" /> Kirim</>
+                                <><ArrowDownLeft className="w-3 h-3 mr-1" /> {t('income') || 'Income'}</>
                               ) : (
-                                <><ArrowUpRight className="w-3 h-3 mr-1" /> Chiqim</>
+                                <><ArrowUpRight className="w-3 h-3 mr-1" /> {t('expense') || 'Expense'}</>
                               )}
                             </Badge>
                           </TableCell>
@@ -422,9 +422,9 @@ export default function BankReconciliation() {
                           <TableCell>
                             <Badge className={transaction.is_reconciled ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
                               {transaction.is_reconciled ? (
-                                <><CheckCircle className="w-3 h-3 mr-1" /> Tasdiqlangan</>
+                                <><CheckCircle className="w-3 h-3 mr-1" /> {t('confirmed') || 'Confirmed'}</>
                               ) : (
-                                <><Clock className="w-3 h-3 mr-1" /> Kutilmoqda</>
+                                <><Clock className="w-3 h-3 mr-1" /> {t('waiting') || 'Waiting'}</>
                               )}
                             </Badge>
                           </TableCell>
@@ -437,7 +437,7 @@ export default function BankReconciliation() {
                                 className="text-green-600 hover:text-green-700 hover:bg-green-50"
                               >
                                 <Check className="w-4 h-4 mr-1" />
-                                Tasdiqlash
+                                {t('confirm') || 'Confirm'}
                               </Button>
                             )}
                           </TableCell>
@@ -446,7 +446,7 @@ export default function BankReconciliation() {
                       {getFilteredTransactions().length === 0 && (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                            Tranzaksiyalar mavjud emas
+                            {t('no_transactions') || 'No transactions'}
                           </TableCell>
                         </TableRow>
                       )}
@@ -459,14 +459,14 @@ export default function BankReconciliation() {
             <Card>
               <CardContent className="p-8 text-center">
                 <Landmark className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-                <h3 className="text-lg font-medium text-slate-600">Bank hisobini tanlang</h3>
-                <p className="text-sm text-slate-400 mt-2">Tranzaksiyalarni ko'rish uchun bank hisobini tanlang</p>
+                <h3 className="text-lg font-medium text-slate-600">{t('select_bank_account') || 'Select a bank account'}</h3>
+                <p className="text-sm text-slate-400 mt-2">{t('select_account_to_view') || 'Select an account to view transactions'}</p>
                 <Button
                   variant="outline"
                   className="mt-4"
                   onClick={() => setActiveTab('accounts')}
                 >
-                  Bank hisoblarini ko'rish
+                  {t('view_bank_accounts') || 'View bank accounts'}
                 </Button>
               </CardContent>
             </Card>
@@ -478,28 +478,28 @@ export default function BankReconciliation() {
       <Dialog open={showCreateAccountModal} onOpenChange={setShowCreateAccountModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yangi Bank Hisob</DialogTitle>
-            <DialogDescription>Bank hisobini qo'shish uchun ma'lumotlarni kiriting</DialogDescription>
+            <DialogTitle>{t('new_bank_account') || 'New Bank Account'}</DialogTitle>
+            <DialogDescription>{t('enter_bank_account_info') || 'Enter bank account details'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Hisob nomi</label>
+              <label className="text-sm font-medium">{t('account_name') || 'Account Name'}</label>
               <Input
                 value={newBankAccount.name}
                 onChange={(e) => setNewBankAccount({ ...newBankAccount, name: e.target.value })}
-                placeholder="Asosiy hisob"
+                placeholder={t('main_account') || 'Main Account'}
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Bank nomi</label>
+              <label className="text-sm font-medium">{t('bank_name') || 'Bank Name'}</label>
               <Input
                 value={newBankAccount.bank_name}
                 onChange={(e) => setNewBankAccount({ ...newBankAccount, bank_name: e.target.value })}
-                placeholder="O'zbekiston Milliy Banki"
+                placeholder={t('national_bank') || 'National Bank'}
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Hisob raqami</label>
+              <label className="text-sm font-medium">{t('account_number') || 'Account Number'}</label>
               <Input
                 value={newBankAccount.account_number}
                 onChange={(e) => setNewBankAccount({ ...newBankAccount, account_number: e.target.value })}
@@ -508,7 +508,7 @@ export default function BankReconciliation() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Valyuta</label>
+                <label className="text-sm font-medium">{t('currency') || 'Currency'}</label>
                 <Select
                   value={newBankAccount.currency}
                   onValueChange={(v) => setNewBankAccount({ ...newBankAccount, currency: v })}
@@ -525,7 +525,7 @@ export default function BankReconciliation() {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium">Hisob turi</label>
+                <label className="text-sm font-medium">{t('account_type') || 'Account Type'}</label>
                 <Select
                   value={newBankAccount.account_type}
                   onValueChange={(v) => setNewBankAccount({ ...newBankAccount, account_type: v })}
@@ -534,15 +534,15 @@ export default function BankReconciliation() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="checking">Joriy</SelectItem>
-                    <SelectItem value="savings">Jamg'arma</SelectItem>
-                    <SelectItem value="deposit">Depozit</SelectItem>
+                    <SelectItem value="checking">{t('checking') || 'Checking'}</SelectItem>
+                    <SelectItem value="savings">{t('savings') || 'Savings'}</SelectItem>
+                    <SelectItem value="deposit">{t('deposit') || 'Deposit'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Boshlang'ich balans</label>
+              <label className="text-sm font-medium">{t('initial_balance') || 'Initial Balance'}</label>
               <Input
                 type="number"
                 value={newBankAccount.balance}
@@ -551,13 +551,13 @@ export default function BankReconciliation() {
               />
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateAccountModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateAccountModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleCreateBankAccount}
                 disabled={isSaving || !newBankAccount.name || !newBankAccount.bank_name}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
             </div>
           </div>
@@ -568,14 +568,14 @@ export default function BankReconciliation() {
       <Dialog open={showCreateTransactionModal} onOpenChange={setShowCreateTransactionModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Yangi Tranzaksiya</DialogTitle>
+            <DialogTitle>{t('new_transaction') || 'New Transaction'}</DialogTitle>
             <DialogDescription>
-              {selectedBankAccount?.name} - tranzaksiya qo'shish
+              {selectedBankAccount?.name} - {t('add_transaction') || 'add transaction'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <label className="text-sm font-medium">Sana</label>
+              <label className="text-sm font-medium">{t('date') || 'Date'}</label>
               <Input
                 type="date"
                 value={newTransaction.transaction_date}
@@ -583,15 +583,15 @@ export default function BankReconciliation() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Tavsif</label>
+              <label className="text-sm font-medium">{t('description')}</label>
               <Input
                 value={newTransaction.description}
                 onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
-                placeholder="Tranzaksiya tavsifi"
+                placeholder={t('transaction_description') || 'Transaction description'}
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Referens</label>
+              <label className="text-sm font-medium">{t('reference')}</label>
               <Input
                 value={newTransaction.reference}
                 onChange={(e) => setNewTransaction({ ...newTransaction, reference: e.target.value })}
@@ -600,7 +600,7 @@ export default function BankReconciliation() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Turi</label>
+                <label className="text-sm font-medium">{t('type') || 'Type'}</label>
                 <Select
                   value={newTransaction.type}
                   onValueChange={(v) => setNewTransaction({ ...newTransaction, type: v })}
@@ -609,13 +609,13 @@ export default function BankReconciliation() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="credit">Kirim</SelectItem>
-                    <SelectItem value="debit">Chiqim</SelectItem>
+                    <SelectItem value="credit">{t('income') || 'Income'}</SelectItem>
+                    <SelectItem value="debit">{t('expense') || 'Expense'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium">Summa</label>
+                <label className="text-sm font-medium">{t('amount') || 'Amount'}</label>
                 <Input
                   type="number"
                   value={newTransaction.amount}
@@ -625,13 +625,13 @@ export default function BankReconciliation() {
               </div>
             </div>
             <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateTransactionModal(false)}>Bekor qilish</Button>
+              <Button variant="outline" onClick={() => setShowCreateTransactionModal(false)}>{t('cancel')}</Button>
               <Button
                 onClick={handleCreateTransaction}
                 disabled={isSaving || !newTransaction.description || !newTransaction.amount}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
             </div>
           </div>
