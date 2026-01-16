@@ -4,6 +4,49 @@ import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const ProcurementContext = createContext(null);
 
+// Storage keys
+const STORAGE_KEYS = {
+  SUPPLIERS: 'suppliers',
+  PURCHASE_ORDERS: 'purchase_orders',
+  RFQS: 'rfqs',
+  CONTRACTS: 'contracts',
+  PRICE_HISTORY: 'price_history',
+};
+
+const getStorageKey = (key) => `procurement_${key}`;
+
+// Sample data for demo mode
+const sampleSuppliers = [
+  {
+    id: '1',
+    code: 'SUP-001',
+    name: 'Acme Supplies',
+    email: 'contact@acme.com',
+    phone: '+998901234567',
+    status: 'active',
+    rating: 4.5,
+    total_orders: 25,
+    total_spent: 150000000,
+    created_at: '2024-01-15',
+  },
+  {
+    id: '2',
+    code: 'SUP-002',
+    name: 'Global Parts Inc',
+    email: 'info@globalparts.com',
+    phone: '+998909876543',
+    status: 'active',
+    rating: 4.2,
+    total_orders: 18,
+    total_spent: 85000000,
+    created_at: '2024-02-20',
+  },
+];
+
+const sampleRFQs = [];
+const sampleContracts = [];
+const samplePriceHistory = [];
+
 export function ProcurementProvider({ children }) {
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -14,34 +57,8 @@ export function ProcurementProvider({ children }) {
   const [error, setError] = useState(null);
   const [backendAvailable, setBackendAvailable] = useState(false);
 
-  // Load data from backend on mount
   // Load data from backend or localStorage on mount
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [suppliersData, ordersData, contractsData] = await Promise.all([
-        procurementService.listSuppliers(),
-        procurementService.listOrders(),
-        procurementService.listContracts(),
-      ]);
-      setSuppliers(suppliersData || []);
-      setPurchaseOrders(ordersData || []);
-      setContracts(contractsData || []);
-    } catch (err) {
-      console.error('Error loading procurement data:', err);
-      setError(err.message);
-      setSuppliers([]);
-      setPurchaseOrders([]);
-      setContracts([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
     const loadData = async () => {
       try {
         const demoMode = isDemoMode();
@@ -148,7 +165,6 @@ export function ProcurementProvider({ children }) {
 
   // Supplier CRUD operations
   const createSupplier = useCallback(async (supplierData) => {
-    const newSupplier = await procurementService.createSupplier(supplierData);
     if (backendAvailable) {
       try {
         const response = await procurementService.createSupplier({
@@ -174,14 +190,9 @@ export function ProcurementProvider({ children }) {
     };
     setSuppliers(prev => [...prev, newSupplier]);
     return newSupplier;
-  }, []);
   }, [suppliers.length, backendAvailable]);
 
   const updateSupplier = useCallback(async (id, updates) => {
-    const updated = await procurementService.updateSupplier(id, updates);
-    setSuppliers(prev => prev.map(s => s.id === id ? updated : s));
-    return updated;
-  }, []);
     if (backendAvailable) {
       try {
         await procurementService.updateSupplier(id, updates);
@@ -193,7 +204,6 @@ export function ProcurementProvider({ children }) {
   }, [backendAvailable]);
 
   const deleteSupplier = useCallback(async (id) => {
-    await procurementService.deleteSupplier(id);
     if (backendAvailable) {
       try {
         await procurementService.deleteSupplier(id);
@@ -265,21 +275,50 @@ export function ProcurementProvider({ children }) {
 
   // Contract operations
   const createContract = useCallback(async (contractData) => {
-    const newContract = await procurementService.createContract(contractData);
+    if (backendAvailable) {
+      try {
+        const newContract = await procurementService.createContract(contractData);
+        setContracts(prev => [...prev, newContract]);
+        return newContract;
+      } catch (error) {
+        console.error('Failed to create contract via API:', error);
+      }
+    }
+    // Fallback to local
+    const newContract = {
+      ...contractData,
+      id: Date.now().toString(),
+      contract_number: `CON-${new Date().getFullYear()}-${String(contracts.length + 1).padStart(3, '0')}`,
+      status: 'draft',
+      created_at: new Date().toISOString().split('T')[0],
+    };
     setContracts(prev => [...prev, newContract]);
     return newContract;
-  }, []);
+  }, [backendAvailable, contracts.length]);
 
   const updateContract = useCallback(async (id, updates) => {
-    const updated = await procurementService.updateContract(id, updates);
-    setContracts(prev => prev.map(c => c.id === id ? updated : c));
-    return updated;
-  }, []);
+    if (backendAvailable) {
+      try {
+        const updated = await procurementService.updateContract(id, updates);
+        setContracts(prev => prev.map(c => c.id === id ? updated : c));
+        return updated;
+      } catch (error) {
+        console.error('Failed to update contract via API:', error);
+      }
+    }
+    setContracts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, [backendAvailable]);
 
   const deleteContract = useCallback(async (id) => {
-    await procurementService.deleteContract(id);
+    if (backendAvailable) {
+      try {
+        await procurementService.deleteContract(id);
+      } catch (error) {
+        console.error('Failed to delete contract via API:', error);
+      }
+    }
     setContracts(prev => prev.filter(c => c.id !== id));
-  }, []);
+  }, [backendAvailable]);
 
   // Price history operations (to be implemented in backend)
   const addPriceRecord = useCallback(async (productName, supplierId, price, currency = 'UZS') => {
@@ -323,33 +362,76 @@ export function ProcurementProvider({ children }) {
 
   // Purchase Order operations
   const createPurchaseOrder = useCallback(async (poData) => {
-    const newPO = await procurementService.createOrder(poData);
+    if (backendAvailable) {
+      try {
+        const newPO = await procurementService.createOrder(poData);
+        setPurchaseOrders(prev => [...prev, newPO]);
+        return newPO;
+      } catch (error) {
+        console.error('Failed to create PO via API:', error);
+      }
+    }
+    // Fallback to local
+    const newPO = {
+      ...poData,
+      id: Date.now().toString(),
+      order_number: `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
+      status: 'draft',
+      created_at: new Date().toISOString().split('T')[0],
+    };
     setPurchaseOrders(prev => [...prev, newPO]);
     return newPO;
-  }, []);
+  }, [backendAvailable, purchaseOrders.length]);
 
   const updatePurchaseOrder = useCallback(async (id, updates) => {
-    const updated = await procurementService.updateOrder(id, updates);
-    setPurchaseOrders(prev => prev.map(po => po.id === id ? updated : po));
-    return updated;
-  }, []);
+    if (backendAvailable) {
+      try {
+        const updated = await procurementService.updateOrder(id, updates);
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? updated : po));
+        return updated;
+      } catch (error) {
+        console.error('Failed to update PO via API:', error);
+      }
+    }
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, ...updates } : po));
+  }, [backendAvailable]);
 
   const deletePurchaseOrder = useCallback(async (id) => {
-    await procurementService.deleteOrder(id);
+    if (backendAvailable) {
+      try {
+        await procurementService.deleteOrder(id);
+      } catch (error) {
+        console.error('Failed to delete PO via API:', error);
+      }
+    }
     setPurchaseOrders(prev => prev.filter(po => po.id !== id));
-  }, []);
+  }, [backendAvailable]);
 
   const approvePurchaseOrder = useCallback(async (id) => {
-    const approved = await procurementService.approveOrder(id);
-    setPurchaseOrders(prev => prev.map(po => po.id === id ? approved : po));
-    return approved;
-  }, []);
+    if (backendAvailable) {
+      try {
+        const approved = await procurementService.approveOrder(id);
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? approved : po));
+        return approved;
+      } catch (error) {
+        console.error('Failed to approve PO via API:', error);
+      }
+    }
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'approved' } : po));
+  }, [backendAvailable]);
 
   const receivePurchaseOrder = useCallback(async (id, data) => {
-    const received = await procurementService.receiveOrder(id, data);
-    setPurchaseOrders(prev => prev.map(po => po.id === id ? received : po));
-    return received;
-  }, []);
+    if (backendAvailable) {
+      try {
+        const received = await procurementService.receiveOrder(id, data);
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? received : po));
+        return received;
+      } catch (error) {
+        console.error('Failed to receive PO via API:', error);
+      }
+    }
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'received', ...data } : po));
+  }, [backendAvailable]);
 
   // Supplier rating update
   const updateSupplierRating = useCallback(async (supplierId, rating, comment = '') => {
@@ -385,7 +467,29 @@ export function ProcurementProvider({ children }) {
 
   // Refresh data from backend
   const refreshData = useCallback(async () => {
-    await loadData();
+    setIsLoading(true);
+    try {
+      const isBackendAvailable = await checkBackendHealth();
+      setBackendAvailable(isBackendAvailable);
+
+      if (isBackendAvailable) {
+        const [suppliersData, posData, rfqsData, contractsData] = await Promise.all([
+          procurementService.listSuppliers().catch(() => null),
+          procurementService.listOrders().catch(() => null),
+          procurementService.listRFQs().catch(() => null),
+          procurementService.listContracts().catch(() => null),
+        ]);
+
+        if (suppliersData) setSuppliers(suppliersData);
+        if (posData) setPurchaseOrders(posData);
+        if (rfqsData) setRFQs(rfqsData);
+        if (contractsData) setContracts(contractsData);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const value = {
