@@ -58,33 +58,33 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 
-// SAP Safety Stock Methods
+// SAP Safety Stock Methods - use translation keys
 const safetyStockMethods = [
-  { value: 'fixed', label: 'Fixed Quantity' },
-  { value: 'percentage', label: 'Percentage of Demand' },
-  { value: 'days_of_supply', label: 'Days of Supply' },
+  { value: 'fixed', labelKey: 'fixed_quantity', fallback: 'Fixed Quantity' },
+  { value: 'percentage', labelKey: 'percentage_of_demand', fallback: 'Percentage of Demand' },
+  { value: 'days_of_supply', labelKey: 'days_of_supply', fallback: 'Days of Supply' },
 ];
 
-// Odoo Procurement Types
+// Odoo Procurement Types - use translation keys
 const procurementTypes = [
-  { value: 'buy', label: 'Buy (Purchase)', icon: ShoppingCart },
-  { value: 'make', label: 'Make (Manufacture)', icon: Factory },
-  { value: 'transfer', label: 'Transfer (Warehouse)', icon: ArrowRightLeft },
+  { value: 'buy', labelKey: 'buy_purchase', fallback: 'Buy (Purchase)', icon: ShoppingCart },
+  { value: 'make', labelKey: 'make_manufacture', fallback: 'Make (Manufacture)', icon: Factory },
+  { value: 'transfer', labelKey: 'transfer_warehouse', fallback: 'Transfer (Warehouse)', icon: ArrowRightLeft },
 ];
 
-// SAP MRP Lot Sizing Policies
+// SAP MRP Lot Sizing Policies - use translation keys
 const lotSizingPolicies = [
-  { value: 'lot_for_lot', label: 'Lot-for-Lot', description: 'Order exact requirement' },
-  { value: 'fixed_order_qty', label: 'Fixed Order Quantity', description: 'Order in fixed quantities' },
-  { value: 'period_order_qty', label: 'Period Order Quantity', description: 'Consolidate for period' },
-  { value: 'eoq', label: 'Economic Order Quantity', description: 'Minimize total cost' },
+  { value: 'lot_for_lot', labelKey: 'lot_for_lot', fallback: 'Lot-for-Lot', descKey: 'order_exact_requirement', descFallback: 'Order exact requirement' },
+  { value: 'fixed_order_qty', labelKey: 'fixed_order_quantity', fallback: 'Fixed Order Quantity', descKey: 'order_in_fixed_quantities', descFallback: 'Order in fixed quantities' },
+  { value: 'period_order_qty', labelKey: 'period_order_quantity', fallback: 'Period Order Quantity', descKey: 'consolidate_for_period', descFallback: 'Consolidate for period' },
+  { value: 'eoq', labelKey: 'economic_order_quantity', fallback: 'Economic Order Quantity', descKey: 'minimize_total_cost', descFallback: 'Minimize total cost' },
 ];
 
-// Forecast Methods
+// Forecast Methods - use translation keys
 const forecastMethods = [
-  { value: 'moving_avg', label: 'Moving Average' },
-  { value: 'exponential', label: 'Exponential Smoothing' },
-  { value: 'seasonal', label: 'Seasonal Adjustment' },
+  { value: 'moving_avg', labelKey: 'moving_average', fallback: 'Moving Average' },
+  { value: 'exponential', labelKey: 'exponential_smoothing', fallback: 'Exponential Smoothing' },
+  { value: 'seasonal', labelKey: 'seasonal_forecast', fallback: 'Seasonal Adjustment' },
 ];
 
 export default function ReorderRules() {
@@ -626,7 +626,7 @@ export default function ReorderRules() {
                       onClick={() => setFormData({ ...formData, procurement_type: pt.value })}
                     >
                       <Icon className={`w-5 h-5 mx-auto mb-1 ${formData.procurement_type === pt.value ? 'text-orange-600' : 'text-slate-400'}`} />
-                      <p className="text-xs text-center font-medium">{pt.label}</p>
+                      <p className="text-xs text-center font-medium">{t(pt.labelKey) || pt.fallback}</p>
                     </div>
                   );
                 })}
@@ -690,7 +690,7 @@ export default function ReorderRules() {
                     </SelectTrigger>
                     <SelectContent>
                       {safetyStockMethods.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value}>{t(m.labelKey) || m.fallback}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -754,8 +754,8 @@ export default function ReorderRules() {
                       {lotSizingPolicies.map((p) => (
                         <SelectItem key={p.value} value={p.value}>
                           <div>
-                            <span className="font-medium">{p.label}</span>
-                            <span className="text-xs text-slate-500 ml-1">- {p.description}</span>
+                            <span className="font-medium">{t(p.labelKey) || p.fallback}</span>
+                            <span className="text-xs text-slate-500 ml-1">- {t(p.descKey) || p.descFallback}</span>
                           </div>
                         </SelectItem>
                       ))}
@@ -865,7 +865,7 @@ export default function ReorderRules() {
                     </SelectTrigger>
                     <SelectContent>
                       {forecastMethods.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value}>{t(m.labelKey) || m.fallback}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

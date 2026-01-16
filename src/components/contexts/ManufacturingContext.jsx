@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   workCentersService,
   productionOrdersService,
@@ -8,6 +8,7 @@ import {
 } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const ManufacturingContext = createContext();
 
@@ -245,6 +246,7 @@ const sampleBOMs = [
 
 export function ManufacturingProvider({ children }) {
   const { activeCompany } = useCompany();
+  const { getSetting } = useAdminSettings();
   const [workCenters, setWorkCenters] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
@@ -254,6 +256,25 @@ export function ManufacturingProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
+
+  // Admin settings for manufacturing module - these affect module behavior
+  const manufacturingSettings = useMemo(() => ({
+    // Planning
+    planningMethod: getSetting('manufacturing.planning.method', 'MTO'),
+    defaultLeadTimeDays: getSetting('manufacturing.planning.default_lead_time_days', 5),
+
+    // Work Center
+    defaultCapacityHours: getSetting('manufacturing.work_center.default_capacity', 8),
+    defaultEfficiencyRate: getSetting('manufacturing.work_center.efficiency_rate', 100),
+
+    // Quality
+    qualityControlEnabled: getSetting('manufacturing.quality.control_enabled', true),
+    inspectionRequired: getSetting('manufacturing.quality.inspection_required', true),
+
+    // Production
+    autoConsumeComponents: getSetting('manufacturing.production.auto_consume_components', false),
+    backflushEnabled: getSetting('manufacturing.production.backflush_enabled', false)
+  }), [getSetting]);
 
   // Load data from API or localStorage
   const loadData = useCallback(async () => {
@@ -656,7 +677,19 @@ export function ManufacturingProvider({ children }) {
       deleteBOM,
 
       // Refresh
-      refreshData: loadData
+      refreshData: loadData,
+
+      // Admin Settings (from Admin Settings page)
+      settings: manufacturingSettings,
+      // Helper functions for settings
+      getPlanningMethod: () => manufacturingSettings.planningMethod,
+      getDefaultLeadTime: () => manufacturingSettings.defaultLeadTimeDays,
+      getDefaultCapacity: () => manufacturingSettings.defaultCapacityHours,
+      getDefaultEfficiency: () => manufacturingSettings.defaultEfficiencyRate,
+      isQualityControlEnabled: () => manufacturingSettings.qualityControlEnabled,
+      isInspectionRequired: () => manufacturingSettings.inspectionRequired,
+      isAutoConsumeEnabled: () => manufacturingSettings.autoConsumeComponents,
+      isBackflushEnabled: () => manufacturingSettings.backflushEnabled
     }}>
       {children}
     </ManufacturingContext.Provider>

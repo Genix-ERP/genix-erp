@@ -187,7 +187,7 @@ export default function FinanceDashboard() {
                 <BarChart3 className="w-6 h-6 text-purple-600" />
               </div>
               <div className="px-2.5 py-1 bg-purple-100 rounded-full">
-                <span className="text-xs font-semibold text-purple-700">Target: 35%</span>
+                <span className="text-xs font-semibold text-purple-700">{t('target') || 'Target'}: 35%</span>
               </div>
             </div>
             <div>

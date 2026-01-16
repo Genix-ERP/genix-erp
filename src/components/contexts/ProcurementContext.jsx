@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import procurementService from '@/api/services/procurement';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const ProcurementContext = createContext(null);
 
@@ -48,6 +49,7 @@ const sampleContracts = [];
 const samplePriceHistory = [];
 
 export function ProcurementProvider({ children }) {
+  const { getSetting } = useAdminSettings();
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [rfqs, setRFQs] = useState([]);
@@ -56,6 +58,31 @@ export function ProcurementProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [backendAvailable, setBackendAvailable] = useState(false);
+
+  // Admin settings for procurement module - these affect module behavior
+  const purchaseSettings = useMemo(() => ({
+    // Approval workflow
+    approvalWorkflowEnabled: getSetting('purchase.approval.workflow_enabled', false),
+    approvalThresholds: getSetting('purchase.approval.thresholds', [
+      { amount: 1000000, approver_role: 'manager' },
+      { amount: 10000000, approver_role: 'admin' }
+    ]),
+
+    // Vendor settings
+    defaultPaymentTerms: getSetting('purchase.vendor.default_payment_terms', 'Net 30'),
+    vendorRatingEnabled: getSetting('purchase.vendor.rating_enabled', true),
+    preferredVendorsOnly: getSetting('purchase.vendor.preferred_vendors_only', false),
+
+    // RFQ settings
+    rfqValidityDays: getSetting('purchase.rfq.validity_days', 15),
+    autoCreatePO: getSetting('purchase.rfq.auto_create_po', false),
+
+    // Lead time
+    defaultLeadTimeDays: getSetting('purchase.lead_time.default_days', 7),
+
+    // Blanket orders
+    blanketOrdersEnabled: getSetting('purchase.blanket_orders.enabled', false)
+  }), [getSetting]);
 
   // Load data from backend or localStorage on mount
   useEffect(() => {
@@ -536,6 +563,27 @@ export function ProcurementProvider({ children }) {
 
     // Refresh
     refreshData,
+
+    // Admin Settings (from Admin Settings page)
+    settings: purchaseSettings,
+    // Helper functions for settings
+    isApprovalRequired: (amount) => {
+      if (!purchaseSettings.approvalWorkflowEnabled) return false;
+      return purchaseSettings.approvalThresholds.some(t => amount >= t.amount);
+    },
+    getRequiredApproverRole: (amount) => {
+      if (!purchaseSettings.approvalWorkflowEnabled) return null;
+      const threshold = purchaseSettings.approvalThresholds
+        .filter(t => amount >= t.amount)
+        .sort((a, b) => b.amount - a.amount)[0];
+      return threshold?.approver_role || null;
+    },
+    getDefaultPaymentTerms: () => purchaseSettings.defaultPaymentTerms,
+    getRFQValidityDays: () => purchaseSettings.rfqValidityDays,
+    getDefaultLeadTime: () => purchaseSettings.defaultLeadTimeDays,
+    isVendorRatingEnabled: () => purchaseSettings.vendorRatingEnabled,
+    isPreferredVendorsOnly: () => purchaseSettings.preferredVendorsOnly,
+    isBlanketOrdersEnabled: () => purchaseSettings.blanketOrdersEnabled
   };
 
   return (

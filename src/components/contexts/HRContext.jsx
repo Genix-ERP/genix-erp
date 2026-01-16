@@ -1,9 +1,64 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { hrService } from '@/api/services/hr';
+import { useAdminSettings } from './AdminSettingsContext';
+import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const HRContext = createContext(null);
 
+// Storage keys for localStorage fallback
+const STORAGE_KEYS = {
+  EMPLOYEES: 'genix_hr_employees',
+  PAYROLL_PERIODS: 'genix_hr_payroll_periods',
+  PAYROLL_ENTRIES: 'genix_hr_payroll_entries',
+  LEAVE_REQUESTS: 'genix_hr_leave_requests',
+  ATTENDANCE: 'genix_hr_attendance',
+};
+
+// Sample demo data
+const sampleEmployees = [
+  {
+    id: 'emp_1',
+    full_name: 'Aziz Karimov',
+    email: 'aziz@company.uz',
+    phone: '+998901234567',
+    department: 'Engineering',
+    position: 'Senior Developer',
+    hire_date: '2022-03-15',
+    salary: 15000000,
+    status: 'active',
+    performance_score: 85,
+    turnover_risk: 'low',
+  },
+  {
+    id: 'emp_2',
+    full_name: 'Malika Rashidova',
+    email: 'malika@company.uz',
+    phone: '+998901234568',
+    department: 'Sales',
+    position: 'Sales Manager',
+    hire_date: '2021-06-01',
+    salary: 12000000,
+    status: 'active',
+    performance_score: 92,
+    turnover_risk: 'low',
+  },
+  {
+    id: 'emp_3',
+    full_name: 'Bobur Alimov',
+    email: 'bobur@company.uz',
+    phone: '+998901234569',
+    department: 'Marketing',
+    position: 'Marketing Specialist',
+    hire_date: '2023-01-10',
+    salary: 8000000,
+    status: 'active',
+    performance_score: 78,
+    turnover_risk: 'medium',
+  },
+];
+
 export function HRProvider({ children }) {
+  const { getSetting } = useAdminSettings();
   const [employees, setEmployees] = useState([]);
   const [payrollPeriods, setPayrollPeriods] = useState([]);
   const [payrollEntries, setPayrollEntries] = useState([]);
@@ -11,49 +66,206 @@ export function HRProvider({ children }) {
   const [attendance, setAttendance] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [backendAvailable, setBackendAvailable] = useState(false);
 
-  // Load data from backend on mount
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Admin settings for HR module - these affect module behavior
+  const hrSettings = useMemo(() => ({
+    // Leave types
+    leaveTypes: getSetting('hr.leave.types', [
+      { id: 'annual', name: 'Annual Leave', days_per_year: 24, carry_forward: true, max_carry_forward: 10 },
+      { id: 'sick', name: 'Sick Leave', days_per_year: 15, carry_forward: false, max_carry_forward: 0 },
+      { id: 'unpaid', name: 'Unpaid Leave', days_per_year: 0, carry_forward: false, max_carry_forward: 0 },
+      { id: 'maternity', name: 'Maternity Leave', days_per_year: 126, carry_forward: false, max_carry_forward: 0 }
+    ]),
+    leaveApprovalRequired: getSetting('hr.leave.approval_required', true),
 
-  const loadData = async () => {
+    // Expense settings
+    expenseCategories: getSetting('hr.expense.categories', [
+      { id: 'travel', name: 'Travel', approval_required: true },
+      { id: 'meals', name: 'Meals & Entertainment', approval_required: true },
+      { id: 'supplies', name: 'Office Supplies', approval_required: false },
+      { id: 'equipment', name: 'Equipment', approval_required: true },
+      { id: 'other', name: 'Other', approval_required: true }
+    ]),
+    autoApprovalLimit: getSetting('hr.expense.auto_approval_limit', 100000),
+
+    // Work settings
+    hoursPerDay: getSetting('hr.work.hours_per_day', 8),
+    daysPerWeek: getSetting('hr.work.days_per_week', 5),
+    overtimeMultiplier: getSetting('hr.work.overtime_multiplier', 1.5),
+
+    // Attendance
+    attendanceTrackingEnabled: getSetting('hr.attendance.tracking_enabled', false),
+    geolocationRequired: getSetting('hr.attendance.geolocation_required', false),
+
+    // Payroll
+    payPeriod: getSetting('hr.payroll.pay_period', 'monthly'),
+    payrollCurrency: getSetting('hr.payroll.currency', 'UZS')
+  }), [getSetting]);
+
+  // Helper functions for localStorage
+  const loadFromStorage = (key, defaultValue = []) => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const saveToStorage = (key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (err) {
+      console.warn('Failed to save to localStorage:', err);
+    }
+  };
+
+  // Load data from backend or localStorage
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
     try {
-      const [employeesData, payrollPeriodsData] = await Promise.all([
-        hrService.listEmployees(),
-        hrService.listPayrollPeriods(),
-      ]);
-      setEmployees(employeesData || []);
-      setPayrollPeriods(payrollPeriodsData || []);
+      const demoMode = isDemoMode();
+      const isBackendAvailable = await checkBackendHealth();
+      setBackendAvailable(isBackendAvailable);
+
+      if (!demoMode && isBackendAvailable) {
+        // Try to load from backend
+        try {
+          const [employeesData, payrollPeriodsData] = await Promise.all([
+            hrService.listEmployees(),
+            hrService.listPayrollPeriods(),
+          ]);
+          setEmployees(employeesData || []);
+          setPayrollPeriods(payrollPeriodsData || []);
+
+          // Also save to localStorage as backup
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, employeesData || []);
+          saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, payrollPeriodsData || []);
+        } catch (apiError) {
+          console.error('Error loading from backend, falling back to localStorage:', apiError);
+          // Fall back to localStorage
+          const storedEmployees = loadFromStorage(STORAGE_KEYS.EMPLOYEES, sampleEmployees);
+          const storedPayrollPeriods = loadFromStorage(STORAGE_KEYS.PAYROLL_PERIODS, []);
+          setEmployees(storedEmployees);
+          setPayrollPeriods(storedPayrollPeriods);
+        }
+      } else {
+        // Demo mode or backend not available - use localStorage
+        const storedEmployees = loadFromStorage(STORAGE_KEYS.EMPLOYEES);
+        const storedPayrollPeriods = loadFromStorage(STORAGE_KEYS.PAYROLL_PERIODS);
+        const storedLeaveRequests = loadFromStorage(STORAGE_KEYS.LEAVE_REQUESTS);
+        const storedAttendance = loadFromStorage(STORAGE_KEYS.ATTENDANCE);
+
+        // Use sample data if nothing stored
+        if (storedEmployees.length === 0) {
+          setEmployees(sampleEmployees);
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, sampleEmployees);
+        } else {
+          setEmployees(storedEmployees);
+        }
+
+        setPayrollPeriods(storedPayrollPeriods);
+        setLeaveRequests(storedLeaveRequests);
+        setAttendance(storedAttendance);
+      }
     } catch (err) {
       console.error('Error loading HR data:', err);
       setError(err.message);
-      setEmployees([]);
+      // Fall back to sample data
+      setEmployees(sampleEmployees);
       setPayrollPeriods([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Employee CRUD
   const createEmployee = useCallback(async (data) => {
-    const newEmployee = await hrService.createEmployee(data);
-    setEmployees(prev => [...prev, newEmployee]);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const newEmployee = await hrService.createEmployee(data);
+        setEmployees(prev => {
+          const updated = [...prev, newEmployee];
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
+          return updated;
+        });
+        return newEmployee;
+      } catch (err) {
+        console.error('Backend error, saving locally:', err);
+      }
+    }
+
+    // Fallback to local storage
+    const newEmployee = {
+      ...data,
+      id: `emp_${Date.now()}`,
+      status: data.status || 'active',
+      performance_score: data.performance_score || 0,
+      turnover_risk: data.turnover_risk || 'low',
+      created_at: new Date().toISOString(),
+    };
+    setEmployees(prev => {
+      const updated = [...prev, newEmployee];
+      saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
+      return updated;
+    });
     return newEmployee;
-  }, []);
+  }, [backendAvailable]);
 
   const updateEmployee = useCallback(async (id, updates) => {
-    const updated = await hrService.updateEmployee(id, updates);
-    setEmployees(prev => prev.map(e => e.id === id ? updated : e));
-    return updated;
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const updated = await hrService.updateEmployee(id, updates);
+        setEmployees(prev => {
+          const newList = prev.map(e => e.id === id ? updated : e);
+          saveToStorage(STORAGE_KEYS.EMPLOYEES, newList);
+          return newList;
+        });
+        return updated;
+      } catch (err) {
+        console.error('Backend error, updating locally:', err);
+      }
+    }
+
+    // Fallback to local storage
+    let updatedEmployee;
+    setEmployees(prev => {
+      const newList = prev.map(e => {
+        if (e.id === id) {
+          updatedEmployee = { ...e, ...updates };
+          return updatedEmployee;
+        }
+        return e;
+      });
+      saveToStorage(STORAGE_KEYS.EMPLOYEES, newList);
+      return newList;
+    });
+    return updatedEmployee;
+  }, [backendAvailable]);
 
   const deleteEmployee = useCallback(async (id) => {
-    await hrService.deleteEmployee(id);
-    setEmployees(prev => prev.filter(e => e.id !== id));
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        await hrService.deleteEmployee(id);
+      } catch (err) {
+        console.error('Backend error, deleting locally:', err);
+      }
+    }
+
+    setEmployees(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      saveToStorage(STORAGE_KEYS.EMPLOYEES, updated);
+      return updated;
+    });
+  }, [backendAvailable]);
 
   const getEmployeeById = useCallback((id) => {
     return employees.find(e => e.id === id);
@@ -61,40 +273,159 @@ export function HRProvider({ children }) {
 
   // Payroll Period CRUD
   const createPayrollPeriod = useCallback(async (data) => {
-    const newPeriod = await hrService.createPayrollPeriod(data);
-    setPayrollPeriods(prev => [...prev, newPeriod]);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const newPeriod = await hrService.createPayrollPeriod(data);
+        setPayrollPeriods(prev => {
+          const updated = [...prev, newPeriod];
+          saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, updated);
+          return updated;
+        });
+        return newPeriod;
+      } catch (err) {
+        console.error('Backend error, saving locally:', err);
+      }
+    }
+
+    // Fallback to local storage
+    const newPeriod = {
+      ...data,
+      id: `period_${Date.now()}`,
+      status: data.status || 'draft',
+      created_at: new Date().toISOString(),
+    };
+    setPayrollPeriods(prev => {
+      const updated = [...prev, newPeriod];
+      saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, updated);
+      return updated;
+    });
     return newPeriod;
-  }, []);
+  }, [backendAvailable]);
 
   const updatePayrollPeriod = useCallback(async (id, updates) => {
-    const updated = await hrService.updatePayrollPeriod(id, updates);
-    setPayrollPeriods(prev => prev.map(p => p.id === id ? updated : p));
-    return updated;
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const updated = await hrService.updatePayrollPeriod(id, updates);
+        setPayrollPeriods(prev => {
+          const newList = prev.map(p => p.id === id ? updated : p);
+          saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, newList);
+          return newList;
+        });
+        return updated;
+      } catch (err) {
+        console.error('Backend error, updating locally:', err);
+      }
+    }
+
+    // Fallback
+    let updatedPeriod;
+    setPayrollPeriods(prev => {
+      const newList = prev.map(p => {
+        if (p.id === id) {
+          updatedPeriod = { ...p, ...updates };
+          return updatedPeriod;
+        }
+        return p;
+      });
+      saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, newList);
+      return newList;
+    });
+    return updatedPeriod;
+  }, [backendAvailable]);
 
   const deletePayrollPeriod = useCallback(async (id) => {
-    await hrService.deletePayrollPeriod(id);
-    setPayrollPeriods(prev => prev.filter(p => p.id !== id));
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        await hrService.deletePayrollPeriod(id);
+      } catch (err) {
+        console.error('Backend error, deleting locally:', err);
+      }
+    }
+
+    setPayrollPeriods(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, updated);
+      return updated;
+    });
+  }, [backendAvailable]);
 
   const processPayroll = useCallback(async (id) => {
-    const updated = await hrService.processPayroll(id);
-    setPayrollPeriods(prev => prev.map(p => p.id === id ? updated : p));
-    return updated;
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const updated = await hrService.processPayroll(id);
+        setPayrollPeriods(prev => {
+          const newList = prev.map(p => p.id === id ? updated : p);
+          saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, newList);
+          return newList;
+        });
+        return updated;
+      } catch (err) {
+        console.error('Backend error, processing locally:', err);
+      }
+    }
+
+    // Fallback - just mark as processed
+    let processedPeriod;
+    setPayrollPeriods(prev => {
+      const newList = prev.map(p => {
+        if (p.id === id) {
+          processedPeriod = { ...p, status: 'processed', processed_at: new Date().toISOString() };
+          return processedPeriod;
+        }
+        return p;
+      });
+      saveToStorage(STORAGE_KEYS.PAYROLL_PERIODS, newList);
+      return newList;
+    });
+    return processedPeriod;
+  }, [backendAvailable]);
 
   // Payroll Entry operations
   const loadPayrollEntries = useCallback(async (periodId) => {
-    const entries = await hrService.listPayrollEntries(periodId);
-    setPayrollEntries(entries || []);
-    return entries;
-  }, []);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const entries = await hrService.listPayrollEntries(periodId);
+        setPayrollEntries(entries || []);
+        return entries;
+      } catch (err) {
+        console.error('Backend error loading payroll entries:', err);
+      }
+    }
+
+    // Load from local storage
+    const storedEntries = loadFromStorage(STORAGE_KEYS.PAYROLL_ENTRIES, []);
+    const periodEntries = storedEntries.filter(e => e.period_id === periodId);
+    setPayrollEntries(periodEntries);
+    return periodEntries;
+  }, [backendAvailable]);
 
   const createPayrollEntry = useCallback(async (periodId, data) => {
-    const newEntry = await hrService.createPayrollEntry(periodId, data);
-    setPayrollEntries(prev => [...prev, newEntry]);
+    if (backendAvailable && !isDemoMode()) {
+      try {
+        const newEntry = await hrService.createPayrollEntry(periodId, data);
+        setPayrollEntries(prev => [...prev, newEntry]);
+        return newEntry;
+      } catch (err) {
+        console.error('Backend error, saving locally:', err);
+      }
+    }
+
+    // Fallback
+    const newEntry = {
+      ...data,
+      id: `entry_${Date.now()}`,
+      period_id: periodId,
+      created_at: new Date().toISOString(),
+    };
+    setPayrollEntries(prev => {
+      const updated = [...prev, newEntry];
+      // Save all entries to storage
+      const allEntries = loadFromStorage(STORAGE_KEYS.PAYROLL_ENTRIES, []);
+      saveToStorage(STORAGE_KEYS.PAYROLL_ENTRIES, [...allEntries, newEntry]);
+      return updated;
+    });
     return newEntry;
-  }, []);
+  }, [backendAvailable]);
 
   // Legacy payroll functions for backward compatibility
   const createPayroll = useCallback(async (data) => {
@@ -107,19 +438,34 @@ export function HRProvider({ children }) {
   }, [payrollPeriods, createPayrollEntry]);
 
   const updatePayroll = useCallback(async (id, updates) => {
-    // Update payroll entry - need period ID
-    setPayrollEntries(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    setPayrollEntries(prev => {
+      const newList = prev.map(p => p.id === id ? { ...p, ...updates } : p);
+      const allEntries = loadFromStorage(STORAGE_KEYS.PAYROLL_ENTRIES, []);
+      const updatedAll = allEntries.map(p => p.id === id ? { ...p, ...updates } : p);
+      saveToStorage(STORAGE_KEYS.PAYROLL_ENTRIES, updatedAll);
+      return newList;
+    });
   }, []);
 
   const deletePayroll = useCallback(async (id) => {
-    setPayrollEntries(prev => prev.filter(p => p.id !== id));
+    setPayrollEntries(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      const allEntries = loadFromStorage(STORAGE_KEYS.PAYROLL_ENTRIES, []);
+      saveToStorage(STORAGE_KEYS.PAYROLL_ENTRIES, allEntries.filter(p => p.id !== id));
+      return updated;
+    });
   }, []);
 
   const approvePayroll = useCallback(async (id) => {
-    setPayrollEntries(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p));
+    setPayrollEntries(prev => {
+      const newList = prev.map(p => p.id === id ? { ...p, status: 'approved' } : p);
+      const allEntries = loadFromStorage(STORAGE_KEYS.PAYROLL_ENTRIES, []);
+      saveToStorage(STORAGE_KEYS.PAYROLL_ENTRIES, allEntries.map(p => p.id === id ? { ...p, status: 'approved' } : p));
+      return newList;
+    });
   }, []);
 
-  // Leave Request CRUD (these will need backend implementation)
+  // Leave Request CRUD
   const createLeaveRequest = useCallback(async (data) => {
     const employee = employees.find(e => e.id === data.employee_id);
     const newRequest = {
@@ -129,23 +475,39 @@ export function HRProvider({ children }) {
       status: 'pending',
       created_at: new Date().toISOString().split('T')[0],
     };
-    setLeaveRequests(prev => [...prev, newRequest]);
+    setLeaveRequests(prev => {
+      const updated = [...prev, newRequest];
+      saveToStorage(STORAGE_KEYS.LEAVE_REQUESTS, updated);
+      return updated;
+    });
     return newRequest;
   }, [employees]);
 
   const updateLeaveRequest = useCallback(async (id, updates) => {
-    setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+    setLeaveRequests(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, ...updates } : r);
+      saveToStorage(STORAGE_KEYS.LEAVE_REQUESTS, updated);
+      return updated;
+    });
   }, []);
 
   const approveLeaveRequest = useCallback(async (id, approverName) => {
-    setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'approved', approved_by: approverName } : r));
+    setLeaveRequests(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, status: 'approved', approved_by: approverName } : r);
+      saveToStorage(STORAGE_KEYS.LEAVE_REQUESTS, updated);
+      return updated;
+    });
   }, []);
 
   const rejectLeaveRequest = useCallback(async (id, reason) => {
-    setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected', rejection_reason: reason } : r));
+    setLeaveRequests(prev => {
+      const updated = prev.map(r => r.id === id ? { ...r, status: 'rejected', rejection_reason: reason } : r);
+      saveToStorage(STORAGE_KEYS.LEAVE_REQUESTS, updated);
+      return updated;
+    });
   }, []);
 
-  // Attendance (will need backend implementation)
+  // Attendance
   const recordAttendance = useCallback(async (data) => {
     const employee = employees.find(e => e.id === data.employee_id);
     const newRecord = {
@@ -154,7 +516,11 @@ export function HRProvider({ children }) {
       employee_name: employee?.full_name || data.employee_name,
       created_at: new Date().toISOString(),
     };
-    setAttendance(prev => [...prev, newRecord]);
+    setAttendance(prev => {
+      const updated = [...prev, newRecord];
+      saveToStorage(STORAGE_KEYS.ATTENDANCE, updated);
+      return updated;
+    });
     return newRecord;
   }, [employees]);
 
@@ -195,7 +561,7 @@ export function HRProvider({ children }) {
   // Refresh data from backend
   const refreshData = useCallback(async () => {
     await loadData();
-  }, []);
+  }, [loadData]);
 
   const value = {
     // State
@@ -207,6 +573,7 @@ export function HRProvider({ children }) {
     leaveRequests,
     isLoading,
     error,
+    backendAvailable,
 
     // Employee operations
     createEmployee,
@@ -242,6 +609,27 @@ export function HRProvider({ children }) {
 
     // Refresh
     refreshData,
+
+    // Admin Settings (from Admin Settings page)
+    settings: hrSettings,
+    // Helper functions for settings
+    getLeaveTypes: () => hrSettings.leaveTypes,
+    getLeaveTypeById: (id) => hrSettings.leaveTypes.find(t => t.id === id),
+    isLeaveApprovalRequired: () => hrSettings.leaveApprovalRequired,
+    getExpenseCategories: () => hrSettings.expenseCategories,
+    getAutoApprovalLimit: () => hrSettings.autoApprovalLimit,
+    needsExpenseApproval: (amount, categoryId) => {
+      if (amount > hrSettings.autoApprovalLimit) return true;
+      const category = hrSettings.expenseCategories.find(c => c.id === categoryId);
+      return category?.approval_required ?? true;
+    },
+    getHoursPerDay: () => hrSettings.hoursPerDay,
+    getDaysPerWeek: () => hrSettings.daysPerWeek,
+    getOvertimeMultiplier: () => hrSettings.overtimeMultiplier,
+    isAttendanceTrackingEnabled: () => hrSettings.attendanceTrackingEnabled,
+    isGeolocationRequired: () => hrSettings.geolocationRequired,
+    getPayPeriod: () => hrSettings.payPeriod,
+    getPayrollCurrency: () => hrSettings.payrollCurrency
   };
 
   return (

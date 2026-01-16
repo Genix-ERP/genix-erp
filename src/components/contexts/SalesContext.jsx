@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { salesService } from '@/api/services/sales';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const SalesContext = createContext(null);
 
 export function SalesProvider({ children }) {
+  const { getSetting } = useAdminSettings();
   const [quotations, setQuotations] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -11,6 +13,33 @@ export function SalesProvider({ children }) {
   const [discounts, setDiscounts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Admin settings for sales module - these affect module behavior
+  const salesSettings = useMemo(() => ({
+    // Quotation settings
+    quotationValidityDays: getSetting('sales.quotation.validity_days', 30),
+    autoConfirmQuotation: getSetting('sales.quotation.auto_confirm', false),
+    requireApproval: getSetting('sales.quotation.require_approval', false),
+    approvalThreshold: getSetting('sales.quotation.approval_threshold', 0),
+
+    // Pricing settings
+    pricingStrategy: getSetting('sales.pricing.strategy', 'standard'),
+    allowDiscounts: getSetting('sales.pricing.allow_discounts', true),
+    maxDiscountPercent: getSetting('sales.pricing.max_discount_percent', 20),
+    discountApprovalThreshold: getSetting('sales.pricing.discount_approval_threshold', 10),
+
+    // Payment settings
+    defaultPaymentTerms: getSetting('sales.payment.default_terms', 'Net 30'),
+    availablePaymentTerms: getSetting('sales.payment.available_terms', ['Immediate', 'Net 15', 'Net 30', 'Net 45', 'Net 60']),
+
+    // Invoice settings
+    autoGenerateInvoice: getSetting('sales.invoice.auto_generate', true),
+    autoSendInvoice: getSetting('sales.invoice.auto_send', false),
+
+    // Credit settings
+    enableCreditLimit: getSetting('sales.credit.enable_credit_limit', false),
+    defaultCreditLimit: getSetting('sales.credit.default_credit_limit', 0)
+  }), [getSetting]);
 
   // Load data from backend on mount
   useEffect(() => {
@@ -404,6 +433,17 @@ export function SalesProvider({ children }) {
 
     // Refresh
     refreshData,
+
+    // Admin Settings (from Admin Settings page)
+    settings: salesSettings,
+    // Helper functions for settings
+    getQuotationValidityDays: () => salesSettings.quotationValidityDays,
+    getDefaultPaymentTerms: () => salesSettings.defaultPaymentTerms,
+    getMaxDiscountPercent: () => salesSettings.maxDiscountPercent,
+    isDiscountsAllowed: () => salesSettings.allowDiscounts,
+    needsDiscountApproval: (discountPercent) => discountPercent > salesSettings.discountApprovalThreshold,
+    needsApproval: (amount) => salesSettings.requireApproval && amount >= salesSettings.approvalThreshold,
+    isCreditLimitEnabled: () => salesSettings.enableCreditLimit
   };
 
   return (

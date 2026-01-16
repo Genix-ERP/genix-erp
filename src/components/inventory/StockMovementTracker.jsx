@@ -472,15 +472,15 @@ export default function StockMovementTracker({ movements, items }) {
               <div className="space-y-2">
                 <Label>{t('location') || 'Location (Bin)'}</Label>
                 <Select
-                  value={newMovement.location_id}
-                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, location_id: value }))}
+                  value={newMovement.location_id || '__none__'}
+                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, location_id: value === '__none__' ? '' : value }))}
                   disabled={!newMovement.warehouse_id}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_location') || 'Select bin'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('no_specific_location') || 'No specific location'}</SelectItem>
+                    <SelectItem value="__none__">{t('no_specific_location') || 'No specific location'}</SelectItem>
                     {getWarehouseLocations(newMovement.warehouse_id).map(loc => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.code} - {loc.name}
@@ -496,14 +496,14 @@ export default function StockMovementTracker({ movements, items }) {
               <div className="space-y-2">
                 <Label>{t('lot_batch') || 'Lot/Batch'}</Label>
                 <Select
-                  value={newMovement.lot_id}
-                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, lot_id: value }))}
+                  value={newMovement.lot_id || '__none__'}
+                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, lot_id: value === '__none__' ? '' : value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_lot') || 'Select lot/batch'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('no_lot') || 'No lot tracking'}</SelectItem>
+                    <SelectItem value="__none__">{t('no_lot') || 'No lot tracking'}</SelectItem>
                     {getProductLots(newMovement.product_id).map(lot => (
                       <SelectItem key={lot.id} value={lot.id}>
                         {lot.lot_number} ({lot.quantity} {t('available') || 'available'})

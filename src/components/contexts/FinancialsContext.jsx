@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { financeService, salesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth, API_BASE_URL } from '@/config/dataMode';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const JOURNAL_ENTRIES_KEY = 'genix_journal_entries';
 const JOURNAL_LINES_KEY = 'genix_journal_lines';
@@ -162,6 +163,7 @@ const sampleDepreciationEntries = [
 
 export function FinancialsProvider({ children }) {
   const { activeCompany } = useCompany();
+  const { getSetting } = useAdminSettings();
   const [journalEntries, setJournalEntries] = useState([]);
   const [journalLines, setJournalLines] = useState([]);
   const [vendorBills, setVendorBills] = useState([]);
@@ -184,6 +186,40 @@ export function FinancialsProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
+
+  // Admin settings for finance module - these affect module behavior
+  const financeSettings = useMemo(() => ({
+    // Fiscal year
+    fiscalYearStartMonth: getSetting('finance.fiscal_year.start_month', 1),
+    fiscalYearStartDay: getSetting('finance.fiscal_year.start_day', 1),
+
+    // Accounts
+    chartTemplate: getSetting('finance.accounts.chart_template', 'standard'),
+    defaultSalesAccount: getSetting('finance.accounts.default_sales_account', null),
+    defaultPurchaseAccount: getSetting('finance.accounts.default_purchase_account', null),
+    defaultInventoryAccount: getSetting('finance.accounts.default_inventory_account', null),
+    defaultReceivablesAccount: getSetting('finance.accounts.default_receivables_account', null),
+    defaultPayablesAccount: getSetting('finance.accounts.default_payables_account', null),
+
+    // Tax
+    defaultSalesTax: getSetting('finance.tax.default_sales_tax', 12),
+    defaultPurchaseTax: getSetting('finance.tax.default_purchase_tax', 12),
+    taxRounding: getSetting('finance.tax.tax_rounding', 'line'),
+    priceIncludesTax: getSetting('finance.tax.price_includes_tax', false),
+
+    // Currency
+    multiCurrencyEnabled: getSetting('finance.currency.multi_currency_enabled', false),
+    exchangeRateSource: getSetting('finance.currency.exchange_rate_source', 'manual'),
+    baseCurrency: getSetting('finance.currency.base_currency', 'UZS'),
+
+    // Banking
+    reconciliationTolerance: getSetting('finance.banking.reconciliation_tolerance', 0),
+    autoMatchTransactions: getSetting('finance.banking.auto_match_transactions', true),
+
+    // Journal
+    autoPostEntries: getSetting('finance.journal.auto_post_entries', false),
+    requireApproval: getSetting('finance.journal.require_approval', true)
+  }), [getSetting]);
 
   const loadFromLocalStorage = useCallback(() => {
     const companyId = activeCompany?.id;
@@ -1260,7 +1296,29 @@ export function FinancialsProvider({ children }) {
       depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
       // Reports
       getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
-      isLoading, backendAvailable, error, refreshData: loadData
+      isLoading, backendAvailable, error, refreshData: loadData,
+
+      // Admin Settings (from Admin Settings page)
+      settings: financeSettings,
+      // Helper functions for settings
+      getFiscalYearStart: () => ({ month: financeSettings.fiscalYearStartMonth, day: financeSettings.fiscalYearStartDay }),
+      getDefaultSalesTax: () => financeSettings.defaultSalesTax,
+      getDefaultPurchaseTax: () => financeSettings.defaultPurchaseTax,
+      getTaxRounding: () => financeSettings.taxRounding,
+      isPriceIncludesTax: () => financeSettings.priceIncludesTax,
+      isMultiCurrencyEnabled: () => financeSettings.multiCurrencyEnabled,
+      getBaseCurrency: () => financeSettings.baseCurrency,
+      getReconciliationTolerance: () => financeSettings.reconciliationTolerance,
+      isAutoMatchEnabled: () => financeSettings.autoMatchTransactions,
+      isAutoPostEnabled: () => financeSettings.autoPostEntries,
+      isJournalApprovalRequired: () => financeSettings.requireApproval,
+      getDefaultAccounts: () => ({
+        sales: financeSettings.defaultSalesAccount,
+        purchase: financeSettings.defaultPurchaseAccount,
+        inventory: financeSettings.defaultInventoryAccount,
+        receivables: financeSettings.defaultReceivablesAccount,
+        payables: financeSettings.defaultPayablesAccount
+      })
     }}>
       {children}
     </FinancialsContext.Provider>

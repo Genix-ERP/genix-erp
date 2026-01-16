@@ -1,15 +1,37 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { projectsService } from '@/api/services/projects';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const ProjectsContext = createContext(null);
 
 export function ProjectsProvider({ children }) {
+  const { getSetting } = useAdminSettings();
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Admin settings for projects module - these affect module behavior
+  const projectsSettings = useMemo(() => ({
+    // Billing
+    defaultBillingType: getSetting('projects.billing.default_type', 'time_materials'),
+    allowOvertimeBilling: getSetting('projects.billing.allow_overtime_billing', true),
+    defaultHourlyRate: getSetting('projects.billing.default_hourly_rate', 0),
+
+    // Timesheet
+    timesheetApprovalRequired: getSetting('projects.timesheet.approval_required', true),
+    maxHoursPerDay: getSetting('projects.timesheet.max_hours_per_day', 12),
+    timesheetReminderEnabled: getSetting('projects.timesheet.reminder_enabled', true),
+
+    // Tasks
+    defaultTaskHours: getSetting('projects.task.default_hours', 8),
+    allowSubtasks: getSetting('projects.task.allow_subtasks', true),
+
+    // Stages
+    projectStages: getSetting('projects.stages', ['Planning', 'In Progress', 'Review', 'Completed', 'On Hold', 'Cancelled'])
+  }), [getSetting]);
 
   // Load data from backend on mount
   useEffect(() => {
@@ -240,6 +262,25 @@ export function ProjectsProvider({ children }) {
 
     // Refresh
     refreshData,
+
+    // Admin Settings (from Admin Settings page)
+    settings: projectsSettings,
+    // Helper functions for settings
+    getDefaultBillingType: () => projectsSettings.defaultBillingType,
+    isOvertimeBillingAllowed: () => projectsSettings.allowOvertimeBilling,
+    getDefaultHourlyRate: () => projectsSettings.defaultHourlyRate,
+    isTimesheetApprovalRequired: () => projectsSettings.timesheetApprovalRequired,
+    getMaxHoursPerDay: () => projectsSettings.maxHoursPerDay,
+    isTimesheetReminderEnabled: () => projectsSettings.timesheetReminderEnabled,
+    getDefaultTaskHours: () => projectsSettings.defaultTaskHours,
+    areSubtasksAllowed: () => projectsSettings.allowSubtasks,
+    getProjectStages: () => projectsSettings.projectStages,
+    validateTimeEntry: (hours) => {
+      if (hours > projectsSettings.maxHoursPerDay) {
+        return { valid: false, message: `Maximum ${projectsSettings.maxHoursPerDay} hours per day allowed` };
+      }
+      return { valid: true };
+    }
   };
 
   return (

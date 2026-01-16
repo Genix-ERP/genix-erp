@@ -651,14 +651,14 @@ export default function LotTracking() {
                 <div>
                   <label className="text-sm font-medium">{t('grade') || 'Grade'}</label>
                   <Select
-                    value={newLot.lot_grade}
-                    onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v })}
+                    value={newLot.lot_grade || '__none__'}
+                    onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v === '__none__' ? '' : v })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t('select') || 'Select'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t('none') || 'None'}</SelectItem>
+                      <SelectItem value="__none__">{t('none') || 'None'}</SelectItem>
                       {lotGrades.map(g => (
                         <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
                       ))}
