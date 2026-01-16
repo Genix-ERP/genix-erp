@@ -26,6 +26,9 @@ import {
   FileText,
   History,
   DollarSign,
+  ClipboardList,
+  Package,
+  RotateCcw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -39,6 +42,9 @@ import Suppliers from '@/components/procurement/Suppliers';
 import RFQManagement from '@/components/procurement/RFQManagement';
 import Contracts from '@/components/procurement/Contracts';
 import PriceHistory from '@/components/procurement/PriceHistory';
+import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
+import GoodsReceipt from '@/components/procurement/GoodsReceipt';
+import PurchaseReturns from '@/components/procurement/PurchaseReturns';
 
 export default function Procurement() {
   const { language } = useLanguage();
@@ -208,13 +214,13 @@ export default function Procurement() {
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
           <div className="flex items-center gap-3 mb-4">
             <ShoppingCart className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">Ta'minot va Xaridlar</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('procurement_and_purchases') || 'Ta\'minot va Xaridlar'}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered') || 'AI-Powered'}
             </Badge>
           </div>
-          <p className="text-white/90">Ta'minotchilar, xarid buyurtmalari, shartnomalar va narxlarni boshqaring</p>
+          <p className="text-white/90">{t('procurement_subtitle') || 'Ta\'minotchilar, xarid buyurtmalari, shartnomalar va narxlarni boshqaring'}</p>
         </div>
 
         {/* Tabs */}
@@ -225,7 +231,7 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
+              <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -233,8 +239,7 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Building2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Ta'minotchilar</span>
-              <span className="sm:hidden">Suppliers</span>
+              <span className="hidden sm:inline">{t('suppliers') || 'Suppliers'}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -242,7 +247,7 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline">Xarid buyurtmalari</span>
+              <span className="hidden sm:inline">{t('purchase_orders') || 'Purchase Orders'}</span>
               <span className="sm:hidden">PO</span>
             </TabsTrigger>
 
@@ -251,8 +256,7 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <FileQuestion className="w-4 h-4" />
-              <span className="hidden sm:inline">Takliflar so'rovi</span>
-              <span className="sm:hidden">RFQ</span>
+              <span className="hidden sm:inline">{t('rfq') || 'RFQ'}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -260,7 +264,7 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Shartnomalar</span>
+              <span className="hidden sm:inline">{t('contracts') || 'Contracts'}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -268,8 +272,33 @@ export default function Procurement() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <History className="w-4 h-4" />
-              <span className="hidden sm:inline">Narxlar tarixi</span>
-              <span className="sm:hidden">Prices</span>
+              <span className="hidden sm:inline">{t('price_history') || 'Price History'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="requisitions"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('requisitions') || 'Requisitions'}</span>
+              <span className="sm:hidden">PR</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="goods-receipt"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Package className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('goods_receipt') || 'Goods Receipt'}</span>
+              <span className="sm:hidden">GR</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="returns"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('returns') || 'Returns'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -281,7 +310,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Jami PO</p>
+                      <p className="text-xs text-slate-500">{t('total_po') || 'Total PO'}</p>
                       <p className="text-2xl font-bold text-slate-900">{metrics.totalPOs}</p>
                     </div>
                     <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -295,7 +324,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Jami qiymat</p>
+                      <p className="text-xs text-slate-500">{t('total_value') || 'Total Value'}</p>
                       <p className="text-lg font-bold text-green-600">
                         {metrics.totalValue > 1000000
                           ? `${(metrics.totalValue / 1000000).toFixed(1)}M`
@@ -313,7 +342,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Kutilmoqda</p>
+                      <p className="text-xs text-slate-500">{t('pending') || 'Pending'}</p>
                       <p className="text-2xl font-bold text-yellow-600">{metrics.pendingPOs}</p>
                     </div>
                     <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -327,7 +356,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Qabul qilingan</p>
+                      <p className="text-xs text-slate-500">{t('received') || 'Received'}</p>
                       <p className="text-2xl font-bold text-purple-600">{metrics.receivedPOs}</p>
                     </div>
                     <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -341,7 +370,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Ta'minotchilar</p>
+                      <p className="text-xs text-slate-500">{t('suppliers') || 'Suppliers'}</p>
                       <p className="text-2xl font-bold text-indigo-600">{supplierStats.activeSuppliers}</p>
                     </div>
                     <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
@@ -355,7 +384,7 @@ export default function Procurement() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Shartnomalar</p>
+                      <p className="text-xs text-slate-500">{t('contracts') || 'Contracts'}</p>
                       <p className="text-2xl font-bold text-pink-600">{contracts.filter(c => c.status === 'active').length}</p>
                     </div>
                     <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
@@ -372,7 +401,7 @@ export default function Procurement() {
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Brain className="w-5 h-5 text-indigo-600" />
-                    AI Tahlil
+                    {t('ai_analysis') || 'AI Analysis'}
                     <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -403,7 +432,7 @@ export default function Procurement() {
                         <div className="flex items-start gap-3">
                           <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                           <div>
-                            <h4 className="font-medium text-slate-900 text-sm">AI Tavsiya</h4>
+                            <h4 className="font-medium text-slate-900 text-sm">{t('ai_recommendation') || 'AI Recommendation'}</h4>
                             <p className="text-xs text-slate-600 mt-0.5">{procurementAnalysis.recommendations[0].action}</p>
                             <p className="text-xs text-slate-500 mt-1">{procurementAnalysis.recommendations[0].description}</p>
                           </div>
@@ -420,7 +449,7 @@ export default function Procurement() {
               {chartData.length > 0 && (
                 <Card className="bg-white/80 backdrop-blur-sm">
                   <CardHeader>
-                    <CardTitle>Ta'minotchilar bo'yicha xaridlar</CardTitle>
+                    <CardTitle>{t('purchases_by_supplier') || 'Purchases by Supplier'}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={250}>
@@ -439,13 +468,13 @@ export default function Procurement() {
               {/* Recent POs */}
               <Card className="bg-white/80 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle>So'nggi buyurtmalar</CardTitle>
+                  <CardTitle>{t('recent_orders') || 'Recent Orders'}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {purchaseOrders.length === 0 ? (
                     <div className="text-center py-8">
                       <ShoppingCart className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-500">Hali buyurtmalar yo'q</p>
+                      <p className="text-slate-500">{t('no_orders_yet') || 'No orders yet'}</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -480,16 +509,16 @@ export default function Procurement() {
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle>Xarid buyurtmalari</CardTitle>
+                  <CardTitle>{t('purchase_orders') || 'Purchase Orders'}</CardTitle>
                   <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                    <Plus className="w-4 h-4 mr-2" /> Yangi PO
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_po') || 'New PO'}
                   </Button>
                 </div>
                 <div className="flex gap-3 mt-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      placeholder="Qidirish..."
+                      placeholder={t('search') || 'Search...'}
                       className="pl-9"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -500,11 +529,11 @@ export default function Procurement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Hammasi</SelectItem>
-                      <SelectItem value="draft">Qoralama</SelectItem>
-                      <SelectItem value="sent">Yuborilgan</SelectItem>
-                      <SelectItem value="confirmed">Tasdiqlangan</SelectItem>
-                      <SelectItem value="received">Qabul qilingan</SelectItem>
+                      <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                      <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                      <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
+                      <SelectItem value="confirmed">{t('confirmed') || 'Confirmed'}</SelectItem>
+                      <SelectItem value="received">{t('received') || 'Received'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -517,21 +546,21 @@ export default function Procurement() {
                 ) : filteredOrders.length === 0 ? (
                   <div className="text-center py-16">
                     <ShoppingCart className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500">Buyurtmalar topilmadi</p>
-                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">Birinchi PO yaratish</Button>
+                    <p className="text-slate-500">{t('orders_not_found') || 'Orders not found'}</p>
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_po') || 'Create First PO'}</Button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
-                          <TableHead>PO #</TableHead>
-                          <TableHead>Ta'minotchi</TableHead>
-                          <TableHead>Buyurtma sanasi</TableHead>
-                          <TableHead>Yetkazish sanasi</TableHead>
-                          <TableHead>Summa</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Amallar</TableHead>
+                          <TableHead>{t('po_number') || 'PO #'}</TableHead>
+                          <TableHead>{t('supplier') || 'Supplier'}</TableHead>
+                          <TableHead>{t('order_date') || 'Order Date'}</TableHead>
+                          <TableHead>{t('delivery_date') || 'Delivery Date'}</TableHead>
+                          <TableHead>{t('amount') || 'Amount'}</TableHead>
+                          <TableHead>{t('status') || 'Status'}</TableHead>
+                          <TableHead>{t('actions') || 'Actions'}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -551,17 +580,17 @@ export default function Procurement() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
-                                <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title="Tahrirlash">
+                                <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
                                 {po.status === 'draft' && (
                                   <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'sent')}>
-                                    Yuborish
+                                    {t('send') || 'Send'}
                                   </Button>
                                 )}
                                 {po.status === 'sent' && (
                                   <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
-                                    Tasdiqlash
+                                    {t('confirm') || 'Confirm'}
                                   </Button>
                                 )}
                                 {po.status === 'confirmed' && (
@@ -595,26 +624,41 @@ export default function Procurement() {
           <TabsContent value="price-history" className="mt-6">
             <PriceHistory />
           </TabsContent>
+
+          {/* Purchase Requisitions Tab */}
+          <TabsContent value="requisitions" className="mt-6">
+            <PurchaseRequisitions />
+          </TabsContent>
+
+          {/* Goods Receipt Tab */}
+          <TabsContent value="goods-receipt" className="mt-6">
+            <GoodsReceipt />
+          </TabsContent>
+
+          {/* Purchase Returns Tab */}
+          <TabsContent value="returns" className="mt-6">
+            <PurchaseReturns />
+          </TabsContent>
         </Tabs>
 
         {/* Create PO Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Yangi xarid buyurtmasi</DialogTitle>
+              <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">PO raqami (Ixtiyoriy)</label>
+                  <label className="text-sm font-medium mb-1 block">{t('po_number_optional') || 'PO Number (Optional)'}</label>
                   <Input
-                    placeholder="Avtomatik generatsiya"
+                    placeholder={t('auto_generate') || 'Auto generate'}
                     value={newPO.po_number}
                     onChange={(e) => setNewPO({...newPO, po_number: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Ta'minotchi *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
                   <Select
                     value={newPO.supplier_id}
                     onValueChange={(value) => {
@@ -627,7 +671,7 @@ export default function Procurement() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Ta'minotchini tanlang" />
+                      <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
                     </SelectTrigger>
                     <SelectContent>
                       {suppliers.filter(s => s.status === 'active').map((supplier) => (
@@ -642,7 +686,7 @@ export default function Procurement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Buyurtma sanasi *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('order_date') || 'Order Date'} *</label>
                   <Input
                     type="date"
                     value={newPO.order_date}
@@ -651,7 +695,7 @@ export default function Procurement() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Yetkazish sanasi</label>
+                  <label className="text-sm font-medium mb-1 block">{t('delivery_date') || 'Delivery Date'}</label>
                   <Input
                     type="date"
                     value={newPO.expected_delivery_date}
@@ -662,7 +706,7 @@ export default function Procurement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Jami summa *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'} *</label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -672,17 +716,17 @@ export default function Procurement() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">To'lov shartlari</label>
+                  <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
                   <Select value={newPO.payment_terms} onValueChange={(value) => setNewPO({...newPO, payment_terms: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="prepaid">Oldindan to'lov</SelectItem>
+                      <SelectItem value="prepaid">{t('prepaid') || 'Prepaid'}</SelectItem>
                       <SelectItem value="net_30">Net 30</SelectItem>
                       <SelectItem value="net_60">Net 60</SelectItem>
                       <SelectItem value="net_90">Net 90</SelectItem>
-                      <SelectItem value="due_on_receipt">Qabul qilganda</SelectItem>
+                      <SelectItem value="due_on_receipt">{t('due_on_receipt') || 'Due on Receipt'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -690,14 +734,14 @@ export default function Procurement() {
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
-                  Bekor qilish
+                  {t('cancel') || 'Cancel'}
                 </Button>
                 <Button
                   onClick={handleCreatePO}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
                   disabled={!newPO.supplier_id || !newPO.total_amount || isSubmitting}
                 >
-                  {isSubmitting ? 'Yaratilmoqda...' : 'Yaratish'}
+                  {isSubmitting ? (t('creating') || 'Creating...') : (t('create') || 'Create')}
                 </Button>
               </div>
             </div>
@@ -708,20 +752,20 @@ export default function Procurement() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Buyurtmani tahrirlash</DialogTitle>
+              <DialogTitle>{t('edit_order') || 'Edit Order'}</DialogTitle>
             </DialogHeader>
             {editPO && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">PO raqami</label>
+                    <label className="text-sm font-medium mb-1 block">{t('po_number') || 'PO Number'}</label>
                     <Input
                       value={editPO.po_number}
                       onChange={(e) => setEditPO({...editPO, po_number: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Ta'minotchi</label>
+                    <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'}</label>
                     <Input
                       value={editPO.supplier_name || editPO.vendor_name}
                       disabled
@@ -731,7 +775,7 @@ export default function Procurement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Buyurtma sanasi *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('order_date') || 'Order Date'} *</label>
                     <Input
                       type="date"
                       value={editPO.order_date?.split('T')[0] || ''}
@@ -740,7 +784,7 @@ export default function Procurement() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Yetkazish sanasi</label>
+                    <label className="text-sm font-medium mb-1 block">{t('delivery_date') || 'Delivery Date'}</label>
                     <Input
                       type="date"
                       value={editPO.expected_delivery_date?.split('T')[0] || ''}
@@ -751,7 +795,7 @@ export default function Procurement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Jami summa *</label>
+                    <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'} *</label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -761,48 +805,48 @@ export default function Procurement() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">To'lov shartlari</label>
+                    <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
                     <Select value={editPO.payment_terms || 'net_30'} onValueChange={(value) => setEditPO({...editPO, payment_terms: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="prepaid">Oldindan to'lov</SelectItem>
+                        <SelectItem value="prepaid">{t('prepaid') || 'Prepaid'}</SelectItem>
                         <SelectItem value="net_30">Net 30</SelectItem>
                         <SelectItem value="net_60">Net 60</SelectItem>
                         <SelectItem value="net_90">Net 90</SelectItem>
-                        <SelectItem value="due_on_receipt">Qabul qilganda</SelectItem>
+                        <SelectItem value="due_on_receipt">{t('due_on_receipt') || 'Due on Receipt'}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Status</label>
+                  <label className="text-sm font-medium mb-1 block">{t('status') || 'Status'}</label>
                   <Select value={editPO.status || 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Qoralama</SelectItem>
-                      <SelectItem value="sent">Yuborilgan</SelectItem>
-                      <SelectItem value="confirmed">Tasdiqlangan</SelectItem>
-                      <SelectItem value="received">Qabul qilingan</SelectItem>
-                      <SelectItem value="cancelled">Bekor qilingan</SelectItem>
+                      <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                      <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
+                      <SelectItem value="confirmed">{t('confirmed') || 'Confirmed'}</SelectItem>
+                      <SelectItem value="received">{t('received') || 'Received'}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled') || 'Cancelled'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowEditModal(false); setEditPO(null); }} className="flex-1">
-                    Bekor qilish
+                    {t('cancel') || 'Cancel'}
                   </Button>
                   <Button
                     onClick={handleUpdatePO}
                     className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
+                    {isSubmitting ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
                   </Button>
                 </div>
               </div>

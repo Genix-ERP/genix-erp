@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 export default function MRPPlanning() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { productionOrders } = useManufacturing();
   const [isGenerating, setIsGenerating] = useState(false);
   const [mrpResults, setMrpResults] = useState(null);
@@ -129,24 +133,24 @@ Each array should have 2-4 realistic items.`,
                 <Zap className="w-6 h-6" />
               </div>
               <div>
-                <CardTitle className="text-xl">AI-Powered MRP Planning</CardTitle>
-                <p className="text-sm text-white/80 mt-1">Material Requirements Planning with Genix AI</p>
+                <CardTitle className="text-xl">{t('ai_powered_mrp_planning') || 'AI-Powered MRP Planning'}</CardTitle>
+                <p className="text-sm text-white/80 mt-1">{t('mrp_subtitle') || 'Material Requirements Planning with Genix AI'}</p>
               </div>
             </div>
-            <Button 
-              onClick={generateMRPPlan} 
+            <Button
+              onClick={generateMRPPlan}
               disabled={isGenerating}
               className="bg-white text-slate-800 hover:bg-white/90"
             >
               {isGenerating ? (
                 <>
                   <div className="w-4 h-4 border-2 border-slate-800 border-t-transparent rounded-full animate-spin mr-2" />
-                  Generating...
+                  {t('generating') || 'Generating...'}
                 </>
               ) : (
                 <>
                   <Brain className="w-4 h-4 mr-2" />
-                  Generate MRP Plan
+                  {t('generate_mrp_plan') || 'Generate MRP Plan'}
                 </>
               )}
             </Button>
@@ -172,10 +176,9 @@ Each array should have 2-4 realistic items.`,
             <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Zap className="w-10 h-10 text-slate-400" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">No MRP Plan Generated Yet</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_mrp_plan_generated_yet') || 'No MRP Plan Generated Yet'}</h3>
             <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-              Click "Generate MRP Plan" to get AI-powered recommendations for material procurement,
-              production scheduling, and optimization opportunities.
+              {t('mrp_plan_description') || 'Click "Generate MRP Plan" to get AI-powered recommendations for material procurement, production scheduling, and optimization opportunities.'}
             </p>
           </CardContent>
         </Card>
@@ -188,7 +191,7 @@ Each array should have 2-4 realistic items.`,
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-blue-600" />
-                  Procurement Needs
+                  {t('procurement_needs') || 'Procurement Needs'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -205,9 +208,9 @@ Each array should have 2-4 realistic items.`,
                       </Badge>
                     </div>
                     <div className="space-y-1 text-sm text-slate-600">
-                      <p>Quantity: <span className="font-semibold">{item.quantity} units</span></p>
-                      <p>Lead Time: <span className="font-semibold">{item.lead_time_days} days</span></p>
-                      <p>Est. Cost: <span className="font-semibold">${item.estimated_cost?.toFixed(2) || 0}</span></p>
+                      <p>{t('quantity') || 'Quantity'}: <span className="font-semibold">{item.quantity} {t('units') || 'units'}</span></p>
+                      <p>{t('lead_time') || 'Lead Time'}: <span className="font-semibold">{item.lead_time_days} {t('days') || 'days'}</span></p>
+                      <p>{t('est_cost') || 'Est. Cost'}: <span className="font-semibold">${item.estimated_cost?.toFixed(2) || 0}</span></p>
                     </div>
                   </div>
                 ))}
@@ -221,7 +224,7 @@ Each array should have 2-4 realistic items.`,
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-green-600" />
-                  Recommended Production Schedule
+                  {t('recommended_production_schedule') || 'Recommended Production Schedule'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -232,8 +235,8 @@ Each array should have 2-4 realistic items.`,
                       <Badge variant="outline">{item.priority}</Badge>
                     </div>
                     <div className="space-y-1 text-sm text-slate-600">
-                      <p>Start: <span className="font-medium">{item.recommended_start}</span></p>
-                      <p>Complete: <span className="font-medium">{item.estimated_completion}</span></p>
+                      <p>{t('start') || 'Start'}: <span className="font-medium">{item.recommended_start}</span></p>
+                      <p>{t('complete') || 'Complete'}: <span className="font-medium">{item.estimated_completion}</span></p>
                     </div>
                   </div>
                 ))}
@@ -247,7 +250,7 @@ Each array should have 2-4 realistic items.`,
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-orange-600" />
-                  Identified Bottlenecks
+                  {t('identified_bottlenecks') || 'Identified Bottlenecks'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -263,7 +266,7 @@ Each array should have 2-4 realistic items.`,
                         {item.severity}
                       </Badge>
                     </div>
-                    <p className="text-sm text-slate-700"><strong>Mitigation:</strong> {item.mitigation}</p>
+                    <p className="text-sm text-slate-700"><strong>{t('mitigation') || 'Mitigation'}:</strong> {item.mitigation}</p>
                   </div>
                 ))}
               </CardContent>
@@ -276,7 +279,7 @@ Each array should have 2-4 realistic items.`,
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Brain className="w-5 h-5 text-purple-600" />
-                  Optimization Opportunities
+                  {t('optimization_opportunities') || 'Optimization Opportunities'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -285,10 +288,10 @@ Each array should have 2-4 realistic items.`,
                     <p className="text-sm text-slate-900 mb-2">{item.tip}</p>
                     <div className="flex gap-2 text-xs">
                       <Badge className="bg-purple-100 text-purple-800">
-                        Impact: {item.impact}
+                        {t('impact') || 'Impact'}: {item.impact}
                       </Badge>
                       <Badge variant="outline">
-                        Effort: {item.implementation_effort}
+                        {t('effort') || 'Effort'}: {item.implementation_effort}
                       </Badge>
                     </div>
                   </div>

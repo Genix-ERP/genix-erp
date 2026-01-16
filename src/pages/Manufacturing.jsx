@@ -44,14 +44,14 @@ export default function Manufacturing() {
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-4">
               <Factory className="w-8 h-8" />
-              <h1 className="text-2xl md:text-3xl font-bold">Manufacturing Operations</h1>
+              <h1 className="text-2xl md:text-3xl font-bold">{t('manufacturing_operations') || 'Manufacturing Operations'}</h1>
               <Badge className="bg-white/20 text-white border-white/30">
                 <Brain className="w-3 h-3 mr-1" />
-                AI-Powered
+                {t('ai_powered') || 'AI-Powered'}
               </Badge>
             </div>
             <p className="text-white/90 text-base md:text-lg">
-              Intelligent production planning, scheduling, and quality control powered by Genix AI
+              {t('manufacturing_subtitle') || 'Intelligent production planning, scheduling, and quality control powered by Genix AI'}
             </p>
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32"></div>
@@ -63,31 +63,31 @@ export default function Manufacturing() {
           <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
+              <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
             </TabsTrigger>
             <TabsTrigger value="production" className="flex items-center gap-2">
               <Factory className="w-4 h-4" />
-              <span className="hidden sm:inline">Production</span>
+              <span className="hidden sm:inline">{t('production') || 'Production'}</span>
             </TabsTrigger>
             <TabsTrigger value="schedule" className="flex items-center gap-2">
               <CalendarDays className="w-4 h-4" />
-              <span className="hidden sm:inline">Schedule</span>
+              <span className="hidden sm:inline">{t('schedule') || 'Schedule'}</span>
             </TabsTrigger>
             <TabsTrigger value="bom" className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">BOM</span>
+              <span className="hidden sm:inline">{t('bom') || 'BOM'}</span>
             </TabsTrigger>
             <TabsTrigger value="workcenters" className="flex items-center gap-2">
               <Cog className="w-4 h-4" />
-              <span className="hidden sm:inline">Work Centers</span>
+              <span className="hidden sm:inline">{t('work_centers') || 'Work Centers'}</span>
             </TabsTrigger>
             <TabsTrigger value="quality" className="flex items-center gap-2">
               <PackageCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">Quality</span>
+              <span className="hidden sm:inline">{t('quality') || 'Quality'}</span>
             </TabsTrigger>
             <TabsTrigger value="mrp" className="flex items-center gap-2">
               <Zap className="w-4 h-4" />
-              <span className="hidden sm:inline">MRP</span>
+              <span className="hidden sm:inline">{t('mrp') || 'MRP'}</span>
             </TabsTrigger>
           </TabsList>
 

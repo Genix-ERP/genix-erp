@@ -145,7 +145,9 @@ export default function ProductionSchedule() {
             <div className="flex items-center gap-3">
               <Select value={viewMode} onValueChange={setViewMode}>
                 <SelectTrigger className="w-32">
-                  <SelectValue />
+                  <SelectValue placeholder={t('week_view') || 'Week View'}>
+                    {viewMode === 'week' ? (t('week_view') || 'Week View') : (t('month_view') || 'Month View')}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="week">{t('week_view') || 'Week View'}</SelectItem>

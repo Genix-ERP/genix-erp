@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import procurementService from '@/api/services/procurement';
-import { isDemoMode } from '@/config/dataMode';
+import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const ProcurementContext = createContext(null);
 
@@ -186,38 +186,38 @@ export function ProcurementProvider({ children }) {
   const [contracts, setContracts] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [backendAvailable, setBackendAvailable] = useState(false);
 
-  // Load data from localStorage on mount
+  // Load data from backend or localStorage on mount
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       try {
         const demoMode = isDemoMode();
+        const isBackendAvailable = await checkBackendHealth();
+        setBackendAvailable(isBackendAvailable);
 
-        const getData = (key, sampleData) => {
-          const storageKey = getStorageKey(key);
-          const stored = localStorage.getItem(storageKey);
-          if (stored) return JSON.parse(stored);
-          return demoMode ? sampleData : [];
-        };
+        if (isBackendAvailable) {
+          // Try to load from backend
+          try {
+            const [suppliersData, posData, rfqsData, contractsData] = await Promise.all([
+              procurementService.listSuppliers().catch(() => null),
+              procurementService.listOrders().catch(() => null),
+              procurementService.listRFQs().catch(() => null),
+              procurementService.listContracts().catch(() => null),
+            ]);
 
-        setSuppliers(getData(STORAGE_KEYS.SUPPLIERS, sampleSuppliers));
-        setPurchaseOrders(getData(STORAGE_KEYS.PURCHASE_ORDERS, []));
-        setRFQs(getData(STORAGE_KEYS.RFQS, sampleRFQs));
-        setContracts(getData(STORAGE_KEYS.CONTRACTS, sampleContracts));
-        setPriceHistory(getData(STORAGE_KEYS.PRICE_HISTORY, samplePriceHistory));
-
-        // Initialize localStorage with sample data only in demo mode
-        if (demoMode) {
-          const initIfEmpty = (key, sampleData) => {
-            const storageKey = getStorageKey(key);
-            if (!localStorage.getItem(storageKey)) {
-              localStorage.setItem(storageKey, JSON.stringify(sampleData));
-            }
-          };
-          initIfEmpty(STORAGE_KEYS.SUPPLIERS, sampleSuppliers);
-          initIfEmpty(STORAGE_KEYS.RFQS, sampleRFQs);
-          initIfEmpty(STORAGE_KEYS.CONTRACTS, sampleContracts);
-          initIfEmpty(STORAGE_KEYS.PRICE_HISTORY, samplePriceHistory);
+            // Use backend data if available, else fall back to demo data
+            setSuppliers(Array.isArray(suppliersData) && suppliersData.length > 0 ? suppliersData : (demoMode ? sampleSuppliers : []));
+            setPurchaseOrders(Array.isArray(posData) ? posData : []);
+            setRFQs(Array.isArray(rfqsData) && rfqsData.length > 0 ? rfqsData : (demoMode ? sampleRFQs : []));
+            setContracts(Array.isArray(contractsData) && contractsData.length > 0 ? contractsData : (demoMode ? sampleContracts : []));
+            setPriceHistory(demoMode ? samplePriceHistory : []);
+          } catch (apiError) {
+            console.warn('API call failed, falling back to localStorage:', apiError);
+            loadFromLocalStorage(demoMode);
+          }
+        } else {
+          loadFromLocalStorage(demoMode);
         }
       } catch (error) {
         console.error('Error loading procurement data:', error);
@@ -228,6 +228,35 @@ export function ProcurementProvider({ children }) {
         setPriceHistory(demoMode ? samplePriceHistory : []);
       } finally {
         setIsLoading(false);
+      }
+    };
+
+    const loadFromLocalStorage = (demoMode) => {
+      const getData = (key, sampleData) => {
+        const storageKey = getStorageKey(key);
+        const stored = localStorage.getItem(storageKey);
+        if (stored) return JSON.parse(stored);
+        return demoMode ? sampleData : [];
+      };
+
+      setSuppliers(getData(STORAGE_KEYS.SUPPLIERS, sampleSuppliers));
+      setPurchaseOrders(getData(STORAGE_KEYS.PURCHASE_ORDERS, []));
+      setRFQs(getData(STORAGE_KEYS.RFQS, sampleRFQs));
+      setContracts(getData(STORAGE_KEYS.CONTRACTS, sampleContracts));
+      setPriceHistory(getData(STORAGE_KEYS.PRICE_HISTORY, samplePriceHistory));
+
+      // Initialize localStorage with sample data only in demo mode
+      if (demoMode) {
+        const initIfEmpty = (key, sampleData) => {
+          const storageKey = getStorageKey(key);
+          if (!localStorage.getItem(storageKey)) {
+            localStorage.setItem(storageKey, JSON.stringify(sampleData));
+          }
+        };
+        initIfEmpty(STORAGE_KEYS.SUPPLIERS, sampleSuppliers);
+        initIfEmpty(STORAGE_KEYS.RFQS, sampleRFQs);
+        initIfEmpty(STORAGE_KEYS.CONTRACTS, sampleContracts);
+        initIfEmpty(STORAGE_KEYS.PRICE_HISTORY, samplePriceHistory);
       }
     };
 
@@ -267,6 +296,19 @@ export function ProcurementProvider({ children }) {
 
   // Supplier CRUD operations
   const createSupplier = useCallback(async (supplierData) => {
+    if (backendAvailable) {
+      try {
+        const response = await procurementService.createSupplier({
+          ...supplierData,
+          type: 'vendor',
+        });
+        setSuppliers(prev => [...prev, response]);
+        return response;
+      } catch (error) {
+        console.error('Failed to create supplier via API:', error);
+      }
+    }
+    // Fallback to local
     const newSupplier = {
       ...supplierData,
       id: Date.now().toString(),
@@ -279,15 +321,29 @@ export function ProcurementProvider({ children }) {
     };
     setSuppliers(prev => [...prev, newSupplier]);
     return newSupplier;
-  }, [suppliers.length]);
+  }, [suppliers.length, backendAvailable]);
 
   const updateSupplier = useCallback(async (id, updates) => {
+    if (backendAvailable) {
+      try {
+        await procurementService.updateSupplier(id, updates);
+      } catch (error) {
+        console.error('Failed to update supplier via API:', error);
+      }
+    }
     setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-  }, []);
+  }, [backendAvailable]);
 
   const deleteSupplier = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await procurementService.deleteSupplier(id);
+      } catch (error) {
+        console.error('Failed to delete supplier via API:', error);
+      }
+    }
     setSuppliers(prev => prev.filter(s => s.id !== id));
-  }, []);
+  }, [backendAvailable]);
 
   const getSupplierById = useCallback((id) => {
     return suppliers.find(s => s.id === id);
@@ -498,6 +554,7 @@ export function ProcurementProvider({ children }) {
     contracts,
     priceHistory,
     isLoading,
+    backendAvailable,
 
     // Supplier operations
     createSupplier,
