@@ -507,35 +507,35 @@ export default function Layout({ children, currentPageName }) {
     <LanguageProvider>
       <SubscriptionProvider>
         <CompanyProvider>
-          <RolesProvider>
-            <InstalledAppsProvider>
-              <CustomersProvider>
-                <VendorsProvider>
-                  <InventoryProvider>
-                  <FinancialsProvider>
-                    <ModulesProvider>
-                      <ProcurementProvider>
-                        <SalesProvider>
-                          <ManufacturingProvider>
-                            <HRProvider>
-                              <ProjectsProvider>
-                                <AdminSettingsProvider>
+          <AdminSettingsProvider>
+            <RolesProvider>
+              <InstalledAppsProvider>
+                <CustomersProvider>
+                  <VendorsProvider>
+                    <InventoryProvider>
+                    <FinancialsProvider>
+                      <ModulesProvider>
+                        <ProcurementProvider>
+                          <SalesProvider>
+                            <ManufacturingProvider>
+                              <HRProvider>
+                                <ProjectsProvider>
                                   <AIProvider>
                                     <LayoutContent children={children} currentPageName={currentPageName} />
                                   </AIProvider>
-                                </AdminSettingsProvider>
-                              </ProjectsProvider>
-                            </HRProvider>
-                          </ManufacturingProvider>
-                        </SalesProvider>
-                      </ProcurementProvider>
-                    </ModulesProvider>
-                  </FinancialsProvider>
-                </InventoryProvider>
-                </VendorsProvider>
-              </CustomersProvider>
-            </InstalledAppsProvider>
-          </RolesProvider>
+                                </ProjectsProvider>
+                              </HRProvider>
+                            </ManufacturingProvider>
+                          </SalesProvider>
+                        </ProcurementProvider>
+                      </ModulesProvider>
+                    </FinancialsProvider>
+                  </InventoryProvider>
+                  </VendorsProvider>
+                </CustomersProvider>
+              </InstalledAppsProvider>
+            </RolesProvider>
+          </AdminSettingsProvider>
         </CompanyProvider>
       </SubscriptionProvider>
     </LanguageProvider>
