@@ -48,6 +48,7 @@ import {
   Clock,
   CreditCard,
   Banknote,
+  AlertTriangle,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -75,6 +76,8 @@ export default function Invoices() {
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [editMode, setEditMode] = useState(false);
 
@@ -155,7 +158,7 @@ export default function Invoices() {
       setFormData({
         ...formData,
         customer_id: customerId,
-        customer_name: customer.name,
+        customer_name: customer.company_name,
       });
     }
   };
@@ -250,9 +253,16 @@ export default function Invoices() {
     }
   };
 
-  const handleDelete = async (invoice) => {
-    if (window.confirm(t("confirm_delete_invoice"))) {
-      await deleteInvoice(invoice.id);
+  const handleDelete = (invoice) => {
+    setInvoiceToDelete(invoice);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (invoiceToDelete) {
+      await deleteInvoice(invoiceToDelete.id);
+      setShowDeleteConfirm(false);
+      setInvoiceToDelete(null);
     }
   };
 
@@ -545,7 +555,7 @@ export default function Invoices() {
                   <SelectContent>
                     {customers.map((customer) => (
                       <SelectItem key={customer.id} value={customer.id}>
-                        {customer.name}
+                        {customer.company_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -956,6 +966,43 @@ export default function Invoices() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('confirm_deletion')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('delete_invoice_confirm')}
+            </p>
+            {invoiceToDelete && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <p className="font-semibold">{invoiceToDelete.invoice_number}</p>
+                <p className="text-sm text-slate-500">{invoiceToDelete.customer_name}</p>
+                <p className="text-sm font-medium mt-1">
+                  {formatCurrency(invoiceToDelete.total_amount)}
+                </p>
+              </div>
+            )}
+            <p className="text-sm text-red-500 mt-3">
+              {t('this_action_cannot_be_undone')}
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('cancel')}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              {t('delete')}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

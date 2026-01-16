@@ -245,6 +245,88 @@ export const financeService = {
     const response = await apiClient.get('/reports/aging-payables', { params });
     return response.data.data;
   },
+
+  // Expense Categories
+  async listExpenseCategories(params = {}) {
+    const response = await apiClient.get('/expense-categories', { params });
+    return response.data.data;
+  },
+
+  // Expenses
+  async listExpenses(params = {}) {
+    const response = await apiClient.get('/expenses', { params });
+    return response.data.data;
+  },
+
+  async getExpense(id) {
+    const response = await apiClient.get(`/expenses/${id}`);
+    return response.data.data;
+  },
+
+  async createExpense(data) {
+    const response = await apiClient.post('/expenses', data);
+    return response.data.data;
+  },
+
+  async updateExpense(id, data) {
+    const response = await apiClient.put(`/expenses/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteExpense(id) {
+    await apiClient.delete(`/expenses/${id}`);
+  },
+
+  async approveExpense(id) {
+    const response = await apiClient.post(`/expenses/${id}/approve`);
+    return response.data.data;
+  },
+
+  // Asset Categories
+  async listAssetCategories(params = {}) {
+    const response = await apiClient.get('/asset-categories', { params });
+    return response.data.data;
+  },
+
+  // Fixed Assets
+  async listFixedAssets(params = {}) {
+    const response = await apiClient.get('/fixed-assets', { params });
+    return response.data.data;
+  },
+
+  async getFixedAsset(id) {
+    const response = await apiClient.get(`/fixed-assets/${id}`);
+    return response.data.data;
+  },
+
+  async createFixedAsset(data) {
+    const response = await apiClient.post('/fixed-assets', data);
+    return response.data.data;
+  },
+
+  async updateFixedAsset(id, data) {
+    const response = await apiClient.put(`/fixed-assets/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteFixedAsset(id) {
+    await apiClient.delete(`/fixed-assets/${id}`);
+  },
+
+  async disposeFixedAsset(id, data) {
+    const response = await apiClient.post(`/fixed-assets/${id}/dispose`, data);
+    return response.data.data;
+  },
+
+  async getDepreciationEntries(id) {
+    const response = await apiClient.get(`/fixed-assets/${id}/depreciation`);
+    return response.data.data;
+  },
+
+  async runDepreciation(data) {
+    const response = await apiClient.post('/run-depreciation', data);
+    return response.data;
+  },
 };
 
 export default financeService;
