@@ -122,6 +122,7 @@ export default function Products() {
     cost_price: '',
     list_price: '',
     min_price: '',
+    wholesale_price: '',
     is_stockable: true,
     track_inventory: true,
     min_stock_level: '',
@@ -130,8 +131,70 @@ export default function Products() {
     is_purchasable: true,
     is_sellable: true,
     is_active: true,
-    tags: []
+    tags: [],
+    // New advanced fields
+    brand: '',
+    manufacturer: '',
+    model_number: '',
+    upc: '',
+    ean: '',
+    isbn: '',
+    mpn: '', // Manufacturer Part Number
+    // Weight & Dimensions
+    weight: '',
+    weight_unit: 'kg',
+    length: '',
+    width: '',
+    height: '',
+    dimension_unit: 'cm',
+    // Additional info
+    warranty_months: '',
+    country_of_origin: '',
+    hs_code: '', // Harmonized System code for customs
+    tax_class: 'standard',
+    // Variants
+    has_variants: false,
+    variant_attributes: [], // e.g., [{name: 'Color', values: ['Red', 'Blue']}, {name: 'Size', values: ['S', 'M', 'L']}]
+    variants: [], // Generated variant combinations
+    // Supplier info
+    default_supplier_id: '',
+    supplier_sku: '',
+    lead_time_days: '',
+    // Storage
+    shelf_life_days: '',
+    storage_conditions: '',
+    requires_lot_tracking: false,
+    requires_serial_tracking: false,
+    // Media
+    image_url: '',
+    additional_images: [],
+    // SEO/Web
+    meta_title: '',
+    meta_description: '',
+    url_slug: '',
+    // Units of Measure (SAP-style)
+    inventory_uom: 'unit',
+    sales_uom: 'unit',
+    purchase_uom: 'unit',
+    uom_conversion_factor: '1',
+    // Invoicing Policy (Odoo-style)
+    invoicing_policy: 'ordered', // 'ordered' or 'delivered'
+    // Valuation Method per product
+    valuation_method: 'fifo', // 'fifo', 'lifo', 'average', 'standard'
+    standard_cost: '',
+    // Customer Lead Time
+    customer_lead_time_days: '',
+    // Expiration tracking
+    track_expiration: false,
+    expiration_time_days: '', // Default expiration time from production/receipt
+    use_expiration_date: false,
+    use_best_before_date: false,
+    removal_time_days: '', // Days before expiration to remove from available stock
+    alert_time_days: '' // Days before expiration to show alert
   });
+
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [newVariantAttribute, setNewVariantAttribute] = useState({ name: '', values: '' });
 
   // Summary calculations
   const summaryStats = {
@@ -193,6 +256,7 @@ export default function Products() {
       cost_price: '',
       list_price: '',
       min_price: '',
+      wholesale_price: '',
       is_stockable: true,
       track_inventory: true,
       min_stock_level: '',
@@ -201,8 +265,61 @@ export default function Products() {
       is_purchasable: true,
       is_sellable: true,
       is_active: true,
-      tags: []
+      tags: [],
+      // Advanced fields
+      brand: '',
+      manufacturer: '',
+      model_number: '',
+      upc: '',
+      ean: '',
+      isbn: '',
+      mpn: '',
+      weight: '',
+      weight_unit: 'kg',
+      length: '',
+      width: '',
+      height: '',
+      dimension_unit: 'cm',
+      warranty_months: '',
+      country_of_origin: '',
+      hs_code: '',
+      tax_class: 'standard',
+      has_variants: false,
+      variant_attributes: [],
+      variants: [],
+      default_supplier_id: '',
+      supplier_sku: '',
+      lead_time_days: '',
+      shelf_life_days: '',
+      storage_conditions: '',
+      requires_lot_tracking: false,
+      requires_serial_tracking: false,
+      image_url: '',
+      additional_images: [],
+      meta_title: '',
+      meta_description: '',
+      url_slug: '',
+      // Units of Measure
+      inventory_uom: 'unit',
+      sales_uom: 'unit',
+      purchase_uom: 'unit',
+      uom_conversion_factor: '1',
+      // Invoicing & Valuation
+      invoicing_policy: 'ordered',
+      valuation_method: 'fifo',
+      standard_cost: '',
+      // Customer Lead Time
+      customer_lead_time_days: '',
+      // Expiration tracking
+      track_expiration: false,
+      expiration_time_days: '',
+      use_expiration_date: false,
+      use_best_before_date: false,
+      removal_time_days: '',
+      alert_time_days: ''
     });
+    setShowAdvancedFields(false);
+    setNewVariantAttribute({ name: '', values: '' });
   };
 
   const handleCreate = () => {
@@ -213,9 +330,23 @@ export default function Products() {
         cost_price: parseFloat(formData.cost_price) || 0,
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
+        wholesale_price: parseFloat(formData.wholesale_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
-        reorder_quantity: parseFloat(formData.reorder_quantity) || 0
+        reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
+        weight: parseFloat(formData.weight) || null,
+        length: parseFloat(formData.length) || null,
+        width: parseFloat(formData.width) || null,
+        height: parseFloat(formData.height) || null,
+        warranty_months: parseInt(formData.warranty_months) || null,
+        lead_time_days: parseInt(formData.lead_time_days) || null,
+        shelf_life_days: parseInt(formData.shelf_life_days) || null,
+        standard_cost: parseFloat(formData.standard_cost) || null,
+        customer_lead_time_days: parseInt(formData.customer_lead_time_days) || null,
+        expiration_time_days: parseInt(formData.expiration_time_days) || null,
+        removal_time_days: parseInt(formData.removal_time_days) || null,
+        alert_time_days: parseInt(formData.alert_time_days) || null,
+        uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
       createProduct(productData);
@@ -230,6 +361,8 @@ export default function Products() {
 
   const handleEdit = (product) => {
     setSelectedProduct(product);
+    const hasAdvancedData = product.brand || product.manufacturer || product.weight ||
+                           product.has_variants || product.warranty_months || product.hs_code;
     setFormData({
       code: product.code || '',
       name: product.name || '',
@@ -241,6 +374,7 @@ export default function Products() {
       cost_price: product.cost_price?.toString() || '',
       list_price: product.list_price?.toString() || '',
       min_price: product.min_price?.toString() || '',
+      wholesale_price: product.wholesale_price?.toString() || '',
       is_stockable: product.is_stockable !== false,
       track_inventory: product.track_inventory !== false,
       min_stock_level: product.min_stock_level?.toString() || '',
@@ -249,8 +383,60 @@ export default function Products() {
       is_purchasable: product.is_purchasable !== false,
       is_sellable: product.is_sellable !== false,
       is_active: product.is_active !== false,
-      tags: product.tags || []
+      tags: product.tags || [],
+      // Advanced fields
+      brand: product.brand || '',
+      manufacturer: product.manufacturer || '',
+      model_number: product.model_number || '',
+      upc: product.upc || '',
+      ean: product.ean || '',
+      isbn: product.isbn || '',
+      mpn: product.mpn || '',
+      weight: product.weight?.toString() || '',
+      weight_unit: product.weight_unit || 'kg',
+      length: product.length?.toString() || '',
+      width: product.width?.toString() || '',
+      height: product.height?.toString() || '',
+      dimension_unit: product.dimension_unit || 'cm',
+      warranty_months: product.warranty_months?.toString() || '',
+      country_of_origin: product.country_of_origin || '',
+      hs_code: product.hs_code || '',
+      tax_class: product.tax_class || 'standard',
+      has_variants: product.has_variants || false,
+      variant_attributes: product.variant_attributes || [],
+      variants: product.variants || [],
+      default_supplier_id: product.default_supplier_id || '',
+      supplier_sku: product.supplier_sku || '',
+      lead_time_days: product.lead_time_days?.toString() || '',
+      shelf_life_days: product.shelf_life_days?.toString() || '',
+      storage_conditions: product.storage_conditions || '',
+      requires_lot_tracking: product.requires_lot_tracking || false,
+      requires_serial_tracking: product.requires_serial_tracking || false,
+      image_url: product.image_url || '',
+      additional_images: product.additional_images || [],
+      meta_title: product.meta_title || '',
+      meta_description: product.meta_description || '',
+      url_slug: product.url_slug || '',
+      // Units of Measure
+      inventory_uom: product.inventory_uom || 'unit',
+      sales_uom: product.sales_uom || 'unit',
+      purchase_uom: product.purchase_uom || 'unit',
+      uom_conversion_factor: product.uom_conversion_factor?.toString() || '1',
+      // Invoicing & Valuation
+      invoicing_policy: product.invoicing_policy || 'ordered',
+      valuation_method: product.valuation_method || 'fifo',
+      standard_cost: product.standard_cost?.toString() || '',
+      // Customer Lead Time
+      customer_lead_time_days: product.customer_lead_time_days?.toString() || '',
+      // Expiration tracking
+      track_expiration: product.track_expiration || false,
+      expiration_time_days: product.expiration_time_days?.toString() || '',
+      use_expiration_date: product.use_expiration_date || false,
+      use_best_before_date: product.use_best_before_date || false,
+      removal_time_days: product.removal_time_days?.toString() || '',
+      alert_time_days: product.alert_time_days?.toString() || ''
     });
+    setShowAdvancedFields(hasAdvancedData || product.track_expiration || product.valuation_method !== 'fifo');
     setShowEditModal(true);
   };
 
@@ -262,9 +448,23 @@ export default function Products() {
         cost_price: parseFloat(formData.cost_price) || 0,
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
+        wholesale_price: parseFloat(formData.wholesale_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
-        reorder_quantity: parseFloat(formData.reorder_quantity) || 0
+        reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
+        weight: parseFloat(formData.weight) || null,
+        length: parseFloat(formData.length) || null,
+        width: parseFloat(formData.width) || null,
+        height: parseFloat(formData.height) || null,
+        warranty_months: parseInt(formData.warranty_months) || null,
+        lead_time_days: parseInt(formData.lead_time_days) || null,
+        shelf_life_days: parseInt(formData.shelf_life_days) || null,
+        standard_cost: parseFloat(formData.standard_cost) || null,
+        customer_lead_time_days: parseInt(formData.customer_lead_time_days) || null,
+        expiration_time_days: parseInt(formData.expiration_time_days) || null,
+        removal_time_days: parseInt(formData.removal_time_days) || null,
+        alert_time_days: parseInt(formData.alert_time_days) || null,
+        uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
       updateProduct(selectedProduct.id, productData);
@@ -967,6 +1167,657 @@ export default function Products() {
                 </div>
               </div>
             </div>
+
+            {/* Advanced Fields Toggle */}
+            <div className="border-t border-slate-200 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                className="flex items-center gap-2 text-sm font-medium text-[var(--genix-blue)] hover:text-[var(--genix-purple)] transition-colors"
+              >
+                {showAdvancedFields ? (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    {t('hide_advanced_fields') || 'Hide Advanced Fields'}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    {t('show_advanced_fields') || 'Show Advanced Fields'}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Advanced Fields Section */}
+            {showAdvancedFields && (
+              <>
+                {/* Brand & Manufacturer */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('brand_manufacturer') || 'Brand & Manufacturer'}</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('brand') || 'Brand'}</label>
+                      <Input
+                        placeholder={t('brand_placeholder') || 'e.g., Samsung, Apple'}
+                        value={formData.brand}
+                        onChange={(e) => setFormData({...formData, brand: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('manufacturer') || 'Manufacturer'}</label>
+                      <Input
+                        placeholder={t('manufacturer_placeholder') || 'e.g., Samsung Electronics'}
+                        value={formData.manufacturer}
+                        onChange={(e) => setFormData({...formData, manufacturer: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('model_number') || 'Model Number'}</label>
+                      <Input
+                        placeholder={t('model_placeholder') || 'e.g., SM-G998B'}
+                        value={formData.model_number}
+                        onChange={(e) => setFormData({...formData, model_number: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('mpn') || 'MPN (Manufacturer Part Number)'}</label>
+                      <Input
+                        placeholder={t('mpn_placeholder') || 'Manufacturer part number'}
+                        value={formData.mpn}
+                        onChange={(e) => setFormData({...formData, mpn: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Identifiers */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('additional_identifiers') || 'Additional Identifiers'}</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('upc') || 'UPC'}</label>
+                      <Input
+                        placeholder="012345678901"
+                        value={formData.upc}
+                        onChange={(e) => setFormData({...formData, upc: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('ean') || 'EAN'}</label>
+                      <Input
+                        placeholder="0123456789012"
+                        value={formData.ean}
+                        onChange={(e) => setFormData({...formData, ean: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('isbn') || 'ISBN'}</label>
+                      <Input
+                        placeholder="978-0-123456-47-2"
+                        value={formData.isbn}
+                        onChange={(e) => setFormData({...formData, isbn: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Weight & Dimensions */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('weight_dimensions') || 'Weight & Dimensions'}</h4>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight') || 'Weight'}</label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.weight}
+                          onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                          className="flex-1"
+                        />
+                        <Select
+                          value={formData.weight_unit}
+                          onValueChange={(value) => setFormData({...formData, weight_unit: value})}
+                        >
+                          <SelectTrigger className="w-20">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="kg">kg</SelectItem>
+                            <SelectItem value="g">g</SelectItem>
+                            <SelectItem value="lb">lb</SelectItem>
+                            <SelectItem value="oz">oz</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('dimension_unit') || 'Dimension Unit'}</label>
+                      <Select
+                        value={formData.dimension_unit}
+                        onValueChange={(value) => setFormData({...formData, dimension_unit: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cm">cm</SelectItem>
+                          <SelectItem value="m">m</SelectItem>
+                          <SelectItem value="in">in</SelectItem>
+                          <SelectItem value="ft">ft</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('length') || 'Length'}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.length}
+                        onChange={(e) => setFormData({...formData, length: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('width') || 'Width'}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.width}
+                        onChange={(e) => setFormData({...formData, width: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('height') || 'Height'}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.height}
+                        onChange={(e) => setFormData({...formData, height: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Product Variants */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    {t('product_variants') || 'Product Variants'}
+                    <Badge className="bg-blue-100 text-blue-700 text-xs">{t('optional') || 'Optional'}</Badge>
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={formData.has_variants}
+                        onCheckedChange={(checked) => setFormData({...formData, has_variants: checked})}
+                      />
+                      <span className="text-sm text-slate-700">{t('this_product_has_variants') || 'This product has variants (e.g., Size, Color)'}</span>
+                    </div>
+
+                    {formData.has_variants && (
+                      <div className="bg-slate-50 p-4 rounded-lg space-y-4">
+                        {/* Existing variant attributes */}
+                        {formData.variant_attributes.length > 0 && (
+                          <div className="space-y-2">
+                            {formData.variant_attributes.map((attr, index) => (
+                              <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg border">
+                                <div className="flex-1">
+                                  <span className="font-medium text-slate-700">{attr.name}:</span>
+                                  <span className="text-slate-600 ml-2">{attr.values.join(', ')}</span>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newAttrs = formData.variant_attributes.filter((_, i) => i !== index);
+                                    setFormData({...formData, variant_attributes: newAttrs});
+                                  }}
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add new variant attribute */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Input
+                              placeholder={t('attribute_name') || 'Attribute (e.g., Color)'}
+                              value={newVariantAttribute.name}
+                              onChange={(e) => setNewVariantAttribute({...newVariantAttribute, name: e.target.value})}
+                            />
+                          </div>
+                          <div>
+                            <Input
+                              placeholder={t('attribute_values') || 'Values (comma separated)'}
+                              value={newVariantAttribute.values}
+                              onChange={(e) => setNewVariantAttribute({...newVariantAttribute, values: e.target.value})}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              if (newVariantAttribute.name && newVariantAttribute.values) {
+                                const values = newVariantAttribute.values.split(',').map(v => v.trim()).filter(v => v);
+                                setFormData({
+                                  ...formData,
+                                  variant_attributes: [
+                                    ...formData.variant_attributes,
+                                    { name: newVariantAttribute.name, values }
+                                  ]
+                                });
+                                setNewVariantAttribute({ name: '', values: '' });
+                              }
+                            }}
+                            disabled={!newVariantAttribute.name || !newVariantAttribute.values}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            {t('add_attribute') || 'Add'}
+                          </Button>
+                        </div>
+
+                        {/* Variant preview */}
+                        {formData.variant_attributes.length > 0 && (
+                          <div className="text-sm text-slate-600">
+                            <p className="font-medium mb-1">{t('variants_will_be_generated') || 'Variants will be generated for all combinations:'}</p>
+                            <p className="text-xs text-slate-500">
+                              {formData.variant_attributes.reduce((acc, attr) => acc * attr.values.length, 1)} {t('variants_total') || 'variants total'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Additional Product Info */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('additional_info') || 'Additional Information'}</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('warranty_months') || 'Warranty (Months)'}</label>
+                      <Input
+                        type="number"
+                        placeholder="12"
+                        value={formData.warranty_months}
+                        onChange={(e) => setFormData({...formData, warranty_months: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('country_of_origin') || 'Country of Origin'}</label>
+                      <Input
+                        placeholder={t('country_placeholder') || 'e.g., China, USA'}
+                        value={formData.country_of_origin}
+                        onChange={(e) => setFormData({...formData, country_of_origin: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('hs_code') || 'HS Code (Customs)'}</label>
+                      <Input
+                        placeholder="8471.30.00"
+                        value={formData.hs_code}
+                        onChange={(e) => setFormData({...formData, hs_code: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('tax_class') || 'Tax Class'}</label>
+                      <Select
+                        value={formData.tax_class}
+                        onValueChange={(value) => setFormData({...formData, tax_class: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="standard">{t('standard') || 'Standard'}</SelectItem>
+                          <SelectItem value="reduced">{t('reduced') || 'Reduced'}</SelectItem>
+                          <SelectItem value="zero">{t('zero_rate') || 'Zero Rate'}</SelectItem>
+                          <SelectItem value="exempt">{t('tax_exempt') || 'Tax Exempt'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('lead_time_days') || 'Lead Time (Days)'}</label>
+                      <Input
+                        type="number"
+                        placeholder="7"
+                        value={formData.lead_time_days}
+                        onChange={(e) => setFormData({...formData, lead_time_days: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('shelf_life_days') || 'Shelf Life (Days)'}</label>
+                      <Input
+                        type="number"
+                        placeholder="365"
+                        value={formData.shelf_life_days}
+                        onChange={(e) => setFormData({...formData, shelf_life_days: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Storage & Tracking */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('storage_tracking') || 'Storage & Tracking'}</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('storage_conditions') || 'Storage Conditions'}</label>
+                      <Input
+                        placeholder={t('storage_placeholder') || 'e.g., Keep in cool, dry place'}
+                        value={formData.storage_conditions}
+                        onChange={(e) => setFormData({...formData, storage_conditions: e.target.value})}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-6">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={formData.requires_lot_tracking}
+                          onCheckedChange={(checked) => setFormData({...formData, requires_lot_tracking: checked})}
+                        />
+                        <span className="text-sm text-slate-700">{t('requires_lot_tracking') || 'Requires Lot/Batch Tracking'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={formData.requires_serial_tracking}
+                          onCheckedChange={(checked) => setFormData({...formData, requires_serial_tracking: checked})}
+                        />
+                        <span className="text-sm text-slate-700">{t('requires_serial_tracking') || 'Requires Serial Number Tracking'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Wholesale Price */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('wholesale_pricing') || 'Wholesale Pricing'}</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('wholesale_price') || 'Wholesale Price'}</label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="pl-9"
+                          value={formData.wholesale_price}
+                          onChange={(e) => setFormData({...formData, wholesale_price: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Units of Measure (SAP-style) */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    {t('units_of_measure') || 'Units of Measure'}
+                    <Badge className="bg-purple-100 text-purple-700 text-xs">SAP</Badge>
+                  </h4>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('inventory_uom') || 'Inventory UoM'}</label>
+                      <Select
+                        value={formData.inventory_uom}
+                        onValueChange={(value) => setFormData({...formData, inventory_uom: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
+                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
+                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
+                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
+                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
+                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
+                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
+                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
+                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
+                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('sales_uom') || 'Sales UoM'}</label>
+                      <Select
+                        value={formData.sales_uom}
+                        onValueChange={(value) => setFormData({...formData, sales_uom: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
+                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
+                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
+                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
+                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
+                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
+                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
+                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
+                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
+                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('purchase_uom') || 'Purchase UoM'}</label>
+                      <Select
+                        value={formData.purchase_uom}
+                        onValueChange={(value) => setFormData({...formData, purchase_uom: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
+                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
+                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
+                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
+                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
+                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
+                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
+                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
+                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
+                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('uom_conversion') || 'Conversion Factor'}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="1"
+                        value={formData.uom_conversion_factor}
+                        onChange={(e) => setFormData({...formData, uom_conversion_factor: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Invoicing & Valuation (Odoo-style) */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    {t('invoicing_valuation') || 'Invoicing & Valuation'}
+                    <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('invoicing_policy') || 'Invoicing Policy'}</label>
+                      <Select
+                        value={formData.invoicing_policy}
+                        onValueChange={(value) => setFormData({...formData, invoicing_policy: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ordered">{t('invoice_on_order') || 'Ordered Quantities'}</SelectItem>
+                          <SelectItem value="delivered">{t('invoice_on_delivery') || 'Delivered Quantities'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {formData.invoicing_policy === 'ordered'
+                          ? (t('invoice_order_desc') || 'Invoice when order is confirmed')
+                          : (t('invoice_delivery_desc') || 'Invoice when delivery is completed')
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('valuation_method') || 'Valuation Method'}</label>
+                      <Select
+                        value={formData.valuation_method}
+                        onValueChange={(value) => setFormData({...formData, valuation_method: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fifo">{t('fifo') || 'FIFO (First In, First Out)'}</SelectItem>
+                          <SelectItem value="lifo">{t('lifo') || 'LIFO (Last In, First Out)'}</SelectItem>
+                          <SelectItem value="average">{t('weighted_average') || 'Weighted Average'}</SelectItem>
+                          <SelectItem value="standard">{t('standard_cost') || 'Standard Cost'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {formData.valuation_method === 'standard' && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('standard_cost_value') || 'Standard Cost Value'}</label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="pl-9"
+                            value={formData.standard_cost}
+                            onChange={(e) => setFormData({...formData, standard_cost: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Customer Lead Time */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('delivery_lead_times') || 'Delivery & Lead Times'}</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('customer_lead_time') || 'Customer Lead Time (Days)'}</label>
+                      <Input
+                        type="number"
+                        placeholder="3"
+                        value={formData.customer_lead_time_days}
+                        onChange={(e) => setFormData({...formData, customer_lead_time_days: e.target.value})}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">{t('customer_lead_time_desc') || 'Delivery time to customer from order'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('supplier_lead_time') || 'Supplier Lead Time (Days)'}</label>
+                      <Input
+                        type="number"
+                        placeholder="7"
+                        value={formData.lead_time_days}
+                        onChange={(e) => setFormData({...formData, lead_time_days: e.target.value})}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">{t('supplier_lead_time_desc') || 'Time to receive from supplier'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expiration Tracking (Odoo-style) */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    {t('expiration_tracking') || 'Expiration & Best Before'}
+                    <Badge className="bg-red-100 text-red-700 text-xs">{t('perishable') || 'Perishable'}</Badge>
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={formData.track_expiration}
+                        onCheckedChange={(checked) => setFormData({...formData, track_expiration: checked})}
+                      />
+                      <span className="text-sm text-slate-700">{t('enable_expiration_tracking') || 'Enable expiration date tracking for this product'}</span>
+                    </div>
+
+                    {formData.track_expiration && (
+                      <div className="bg-red-50 p-4 rounded-lg space-y-4">
+                        <div className="flex flex-wrap gap-6">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={formData.use_expiration_date}
+                              onCheckedChange={(checked) => setFormData({...formData, use_expiration_date: checked})}
+                            />
+                            <span className="text-sm text-slate-700">{t('use_expiration_date') || 'Use Expiration Date'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={formData.use_best_before_date}
+                              onCheckedChange={(checked) => setFormData({...formData, use_best_before_date: checked})}
+                            />
+                            <span className="text-sm text-slate-700">{t('use_best_before_date') || 'Use Best Before Date'}</span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('expiration_time') || 'Expiration Time (Days)'}</label>
+                            <Input
+                              type="number"
+                              placeholder="365"
+                              value={formData.expiration_time_days}
+                              onChange={(e) => setFormData({...formData, expiration_time_days: e.target.value})}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">{t('from_production') || 'From production/receipt'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('best_before_time') || 'Best Before (Days)'}</label>
+                            <Input
+                              type="number"
+                              placeholder="300"
+                              value={formData.shelf_life_days}
+                              onChange={(e) => setFormData({...formData, shelf_life_days: e.target.value})}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('removal_time') || 'Removal Time (Days)'}</label>
+                            <Input
+                              type="number"
+                              placeholder="30"
+                              value={formData.removal_time_days}
+                              onChange={(e) => setFormData({...formData, removal_time_days: e.target.value})}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">{t('before_expiration') || 'Before expiration'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('alert_time') || 'Alert Time (Days)'}</label>
+                            <Input
+                              type="number"
+                              placeholder="60"
+                              value={formData.alert_time_days}
+                              onChange={(e) => setFormData({...formData, alert_time_days: e.target.value})}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">{t('show_warning') || 'Show warning'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="flex gap-3 pt-4">
               <Button

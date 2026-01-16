@@ -42,13 +42,50 @@ import {
   TrendingDown,
   CheckCircle2,
   XCircle,
-  Filter
+  Filter,
+  Shield,
+  Calculator,
+  Factory,
+  Truck,
+  ArrowRightLeft,
+  Settings2,
+  BarChart3,
+  Target
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// SAP Safety Stock Methods
+const safetyStockMethods = [
+  { value: 'fixed', label: 'Fixed Quantity' },
+  { value: 'percentage', label: 'Percentage of Demand' },
+  { value: 'days_of_supply', label: 'Days of Supply' },
+];
+
+// Odoo Procurement Types
+const procurementTypes = [
+  { value: 'buy', label: 'Buy (Purchase)', icon: ShoppingCart },
+  { value: 'make', label: 'Make (Manufacture)', icon: Factory },
+  { value: 'transfer', label: 'Transfer (Warehouse)', icon: ArrowRightLeft },
+];
+
+// SAP MRP Lot Sizing Policies
+const lotSizingPolicies = [
+  { value: 'lot_for_lot', label: 'Lot-for-Lot', description: 'Order exact requirement' },
+  { value: 'fixed_order_qty', label: 'Fixed Order Quantity', description: 'Order in fixed quantities' },
+  { value: 'period_order_qty', label: 'Period Order Quantity', description: 'Consolidate for period' },
+  { value: 'eoq', label: 'Economic Order Quantity', description: 'Minimize total cost' },
+];
+
+// Forecast Methods
+const forecastMethods = [
+  { value: 'moving_avg', label: 'Moving Average' },
+  { value: 'exponential', label: 'Exponential Smoothing' },
+  { value: 'seasonal', label: 'Seasonal Adjustment' },
+];
 
 export default function ReorderRules() {
   const { language } = useLanguage();
@@ -81,7 +118,26 @@ export default function ReorderRules() {
     lead_time_days: 7,
     is_active: true,
     auto_create_po: false,
-    notes: ""
+    notes: "",
+    // SAP-style Safety Stock
+    safety_stock: 0,
+    safety_stock_method: 'fixed', // fixed, percentage, days_of_supply
+    safety_stock_percentage: 10,
+    safety_days_of_supply: 7,
+    // SAP Economic Order Quantity (EOQ)
+    use_eoq: false,
+    ordering_cost: 0, // Cost per order
+    holding_cost_rate: 0.20, // Annual holding cost as % of unit cost
+    annual_demand: 0, // Expected annual demand
+    // Odoo Procurement Type
+    procurement_type: 'buy', // buy, make, transfer
+    preferred_vendor_id: '',
+    // SAP MRP settings
+    lot_sizing_policy: 'lot_for_lot', // lot_for_lot, fixed_order_qty, period_order_qty, eoq
+    fixed_order_period_days: 7,
+    // Demand-based reordering
+    forecast_method: 'moving_avg', // moving_avg, exponential, seasonal
+    forecast_period_days: 30
   });
 
   // Get products needing reorder
@@ -129,9 +185,37 @@ export default function ReorderRules() {
       lead_time_days: 7,
       is_active: true,
       auto_create_po: false,
-      notes: ""
+      notes: "",
+      safety_stock: 0,
+      safety_stock_method: 'fixed',
+      safety_stock_percentage: 10,
+      safety_days_of_supply: 7,
+      use_eoq: false,
+      ordering_cost: 0,
+      holding_cost_rate: 0.20,
+      annual_demand: 0,
+      procurement_type: 'buy',
+      preferred_vendor_id: '',
+      lot_sizing_policy: 'lot_for_lot',
+      fixed_order_period_days: 7,
+      forecast_method: 'moving_avg',
+      forecast_period_days: 30
     });
     setEditingRule(null);
+  };
+
+  // Calculate EOQ
+  const calculateEOQ = () => {
+    const D = parseFloat(formData.annual_demand) || 0;
+    const S = parseFloat(formData.ordering_cost) || 0;
+    const H = parseFloat(formData.holding_cost_rate) || 0.20;
+    const unitCost = products.find(p => p.id === formData.product_id)?.cost_price || 1;
+
+    if (D > 0 && S > 0 && H > 0) {
+      const eoq = Math.sqrt((2 * D * S) / (H * unitCost));
+      return Math.round(eoq);
+    }
+    return 0;
   };
 
   const handleOpenForm = (rule = null) => {
@@ -474,7 +558,7 @@ export default function ReorderRules() {
 
       {/* Form Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingRule ? (t('edit_rule') || 'Edit Rule') : (t('add_rule') || 'Add Rule')}
@@ -482,49 +566,75 @@ export default function ReorderRules() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Product */}
-            <div className="space-y-2">
-              <Label>{t('product') || 'Product'} *</Label>
-              <Select
-                value={formData.product_id}
-                onValueChange={(value) => setFormData({ ...formData, product_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product') || 'Select product'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.is_stockable !== false).map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Product & Warehouse */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('product') || 'Product'} *</Label>
+                <Select
+                  value={formData.product_id}
+                  onValueChange={(value) => setFormData({ ...formData, product_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_product') || 'Select product'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.filter(p => p.is_stockable !== false).map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} ({product.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('warehouse') || 'Warehouse'}</Label>
+                <Select
+                  value={formData.warehouse_id || "all"}
+                  onValueChange={(value) => setFormData({ ...formData, warehouse_id: value === "all" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_warehouses') || 'All Warehouses'}</SelectItem>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Warehouse */}
-            <div className="space-y-2">
-              <Label>{t('warehouse') || 'Warehouse'}</Label>
-              <Select
-                value={formData.warehouse_id || "all"}
-                onValueChange={(value) => setFormData({ ...formData, warehouse_id: value === "all" ? "" : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_warehouses') || 'All Warehouses'}</SelectItem>
-                  {warehouses.map((warehouse) => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Odoo Procurement Type */}
+            <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+              <p className="text-xs font-medium text-orange-700 mb-2 flex items-center gap-1">
+                <Truck className="w-3 h-3" /> {t('procurement_type') || 'Procurement Type'} (Odoo)
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {procurementTypes.map((pt) => {
+                  const Icon = pt.icon;
+                  return (
+                    <div
+                      key={pt.value}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                        formData.procurement_type === pt.value
+                          ? 'bg-orange-100 border-orange-400'
+                          : 'bg-white border-slate-200 hover:border-orange-300'
+                      }`}
+                      onClick={() => setFormData({ ...formData, procurement_type: pt.value })}
+                    >
+                      <Icon className={`w-5 h-5 mx-auto mb-1 ${formData.procurement_type === pt.value ? 'text-orange-600' : 'text-slate-400'}`} />
+                      <p className="text-xs text-center font-medium">{pt.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Quantities */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-3">
               <div className="space-y-2">
                 <Label>{t('min_qty') || 'Min Qty'}</Label>
                 <Input
@@ -552,9 +662,178 @@ export default function ReorderRules() {
                   onChange={(e) => setFormData({ ...formData, reorder_qty: parseInt(e.target.value) || 1 })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>{t('lead_time_days') || 'Lead Time'}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={formData.lead_time_days}
+                  onChange={(e) => setFormData({ ...formData, lead_time_days: parseInt(e.target.value) || 0 })}
+                />
+              </div>
             </div>
 
-            {/* Trigger Type & Lead Time */}
+            {/* SAP Safety Stock Section */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs font-medium text-blue-700 mb-2 flex items-center gap-1">
+                <Shield className="w-3 h-3" /> {t('safety_stock') || 'Safety Stock'} (SAP)
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">{t('method') || 'Method'}</Label>
+                  <Select
+                    value={formData.safety_stock_method}
+                    onValueChange={(value) => setFormData({ ...formData, safety_stock_method: value })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {safetyStockMethods.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.safety_stock_method === 'fixed' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('safety_qty') || 'Safety Qty'}</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      className="h-9"
+                      value={formData.safety_stock}
+                      onChange={(e) => setFormData({ ...formData, safety_stock: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                )}
+                {formData.safety_stock_method === 'percentage' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('percentage') || 'Percentage'} %</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="h-9"
+                      value={formData.safety_stock_percentage}
+                      onChange={(e) => setFormData({ ...formData, safety_stock_percentage: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                )}
+                {formData.safety_stock_method === 'days_of_supply' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('days') || 'Days'}</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      className="h-9"
+                      value={formData.safety_days_of_supply}
+                      onChange={(e) => setFormData({ ...formData, safety_days_of_supply: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SAP MRP Lot Sizing */}
+            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+              <p className="text-xs font-medium text-purple-700 mb-2 flex items-center gap-1">
+                <Settings2 className="w-3 h-3" /> {t('lot_sizing_policy') || 'Lot Sizing Policy'} (SAP MRP)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">{t('policy') || 'Policy'}</Label>
+                  <Select
+                    value={formData.lot_sizing_policy}
+                    onValueChange={(value) => setFormData({ ...formData, lot_sizing_policy: value })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lotSizingPolicies.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          <div>
+                            <span className="font-medium">{p.label}</span>
+                            <span className="text-xs text-slate-500 ml-1">- {p.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.lot_sizing_policy === 'period_order_qty' && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('period_days') || 'Period (days)'}</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="h-9"
+                      value={formData.fixed_order_period_days}
+                      onChange={(e) => setFormData({ ...formData, fixed_order_period_days: parseInt(e.target.value) || 7 })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* EOQ Calculator */}
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-green-700 flex items-center gap-1">
+                  <Calculator className="w-3 h-3" /> {t('eoq_calculator') || 'EOQ Calculator'} (SAP)
+                </p>
+                <Switch
+                  checked={formData.use_eoq}
+                  onCheckedChange={(checked) => setFormData({ ...formData, use_eoq: checked })}
+                />
+              </div>
+              {formData.use_eoq && (
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('annual_demand') || 'Annual Demand'}</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      className="h-9"
+                      value={formData.annual_demand}
+                      onChange={(e) => setFormData({ ...formData, annual_demand: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('ordering_cost') || 'Ordering Cost'}</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="h-9"
+                      value={formData.ordering_cost}
+                      onChange={(e) => setFormData({ ...formData, ordering_cost: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">{t('holding_cost_rate') || 'Holding Cost %'}</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      className="h-9"
+                      value={formData.holding_cost_rate}
+                      onChange={(e) => setFormData({ ...formData, holding_cost_rate: parseFloat(e.target.value) || 0.20 })}
+                    />
+                  </div>
+                </div>
+              )}
+              {formData.use_eoq && calculateEOQ() > 0 && (
+                <div className="mt-3 p-2 bg-green-100 rounded flex items-center justify-between">
+                  <span className="text-sm text-green-800">{t('calculated_eoq') || 'Calculated EOQ'}:</span>
+                  <span className="text-lg font-bold text-green-900">{calculateEOQ()} {t('units') || 'units'}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Trigger Type & Forecast */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t('trigger_type') || 'Trigger Type'}</Label>
@@ -574,19 +853,28 @@ export default function ReorderRules() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>{t('lead_time_days') || 'Lead Time (days)'}</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={formData.lead_time_days}
-                  onChange={(e) => setFormData({ ...formData, lead_time_days: parseInt(e.target.value) || 0 })}
-                />
-              </div>
+              {formData.trigger_type === 'forecast' && (
+                <div className="space-y-2">
+                  <Label>{t('forecast_method') || 'Forecast Method'}</Label>
+                  <Select
+                    value={formData.forecast_method}
+                    onValueChange={(value) => setFormData({ ...formData, forecast_method: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {forecastMethods.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {/* Options */}
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
                 <Label>{t('auto_create_po') || 'Auto Create Purchase Order'}</Label>
                 <p className="text-xs text-slate-500">
@@ -600,7 +888,7 @@ export default function ReorderRules() {
             </div>
 
             {/* Active */}
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
                 <Label>{t('active') || 'Active'}</Label>
                 <p className="text-xs text-slate-500">

@@ -13,10 +13,30 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 
+// SAP-style document types
+const documentTypes = [
+  { value: 'PO', label: 'Purchase Order' },
+  { value: 'SO', label: 'Sales Order' },
+  { value: 'GRN', label: 'Goods Receipt Note' },
+  { value: 'GDN', label: 'Goods Delivery Note' },
+  { value: 'TR', label: 'Transfer Order' },
+  { value: 'ADJ', label: 'Adjustment' },
+  { value: 'RET', label: 'Return' },
+  { value: 'PROD', label: 'Production Order' },
+];
+
+// SAP quality statuses
+const qualityStatuses = [
+  { value: 'released', label: 'Released', color: 'bg-green-100 text-green-800' },
+  { value: 'blocked', label: 'Blocked', color: 'bg-red-100 text-red-800' },
+  { value: 'in_qc', label: 'In QC', color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'quarantine', label: 'Quarantine', color: 'bg-orange-100 text-orange-800' },
+];
+
 export default function StockMovementTracker({ movements, items }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { adjustInventory, warehouses, products } = useInventory();
+  const { adjustInventory, warehouses, products, lots = [] } = useInventory();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
 
@@ -26,10 +46,18 @@ export default function StockMovementTracker({ movements, items }) {
   const [newMovement, setNewMovement] = useState({
     product_id: '',
     warehouse_id: '',
+    location_id: '', // SAP: bin-level tracking
     movement_type: 'inbound',
     quantity: '',
     unit_cost: '',
     reference: '',
+    // SAP-style document references
+    document_type: '', // PO, SO, GRN, GDN, Transfer
+    document_number: '',
+    // Batch/Lot tracking
+    lot_id: '',
+    // Quality status (SAP)
+    quality_status: 'released', // released, blocked, in_qc, quarantine
     supplier_or_customer: '',
     notes: ''
   });
@@ -100,15 +128,31 @@ export default function StockMovementTracker({ movements, items }) {
     };
   }, [filteredMovements]);
 
+  // Get warehouse locations for selected warehouse
+  const getWarehouseLocations = (warehouseId) => {
+    const warehouse = warehouses.find(w => w.id === warehouseId);
+    return warehouse?.locations || [];
+  };
+
+  // Get lots for selected product
+  const getProductLots = (productId) => {
+    return lots.filter(l => l.product_id === productId && l.status === 'active');
+  };
+
   // Handler for opening new movement modal
   const handleNewMovementClick = () => {
     setNewMovement({
       product_id: '',
       warehouse_id: warehouses?.[0]?.id || '',
+      location_id: '',
       movement_type: 'inbound',
       quantity: '',
       unit_cost: '',
       reference: '',
+      document_type: '',
+      document_number: '',
+      lot_id: '',
+      quality_status: 'released',
       supplier_or_customer: '',
       notes: ''
     });
@@ -338,10 +382,44 @@ export default function StockMovementTracker({ movements, items }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            {/* SAP-style Document Reference Section */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs font-medium text-blue-700 mb-2 flex items-center gap-1">
+                <Activity className="w-3 h-3" /> {t('document_reference') || 'Document Reference'} (SAP)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('document_type') || 'Document Type'}</Label>
+                  <Select
+                    value={newMovement.document_type}
+                    onValueChange={(value) => setNewMovement(prev => ({ ...prev, document_type: value }))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder={t('select_type') || 'Select type'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {documentTypes.map(dt => (
+                        <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('document_number') || 'Document Number'}</Label>
+                  <Input
+                    className="h-9"
+                    value={newMovement.document_number}
+                    onChange={(e) => setNewMovement(prev => ({ ...prev, document_number: e.target.value }))}
+                    placeholder="e.g., PO-2025-001"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Product Selection */}
             <div className="space-y-2">
-              <Label>{t('select_product')}</Label>
+              <Label>{t('select_product')} *</Label>
               <Select
                 value={newMovement.product_id}
                 onValueChange={(value) => {
@@ -349,7 +427,8 @@ export default function StockMovementTracker({ movements, items }) {
                   setNewMovement(prev => ({
                     ...prev,
                     product_id: value,
-                    unit_cost: product?.cost_price?.toString() || ''
+                    unit_cost: product?.cost_price?.toString() || '',
+                    lot_id: '' // Reset lot when product changes
                   }));
                 }}
               >
@@ -366,29 +445,78 @@ export default function StockMovementTracker({ movements, items }) {
               </Select>
             </div>
 
-            {/* Warehouse Selection */}
-            <div className="space-y-2">
-              <Label>{t('warehouse')}</Label>
-              <Select
-                value={newMovement.warehouse_id}
-                onValueChange={(value) => setNewMovement(prev => ({ ...prev, warehouse_id: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_warehouse')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(warehouses || []).map(warehouse => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Warehouse and Location Selection (SAP bin-level) */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('warehouse')} *</Label>
+                <Select
+                  value={newMovement.warehouse_id}
+                  onValueChange={(value) => setNewMovement(prev => ({
+                    ...prev,
+                    warehouse_id: value,
+                    location_id: '' // Reset location when warehouse changes
+                  }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_warehouse')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(warehouses || []).map(warehouse => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('location') || 'Location (Bin)'}</Label>
+                <Select
+                  value={newMovement.location_id}
+                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, location_id: value }))}
+                  disabled={!newMovement.warehouse_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_location') || 'Select bin'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('no_specific_location') || 'No specific location'}</SelectItem>
+                    {getWarehouseLocations(newMovement.warehouse_id).map(loc => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.code} - {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
+            {/* Lot/Batch Selection (if product has lots) */}
+            {newMovement.product_id && getProductLots(newMovement.product_id).length > 0 && (
+              <div className="space-y-2">
+                <Label>{t('lot_batch') || 'Lot/Batch'}</Label>
+                <Select
+                  value={newMovement.lot_id}
+                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, lot_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_lot') || 'Select lot/batch'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('no_lot') || 'No lot tracking'}</SelectItem>
+                    {getProductLots(newMovement.product_id).map(lot => (
+                      <SelectItem key={lot.id} value={lot.id}>
+                        {lot.lot_number} ({lot.quantity} {t('available') || 'available'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Movement Type */}
             <div className="space-y-2">
-              <Label>{t('movement_type')}</Label>
+              <Label>{t('movement_type')} *</Label>
               <Select
                 value={newMovement.movement_type}
                 onValueChange={(value) => setNewMovement(prev => ({ ...prev, movement_type: value }))}
@@ -419,10 +547,10 @@ export default function StockMovementTracker({ movements, items }) {
               </Select>
             </div>
 
-            {/* Quantity and Unit Cost */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Quantity, Unit Cost, Quality Status */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
-                <Label>{t('quantity')}</Label>
+                <Label>{t('quantity')} *</Label>
                 <Input
                   type="number"
                   min="1"
@@ -442,6 +570,24 @@ export default function StockMovementTracker({ movements, items }) {
                   placeholder="0.00"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>{t('quality_status') || 'Quality Status'}</Label>
+                <Select
+                  value={newMovement.quality_status}
+                  onValueChange={(value) => setNewMovement(prev => ({ ...prev, quality_status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {qualityStatuses.map(qs => (
+                      <SelectItem key={qs.value} value={qs.value}>
+                        <Badge className={qs.color}>{qs.label}</Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Reference Number */}
@@ -450,7 +596,7 @@ export default function StockMovementTracker({ movements, items }) {
               <Input
                 value={newMovement.reference}
                 onChange={(e) => setNewMovement(prev => ({ ...prev, reference: e.target.value }))}
-                placeholder={t('reference_number_placeholder')}
+                placeholder={t('reference_number_placeholder') || 'Internal reference'}
               />
             </div>
 
@@ -460,7 +606,7 @@ export default function StockMovementTracker({ movements, items }) {
               <Input
                 value={newMovement.supplier_or_customer}
                 onChange={(e) => setNewMovement(prev => ({ ...prev, supplier_or_customer: e.target.value }))}
-                placeholder={t('supplier_or_customer_placeholder')}
+                placeholder={t('supplier_or_customer_placeholder') || 'Supplier or customer name'}
               />
             </div>
 
@@ -470,7 +616,7 @@ export default function StockMovementTracker({ movements, items }) {
               <Input
                 value={newMovement.notes}
                 onChange={(e) => setNewMovement(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder={t('movement_notes_placeholder')}
+                placeholder={t('movement_notes_placeholder') || 'Additional notes'}
               />
             </div>
           </div>

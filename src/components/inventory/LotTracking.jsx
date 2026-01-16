@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, Calendar, AlertTriangle, Clock, CheckCircle,
   Warehouse, Tag, Hash, Layers, TrendingDown, ChevronDown, ChevronRight,
-  FileText, Barcode, Eye, Edit, Trash2, MoreHorizontal
+  FileText, Barcode, Eye, Edit, Trash2, MoreHorizontal, Shield, Globe,
+  Award, FileCheck, ClipboardCheck, QrCode, Beaker
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -21,6 +22,23 @@ import { format, differenceInDays } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// SAP Quality Status options
+const qualityStatuses = [
+  { value: 'released', label: 'Released', color: 'bg-green-100 text-green-700 border-green-200' },
+  { value: 'blocked', label: 'Blocked', color: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'in_qc', label: 'In QC', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  { value: 'quarantine', label: 'Quarantine', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { value: 'rejected', label: 'Rejected', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+];
+
+// Lot grades (SAP)
+const lotGrades = [
+  { value: 'A', label: 'Grade A (Premium)' },
+  { value: 'B', label: 'Grade B (Standard)' },
+  { value: 'C', label: 'Grade C (Economy)' },
+  { value: 'X', label: 'Grade X (Defective)' },
+];
 
 export default function LotTracking() {
   const { language } = useLanguage();
@@ -59,7 +77,23 @@ export default function LotTracking() {
     expiry_date: '',
     supplier: '',
     received_date: new Date().toISOString().split('T')[0],
-    serial_numbers: ''
+    serial_numbers: '',
+    // SAP/Odoo Quality Management
+    quality_status: 'released', // released, blocked, in_qc, quarantine, rejected
+    // GS1 Standards
+    gtin: '', // Global Trade Item Number
+    gs1_batch: '', // GS1-128 batch code
+    // Lot Attributes (SAP)
+    lot_grade: '', // A, B, C grades
+    lot_color: '',
+    lot_size: '',
+    // Certificate tracking (SAP QM)
+    certificate_of_analysis: '', // COA document URL
+    test_results: '',
+    inspection_date: '',
+    inspector_name: '',
+    // Country of origin (important for compliance)
+    country_of_origin: ''
   });
 
   // Calculate summaries
@@ -478,86 +512,187 @@ export default function LotTracking() {
 
       {/* Create Lot Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t('create_new_lot')}</DialogTitle>
             <DialogDescription>{t('enter_lot_details')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">{t('lot_number')}</label>
-                <Input
-                  value={newLot.lot_number}
-                  onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
-                  placeholder="LOT-2025-001"
-                />
+          <div className="space-y-4 mt-4 max-h-[70vh] overflow-y-auto">
+            {/* Basic Information */}
+            <div className="p-3 bg-slate-50 rounded-lg border">
+              <p className="text-xs font-medium text-slate-600 mb-3 flex items-center gap-1">
+                <Package className="w-3 h-3" /> {t('basic_information') || 'Basic Information'}
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sm font-medium">{t('lot_number')} *</label>
+                  <Input
+                    value={newLot.lot_number}
+                    onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
+                    placeholder="LOT-2025-001"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('received_date')}</label>
+                  <Input
+                    type="date"
+                    value={newLot.received_date}
+                    onChange={(e) => setNewLot({ ...newLot, received_date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('quality_status') || 'Quality Status'}</label>
+                  <Select
+                    value={newLot.quality_status}
+                    onValueChange={(v) => setNewLot({ ...newLot, quality_status: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {qualityStatuses.map(qs => (
+                        <SelectItem key={qs.value} value={qs.value}>
+                          <Badge className={qs.color}>{qs.label}</Badge>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">{t('received_date')}</label>
-                <Input
-                  type="date"
-                  value={newLot.received_date}
-                  onChange={(e) => setNewLot({ ...newLot, received_date: e.target.value })}
-                />
+
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-sm font-medium">{t('product')} *</label>
+                  <Select
+                    value={newLot.product_id}
+                    onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_product')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.filter(p => p.is_stockable).map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('warehouse')} *</label>
+                  <Select
+                    value={newLot.warehouse_id}
+                    onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_warehouse')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map(w => (
+                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-sm font-medium">{t('quantity')} *</label>
+                  <Input
+                    type="number"
+                    value={newLot.quantity}
+                    onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('unit_cost')}</label>
+                  <Input
+                    type="number"
+                    value={newLot.unit_cost}
+                    onChange={(e) => setNewLot({ ...newLot, unit_cost: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium">{t('product')}</label>
-              <Select
-                value={newLot.product_id}
-                onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.is_stockable).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">{t('warehouse')}</label>
-              <Select
-                value={newLot.warehouse_id}
-                onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_warehouse')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">{t('quantity')}</label>
-                <Input
-                  type="number"
-                  value={newLot.quantity}
-                  onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">{t('unit_cost')}</label>
-                <Input
-                  type="number"
-                  value={newLot.unit_cost}
-                  onChange={(e) => setNewLot({ ...newLot, unit_cost: e.target.value })}
-                  placeholder="0.00"
-                />
+            {/* GS1 Standards Section */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs font-medium text-blue-700 mb-3 flex items-center gap-1">
+                <QrCode className="w-3 h-3" /> {t('gs1_standards') || 'GS1 Standards'}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">{t('gtin') || 'GTIN (Barcode)'}</label>
+                  <Input
+                    value={newLot.gtin}
+                    onChange={(e) => setNewLot({ ...newLot, gtin: e.target.value })}
+                    placeholder="e.g., 01234567890123"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('gs1_batch') || 'GS1-128 Batch'}</label>
+                  <Input
+                    value={newLot.gs1_batch}
+                    onChange={(e) => setNewLot({ ...newLot, gs1_batch: e.target.value })}
+                    placeholder="e.g., 10ABC123"
+                  />
+                </div>
               </div>
             </div>
 
+            {/* Lot Attributes (SAP) */}
+            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+              <p className="text-xs font-medium text-purple-700 mb-3 flex items-center gap-1">
+                <Award className="w-3 h-3" /> {t('lot_attributes') || 'Lot Attributes'} (SAP)
+              </p>
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <label className="text-sm font-medium">{t('grade') || 'Grade'}</label>
+                  <Select
+                    value={newLot.lot_grade}
+                    onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select') || 'Select'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">{t('none') || 'None'}</SelectItem>
+                      {lotGrades.map(g => (
+                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('color') || 'Color'}</label>
+                  <Input
+                    value={newLot.lot_color}
+                    onChange={(e) => setNewLot({ ...newLot, lot_color: e.target.value })}
+                    placeholder="e.g., Red"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('size') || 'Size'}</label>
+                  <Input
+                    value={newLot.lot_size}
+                    onChange={(e) => setNewLot({ ...newLot, lot_size: e.target.value })}
+                    placeholder="e.g., Large"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('country_of_origin') || 'Origin'}</label>
+                  <Input
+                    value={newLot.country_of_origin}
+                    onChange={(e) => setNewLot({ ...newLot, country_of_origin: e.target.value })}
+                    placeholder="e.g., USA"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dates Section */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">{t('manufacture_date')}</label>
@@ -574,6 +709,49 @@ export default function LotTracking() {
                   value={newLot.expiry_date}
                   onChange={(e) => setNewLot({ ...newLot, expiry_date: e.target.value })}
                 />
+              </div>
+            </div>
+
+            {/* Certificate Tracking (SAP QM) */}
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-xs font-medium text-green-700 mb-3 flex items-center gap-1">
+                <FileCheck className="w-3 h-3" /> {t('certificate_tracking') || 'Certificate Tracking'} (QM)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">{t('coa_url') || 'Certificate of Analysis URL'}</label>
+                  <Input
+                    value={newLot.certificate_of_analysis}
+                    onChange={(e) => setNewLot({ ...newLot, certificate_of_analysis: e.target.value })}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('test_results') || 'Test Results'}</label>
+                  <Input
+                    value={newLot.test_results}
+                    onChange={(e) => setNewLot({ ...newLot, test_results: e.target.value })}
+                    placeholder={t('test_results_placeholder') || 'Pass/Fail or details'}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-sm font-medium">{t('inspection_date') || 'Inspection Date'}</label>
+                  <Input
+                    type="date"
+                    value={newLot.inspection_date}
+                    onChange={(e) => setNewLot({ ...newLot, inspection_date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('inspector_name') || 'Inspector Name'}</label>
+                  <Input
+                    value={newLot.inspector_name}
+                    onChange={(e) => setNewLot({ ...newLot, inspector_name: e.target.value })}
+                    placeholder={t('inspector_name_placeholder') || 'Name of inspector'}
+                  />
+                </div>
               </div>
             </div>
 

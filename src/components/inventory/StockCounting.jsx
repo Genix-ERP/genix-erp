@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, ClipboardCheck, Calendar, CheckCircle, Clock, AlertCircle,
   Warehouse, Package, ArrowUp, ArrowDown, Minus, Edit, Eye, FileText,
-  User, Check, X
+  User, Check, X, EyeOff, RefreshCw, BarChart3, Target, Repeat, CalendarClock
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -19,6 +19,34 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { hrService } from "@/api/services/hr";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+
+// SAP-style Count Types
+const countTypes = [
+  { value: 'full', label: 'Full Count', description: 'Count all items in warehouse' },
+  { value: 'cycle', label: 'Cycle Count', description: 'Based on ABC classification' },
+  { value: 'spot', label: 'Spot Check', description: 'Random sampling' },
+  { value: 'annual', label: 'Annual Count', description: 'Year-end inventory' },
+];
+
+// ABC Classification for cycle counting
+const abcClasses = [
+  { value: 'A', label: 'Class A', description: 'High value (count weekly)', frequency: 7 },
+  { value: 'B', label: 'Class B', description: 'Medium value (count monthly)', frequency: 30 },
+  { value: 'C', label: 'Class C', description: 'Low value (count quarterly)', frequency: 90 },
+];
+
+// Variance reasons (SAP)
+const varianceReasons = [
+  { value: 'theft', label: 'Theft/Shrinkage' },
+  { value: 'damage', label: 'Damaged Goods' },
+  { value: 'miscount', label: 'Previous Miscount' },
+  { value: 'data_entry', label: 'Data Entry Error' },
+  { value: 'unreported', label: 'Unreported Movement' },
+  { value: 'expired', label: 'Expired/Scrapped' },
+  { value: 'other', label: 'Other' },
+];
 
 export default function StockCounting() {
   const { language } = useLanguage();
@@ -49,7 +77,19 @@ export default function StockCounting() {
     count_date: new Date().toISOString().split('T')[0],
     counted_by: '',
     notes: '',
-    selected_products: [] // empty = all products, otherwise specific product IDs
+    selected_products: [], // empty = all products, otherwise specific product IDs
+    // SAP-style count settings
+    count_type: 'full', // full, cycle, spot, annual
+    abc_class: '', // A, B, C - for cycle counting
+    blind_count: false, // Hide system quantities from counter
+    require_recount: true, // Require recount if variance exceeds threshold
+    variance_threshold: 5, // % threshold for recount
+    allow_multiple_counters: false,
+    second_counter: '',
+    // Scheduling (SAP)
+    scheduled_date: '',
+    is_scheduled: false,
+    recurrence: 'none', // none, daily, weekly, monthly
   });
 
   const [approvedBy, setApprovedBy] = useState('');
@@ -96,7 +136,17 @@ export default function StockCounting() {
         count_date: new Date().toISOString().split('T')[0],
         counted_by: '',
         notes: '',
-        selected_products: []
+        selected_products: [],
+        count_type: 'full',
+        abc_class: '',
+        blind_count: false,
+        require_recount: true,
+        variance_threshold: 5,
+        allow_multiple_counters: false,
+        second_counter: '',
+        scheduled_date: '',
+        is_scheduled: false,
+        recurrence: 'none',
       });
       setShowCreateModal(false);
       setSelectedCount(count);
@@ -487,27 +537,85 @@ export default function StockCounting() {
 
       {/* Create Count Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('new_stocktake')}</DialogTitle>
             <DialogDescription>{t('enter_stocktake_details')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div>
-              <label className="text-sm font-medium">{t('warehouse')}</label>
-              <Select
-                value={newCount.warehouse_id}
-                onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v, selected_products: [] })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_warehouse')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+            {/* SAP Count Type Selection */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs font-medium text-blue-700 mb-2 flex items-center gap-1">
+                <ClipboardCheck className="w-3 h-3" /> {t('count_type') || 'Count Type'} (SAP)
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {countTypes.map((ct) => (
+                  <div
+                    key={ct.value}
+                    className={`p-2 rounded-lg border cursor-pointer transition-all text-center ${
+                      newCount.count_type === ct.value
+                        ? 'bg-blue-100 border-blue-400'
+                        : 'bg-white border-slate-200 hover:border-blue-300'
+                    }`}
+                    onClick={() => setNewCount({ ...newCount, count_type: ct.value })}
+                  >
+                    <p className="text-xs font-medium">{ct.label}</p>
+                    <p className="text-[10px] text-slate-500">{ct.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ABC Class for Cycle Count */}
+            {newCount.count_type === 'cycle' && (
+              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-xs font-medium text-purple-700 mb-2 flex items-center gap-1">
+                  <BarChart3 className="w-3 h-3" /> {t('abc_classification') || 'ABC Classification'}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {abcClasses.map((abc) => (
+                    <div
+                      key={abc.value}
+                      className={`p-2 rounded-lg border cursor-pointer transition-all ${
+                        newCount.abc_class === abc.value
+                          ? 'bg-purple-100 border-purple-400'
+                          : 'bg-white border-slate-200 hover:border-purple-300'
+                      }`}
+                      onClick={() => setNewCount({ ...newCount, abc_class: abc.value })}
+                    >
+                      <p className="text-sm font-bold text-center">{abc.label}</p>
+                      <p className="text-[10px] text-slate-500 text-center">{abc.description}</p>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('warehouse')} *</label>
+                <Select
+                  value={newCount.warehouse_id}
+                  onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v, selected_products: [] })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_warehouse')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map(w => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('date')}</label>
+                <Input
+                  type="date"
+                  value={newCount.count_date}
+                  onChange={(e) => setNewCount({ ...newCount, count_date: e.target.value })}
+                />
+              </div>
             </div>
 
             {/* Product selection - show products in selected warehouse */}
@@ -599,40 +707,176 @@ export default function StockCounting() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium">{t('date')}</label>
-              <Input
-                type="date"
-                value={newCount.count_date}
-                onChange={(e) => setNewCount({ ...newCount, count_date: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">{t('counted_by')}</label>
-              {employees.length > 0 ? (
-                <Select
-                  value={newCount.counted_by}
-                  onValueChange={(v) => setNewCount({ ...newCount, counted_by: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_employee')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.name || `${emp.first_name} ${emp.last_name}`}>
-                        {emp.name || `${emp.first_name} ${emp.last_name}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  value={newCount.counted_by}
-                  onChange={(e) => setNewCount({ ...newCount, counted_by: e.target.value })}
-                  placeholder={t('employee_name')}
-                />
+            {/* Counter Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('counted_by')} *</label>
+                {employees.length > 0 ? (
+                  <Select
+                    value={newCount.counted_by}
+                    onValueChange={(v) => setNewCount({ ...newCount, counted_by: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_employee')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.name || `${emp.first_name} ${emp.last_name}`}>
+                          {emp.name || `${emp.first_name} ${emp.last_name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newCount.counted_by}
+                    onChange={(e) => setNewCount({ ...newCount, counted_by: e.target.value })}
+                    placeholder={t('employee_name')}
+                  />
+                )}
+              </div>
+              {newCount.allow_multiple_counters && (
+                <div>
+                  <label className="text-sm font-medium">{t('second_counter') || 'Second Counter'}</label>
+                  {employees.length > 0 ? (
+                    <Select
+                      value={newCount.second_counter}
+                      onValueChange={(v) => setNewCount({ ...newCount, second_counter: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_employee')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.filter(e => (e.name || `${e.first_name} ${e.last_name}`) !== newCount.counted_by).map(emp => (
+                          <SelectItem key={emp.id} value={emp.name || `${emp.first_name} ${emp.last_name}`}>
+                            {emp.name || `${emp.first_name} ${emp.last_name}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={newCount.second_counter}
+                      onChange={(e) => setNewCount({ ...newCount, second_counter: e.target.value })}
+                      placeholder={t('employee_name')}
+                    />
+                  )}
+                </div>
               )}
             </div>
+
+            {/* SAP Count Options */}
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-xs font-medium text-green-700 mb-3 flex items-center gap-1">
+                <Target className="w-3 h-3" /> {t('count_options') || 'Count Options'}
+              </p>
+              <div className="space-y-3">
+                {/* Blind Count */}
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <div className="flex items-center gap-2">
+                    <EyeOff className="w-4 h-4 text-slate-500" />
+                    <div>
+                      <Label className="text-sm">{t('blind_count') || 'Blind Count'}</Label>
+                      <p className="text-xs text-slate-500">{t('blind_count_desc') || 'Hide system quantities from counter'}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={newCount.blind_count}
+                    onCheckedChange={(checked) => setNewCount({ ...newCount, blind_count: checked })}
+                  />
+                </div>
+
+                {/* Require Recount */}
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-slate-500" />
+                    <div>
+                      <Label className="text-sm">{t('require_recount') || 'Require Recount'}</Label>
+                      <p className="text-xs text-slate-500">{t('require_recount_desc') || 'If variance exceeds threshold'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {newCount.require_recount && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min="1"
+                          max="100"
+                          className="w-16 h-8 text-center"
+                          value={newCount.variance_threshold}
+                          onChange={(e) => setNewCount({ ...newCount, variance_threshold: parseInt(e.target.value) || 5 })}
+                        />
+                        <span className="text-xs text-slate-500">%</span>
+                      </div>
+                    )}
+                    <Switch
+                      checked={newCount.require_recount}
+                      onCheckedChange={(checked) => setNewCount({ ...newCount, require_recount: checked })}
+                    />
+                  </div>
+                </div>
+
+                {/* Multiple Counters */}
+                <div className="flex items-center justify-between p-2 bg-white rounded border">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-slate-500" />
+                    <div>
+                      <Label className="text-sm">{t('multiple_counters') || 'Multiple Counters'}</Label>
+                      <p className="text-xs text-slate-500">{t('multiple_counters_desc') || 'Two people count independently'}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={newCount.allow_multiple_counters}
+                    onCheckedChange={(checked) => setNewCount({ ...newCount, allow_multiple_counters: checked, second_counter: '' })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Scheduling (SAP) */}
+            <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-orange-700 flex items-center gap-1">
+                  <CalendarClock className="w-3 h-3" /> {t('schedule_count') || 'Schedule Count'}
+                </p>
+                <Switch
+                  checked={newCount.is_scheduled}
+                  onCheckedChange={(checked) => setNewCount({ ...newCount, is_scheduled: checked })}
+                />
+              </div>
+              {newCount.is_scheduled && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <Label className="text-xs">{t('scheduled_date') || 'Scheduled Date'}</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={newCount.scheduled_date}
+                      onChange={(e) => setNewCount({ ...newCount, scheduled_date: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('recurrence') || 'Recurrence'}</Label>
+                    <Select
+                      value={newCount.recurrence}
+                      onValueChange={(v) => setNewCount({ ...newCount, recurrence: v })}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('no_recurrence') || 'No Recurrence'}</SelectItem>
+                        <SelectItem value="daily">{t('daily') || 'Daily'}</SelectItem>
+                        <SelectItem value="weekly">{t('weekly') || 'Weekly'}</SelectItem>
+                        <SelectItem value="monthly">{t('monthly') || 'Monthly'}</SelectItem>
+                        <SelectItem value="quarterly">{t('quarterly') || 'Quarterly'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="text-sm font-medium">{t('notes')}</label>
               <Textarea
