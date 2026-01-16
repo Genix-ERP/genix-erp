@@ -120,8 +120,8 @@ export default function FixedAssets() {
 
   // Calculate depreciation for an asset
   const calculateDepreciation = (asset) => {
-    if (!asset.acquisition_date || !asset.acquisition_cost || !asset.useful_life_months) {
-      return { monthlyDepreciation: 0, accumulatedDepreciation: 0, netBookValue: asset.acquisition_cost || 0 };
+    if (!asset || !asset.acquisition_date || !asset.acquisition_cost || !asset.useful_life_months) {
+      return { monthlyDepreciation: 0, accumulatedDepreciation: 0, netBookValue: asset?.acquisition_cost || 0, depreciationProgress: 0 };
     }
 
     const cost = asset.acquisition_cost;
@@ -552,11 +552,11 @@ export default function FixedAssets() {
                       <TableCell>
                         <div className="w-24">
                           <Progress
-                            value={depCalc.depreciationProgress}
+                            value={depCalc.depreciationProgress || 0}
                             className="h-2 [&>div]:bg-amber-500"
                           />
                           <span className="text-xs text-slate-500">
-                            {depCalc.depreciationProgress.toFixed(0)}%
+                            {(depCalc.depreciationProgress || 0).toFixed(0)}%
                           </span>
                         </div>
                       </TableCell>

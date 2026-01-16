@@ -23,7 +23,8 @@ import {
   Receipt,
   FileText,
   Shield,
-  LogOut
+  LogOut,
+  Cog
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,12 +63,47 @@ import { SalesProvider } from "@/components/contexts/SalesContext";
 import { ManufacturingProvider } from "@/components/contexts/ManufacturingContext";
 import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
+import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+
+// Navigation link that closes mobile sidebar on click
+function NavLink({ item, isActive }) {
+  const { setOpenMobile, isMobile } = useSidebar();
+
+  const handleClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  return (
+    <Link to={item.url} className="flex items-center justify-between px-3 py-3" onClick={handleClick}>
+      <div className="flex items-center gap-3">
+        <item.icon className="w-5 h-5" />
+        <span className="font-medium text-sm">{item.title}</span>
+      </div>
+      {item.badge && (
+        <Badge
+          variant="secondary"
+          className={`text-[10px] px-2 py-0 h-5 border ${
+            item.badge === "New"
+              ? "bg-[var(--genix-green)]/10 text-[var(--genix-green)] border-[var(--genix-green)]/20"
+              : item.badge === "Admin"
+              ? "bg-[var(--genix-purple)]/10 text-[var(--genix-purple)] border-[var(--genix-purple)]/20"
+              : "bg-[var(--genix-orange)]/10 text-[var(--genix-orange)] border-[var(--genix-orange)]/20"
+          }`}
+        >
+          {item.badge}
+        </Badge>
+      )}
+    </Link>
+  );
+}
 
 function LayoutContent({ children, currentPageName }) {
   const location = useLocation();
@@ -252,6 +288,16 @@ function LayoutContent({ children, currentPageName }) {
       });
     }
 
+    // Add Admin Settings if user is admin or owner
+    if (isSiteAdmin() || isOwner()) {
+      dynamicItems.push({
+        title: t("admin_settings") || "Admin Settings",
+        url: createPageUrl("AdminSettings"),
+        icon: Cog,
+        badge: null
+      });
+    }
+
     return dynamicItems;
   };
 
@@ -320,32 +366,13 @@ function LayoutContent({ children, currentPageName }) {
                 <SidebarMenu className="space-y-1">
                   {navigationItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
+                      <SidebarMenuButton
+                        asChild
                         className={`relative group hover:bg-[var(--genix-light-blue)]/50 hover:text-[var(--genix-blue)] transition-all duration-200 rounded-xl mb-1 h-11 ${
                           location.pathname === item.url ? 'bg-gradient-to-r from-[var(--genix-blue)]/10 to-[var(--genix-purple)]/10 text-[var(--genix-blue)] shadow-sm border-l-2 border-[var(--genix-blue)]' : ''
                         }`}
                       >
-                        <Link to={item.url} className="flex items-center justify-between px-3 py-3">
-                          <div className="flex items-center gap-3">
-                            <item.icon className="w-5 h-5" />
-                            <span className="font-medium text-sm">{item.title}</span>
-                          </div>
-                          {item.badge && (
-                            <Badge 
-                              variant="secondary" 
-                              className={`text-[10px] px-2 py-0 h-5 border ${
-                                item.badge === "New" 
-                                  ? "bg-[var(--genix-green)]/10 text-[var(--genix-green)] border-[var(--genix-green)]/20"
-                                  : item.badge === "Admin"
-                                  ? "bg-[var(--genix-purple)]/10 text-[var(--genix-purple)] border-[var(--genix-purple)]/20"
-                                  : "bg-[var(--genix-orange)]/10 text-[var(--genix-orange)] border-[var(--genix-orange)]/20"
-                              }`}
-                            >
-                              {item.badge}
-                            </Badge>
-                          )}
-                        </Link>
+                        <NavLink item={item} isActive={location.pathname === item.url} />
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -492,9 +519,11 @@ export default function Layout({ children, currentPageName }) {
                           <ManufacturingProvider>
                             <HRProvider>
                               <ProjectsProvider>
-                                <AIProvider>
-                                  <LayoutContent children={children} currentPageName={currentPageName} />
-                                </AIProvider>
+                                <AdminSettingsProvider>
+                                  <AIProvider>
+                                    <LayoutContent children={children} currentPageName={currentPageName} />
+                                  </AIProvider>
+                                </AdminSettingsProvider>
                               </ProjectsProvider>
                             </HRProvider>
                           </ManufacturingProvider>

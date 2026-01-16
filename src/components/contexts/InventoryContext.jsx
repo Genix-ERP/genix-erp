@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { inventoryService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
+import { useAdminSettings } from './AdminSettingsContext';
 
 const PRODUCTS_STORAGE_KEY = 'genix_products';
 const CATEGORIES_STORAGE_KEY = 'genix_product_categories';
@@ -501,6 +502,7 @@ const sampleStockCounts = [
 
 export function InventoryProvider({ children }) {
   const { activeCompany } = useCompany();
+  const { getSetting } = useAdminSettings();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -515,6 +517,38 @@ export function InventoryProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
+
+  // Get admin settings for inventory module - these affect module behavior
+  const inventorySettings = useMemo(() => ({
+    // Costing Method
+    costingMethod: getSetting('inventory.costing.method', 'FIFO'),
+    valuationMode: getSetting('inventory.costing.valuation', 'automatic'),
+
+    // Traceability
+    traceabilityEnabled: getSetting('inventory.traceability.enabled', true),
+    lotTrackingEnabled: getSetting('inventory.traceability.lot_tracking', true),
+    serialTrackingEnabled: getSetting('inventory.traceability.serial_number_tracking', false),
+    expiryTrackingEnabled: getSetting('inventory.traceability.expiry_date_tracking', true),
+
+    // Warehouse
+    defaultWarehouseId: getSetting('inventory.warehouse.default_warehouse_id', null),
+    allowNegativeStock: getSetting('inventory.warehouse.allow_negative_stock', false),
+    requireLocation: getSetting('inventory.warehouse.require_location', false),
+    multiLocationEnabled: getSetting('inventory.warehouse.multi_location', false),
+
+    // Reorder
+    autoReorderEnabled: getSetting('inventory.reorder.auto_reorder', false),
+    defaultReorderQty: getSetting('inventory.reorder.default_reorder_quantity', 10),
+    lowStockThresholdPercent: getSetting('inventory.reorder.low_stock_threshold_percent', 20),
+
+    // Units
+    defaultUnit: getSetting('inventory.units.default_unit', 'Unit'),
+    unitsOfMeasure: getSetting('inventory.units.units_of_measure', []),
+
+    // Barcode
+    barcodeFormat: getSetting('inventory.barcode.format', 'EAN13'),
+    autoGenerateBarcode: getSetting('inventory.barcode.auto_generate', false)
+  }), [getSetting]);
 
   const loadFromLocalStorage = useCallback(() => {
     const companyId = activeCompany?.id;
@@ -890,6 +924,23 @@ export function InventoryProvider({ children }) {
     const companyId = activeCompany?.id;
     const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
     const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
+
+    // Check negative stock setting
+    const existingItem = inventory.find(
+      i => i.product_id === adjustmentData.product_id && i.warehouse_id === adjustmentData.warehouse_id
+    );
+    const currentQty = existingItem?.quantity || 0;
+    const newQty = currentQty + adjustmentData.quantity;
+
+    // Validate: prevent negative stock if setting disallows it
+    if (newQty < 0 && !inventorySettings.allowNegativeStock) {
+      throw new Error('Negative stock is not allowed. Enable "Allow Negative Stock" in Admin Settings to permit this operation.');
+    }
+
+    // Validate: require location if setting requires it
+    if (inventorySettings.requireLocation && !adjustmentData.location_id) {
+      throw new Error('Location is required. This setting is enabled in Admin Settings.');
+    }
 
     if (backendAvailable) {
       try {
@@ -1620,7 +1671,22 @@ export function InventoryProvider({ children }) {
       isLoading,
       backendAvailable,
       error,
-      refreshData: loadData
+      refreshData: loadData,
+
+      // Admin Settings (from Admin Settings page)
+      // These settings affect how the inventory module behaves
+      settings: inventorySettings,
+      // Helper functions to check settings
+      isCostingMethod: (method) => inventorySettings.costingMethod === method,
+      isLotTrackingEnabled: () => inventorySettings.lotTrackingEnabled,
+      isSerialTrackingEnabled: () => inventorySettings.serialTrackingEnabled,
+      isExpiryTrackingEnabled: () => inventorySettings.expiryTrackingEnabled,
+      canHaveNegativeStock: () => inventorySettings.allowNegativeStock,
+      requiresLocation: () => inventorySettings.requireLocation,
+      isMultiLocationEnabled: () => inventorySettings.multiLocationEnabled,
+      isAutoReorderEnabled: () => inventorySettings.autoReorderEnabled,
+      getDefaultUnit: () => inventorySettings.defaultUnit,
+      getUnitsOfMeasure: () => inventorySettings.unitsOfMeasure
     }}>
       {children}
     </InventoryContext.Provider>

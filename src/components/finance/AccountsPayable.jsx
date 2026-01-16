@@ -332,14 +332,14 @@ export default function AccountsPayable() {
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by status" />
+                      <SelectValue placeholder={t('filter_by_status') || 'Filter by status'} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t('all_status')}</SelectItem>
-                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
                       <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
                       <SelectItem value="paid">{t('paid')}</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
+                      <SelectItem value="overdue">{t('overdue') || 'Overdue'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -499,8 +499,7 @@ export default function AccountsPayable() {
 
             <div className="p-4 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
-                <strong>Note:</strong> AI extraction will be available when connected to the backend.
-                For now, please use manual entry.
+                <strong>{t('note') || 'Note'}:</strong> {t('ai_extraction_note') || 'AI extraction will be available when connected to the backend. For now, please use manual entry.'}
               </p>
             </div>
           </div>
@@ -511,22 +510,22 @@ export default function AccountsPayable() {
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Create Vendor Bill</DialogTitle>
+            <DialogTitle>{t('create_vendor_bill') || 'Create Vendor Bill'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Invoice Number (Optional)</label>
+                <label className="text-sm font-medium mb-1 block">{t('invoice_number_optional') || 'Invoice Number (Optional)'}</label>
                 <Input
-                  placeholder="Auto-generated"
+                  placeholder={t('auto_generated') || 'Auto-generated'}
                   value={newBill.invoice_number}
                   onChange={(e) => setNewBill({...newBill, invoice_number: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Vendor *</label>
+                <label className="text-sm font-medium mb-1 block">{t('vendor')} *</label>
                 <Input
-                  placeholder="Vendor name"
+                  placeholder={t('vendor_name') || 'Vendor name'}
                   value={newBill.partner_id}
                   onChange={(e) => setNewBill({...newBill, partner_id: e.target.value})}
                   required
@@ -536,7 +535,7 @@ export default function AccountsPayable() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Invoice Date *</label>
+                <label className="text-sm font-medium mb-1 block">{t('invoice_date')} *</label>
                 <Input
                   type="date"
                   value={newBill.invoice_date}
@@ -545,7 +544,7 @@ export default function AccountsPayable() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Due Date *</label>
+                <label className="text-sm font-medium mb-1 block">{t('due_date')} *</label>
                 <Input
                   type="date"
                   value={newBill.due_date}
@@ -557,10 +556,10 @@ export default function AccountsPayable() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Subtotal *</label>
+                <label className="text-sm font-medium mb-1 block">{t('subtotal')} *</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   value={newBill.subtotal}
                   onChange={(e) => {
                     const subtotal = parseFloat(e.target.value) || 0;
@@ -571,19 +570,19 @@ export default function AccountsPayable() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Tax</label>
+                <label className="text-sm font-medium mb-1 block">{t('tax') || 'Tax'}</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   value={newBill.tax_amount}
                   disabled
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Total</label>
+                <label className="text-sm font-medium mb-1 block">{t('total')}</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   value={newBill.total_amount}
                   disabled
                   className="font-bold"
@@ -600,7 +599,7 @@ export default function AccountsPayable() {
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={!newBill.partner_id || !newBill.due_date}
               >
-                Create Bill
+                {t('create_bill') || 'Create Bill'}
               </Button>
             </div>
           </div>

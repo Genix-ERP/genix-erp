@@ -841,14 +841,14 @@ export default function Warehouses() {
                 <div className="mt-4">
                   <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_location') || 'Parent Location'}</label>
                   <Select
-                    value={locationForm.parent_id}
-                    onValueChange={(value) => setLocationForm({...locationForm, parent_id: value})}
+                    value={locationForm.parent_id || '__none__'}
+                    onValueChange={(value) => setLocationForm({...locationForm, parent_id: value === '__none__' ? '' : value})}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_parent') || 'None (Top Level)'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t('none_top_level') || 'None (Top Level)'}</SelectItem>
+                      <SelectItem value="__none__">{t('none_top_level') || 'None (Top Level)'}</SelectItem>
                       {selectedWarehouse.locations.map(loc => (
                         <SelectItem key={loc.id} value={loc.id}>{loc.code} - {loc.name}</SelectItem>
                       ))}

@@ -283,9 +283,9 @@ export default function AccountsReceivable() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t('all_status')}</SelectItem>
-                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
                     <SelectItem value="paid">{t('paid')}</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="overdue">{t('overdue') || 'Overdue'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -370,22 +370,22 @@ export default function AccountsReceivable() {
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Create Customer Invoice</DialogTitle>
+            <DialogTitle>{t('create_customer_invoice') || 'Create Customer Invoice'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Invoice Number {t('optional')}</label>
+                <label className="text-sm font-medium mb-1 block">{t('invoice_number_optional') || 'Invoice Number (Optional)'}</label>
                 <Input
-                  placeholder="Auto-generated"
+                  placeholder={t('auto_generated') || 'Auto-generated'}
                   value={newInvoice.invoice_number}
                   onChange={(e) => setNewInvoice({...newInvoice, invoice_number: e.target.value})}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Customer *</label>
+                <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
                 <Input
-                  placeholder="Customer name or email"
+                  placeholder={t('customer_name_or_email') || 'Customer name or email'}
                   value={newInvoice.partner_id}
                   onChange={(e) => setNewInvoice({...newInvoice, partner_id: e.target.value})}
                   required
@@ -395,7 +395,7 @@ export default function AccountsReceivable() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Invoice Date *</label>
+                <label className="text-sm font-medium mb-1 block">{t('invoice_date')} *</label>
                 <Input
                   type="date"
                   value={newInvoice.invoice_date}
@@ -404,7 +404,7 @@ export default function AccountsReceivable() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Due Date *</label>
+                <label className="text-sm font-medium mb-1 block">{t('due_date')} *</label>
                 <Input
                   type="date"
                   value={newInvoice.due_date}
@@ -416,10 +416,10 @@ export default function AccountsReceivable() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Subtotal *</label>
+                <label className="text-sm font-medium mb-1 block">{t('subtotal')} *</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   value={newInvoice.subtotal}
                   onChange={(e) => {
                     const subtotal = parseFloat(e.target.value) || 0;
@@ -430,16 +430,16 @@ export default function AccountsReceivable() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Tax</label>
+                <label className="text-sm font-medium mb-1 block">{t('tax') || 'Tax'}</label>
                 <Input
                   type="number"
-                  placeholder="0.00"
+                  placeholder="0"
                   value={newInvoice.tax_amount}
                   disabled
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Total</label>
+                <label className="text-sm font-medium mb-1 block">{t('total')}</label>
                 <Input
                   type="number"
                   placeholder="0.00"
@@ -459,7 +459,7 @@ export default function AccountsReceivable() {
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 disabled={!newInvoice.partner_id || !newInvoice.due_date}
               >
-                Create Invoice
+                {t('create_invoice') || 'Create Invoice'}
               </Button>
             </div>
           </div>

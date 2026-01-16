@@ -12,6 +12,7 @@ import Settings from "./Settings";
 import Financials from "./Financials";
 import Notifications from "./Notifications";
 import AdminPanel from "./AdminPanel";
+import AdminSettings from "./AdminSettings";
 import Manufacturing from "./Manufacturing";
 import Procurement from "./Procurement";
 import Projects from "./Projects";
@@ -38,6 +39,7 @@ const PAGES = {
     Financials: Financials,
     Notifications: Notifications,
     AdminPanel: AdminPanel,
+    AdminSettings: AdminSettings,
     Manufacturing: Manufacturing,
     Procurement: Procurement,
     Projects: Projects,
@@ -109,6 +111,7 @@ function PagesContent() {
                                 <Route path="/financials" element={<Financials />} />
                                 <Route path="/notifications" element={<Notifications />} />
                                 <Route path="/adminpanel" element={<AdminPanel />} />
+                                <Route path="/adminsettings" element={<AdminSettings />} />
                                 <Route path="/manufacturing" element={<Manufacturing />} />
                                 <Route path="/procurement" element={<Procurement />} />
                                 <Route path="/projects" element={<Projects />} />
