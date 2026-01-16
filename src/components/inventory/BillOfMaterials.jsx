@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Layers, ChevronRight, ChevronDown, Edit2, Trash2,
   Package, Copy, FileText, Calculator, AlertTriangle, CheckCircle2,
-  Settings, Eye, Wrench
+  Settings, Eye, Wrench, Calendar, GitBranch, Clock, Cog, Factory,
+  Timer, Users, ArrowRight
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -22,6 +23,33 @@ const bomTypes = [
   { value: 'manufacturing', label: 'Manufacturing', description: 'For production/assembly' },
   { value: 'kit', label: 'Kit/Bundle', description: 'Sold as a set' },
   { value: 'phantom', label: 'Phantom/Subassembly', description: 'Intermediate assembly' },
+];
+
+// SAP BOM Status
+const bomStatuses = [
+  { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-700' },
+  { value: 'pending_approval', label: 'Pending Approval', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'approved', label: 'Approved', color: 'bg-green-100 text-green-700' },
+  { value: 'obsolete', label: 'Obsolete', color: 'bg-red-100 text-red-700' },
+];
+
+// SAP Work Center Types
+const workCenterTypes = [
+  { value: 'machine', label: 'Machine' },
+  { value: 'labor', label: 'Labor' },
+  { value: 'subcontracting', label: 'Subcontracting' },
+  { value: 'overhead', label: 'Overhead' },
+];
+
+// Odoo Operation Types
+const operationTypes = [
+  { value: 'assembly', label: 'Assembly' },
+  { value: 'cutting', label: 'Cutting' },
+  { value: 'welding', label: 'Welding' },
+  { value: 'painting', label: 'Painting' },
+  { value: 'packaging', label: 'Packaging' },
+  { value: 'testing', label: 'Quality Testing' },
+  { value: 'other', label: 'Other' },
 ];
 
 export default function BillOfMaterials() {
@@ -60,6 +88,26 @@ export default function BillOfMaterials() {
     quantity: 1,
     description: '',
     is_active: true,
+    // SAP Version Control
+    version: '1.0',
+    revision: 0,
+    status: 'draft', // draft, pending_approval, approved, obsolete
+    // SAP Effectivity Dates
+    effective_from: '',
+    effective_to: '',
+    // SAP Alternative BOM
+    is_alternative: false,
+    alternative_priority: 1,
+    // Routing/Operations (Odoo Manufacturing)
+    has_routing: false,
+    default_work_center: '',
+    total_operation_time: 0, // minutes
+    // By-products support
+    has_byproducts: false,
+    // Approval workflow
+    created_by: '',
+    approved_by: '',
+    approval_date: '',
   });
 
   const [lineFormData, setLineFormData] = useState({
@@ -67,6 +115,28 @@ export default function BillOfMaterials() {
     quantity: 1,
     uom: 'pcs',
     notes: '',
+    // SAP-style operation sequence
+    operation_sequence: 10,
+    // Alternative component (SAP)
+    is_alternative: false,
+    alternative_group: '',
+    // Scrap factor
+    scrap_percentage: 0,
+  });
+
+  // Operations state for routing
+  const [operations, setOperations] = useState([]);
+  const [showOperationsModal, setShowOperationsModal] = useState(false);
+  const [operationForm, setOperationForm] = useState({
+    sequence: 10,
+    name: '',
+    operation_type: 'assembly',
+    work_center_type: 'labor',
+    work_center: '',
+    setup_time: 0, // minutes
+    run_time: 0, // minutes per unit
+    queue_time: 0, // minutes
+    description: '',
   });
 
   // Filter BOMs
@@ -195,7 +265,53 @@ export default function BillOfMaterials() {
       quantity: 1,
       description: '',
       is_active: true,
+      version: '1.0',
+      revision: 0,
+      status: 'draft',
+      effective_from: '',
+      effective_to: '',
+      is_alternative: false,
+      alternative_priority: 1,
+      has_routing: false,
+      default_work_center: '',
+      total_operation_time: 0,
+      has_byproducts: false,
+      created_by: '',
+      approved_by: '',
+      approval_date: '',
     });
+    setOperations([]);
+  };
+
+  // Add operation to routing
+  const handleAddOperation = () => {
+    const newOp = {
+      ...operationForm,
+      id: `op-${Date.now()}`,
+      sequence: operations.length > 0 ? Math.max(...operations.map(o => o.sequence)) + 10 : 10,
+    };
+    setOperations([...operations, newOp].sort((a, b) => a.sequence - b.sequence));
+    setOperationForm({
+      sequence: newOp.sequence + 10,
+      name: '',
+      operation_type: 'assembly',
+      work_center_type: 'labor',
+      work_center: '',
+      setup_time: 0,
+      run_time: 0,
+      queue_time: 0,
+      description: '',
+    });
+  };
+
+  // Remove operation
+  const handleRemoveOperation = (opId) => {
+    setOperations(operations.filter(o => o.id !== opId));
+  };
+
+  // Calculate total operation time
+  const calculateTotalOperationTime = () => {
+    return operations.reduce((total, op) => total + op.setup_time + op.run_time + op.queue_time, 0);
   };
 
   const toggleExpand = (bomId) => {
@@ -503,7 +619,7 @@ export default function BillOfMaterials() {
 
       {/* Create BOM Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -511,25 +627,45 @@ export default function BillOfMaterials() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('product') || 'Product'} *
-              </label>
-              <Select value={formData.product_id} onValueChange={(v) => setFormData({ ...formData, product_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product') || 'Select product'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.filter(p => p.product_type !== 'service').map(product => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.sku && `${product.sku} - `}{product.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Basic Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('product') || 'Product'} *
+                </label>
+                <Select value={formData.product_id} onValueChange={(v) => setFormData({ ...formData, product_id: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_product') || 'Select product'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.filter(p => p.product_type !== 'service').map(product => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.sku && `${product.sku} - `}{product.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('bom_type') || 'BOM Type'} *
+                </label>
+                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bomTypes.map(type => (
+                      <SelectItem key={type.value} value={type.value}>
+                        <span className="font-medium">{type.label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
                   {t('bom_code') || 'BOM Code'} *
@@ -538,6 +674,16 @@ export default function BillOfMaterials() {
                   placeholder="e.g., BOM-001"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('bom_name') || 'BOM Name'} *
+                </label>
+                <Input
+                  placeholder="e.g., Standard Assembly"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
               <div>
@@ -553,37 +699,116 @@ export default function BillOfMaterials() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('bom_name') || 'BOM Name'} *
-              </label>
-              <Input
-                placeholder={t('bom_name_placeholder') || 'e.g., Standard Assembly'}
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
+            {/* SAP Version Control */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs font-medium text-blue-700 mb-2 flex items-center gap-1">
+                <GitBranch className="w-3 h-3" /> {t('version_control') || 'Version Control'} (SAP)
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium">{t('version') || 'Version'}</label>
+                  <Input
+                    className="h-9"
+                    value={formData.version}
+                    onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+                    placeholder="1.0"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('revision') || 'Revision'}</label>
+                  <Input
+                    type="number"
+                    className="h-9"
+                    min="0"
+                    value={formData.revision}
+                    onChange={(e) => setFormData({ ...formData, revision: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('status') || 'Status'}</label>
+                  <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bomStatuses.map(s => (
+                        <SelectItem key={s.value} value={s.value}>
+                          <Badge className={s.color}>{s.label}</Badge>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('bom_type') || 'BOM Type'} *
-              </label>
-              <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {bomTypes.map(type => (
-                    <SelectItem key={type.value} value={type.value}>
-                      <div>
-                        <span className="font-medium">{type.label}</span>
-                        <span className="text-slate-500 text-xs ml-2">({type.description})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* SAP Effectivity Dates */}
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-xs font-medium text-green-700 mb-2 flex items-center gap-1">
+                <Calendar className="w-3 h-3" /> {t('effectivity_dates') || 'Effectivity Dates'} (SAP)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium">{t('effective_from') || 'Effective From'}</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={formData.effective_from}
+                    onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('effective_to') || 'Effective To'}</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={formData.effective_to}
+                    onChange={(e) => setFormData({ ...formData, effective_to: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
+
+            {/* Routing/Operations Toggle */}
+            {formData.type === 'manufacturing' && (
+              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Factory className="w-4 h-4 text-purple-600" />
+                    <div>
+                      <p className="text-sm font-medium text-purple-700">{t('routing_operations') || 'Routing/Operations'}</p>
+                      <p className="text-xs text-purple-600">{t('routing_desc') || 'Define manufacturing steps'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formData.has_routing && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowOperationsModal(true)}
+                      >
+                        <Cog className="w-4 h-4 mr-1" />
+                        {operations.length} {t('operations') || 'operations'}
+                      </Button>
+                    )}
+                    <input
+                      type="checkbox"
+                      checked={formData.has_routing}
+                      onChange={(e) => setFormData({ ...formData, has_routing: e.target.checked })}
+                      className="rounded"
+                    />
+                  </div>
+                </div>
+                {formData.has_routing && operations.length > 0 && (
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-purple-700">{t('total_operation_time') || 'Total Operation Time'}:</span>
+                      <span className="font-bold text-purple-900">{calculateTotalOperationTime()} {t('minutes') || 'min'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
@@ -607,6 +832,165 @@ export default function BillOfMaterials() {
               disabled={isSaving || !formData.product_id || !formData.name || !formData.code}
             >
               {isSaving ? (t('saving') || 'Saving...') : (t('create') || 'Create')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Operations Modal */}
+      <Dialog open={showOperationsModal} onOpenChange={setShowOperationsModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Factory className="w-5 h-5 text-purple-600" />
+              {t('routing_operations') || 'Routing/Operations'}
+            </DialogTitle>
+            <DialogDescription>
+              {t('define_manufacturing_steps') || 'Define the manufacturing steps for this BOM'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Add Operation Form */}
+            <div className="p-3 bg-slate-50 rounded-lg border">
+              <p className="text-sm font-medium mb-3">{t('add_operation') || 'Add Operation'}</p>
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <label className="text-xs font-medium">{t('sequence') || 'Seq'}</label>
+                  <Input
+                    type="number"
+                    className="h-9"
+                    value={operationForm.sequence}
+                    onChange={(e) => setOperationForm({ ...operationForm, sequence: parseInt(e.target.value) || 10 })}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium">{t('operation_name') || 'Operation Name'}</label>
+                  <Input
+                    className="h-9"
+                    value={operationForm.name}
+                    onChange={(e) => setOperationForm({ ...operationForm, name: e.target.value })}
+                    placeholder="e.g., Assembly Step 1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('type') || 'Type'}</label>
+                  <Select value={operationForm.operation_type} onValueChange={(v) => setOperationForm({ ...operationForm, operation_type: v })}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {operationTypes.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-3 mt-3">
+                <div>
+                  <label className="text-xs font-medium">{t('work_center') || 'Work Center'}</label>
+                  <Select value={operationForm.work_center_type} onValueChange={(v) => setOperationForm({ ...operationForm, work_center_type: v })}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workCenterTypes.map(w => (
+                        <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('setup_time') || 'Setup (min)'}</label>
+                  <Input
+                    type="number"
+                    className="h-9"
+                    min="0"
+                    value={operationForm.setup_time}
+                    onChange={(e) => setOperationForm({ ...operationForm, setup_time: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t('run_time') || 'Run (min/unit)'}</label>
+                  <Input
+                    type="number"
+                    className="h-9"
+                    min="0"
+                    value={operationForm.run_time}
+                    onChange={(e) => setOperationForm({ ...operationForm, run_time: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Button
+                    onClick={handleAddOperation}
+                    disabled={!operationForm.name}
+                    className="w-full mt-5 h-9"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    {t('add') || 'Add'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Operations List */}
+            {operations.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">{t('seq') || 'Seq'}</TableHead>
+                    <TableHead>{t('operation') || 'Operation'}</TableHead>
+                    <TableHead>{t('type') || 'Type'}</TableHead>
+                    <TableHead>{t('work_center') || 'Work Center'}</TableHead>
+                    <TableHead className="text-right">{t('setup') || 'Setup'}</TableHead>
+                    <TableHead className="text-right">{t('run') || 'Run'}</TableHead>
+                    <TableHead className="text-right">{t('total') || 'Total'}</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {operations.map((op, index) => (
+                    <TableRow key={op.id}>
+                      <TableCell className="font-mono">{op.sequence}</TableCell>
+                      <TableCell className="font-medium">{op.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{operationTypes.find(t => t.value === op.operation_type)?.label}</Badge>
+                      </TableCell>
+                      <TableCell>{workCenterTypes.find(w => w.value === op.work_center_type)?.label}</TableCell>
+                      <TableCell className="text-right">{op.setup_time} min</TableCell>
+                      <TableCell className="text-right">{op.run_time} min</TableCell>
+                      <TableCell className="text-right font-medium">{op.setup_time + op.run_time} min</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveOperation(op.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-8 text-slate-500">
+                <Factory className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p>{t('no_operations') || 'No operations added yet'}</p>
+              </div>
+            )}
+
+            {operations.length > 0 && (
+              <div className="p-3 bg-purple-100 rounded-lg flex items-center justify-between">
+                <span className="font-medium text-purple-800">{t('total_manufacturing_time') || 'Total Manufacturing Time'}:</span>
+                <span className="text-xl font-bold text-purple-900">{calculateTotalOperationTime()} {t('minutes') || 'minutes'}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowOperationsModal(false)}>
+              {t('done') || 'Done'}
             </Button>
           </DialogFooter>
         </DialogContent>

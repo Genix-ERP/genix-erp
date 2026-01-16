@@ -6,12 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Warehouse, Pencil, Trash2, Eye, MapPin, Phone,
   Mail, User, ChevronRight, ChevronDown, AlertCircle, CheckCircle,
-  Building2, Package, LayoutGrid
+  Building2, Package, LayoutGrid, Truck, PackageCheck, RotateCcw,
+  ClipboardCheck, Barcode, Box, Layers
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
@@ -64,7 +66,20 @@ export default function Warehouses() {
   const [locationForm, setLocationForm] = useState({
     code: '',
     name: '',
-    zone: '',
+    type: 'storage', // storage, receiving, shipping, staging, returns, quality
+    parent_id: '',
+    // SAP-style hierarchical address
+    aisle: '',
+    rack: '',
+    shelf: '',
+    bin: '',
+    // Capacity & tracking
+    capacity: '',
+    capacity_unit: 'units',
+    is_scrap_location: false,
+    is_return_location: false,
+    is_replenish_location: false,
+    barcode: '',
     is_active: true
   });
 
@@ -121,7 +136,18 @@ export default function Warehouses() {
     setLocationForm({
       code: '',
       name: '',
-      zone: '',
+      type: 'storage',
+      parent_id: '',
+      aisle: '',
+      rack: '',
+      shelf: '',
+      bin: '',
+      capacity: '',
+      capacity_unit: 'units',
+      is_scrap_location: false,
+      is_return_location: false,
+      is_replenish_location: false,
+      barcode: '',
       is_active: true
     });
   };
@@ -217,7 +243,18 @@ export default function Warehouses() {
     setLocationForm({
       code: location.code || '',
       name: location.name || '',
-      zone: location.zone || '',
+      type: location.type || 'storage',
+      parent_id: location.parent_id || '',
+      aisle: location.aisle || '',
+      rack: location.rack || '',
+      shelf: location.shelf || '',
+      bin: location.bin || '',
+      capacity: location.capacity?.toString() || '',
+      capacity_unit: location.capacity_unit || 'units',
+      is_scrap_location: location.is_scrap_location || false,
+      is_return_location: location.is_return_location || false,
+      is_replenish_location: location.is_replenish_location || false,
+      barcode: location.barcode || '',
       is_active: location.is_active !== false
     });
     setShowEditLocationModal(true);
@@ -717,7 +754,7 @@ export default function Warehouses() {
 
       {/* Add Location Modal */}
       <Dialog open={showLocationModal} onOpenChange={setShowLocationModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -727,36 +764,223 @@ export default function Warehouses() {
               {t('add_location_to')} {selectedWarehouse?.name}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+          <div className="space-y-6 py-4">
+            {/* Basic Information */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                  <Input
+                    placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
+                    value={locationForm.code}
+                    onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location_type') || 'Location Type'}</label>
+                  <Select
+                    value={locationForm.type}
+                    onValueChange={(value) => setLocationForm({...locationForm, type: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="storage">
+                        <div className="flex items-center gap-2">
+                          <Box className="w-4 h-4" />
+                          {t('loc_type_storage') || 'Storage'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="receiving">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-4 h-4" />
+                          {t('loc_type_receiving') || 'Receiving'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="shipping">
+                        <div className="flex items-center gap-2">
+                          <PackageCheck className="w-4 h-4" />
+                          {t('loc_type_shipping') || 'Shipping'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="staging">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4" />
+                          {t('loc_type_staging') || 'Staging'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="quality">
+                        <div className="flex items-center gap-2">
+                          <ClipboardCheck className="w-4 h-4" />
+                          {t('loc_type_quality') || 'Quality Control'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="returns">
+                        <div className="flex items-center gap-2">
+                          <RotateCcw className="w-4 h-4" />
+                          {t('loc_type_returns') || 'Returns'}
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
                 <Input
-                  placeholder={t('location_code_placeholder')}
-                  value={locationForm.code}
-                  onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
+                  placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
+                  value={locationForm.name}
+                  onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
                   required
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('zone')}</label>
-                <Input
-                  placeholder={t('zone_placeholder')}
-                  value={locationForm.zone}
-                  onChange={(e) => setLocationForm({...locationForm, zone: e.target.value})}
-                />
+              {selectedWarehouse?.locations?.length > 0 && (
+                <div className="mt-4">
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_location') || 'Parent Location'}</label>
+                  <Select
+                    value={locationForm.parent_id}
+                    onValueChange={(value) => setLocationForm({...locationForm, parent_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_parent') || 'None (Top Level)'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">{t('none_top_level') || 'None (Top Level)'}</SelectItem>
+                      {selectedWarehouse.locations.map(loc => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.code} - {loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">{t('parent_location_desc') || 'Create hierarchical structure like SAP (Zone > Aisle > Rack > Shelf > Bin)'}</p>
+                </div>
+              )}
+            </div>
+
+            {/* SAP-style Address */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                {t('location_address') || 'Location Address'}
+                <Badge className="bg-purple-100 text-purple-700 text-xs">SAP</Badge>
+              </h4>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('aisle') || 'Aisle'}</label>
+                  <Input
+                    placeholder="A"
+                    value={locationForm.aisle}
+                    onChange={(e) => setLocationForm({...locationForm, aisle: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('rack') || 'Rack'}</label>
+                  <Input
+                    placeholder="01"
+                    value={locationForm.rack}
+                    onChange={(e) => setLocationForm({...locationForm, rack: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('shelf') || 'Shelf'}</label>
+                  <Input
+                    placeholder="02"
+                    value={locationForm.shelf}
+                    onChange={(e) => setLocationForm({...locationForm, shelf: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bin') || 'Bin'}</label>
+                  <Input
+                    placeholder="03"
+                    value={locationForm.bin}
+                    onChange={(e) => setLocationForm({...locationForm, bin: e.target.value})}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{t('location_address_desc') || 'Standard warehouse coordinate system: Aisle-Rack-Shelf-Bin (e.g., A-01-02-03)'}</p>
+            </div>
+
+            {/* Capacity */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('capacity_settings') || 'Capacity Settings'}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity') || 'Capacity'}</label>
+                  <Input
+                    type="number"
+                    placeholder="100"
+                    value={locationForm.capacity}
+                    onChange={(e) => setLocationForm({...locationForm, capacity: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity_unit') || 'Unit'}</label>
+                  <Select
+                    value={locationForm.capacity_unit}
+                    onValueChange={(value) => setLocationForm({...locationForm, capacity_unit: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="units">{t('units') || 'Units'}</SelectItem>
+                      <SelectItem value="kg">{t('kilograms') || 'Kilograms (kg)'}</SelectItem>
+                      <SelectItem value="m3">{t('cubic_meters') || 'Cubic Meters (m³)'}</SelectItem>
+                      <SelectItem value="pallets">{t('pallets') || 'Pallets'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
+
+            {/* Barcode */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block flex items-center gap-2">
+                <Barcode className="w-4 h-4" />
+                {t('location_barcode') || 'Location Barcode'}
+              </label>
               <Input
-                placeholder={t('location_name_placeholder')}
-                value={locationForm.name}
-                onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
-                required
+                placeholder={t('barcode_placeholder') || 'Scan or enter barcode'}
+                value={locationForm.barcode}
+                onChange={(e) => setLocationForm({...locationForm, barcode: e.target.value})}
               />
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Special Location Types (Odoo-style) */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                {t('special_location_flags') || 'Special Location Flags'}
+                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
+              </h4>
+              <div className="flex flex-wrap gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_scrap_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_scrap_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_scrap_location') || 'Scrap Location'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_return_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_return_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_return_location') || 'Return Location'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_replenish_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_replenish_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_replenish_location') || 'Replenish Location'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Status */}
+            <div className="flex items-center gap-2 border-t pt-4">
               <Switch
                 checked={locationForm.is_active}
                 onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}
@@ -787,7 +1011,7 @@ export default function Warehouses() {
 
       {/* Edit Location Modal */}
       <Dialog open={showEditLocationModal} onOpenChange={setShowEditLocationModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -797,36 +1021,169 @@ export default function Warehouses() {
               {t('edit_location_in')} {selectedWarehouse?.name}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+          <div className="space-y-6 py-4">
+            {/* Basic Information */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                  <Input
+                    placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
+                    value={locationForm.code}
+                    onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location_type') || 'Location Type'}</label>
+                  <Select
+                    value={locationForm.type}
+                    onValueChange={(value) => setLocationForm({...locationForm, type: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="storage">{t('loc_type_storage') || 'Storage'}</SelectItem>
+                      <SelectItem value="receiving">{t('loc_type_receiving') || 'Receiving'}</SelectItem>
+                      <SelectItem value="shipping">{t('loc_type_shipping') || 'Shipping'}</SelectItem>
+                      <SelectItem value="staging">{t('loc_type_staging') || 'Staging'}</SelectItem>
+                      <SelectItem value="quality">{t('loc_type_quality') || 'Quality Control'}</SelectItem>
+                      <SelectItem value="returns">{t('loc_type_returns') || 'Returns'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
                 <Input
-                  placeholder={t('location_code_placeholder')}
-                  value={locationForm.code}
-                  onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
+                  placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
+                  value={locationForm.name}
+                  onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
                   required
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('zone')}</label>
-                <Input
-                  placeholder={t('zone_placeholder')}
-                  value={locationForm.zone}
-                  onChange={(e) => setLocationForm({...locationForm, zone: e.target.value})}
-                />
+            </div>
+
+            {/* SAP-style Address */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                {t('location_address') || 'Location Address'}
+                <Badge className="bg-purple-100 text-purple-700 text-xs">SAP</Badge>
+              </h4>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('aisle') || 'Aisle'}</label>
+                  <Input
+                    placeholder="A"
+                    value={locationForm.aisle}
+                    onChange={(e) => setLocationForm({...locationForm, aisle: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('rack') || 'Rack'}</label>
+                  <Input
+                    placeholder="01"
+                    value={locationForm.rack}
+                    onChange={(e) => setLocationForm({...locationForm, rack: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('shelf') || 'Shelf'}</label>
+                  <Input
+                    placeholder="02"
+                    value={locationForm.shelf}
+                    onChange={(e) => setLocationForm({...locationForm, shelf: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bin') || 'Bin'}</label>
+                  <Input
+                    placeholder="03"
+                    value={locationForm.bin}
+                    onChange={(e) => setLocationForm({...locationForm, bin: e.target.value})}
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Capacity */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('capacity_settings') || 'Capacity Settings'}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity') || 'Capacity'}</label>
+                  <Input
+                    type="number"
+                    placeholder="100"
+                    value={locationForm.capacity}
+                    onChange={(e) => setLocationForm({...locationForm, capacity: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity_unit') || 'Unit'}</label>
+                  <Select
+                    value={locationForm.capacity_unit}
+                    onValueChange={(value) => setLocationForm({...locationForm, capacity_unit: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="units">{t('units') || 'Units'}</SelectItem>
+                      <SelectItem value="kg">{t('kilograms') || 'Kilograms (kg)'}</SelectItem>
+                      <SelectItem value="m3">{t('cubic_meters') || 'Cubic Meters (m³)'}</SelectItem>
+                      <SelectItem value="pallets">{t('pallets') || 'Pallets'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Barcode */}
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block flex items-center gap-2">
+                <Barcode className="w-4 h-4" />
+                {t('location_barcode') || 'Location Barcode'}
+              </label>
               <Input
-                placeholder={t('location_name_placeholder')}
-                value={locationForm.name}
-                onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
-                required
+                placeholder={t('barcode_placeholder') || 'Scan or enter barcode'}
+                value={locationForm.barcode}
+                onChange={(e) => setLocationForm({...locationForm, barcode: e.target.value})}
               />
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Special Location Flags */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('special_location_flags') || 'Special Location Flags'}</h4>
+              <div className="flex flex-wrap gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_scrap_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_scrap_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_scrap_location') || 'Scrap Location'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_return_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_return_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_return_location') || 'Return Location'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={locationForm.is_replenish_location}
+                    onCheckedChange={(checked) => setLocationForm({...locationForm, is_replenish_location: checked})}
+                  />
+                  <span className="text-sm text-slate-700">{t('is_replenish_location') || 'Replenish Location'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Status */}
+            <div className="flex items-center gap-2 border-t pt-4">
               <Switch
                 checked={locationForm.is_active}
                 onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}

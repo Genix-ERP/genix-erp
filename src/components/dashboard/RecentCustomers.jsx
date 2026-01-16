@@ -45,7 +45,7 @@ export default function RecentCustomers({ customers }) {
                 </div>
                 <div className="text-right">
                   <Badge className={statusColors[customer.status]}>
-                    {customer.status}
+                    {t(customer.status)}
                   </Badge>
                   {customer.monthly_value && (
                     <p className="text-sm text-slate-600 mt-1">
@@ -57,7 +57,7 @@ export default function RecentCustomers({ customers }) {
             ))}
             <Link to={createPageUrl("Customers")}>
               <Button variant="outline" className="w-full mt-4">
-                {t('view_all')} <ArrowRight className="w-4 h-4 ml-2" />
+                {t('view_all_customers')} <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
           </div>

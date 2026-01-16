@@ -352,8 +352,8 @@ export default function Dashboard() {
                  hrAnalysis.recommendations.length === 0 && (
                   <div className="text-center py-8 text-slate-500">
                     <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-400" />
-                    <p>All systems running optimally!</p>
-                    <p className="text-sm">No immediate actions needed</p>
+                    <p>{t('all_systems_optimal')}</p>
+                    <p className="text-sm">{t('no_immediate_actions')}</p>
                   </div>
                 )}
 
