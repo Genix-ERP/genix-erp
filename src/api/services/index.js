@@ -7,6 +7,7 @@ export { default as salesService } from './sales';
 export { default as purchaseService } from './purchase';
 export { default as procurementService } from './procurement';
 export { default as hrService } from './hr';
+export { default as projectsService } from './projects';
 export { default as aiService } from './ai';
 export { default as pbxService } from './pbx';
 export { default as leadsService } from './leads';
