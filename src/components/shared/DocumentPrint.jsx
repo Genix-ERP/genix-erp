@@ -280,9 +280,9 @@ export const generateDocumentPDF = (config) => {
     yPos += splitNotes.length * 4 + 5;
   }
 
-  // Signature section
+  // Signature section - add some spacing but don't force to bottom
   if (templateConfig.showSignature) {
-    yPos = Math.max(yPos, pageHeight - 50);
+    yPos += 15; // Add spacing before signatures
 
     doc.setDrawColor(150);
     doc.setFontSize(8);
@@ -292,19 +292,30 @@ export const generateDocumentPDF = (config) => {
     doc.line(margins.left, yPos + 12, margins.left + 50, yPos + 12);
     doc.text("(imzo)", margins.left + 15, yPos + 16);
 
+    // Stamp placeholder in center (between signatures)
+    if (templateConfig.showStamp) {
+      doc.setDrawColor(150);
+      doc.setLineDash([2, 2]);
+      doc.circle(pageWidth / 2, yPos + 8, 12);
+      doc.setFontSize(6);
+      doc.text("M.O.", pageWidth / 2, yPos + 8, { align: "center" });
+      doc.setLineDash([]);
+    }
+
     // Right signature
     doc.text("Qabul qildi:", pageWidth - margins.right - 50, yPos);
     doc.line(pageWidth - margins.right - 50, yPos + 12, pageWidth - margins.right, yPos + 12);
     doc.text("(imzo)", pageWidth - margins.right - 35, yPos + 16);
-  }
 
-  // Stamp placeholder
-  if (templateConfig.showStamp) {
+    yPos += 25;
+  } else if (templateConfig.showStamp) {
+    // Stamp without signatures
+    yPos += 10;
     doc.setDrawColor(150);
     doc.setLineDash([2, 2]);
-    doc.circle(pageWidth / 2, pageHeight - 35, 15);
+    doc.circle(pageWidth / 2, yPos + 8, 12);
     doc.setFontSize(6);
-    doc.text("M.O.", pageWidth / 2, pageHeight - 35, { align: "center" });
+    doc.text("M.O.", pageWidth / 2, yPos + 8, { align: "center" });
     doc.setLineDash([]);
   }
 

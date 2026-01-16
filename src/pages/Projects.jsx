@@ -12,14 +12,15 @@ import { analyzeProjects } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 
-// Default statuses for Kanban
-const DEFAULT_STATUSES = [
-  { id: 'planning', label: 'Planning', color: 'bg-gray-100 text-gray-800' },
-  { id: 'active', label: 'Active', color: 'bg-green-100 text-green-800' },
-  { id: 'on_hold', label: 'On Hold', color: 'bg-yellow-100 text-yellow-800' },
-  { id: 'completed', label: 'Completed', color: 'bg-blue-100 text-blue-800' },
-  { id: 'cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' }
-];
+// Default status IDs for Kanban
+const DEFAULT_STATUS_IDS = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
+const DEFAULT_STATUS_COLORS = {
+  planning: 'bg-gray-100 text-gray-800',
+  active: 'bg-green-100 text-green-800',
+  on_hold: 'bg-yellow-100 text-yellow-800',
+  completed: 'bg-blue-100 text-blue-800',
+  cancelled: 'bg-red-100 text-red-800'
+};
 
 export default function Projects() {
   const { language } = useLanguage();
@@ -35,10 +36,20 @@ export default function Projects() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'kanban'
 
+  // Default statuses with translations
+  const DEFAULT_STATUSES = useMemo(() => DEFAULT_STATUS_IDS.map(id => ({
+    id,
+    label: t(id),
+    color: DEFAULT_STATUS_COLORS[id]
+  })), [t]);
+
   // Custom statuses stored in localStorage
   const [customStatuses, setCustomStatuses] = useState(() => {
     const saved = localStorage.getItem('genix_project_statuses');
-    return saved ? JSON.parse(saved) : DEFAULT_STATUSES;
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return null; // Will be set in useEffect
   });
 
   const [newStatus, setNewStatus] = useState({ label: '', color: 'bg-blue-100 text-blue-800' });
@@ -57,6 +68,13 @@ export default function Projects() {
     priority: 'medium'
   });
 
+  // Initialize customStatuses with DEFAULT_STATUSES if not saved
+  useEffect(() => {
+    if (customStatuses === null) {
+      setCustomStatuses(DEFAULT_STATUSES);
+    }
+  }, [DEFAULT_STATUSES, customStatuses]);
+
   useEffect(() => {
     let filtered = projects;
     if (statusFilter !== 'all') {
@@ -73,7 +91,9 @@ export default function Projects() {
 
   // Save custom statuses to localStorage
   useEffect(() => {
-    localStorage.setItem('genix_project_statuses', JSON.stringify(customStatuses));
+    if (customStatuses !== null) {
+      localStorage.setItem('genix_project_statuses', JSON.stringify(customStatuses));
+    }
   }, [customStatuses]);
 
   const handleCreateProject = async () => {
@@ -159,7 +179,7 @@ export default function Projects() {
   };
 
   const addCustomStatus = () => {
-    if (newStatus.label.trim()) {
+    if (newStatus.label.trim() && customStatuses) {
       const statusId = newStatus.label.toLowerCase().replace(/\s+/g, '_');
       if (!customStatuses.find(s => s.id === statusId)) {
         setCustomStatuses([...customStatuses, {
@@ -173,6 +193,7 @@ export default function Projects() {
   };
 
   const removeCustomStatus = (statusId) => {
+    if (!customStatuses) return;
     // Don't remove if there are projects with this status
     const hasProjects = projects.some(p => p.status === statusId);
     if (hasProjects) {
@@ -183,12 +204,17 @@ export default function Projects() {
   };
 
   const getStatusColor = (status) => {
-    const found = customStatuses.find(s => s.id === status);
+    const found = (customStatuses || []).find(s => s.id === status);
     return found?.color || 'bg-gray-100 text-gray-800';
   };
 
   const getStatusLabel = (status) => {
-    const found = customStatuses.find(s => s.id === status);
+    // For default statuses, always use translation
+    if (DEFAULT_STATUS_IDS.includes(status)) {
+      return t(status);
+    }
+    // For custom statuses, use the stored label
+    const found = (customStatuses || []).find(s => s.id === status);
     return found?.label || status;
   };
 
@@ -203,16 +229,16 @@ export default function Projects() {
   };
 
   const colorOptions = [
-    { value: 'bg-gray-100 text-gray-800', label: 'Gray' },
-    { value: 'bg-blue-100 text-blue-800', label: 'Blue' },
-    { value: 'bg-green-100 text-green-800', label: 'Green' },
-    { value: 'bg-yellow-100 text-yellow-800', label: 'Yellow' },
-    { value: 'bg-orange-100 text-orange-800', label: 'Orange' },
-    { value: 'bg-red-100 text-red-800', label: 'Red' },
-    { value: 'bg-purple-100 text-purple-800', label: 'Purple' },
-    { value: 'bg-pink-100 text-pink-800', label: 'Pink' },
-    { value: 'bg-indigo-100 text-indigo-800', label: 'Indigo' },
-    { value: 'bg-teal-100 text-teal-800', label: 'Teal' },
+    { value: 'bg-gray-100 text-gray-800', label: t('gray') },
+    { value: 'bg-blue-100 text-blue-800', label: t('blue') },
+    { value: 'bg-green-100 text-green-800', label: t('green') },
+    { value: 'bg-yellow-100 text-yellow-800', label: t('yellow') },
+    { value: 'bg-orange-100 text-orange-800', label: t('orange') },
+    { value: 'bg-red-100 text-red-800', label: t('red') },
+    { value: 'bg-purple-100 text-purple-800', label: t('purple') },
+    { value: 'bg-pink-100 text-pink-800', label: t('pink') },
+    { value: 'bg-indigo-100 text-indigo-800', label: t('indigo') },
+    { value: 'bg-teal-100 text-teal-800', label: t('teal') },
   ];
 
   const metrics = {
@@ -223,7 +249,7 @@ export default function Projects() {
   };
 
   // Project Card Component
-  const ProjectCard = ({ project, draggable = false }) => (
+  const ProjectCard = ({ project, draggable = false, hideStatus = false }) => (
     <Card
       className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : ''}`}
       draggable={draggable}
@@ -236,7 +262,7 @@ export default function Projects() {
             <p className="text-sm text-slate-500">{project.client_name}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>
+            {!hideStatus && <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>}
             <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title={t('edit_project')}>
               <Edit2 className="w-4 h-4" />
             </Button>
@@ -278,6 +304,16 @@ export default function Projects() {
     </Card>
   );
 
+  // Helper to get translated status label
+  const getTranslatedStatusLabel = (status) => {
+    // If it's a default status ID, translate it
+    if (DEFAULT_STATUS_IDS.includes(status.id)) {
+      return t(status.id);
+    }
+    // Otherwise use the stored label
+    return status.label;
+  };
+
   // Kanban Column Component
   const KanbanColumn = ({ status }) => {
     const columnProjects = filteredProjects.filter(p => p.status === status.id);
@@ -290,14 +326,14 @@ export default function Projects() {
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Badge className={status.color}>{status.label}</Badge>
+            <Badge className={status.color}>{getTranslatedStatusLabel(status)}</Badge>
             <span className="text-sm text-slate-500">({columnProjects.length})</span>
           </div>
         </div>
         <div className="space-y-3 min-h-[200px]">
           {columnProjects.map(project => (
             <div key={project.id} className="cursor-move">
-              <ProjectCard project={project} draggable={true} />
+              <ProjectCard project={project} draggable={true} hideStatus={true} />
             </div>
           ))}
           {columnProjects.length === 0 && (
@@ -501,8 +537,8 @@ export default function Projects() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t('all_status')}</SelectItem>
-                    {customStatuses.map(status => (
-                      <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+                    {(customStatuses || []).map(status => (
+                      <SelectItem key={status.id} value={status.id}>{getTranslatedStatusLabel(status)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -524,7 +560,7 @@ export default function Projects() {
               /* Kanban View */
               <div className="overflow-x-auto pb-4">
                 <div className="flex gap-4 min-w-max">
-                  {customStatuses.map(status => (
+                  {(customStatuses || []).map(status => (
                     <KanbanColumn key={status.id} status={status} />
                   ))}
                 </div>
@@ -751,8 +787,8 @@ export default function Projects() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {customStatuses.map(status => (
-                          <SelectItem key={status.id} value={status.id}>{status.label}</SelectItem>
+                        {(customStatuses || []).map(status => (
+                          <SelectItem key={status.id} value={status.id}>{getTranslatedStatusLabel(status)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -827,11 +863,11 @@ export default function Projects() {
               {/* Existing Statuses */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">{t('current_statuses')}</h4>
-                {customStatuses.map((status, index) => (
+                {(customStatuses || []).map((status, index) => (
                   <div key={status.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
                     <div className="flex items-center gap-3">
                       <GripVertical className="w-4 h-4 text-slate-400" />
-                      <Badge className={status.color}>{status.label}</Badge>
+                      <Badge className={status.color}>{getTranslatedStatusLabel(status)}</Badge>
                       <span className="text-xs text-slate-500">
                         ({projects.filter(p => p.status === status.id).length} {t('projects')})
                       </span>

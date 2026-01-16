@@ -47,6 +47,7 @@ import {
   Gift,
   Copy,
   CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -70,6 +71,8 @@ export default function Discounts() {
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [discountToDelete, setDiscountToDelete] = useState(null);
   const [selectedDiscount, setSelectedDiscount] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(null);
@@ -185,9 +188,16 @@ export default function Discounts() {
     await updateDiscount(discount.id, { status: newStatus });
   };
 
-  const handleDelete = async (discount) => {
-    if (window.confirm(t('confirm_delete_discount'))) {
-      await deleteDiscount(discount.id);
+  const handleDelete = (discount) => {
+    setDiscountToDelete(discount);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (discountToDelete) {
+      await deleteDiscount(discountToDelete.id);
+      setShowDeleteConfirm(false);
+      setDiscountToDelete(null);
     }
   };
 
@@ -858,6 +868,47 @@ export default function Discounts() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('confirm_deletion')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('delete_discount_confirm')}
+            </p>
+            {discountToDelete && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <code className="px-2 py-1 bg-slate-200 rounded font-mono">
+                  {discountToDelete.code}
+                </code>
+                <p className="text-sm text-slate-500 mt-2">{discountToDelete.name}</p>
+                <p className="text-sm font-medium mt-1">
+                  {discountToDelete.type === "percentage"
+                    ? `${discountToDelete.value}%`
+                    : formatCurrency(discountToDelete.value)}
+                </p>
+              </div>
+            )}
+            <p className="text-sm text-red-500 mt-3">
+              {t('this_action_cannot_be_undone')}
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('cancel')}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              {t('delete')}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

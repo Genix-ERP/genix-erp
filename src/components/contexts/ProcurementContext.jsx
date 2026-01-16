@@ -4,181 +4,6 @@ import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
 
 const ProcurementContext = createContext(null);
 
-// Helper to get storage key with demo prefix
-const getStorageKey = (key) => {
-  const prefix = isDemoMode() ? 'demo_' : '';
-  return `${prefix}${key}`;
-};
-
-// Storage keys
-const STORAGE_KEYS = {
-  SUPPLIERS: 'genix_suppliers',
-  PURCHASE_ORDERS: 'genix_purchase_orders',
-  RFQS: 'genix_rfqs',
-  CONTRACTS: 'genix_contracts',
-  PRICE_HISTORY: 'genix_price_history',
-};
-
-// Sample data
-const sampleSuppliers = [
-  {
-    id: '1',
-    code: 'SUP-001',
-    name: 'Tashkent Trade LLC',
-    contact_person: 'Akmal Karimov',
-    email: 'info@tashkenttrade.uz',
-    phone: '+998 71 123 4567',
-    address: 'Tashkent, Mirzo Ulugbek tumani',
-    tax_id: '123456789',
-    payment_terms: 'net_30',
-    currency: 'UZS',
-    rating: 4.5,
-    total_orders: 45,
-    total_spent: 125000000,
-    status: 'active',
-    categories: ['Electronics', 'Office Supplies'],
-    created_at: '2024-01-15',
-  },
-  {
-    id: '2',
-    code: 'SUP-002',
-    name: 'Global Import Export',
-    contact_person: 'Dilshod Rahimov',
-    email: 'sales@globalimport.uz',
-    phone: '+998 90 234 5678',
-    address: 'Samarkand, Registon',
-    tax_id: '987654321',
-    payment_terms: 'net_60',
-    currency: 'USD',
-    rating: 4.2,
-    total_orders: 32,
-    total_spent: 85000,
-    status: 'active',
-    categories: ['Raw Materials', 'Chemicals'],
-    created_at: '2024-02-20',
-  },
-  {
-    id: '3',
-    code: 'SUP-003',
-    name: 'Ferghana Textiles',
-    contact_person: 'Nodira Yusupova',
-    email: 'orders@ferghanatextiles.uz',
-    phone: '+998 73 345 6789',
-    address: 'Ferghana viloyati',
-    tax_id: '456789123',
-    payment_terms: 'net_30',
-    currency: 'UZS',
-    rating: 4.8,
-    total_orders: 78,
-    total_spent: 250000000,
-    status: 'active',
-    categories: ['Textiles', 'Fabrics'],
-    created_at: '2023-11-10',
-  },
-];
-
-const sampleRFQs = [
-  {
-    id: '1',
-    rfq_number: 'RFQ-2024-001',
-    title: 'Ofis jihozlari uchun taklif',
-    description: 'Kompyuter va ofis jihozlari sotib olish uchun narx taklifi',
-    status: 'open',
-    deadline: '2024-02-15',
-    created_at: '2024-02-01',
-    created_by: 'Admin',
-    items: [
-      { name: 'Kompyuter Dell', quantity: 10, unit: 'dona' },
-      { name: 'Monitor LG 24"', quantity: 10, unit: 'dona' },
-      { name: 'Stol', quantity: 20, unit: 'dona' },
-    ],
-    suppliers_invited: ['1', '2'],
-    responses: [
-      { supplier_id: '1', total_amount: 150000000, submitted_at: '2024-02-05', status: 'submitted' },
-    ],
-  },
-  {
-    id: '2',
-    rfq_number: 'RFQ-2024-002',
-    title: 'Xom ashyo uchun taklif',
-    description: 'Ishlab chiqarish uchun xom ashyo',
-    status: 'closed',
-    deadline: '2024-01-20',
-    created_at: '2024-01-05',
-    created_by: 'Admin',
-    items: [
-      { name: 'Paxta', quantity: 1000, unit: 'kg' },
-      { name: 'Ip', quantity: 500, unit: 'kg' },
-    ],
-    suppliers_invited: ['2', '3'],
-    responses: [
-      { supplier_id: '2', total_amount: 50000, submitted_at: '2024-01-15', status: 'accepted' },
-      { supplier_id: '3', total_amount: 55000, submitted_at: '2024-01-18', status: 'rejected' },
-    ],
-    winner_supplier_id: '2',
-  },
-];
-
-const sampleContracts = [
-  {
-    id: '1',
-    contract_number: 'CNT-2024-001',
-    supplier_id: '1',
-    supplier_name: 'Tashkent Trade LLC',
-    title: 'Yillik ta\'minot shartnomasi',
-    type: 'annual',
-    start_date: '2024-01-01',
-    end_date: '2024-12-31',
-    value: 500000000,
-    currency: 'UZS',
-    status: 'active',
-    terms: 'Har oyda kamida 50 mln so\'mlik mahsulot yetkazib berish',
-    auto_renew: true,
-    created_at: '2024-01-01',
-  },
-  {
-    id: '2',
-    contract_number: 'CNT-2024-002',
-    supplier_id: '3',
-    supplier_name: 'Ferghana Textiles',
-    title: 'Gazlama yetkazib berish shartnomasi',
-    type: 'fixed',
-    start_date: '2024-02-01',
-    end_date: '2024-06-30',
-    value: 200000000,
-    currency: 'UZS',
-    status: 'active',
-    terms: 'Har oy 1000 metr gazlama yetkazib berish',
-    auto_renew: false,
-    created_at: '2024-02-01',
-  },
-];
-
-const samplePriceHistory = [
-  {
-    id: '1',
-    product_name: 'Kompyuter Dell',
-    supplier_id: '1',
-    supplier_name: 'Tashkent Trade LLC',
-    prices: [
-      { date: '2024-01-01', price: 15000000, currency: 'UZS' },
-      { date: '2024-02-01', price: 14500000, currency: 'UZS' },
-      { date: '2024-03-01', price: 15200000, currency: 'UZS' },
-    ],
-  },
-  {
-    id: '2',
-    product_name: 'Paxta',
-    supplier_id: '2',
-    supplier_name: 'Global Import Export',
-    prices: [
-      { date: '2024-01-01', price: 50, currency: 'USD' },
-      { date: '2024-02-01', price: 48, currency: 'USD' },
-      { date: '2024-03-01', price: 52, currency: 'USD' },
-    ],
-  },
-];
-
 export function ProcurementProvider({ children }) {
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -186,10 +11,37 @@ export function ProcurementProvider({ children }) {
   const [contracts, setContracts] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [backendAvailable, setBackendAvailable] = useState(false);
 
+  // Load data from backend on mount
   // Load data from backend or localStorage on mount
   useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [suppliersData, ordersData, contractsData] = await Promise.all([
+        procurementService.listSuppliers(),
+        procurementService.listOrders(),
+        procurementService.listContracts(),
+      ]);
+      setSuppliers(suppliersData || []);
+      setPurchaseOrders(ordersData || []);
+      setContracts(contractsData || []);
+    } catch (err) {
+      console.error('Error loading procurement data:', err);
+      setError(err.message);
+      setSuppliers([]);
+      setPurchaseOrders([]);
+      setContracts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
     const loadData = async () => {
       try {
         const demoMode = isDemoMode();
@@ -296,6 +148,7 @@ export function ProcurementProvider({ children }) {
 
   // Supplier CRUD operations
   const createSupplier = useCallback(async (supplierData) => {
+    const newSupplier = await procurementService.createSupplier(supplierData);
     if (backendAvailable) {
       try {
         const response = await procurementService.createSupplier({
@@ -321,9 +174,14 @@ export function ProcurementProvider({ children }) {
     };
     setSuppliers(prev => [...prev, newSupplier]);
     return newSupplier;
+  }, []);
   }, [suppliers.length, backendAvailable]);
 
   const updateSupplier = useCallback(async (id, updates) => {
+    const updated = await procurementService.updateSupplier(id, updates);
+    setSuppliers(prev => prev.map(s => s.id === id ? updated : s));
+    return updated;
+  }, []);
     if (backendAvailable) {
       try {
         await procurementService.updateSupplier(id, updates);
@@ -335,6 +193,7 @@ export function ProcurementProvider({ children }) {
   }, [backendAvailable]);
 
   const deleteSupplier = useCallback(async (id) => {
+    await procurementService.deleteSupplier(id);
     if (backendAvailable) {
       try {
         await procurementService.deleteSupplier(id);
@@ -349,7 +208,7 @@ export function ProcurementProvider({ children }) {
     return suppliers.find(s => s.id === id);
   }, [suppliers]);
 
-  // RFQ operations
+  // RFQ operations (RFQs API to be implemented)
   const createRFQ = useCallback(async (rfqData) => {
     const newRFQ = {
       ...rfqData,
@@ -406,28 +265,23 @@ export function ProcurementProvider({ children }) {
 
   // Contract operations
   const createContract = useCallback(async (contractData) => {
-    const supplier = getSupplierById(contractData.supplier_id);
-    const newContract = {
-      ...contractData,
-      id: Date.now().toString(),
-      contract_number: `CNT-${new Date().getFullYear()}-${String(contracts.length + 1).padStart(3, '0')}`,
-      supplier_name: supplier?.name || '',
-      status: 'draft',
-      created_at: new Date().toISOString().split('T')[0],
-    };
+    const newContract = await procurementService.createContract(contractData);
     setContracts(prev => [...prev, newContract]);
     return newContract;
-  }, [contracts.length, getSupplierById]);
+  }, []);
 
   const updateContract = useCallback(async (id, updates) => {
-    setContracts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    const updated = await procurementService.updateContract(id, updates);
+    setContracts(prev => prev.map(c => c.id === id ? updated : c));
+    return updated;
   }, []);
 
   const deleteContract = useCallback(async (id) => {
+    await procurementService.deleteContract(id);
     setContracts(prev => prev.filter(c => c.id !== id));
   }, []);
 
-  // Price history operations
+  // Price history operations (to be implemented in backend)
   const addPriceRecord = useCallback(async (productName, supplierId, price, currency = 'UZS') => {
     const supplier = getSupplierById(supplierId);
     const existingProduct = priceHistory.find(
@@ -467,62 +321,45 @@ export function ProcurementProvider({ children }) {
     return priceHistory.filter(p => p.product_name === productName);
   }, [priceHistory]);
 
-  // Purchase Order operations (from ModulesContext)
+  // Purchase Order operations
   const createPurchaseOrder = useCallback(async (poData) => {
-    const supplier = getSupplierById(poData.supplier_id);
-    const newPO = {
-      ...poData,
-      id: Date.now().toString(),
-      po_number: poData.po_number || `PO-${Date.now()}`,
-      supplier_name: supplier?.name || poData.vendor_name || '',
-      status: 'draft',
-      created_at: new Date().toISOString(),
-    };
+    const newPO = await procurementService.createOrder(poData);
     setPurchaseOrders(prev => [...prev, newPO]);
-
-    // Update supplier stats
-    if (supplier) {
-      updateSupplier(supplier.id, {
-        total_orders: (supplier.total_orders || 0) + 1,
-      });
-    }
-
     return newPO;
-  }, [getSupplierById, updateSupplier]);
+  }, []);
 
   const updatePurchaseOrder = useCallback(async (id, updates) => {
-    setPurchaseOrders(prev => prev.map(po => {
-      if (po.id === id) {
-        const updated = { ...po, ...updates };
-        // If received, update supplier spent amount
-        if (updates.status === 'received' && po.status !== 'received') {
-          const supplier = getSupplierById(po.supplier_id);
-          if (supplier) {
-            updateSupplier(supplier.id, {
-              total_spent: (supplier.total_spent || 0) + (po.total_amount || 0),
-            });
-          }
-        }
-        return updated;
-      }
-      return po;
-    }));
-  }, [getSupplierById, updateSupplier]);
+    const updated = await procurementService.updateOrder(id, updates);
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? updated : po));
+    return updated;
+  }, []);
 
   const deletePurchaseOrder = useCallback(async (id) => {
+    await procurementService.deleteOrder(id);
     setPurchaseOrders(prev => prev.filter(po => po.id !== id));
+  }, []);
+
+  const approvePurchaseOrder = useCallback(async (id) => {
+    const approved = await procurementService.approveOrder(id);
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? approved : po));
+    return approved;
+  }, []);
+
+  const receivePurchaseOrder = useCallback(async (id, data) => {
+    const received = await procurementService.receiveOrder(id, data);
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? received : po));
+    return received;
   }, []);
 
   // Supplier rating update
   const updateSupplierRating = useCallback(async (supplierId, rating, comment = '') => {
     const supplier = getSupplierById(supplierId);
     if (supplier) {
-      // Simple average rating calculation
       const currentRating = supplier.rating || 0;
       const totalOrders = supplier.total_orders || 1;
       const newRating = ((currentRating * (totalOrders - 1)) + rating) / totalOrders;
 
-      updateSupplier(supplierId, {
+      await updateSupplier(supplierId, {
         rating: Math.round(newRating * 10) / 10,
         last_rating_date: new Date().toISOString().split('T')[0],
         last_rating_comment: comment,
@@ -546,6 +383,11 @@ export function ProcurementProvider({ children }) {
     };
   }, [suppliers]);
 
+  // Refresh data from backend
+  const refreshData = useCallback(async () => {
+    await loadData();
+  }, []);
+
   const value = {
     // State
     suppliers,
@@ -554,6 +396,7 @@ export function ProcurementProvider({ children }) {
     contracts,
     priceHistory,
     isLoading,
+    error,
     backendAvailable,
 
     // Supplier operations
@@ -584,6 +427,11 @@ export function ProcurementProvider({ children }) {
     createPurchaseOrder,
     updatePurchaseOrder,
     deletePurchaseOrder,
+    approvePurchaseOrder,
+    receivePurchaseOrder,
+
+    // Refresh
+    refreshData,
   };
 
   return (
