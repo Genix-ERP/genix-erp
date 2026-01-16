@@ -3,12 +3,83 @@
 
 import { aiService } from './services/ai';
 import apiClient from './client';
+import { checkBackendHealth, isDemoMode } from '@/config/dataMode';
+
+// Helper function to get default response based on schema
+const getDefaultResponse = (schema, errorMessage = 'AI service is currently unavailable. Please try again later.') => {
+  if (!schema) {
+    return errorMessage;
+  }
+
+  const schemaProps = schema.properties || {};
+
+  // Reorder optimization schema
+  if (schemaProps.priority_actions || schemaProps.cost_savings_potential) {
+    return {
+      summary: errorMessage,
+      priority_actions: [],
+      cost_savings_potential: 'N/A',
+      recommendations: []
+    };
+  }
+
+  // HR analytics schema
+  if (schemaProps.workforce_insights || schemaProps.retention_risks) {
+    return {
+      workforce_insights: [],
+      retention_risks: [],
+      recommendations: [],
+      summary: errorMessage
+    };
+  }
+
+  // Manufacturing insights schema
+  if (schemaProps.efficiency_analysis || schemaProps.quality_insights) {
+    return {
+      efficiency_analysis: [],
+      quality_insights: [],
+      recommendations: [],
+      summary: errorMessage
+    };
+  }
+
+  // CRM/Sales schema
+  if (schemaProps.lead_scoring || schemaProps.pipeline_analysis) {
+    return {
+      lead_scoring: [],
+      pipeline_analysis: [],
+      recommendations: [],
+      summary: errorMessage
+    };
+  }
+
+  // MRP planning schema (default)
+  return {
+    procurement_needs: [],
+    production_schedule: [],
+    bottlenecks: [],
+    optimization_tips: [],
+    summary: errorMessage
+  };
+};
 
 // Core integrations object
 export const Core = {
   // AI/LLM functionality
   InvokeLLM: async (options) => {
     try {
+      // Check if backend is available before making the request
+      const isBackendAvailable = await checkBackendHealth();
+
+      if (!isBackendAvailable || isDemoMode()) {
+        // Backend not available - return demo/default response
+        console.warn('AI backend not available, returning default response');
+        return getDefaultResponse(
+          options.response_json_schema,
+          'AI service is running in demo mode. Connect to backend for full functionality.'
+        );
+      }
+
       const response = await aiService.chat(options.prompt, null, {
         response_format: options.response_json_schema ? 'json' : 'text',
         schema: options.response_json_schema,
@@ -36,25 +107,7 @@ export const Core = {
           } catch {
             // If parsing fails, return a default structure based on schema
             console.log('Could not parse AI response as JSON, returning default structure');
-            const schemaProps = options.response_json_schema.properties || {};
-
-            // Reorder optimization schema
-            if (schemaProps.priority_actions || schemaProps.cost_savings_potential) {
-              return {
-                summary: 'Unable to parse AI response. Please try again.',
-                priority_actions: [],
-                cost_savings_potential: 'N/A',
-                recommendations: []
-              };
-            }
-
-            // MRP planning schema (default)
-            return {
-              procurement_needs: [],
-              production_schedule: [],
-              bottlenecks: [],
-              optimization_tips: []
-            };
+            return getDefaultResponse(options.response_json_schema, 'Unable to parse AI response. Please try again.');
           }
         } else if (typeof result === 'object') {
           return result;
@@ -62,31 +115,14 @@ export const Core = {
       }
       return result;
     } catch (error) {
-      console.error('InvokeLLM error:', error);
+      // Only log as warning, not error (since this is expected when backend is down)
+      console.warn('InvokeLLM: AI service unavailable -', error.message);
+
       // Return default structure on error so UI doesn't break
-      if (options.response_json_schema) {
-        // Check schema properties to determine which default to return
-        const schemaProps = options.response_json_schema.properties || {};
-
-        // Reorder optimization schema
-        if (schemaProps.priority_actions || schemaProps.cost_savings_potential) {
-          return {
-            summary: 'Unable to generate AI analysis at this time. Please check your connection and try again.',
-            priority_actions: [],
-            cost_savings_potential: 'N/A',
-            recommendations: []
-          };
-        }
-
-        // MRP planning schema (default)
-        return {
-          procurement_needs: [],
-          production_schedule: [],
-          bottlenecks: [],
-          optimization_tips: []
-        };
-      }
-      throw error;
+      return getDefaultResponse(
+        options.response_json_schema,
+        'Unable to generate AI analysis at this time. Please check your connection and try again.'
+      );
     }
   },
 

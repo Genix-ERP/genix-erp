@@ -43,7 +43,7 @@ const qualityColors = {
 export default function GoodsReceipt() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { orders } = useProcurement();
+  const { purchaseOrders = [] } = useProcurement();
 
   const [receipts, setReceipts] = useState([]);
   const [filteredReceipts, setFilteredReceipts] = useState([]);
@@ -98,10 +98,10 @@ export default function GoodsReceipt() {
   }, [receipts, searchQuery, statusFilter]);
 
   // Get open POs for dropdown
-  const openPOs = orders.filter(po => po.status === 'approved' || po.status === 'partial');
+  const openPOs = purchaseOrders.filter(po => po.status === 'approved' || po.status === 'partial');
 
   const handleSelectPO = (poId) => {
-    const po = orders.find(o => o.id === poId);
+    const po = purchaseOrders.find(o => o.id === poId);
     if (po) {
       setNewGR({
         ...newGR,
