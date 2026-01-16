@@ -17,6 +17,7 @@ import {
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { analyzeSales } from '@/api/services/aiAnalytics';
+import { salesService } from '@/api/services/sales';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 
@@ -102,30 +103,46 @@ export default function SalesOrders() {
     addAuditLog('create', 'batch', `${data.length} orders imported`);
   };
 
-  const generatePrintConfig = (order) => ({
-    template: 'order',
-    title: t('sales_order'),
-    documentNumber: order.order_number,
-    documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
-    headerFields: [
-      { label: t('customer'), value: order.customer_name },
-      { label: t('delivery_date'), value: order.delivery_date ? format(new Date(order.delivery_date), 'dd.MM.yyyy') : '-' },
-      { label: t('status'), value: t(order.status) },
-      { label: t('payment_status'), value: t(order.payment_status) },
-    ],
-    tableColumns: [
-      { key: 'description', label: t('description') },
-      { key: 'amount', label: t('amount'), align: 'right' },
-    ],
-    tableData: [
-      { description: t('subtotal'), amount: `${(order.subtotal || 0).toLocaleString()} UZS` },
-      { description: t('tax') + ' (12%)', amount: `${(order.tax_amount || 0).toLocaleString()} UZS` },
-      { description: t('shipping'), amount: `${(order.shipping_cost || 0).toLocaleString()} UZS` },
-    ],
-    totals: [
-      { label: t('total'), value: `${(order.total_amount || 0).toLocaleString()} UZS`, bold: true },
-    ],
-  });
+  const generatePrintConfig = (order) => {
+    // Build table data from order lines if available
+    const lines = order.lines || [];
+    const tableData = lines.length > 0
+      ? lines.map((line, idx) => ({
+          no: idx + 1,
+          description: line.description || line.product_name || '-',
+          quantity: line.quantity || 0,
+          unit_price: `${(line.unit_price || 0).toLocaleString()} UZS`,
+          total: `${((line.quantity || 0) * (line.unit_price || 0)).toLocaleString()} UZS`,
+        }))
+      : [{ no: 1, description: t('no_items'), quantity: '-', unit_price: '-', total: '-' }];
+
+    return {
+      template: 'order',
+      title: t('sales_order'),
+      documentNumber: order.order_number,
+      documentDate: order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '',
+      headerFields: [
+        { label: t('customer'), value: order.customer_name },
+        { label: t('delivery_date'), value: order.delivery_date || order.expected_date ? format(new Date(order.delivery_date || order.expected_date), 'dd.MM.yyyy') : '-' },
+        { label: t('status'), value: t(order.status) },
+        { label: t('payment_status'), value: t(order.payment_status) },
+      ],
+      tableColumns: [
+        { key: 'no', label: '№', width: 10 },
+        { key: 'description', label: t('description') },
+        { key: 'quantity', label: t('quantity'), align: 'center', width: 20 },
+        { key: 'unit_price', label: t('price'), align: 'right', width: 30 },
+        { key: 'total', label: t('total'), align: 'right', width: 35 },
+      ],
+      tableData,
+      totals: [
+        { label: t('subtotal'), value: `${(order.subtotal || 0).toLocaleString()} UZS` },
+        { label: t('tax'), value: `${(order.tax_amount || 0).toLocaleString()} UZS` },
+        { label: t('shipping'), value: `${(order.shipping_amount || order.shipping_cost || 0).toLocaleString()} UZS` },
+        { label: t('total'), value: `${(order.total_amount || 0).toLocaleString()} UZS`, bold: true },
+      ],
+    };
+  };
 
   // AI Analysis - combining both contexts
   const salesAnalysis = useMemo(() => {
@@ -198,12 +215,31 @@ export default function SalesOrders() {
     });
   };
 
-  const handleUpdateStatus = (orderId, newStatus) => {
-    updateSalesOrder(orderId, { status: newStatus });
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      await updateSalesOrder(orderId, { status: newStatus });
+    } catch (error) {
+      console.error('Failed to update status:', error);
+    }
+  };
+
+  const handleViewOrder = async (order) => {
+    try {
+      // Fetch full order details including lines
+      const fullOrder = await salesService.getOrder(order.id);
+      setSelectedOrder(fullOrder);
+      setShowPrintPreview(true);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      // Fallback to using the list order data
+      setSelectedOrder(order);
+      setShowPrintPreview(true);
+    }
   };
 
   const getStatusColor = (status) => {
     const colors = {
+      draft: 'bg-slate-100 text-slate-800',
       quotation: 'bg-gray-100 text-gray-800',
       confirmed: 'bg-blue-100 text-blue-800',
       processing: 'bg-yellow-100 text-yellow-800',
@@ -211,14 +247,14 @@ export default function SalesOrders() {
       delivered: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800'
     };
-    return colors[status] || colors.quotation;
+    return colors[status] || colors.draft;
   };
 
   // Combined metrics from both contexts
   const metrics = useMemo(() => ({
     totalOrders: salesOrders?.length || 0,
     totalRevenue: salesOrders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0,
-    activeOrders: salesOrders?.filter(o => ['confirmed', 'processing', 'shipped'].includes(o.status)).length || 0,
+    activeOrders: salesOrders?.filter(o => ['draft', 'confirmed', 'processing', 'shipped'].includes(o.status)).length || 0,
     avgOrderValue: salesOrders?.length > 0 ? salesOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / salesOrders.length : 0,
     totalQuotations: quotations?.length || 0,
     pendingQuotations: quotations?.filter(q => q.status === 'sent').length || 0,
@@ -604,7 +640,7 @@ export default function SalesOrders() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-1">
-                                  {order.status === 'quotation' && (
+                                  {(order.status === 'draft' || order.status === 'quotation') && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')}>
                                       {t('confirm')}
                                     </Button>
@@ -619,6 +655,9 @@ export default function SalesOrders() {
                                       <Truck className="w-4 h-4" />
                                     </Button>
                                   )}
+                                  <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)}>
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -748,12 +787,21 @@ export default function SalesOrders() {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
-                  <Input
-                    placeholder={t('customer_name')}
+                  <Select
                     value={newOrder.customer_name}
-                    onChange={(e) => setNewOrder({...newOrder, customer_name: e.target.value})}
-                    required
-                  />
+                    onValueChange={(value) => setNewOrder({...newOrder, customer_name: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_customer')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.company_name}>
+                          {customer.company_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
