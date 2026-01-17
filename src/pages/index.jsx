@@ -16,6 +16,7 @@ import AdminSettings from "./AdminSettings";
 import Manufacturing from "./Manufacturing";
 import Procurement from "./Procurement";
 import Projects from "./Projects";
+import ProjectDetail from "./ProjectDetail";
 import SalesOrders from "./SalesOrders";
 import Assets from "./Assets";
 import Expenses from "./Expenses";
@@ -46,6 +47,7 @@ const PAGES = {
     Manufacturing: Manufacturing,
     Procurement: Procurement,
     Projects: Projects,
+    ProjectDetail: ProjectDetail,
     SalesOrders: SalesOrders,
     Assets: Assets,
     Expenses: Expenses,
@@ -124,6 +126,7 @@ function PagesContent() {
                                 <Route path="/manufacturing" element={<Manufacturing />} />
                                 <Route path="/procurement" element={<Procurement />} />
                                 <Route path="/projects" element={<Projects />} />
+                                <Route path="/projects/:projectId" element={<ProjectDetail />} />
                                 <Route path="/salesorders" element={<SalesOrders />} />
                                 <Route path="/assets" element={<Assets />} />
                                 <Route path="/expenses" element={<Expenses />} />

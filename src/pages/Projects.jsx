@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const DEFAULT_STATUS_COLORS = {
 };
 
 export default function Projects() {
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { projects, createProject, updateProject, isLoading } = useModules();
@@ -251,9 +253,10 @@ export default function Projects() {
   // Project Card Component
   const ProjectCard = ({ project, draggable = false, hideStatus = false }) => (
     <Card
-      className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : ''}`}
+      className={`bg-white border-slate-200 hover:shadow-lg transition-shadow ${draggable ? 'cursor-move' : 'cursor-pointer'}`}
       draggable={draggable}
       onDragStart={draggable ? (e) => handleDragStart(e, project) : undefined}
+      onClick={() => navigate(`/projects/${project.id}`)}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
