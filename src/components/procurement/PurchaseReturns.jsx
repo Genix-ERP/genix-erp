@@ -112,12 +112,13 @@ export default function PurchaseReturns() {
   }, [returns, searchQuery, statusFilter]);
 
   // Get receivable POs (completed or with goods received)
-  const returnablePOs = orders.filter(po => po.status === 'completed' || po.status === 'partial' || po.status === 'received');
+  const returnablePOs = (orders || []).filter(po => po.status === 'completed' || po.status === 'partial' || po.status === 'received');
 
   const handleSelectPO = (poId) => {
+    if (!orders || !Array.isArray(orders)) return;
     const po = orders.find(o => o.id === poId);
     if (po) {
-      const supplier = suppliers.find(s => s.id === po.supplier_id);
+      const supplier = suppliers?.find(s => s.id === po.supplier_id);
       setNewReturn({
         ...newReturn,
         po_id: poId,
