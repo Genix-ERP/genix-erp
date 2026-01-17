@@ -276,11 +276,11 @@ export default function ProductionSchedule() {
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-4">
-            <span className="text-sm font-medium text-slate-600">Status:</span>
+            <span className="text-sm font-medium text-slate-600">{t('status') || 'Status'}:</span>
             {Object.entries(STATUS_COLORS).map(([status, colors]) => (
               <div key={status} className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${colors.bar}`}></div>
-                <span className="text-sm text-slate-600 capitalize">{status.replace('_', ' ')}</span>
+                <span className="text-sm text-slate-600">{t(`status_${status}`) || status.replace('_', ' ')}</span>
               </div>
             ))}
           </div>
