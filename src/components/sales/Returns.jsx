@@ -84,6 +84,7 @@ export default function Returns() {
   });
 
   const filteredReturns = useMemo(() => {
+    if (!returns || !Array.isArray(returns)) return [];
     return returns.filter((r) => {
       const matchesSearch =
         r.return_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -94,6 +95,9 @@ export default function Returns() {
   }, [returns, searchQuery, statusFilter]);
 
   const stats = useMemo(() => {
+    if (!returns || !Array.isArray(returns)) {
+      return { total: 0, pending: 0, approved: 0, totalAmount: 0, refundedAmount: 0 };
+    }
     const total = returns.length;
     const pending = returns.filter((r) => r.status === "pending").length;
     const approved = returns.filter((r) => r.status === "approved").length;
@@ -105,6 +109,7 @@ export default function Returns() {
   }, [returns]);
 
   const handleInvoiceSelect = (invoiceId) => {
+    if (!invoices || !Array.isArray(invoices)) return;
     const invoice = invoices.find((inv) => inv.id === invoiceId);
     if (invoice) {
       setFormData({
@@ -462,7 +467,7 @@ export default function Returns() {
                   <SelectValue placeholder={t('select_invoice')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {invoices.map((invoice) => (
+                  {(invoices || []).map((invoice) => (
                     <SelectItem key={invoice.id} value={invoice.id}>
                       {invoice.invoice_number} - {invoice.customer_name}
                     </SelectItem>

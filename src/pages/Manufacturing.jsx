@@ -66,7 +66,8 @@ export default function Manufacturing() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-10 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
+          <div className="overflow-x-auto">
+            <TabsList className="inline-flex w-auto min-w-full gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
@@ -108,6 +109,7 @@ export default function Manufacturing() {
               <span className="hidden sm:inline">{t('equipment_maintenance') || 'Equipment'}</span>
             </TabsTrigger>
           </TabsList>
+          </div>
 
           <TabsContent value="dashboard" className="mt-6">
             <ManufacturingDashboard />

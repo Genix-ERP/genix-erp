@@ -72,7 +72,7 @@ export default function InventoryValuation() {
         id: product.id,
         sku: product.sku,
         name: product.name,
-        category: categories.find(c => c.id === product.category_id)?.name || 'Uncategorized',
+        category: categories.find(c => c.id === product.category_id)?.name || t('uncategorized'),
         costingMethod: product.costing_method || 'FIFO',
         quantity: totalQty,
         unitCost,

@@ -1310,7 +1310,7 @@ Only return the JSON, no other text.`;
                                   {module.isCore ? <Shield className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </div>
                                 <div>
-                                  <span className="font-medium text-slate-800">{module.name}</span>
+                                  <span className="font-medium text-slate-800">{t(module.nameKey) || module.nameKey}</span>
                                   <Badge
                                     variant="outline"
                                     className={`ml-2 text-[10px] px-1.5 py-0 ${
