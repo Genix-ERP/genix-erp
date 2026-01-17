@@ -82,7 +82,13 @@ function NavLink({ item, isActive }) {
   };
 
   return (
-    <Link to={item.url} className="flex items-center justify-between px-3 py-3" onClick={handleClick}>
+    <Link
+      to={item.url}
+      className={`flex items-center justify-between px-3 py-3 w-full ${
+        isActive ? '!bg-gradient-to-r !from-[var(--genix-blue)]/20 !to-[var(--genix-purple)]/20 !text-[var(--genix-blue)] !font-semibold !shadow-md !border-l-4 !border-[var(--genix-blue)]' : ''
+      }`}
+      onClick={handleClick}
+    >
       <div className="flex items-center gap-3">
         <item.icon className="w-5 h-5" />
         <span className="font-medium text-sm">{item.title}</span>
