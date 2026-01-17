@@ -314,7 +314,7 @@ export default function SalesOrders() {
             <h1 className="text-2xl md:text-3xl font-bold">{t('sales_and_crm')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
               <Brain className="w-3 h-3 mr-1" />
-              AI-Powered
+              {t('ai_powered') || 'AI-Powered'}
             </Badge>
           </div>
           <p className="text-white/90">{t('sales_description')}</p>
