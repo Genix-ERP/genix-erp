@@ -29,6 +29,8 @@ import {
   ClipboardList,
   Package,
   RotateCcw,
+  Receipt,
+  Award,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -45,6 +47,8 @@ import PriceHistory from '@/components/procurement/PriceHistory';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 import GoodsReceipt from '@/components/procurement/GoodsReceipt';
 import PurchaseReturns from '@/components/procurement/PurchaseReturns';
+import VendorBills from '@/components/procurement/VendorBills';
+import SupplierPerformance from '@/components/procurement/SupplierPerformance';
 
 export default function Procurement() {
   const { language } = useLanguage();
@@ -299,6 +303,22 @@ export default function Procurement() {
             >
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">{t('returns') || 'Returns'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="vendor-bills"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Receipt className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('vendor_bills') || 'Bills'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="performance"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Award className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('supplier_performance') || 'Performance'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -638,6 +658,16 @@ export default function Procurement() {
           {/* Purchase Returns Tab */}
           <TabsContent value="returns" className="mt-6">
             <PurchaseReturns />
+          </TabsContent>
+
+          {/* Vendor Bills Tab */}
+          <TabsContent value="vendor-bills" className="mt-6">
+            <VendorBills />
+          </TabsContent>
+
+          {/* Supplier Performance Tab */}
+          <TabsContent value="performance" className="mt-6">
+            <SupplierPerformance />
           </TabsContent>
         </Tabs>
 

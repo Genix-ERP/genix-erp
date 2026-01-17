@@ -15,7 +15,10 @@ import {
   Clock,
   Zap,
   Brain,
-  CalendarDays
+  CalendarDays,
+  Monitor,
+  Route,
+  Wrench
 } from 'lucide-react';
 
 import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
@@ -25,6 +28,9 @@ import BOMManagement from '@/components/manufacturing/BOMManagement';
 import WorkCenters from '@/components/manufacturing/WorkCenters';
 import QualityControl from '@/components/manufacturing/QualityControl';
 import MRPPlanning from '@/components/manufacturing/MRPPlanning';
+import ShopFloorControl from '@/components/manufacturing/ShopFloorControl';
+import RoutingManagement from '@/components/manufacturing/RoutingManagement';
+import EquipmentMaintenance from '@/components/manufacturing/EquipmentMaintenance';
 
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -60,7 +66,7 @@ export default function Manufacturing() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
+          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-10 gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
@@ -88,6 +94,18 @@ export default function Manufacturing() {
             <TabsTrigger value="mrp" className="flex items-center gap-2">
               <Zap className="w-4 h-4" />
               <span className="hidden sm:inline">{t('mrp') || 'MRP'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="shopfloor" className="flex items-center gap-2">
+              <Monitor className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('shop_floor_control') || 'Shop Floor'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="routing" className="flex items-center gap-2">
+              <Route className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('routing_management') || 'Routing'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="equipment" className="flex items-center gap-2">
+              <Wrench className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('equipment_maintenance') || 'Equipment'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -117,6 +135,18 @@ export default function Manufacturing() {
 
           <TabsContent value="mrp" className="mt-6">
             <MRPPlanning />
+          </TabsContent>
+
+          <TabsContent value="shopfloor" className="mt-6">
+            <ShopFloorControl />
+          </TabsContent>
+
+          <TabsContent value="routing" className="mt-6">
+            <RoutingManagement />
+          </TabsContent>
+
+          <TabsContent value="equipment" className="mt-6">
+            <EquipmentMaintenance />
           </TabsContent>
         </Tabs>
 
