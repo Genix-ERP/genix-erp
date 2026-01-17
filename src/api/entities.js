@@ -171,8 +171,8 @@ export const SalesOrder = createGenericEntity('/sales-orders');
 // Purchase - use Go backend
 export const PurchaseOrder = createGenericEntity('/purchase-orders');
 
-// Workflows - local storage for now
-export const Workflow = createLocalEntity('genix_workflows');
+// Workflows - use Go backend
+export const Workflow = createGenericEntity('/workflows');
 
 // Notifications - use Go backend
 export const Notification = createGenericEntity('/notifications');
@@ -191,15 +191,28 @@ export const ProductionOrder = createLocalEntity('genix_production_orders');
 export const WorkOrder = createLocalEntity('genix_work_orders');
 export const QualityCheck = createLocalEntity('genix_quality_checks');
 
-// Projects - local storage for now
-export const Project = createLocalEntity('genix_projects');
-export const Task = createLocalEntity('genix_tasks');
+// Projects - use Go backend
+export const Project = createGenericEntity('/projects');
+export const Task = createGenericEntity('/tasks');
 
-// Expenses - local storage for now
-export const ExpenseClaim = createLocalEntity('genix_expense_claims');
+// Expenses - use Go backend (endpoint: /expenses)
+export const ExpenseClaim = createGenericEntity('/expenses');
 
-// Payroll - local storage for now
-export const Payroll = createLocalEntity('genix_payroll');
+// Payroll - use Go backend (endpoint: /payroll-periods)
+export const Payroll = createGenericEntity('/payroll-periods');
 
-// Contracts - local storage for now
-export const Contract = createLocalEntity('genix_contracts');
+// Assets - use Go backend (endpoint: /fixed-assets)
+export const Asset = createGenericEntity('/fixed-assets');
+
+// Contracts - use Go backend
+export const Contract = createGenericEntity('/contracts');
+
+// Attendance - Connected to backend database
+export const AttendanceRecord = createGenericEntity('/attendance');
+
+// Leave Management - Connected to backend database
+export const LeaveRequest = createGenericEntity('/leave-requests');
+export const LeaveBalance = createGenericEntity('/leave-balances');
+
+// Employee Contracts - Connected to backend database (separate from procurement contracts)
+export const EmployeeContract = createGenericEntity('/employee-contracts');

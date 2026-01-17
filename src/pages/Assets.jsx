@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download } from 'lucide-react';
+import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeAssets } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -40,6 +43,16 @@ export default function Assets() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editAsset, setEditAsset] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [assetToDelete, setAssetToDelete] = useState(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [assetToTransfer, setAssetToTransfer] = useState(null);
+  const [transferData, setTransferData] = useState({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] });
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [assetForMaintenance, setAssetForMaintenance] = useState(null);
+  const [maintenanceData, setMaintenanceData] = useState({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 });
+  const [maintenanceHistory, setMaintenanceHistory] = useState({});
+  const [auditLog, setAuditLog] = useState([]);
 
   const [newAsset, setNewAsset] = useState({
     asset_name: '',
@@ -138,6 +151,7 @@ export default function Assets() {
         location: editAsset.location,
         next_maintenance_date: editAsset.next_maintenance_date
       });
+      addAuditLog('update', editAsset.id, editAsset.asset_code);
       setShowEditModal(false);
       setEditAsset(null);
     } catch (error) {
@@ -145,6 +159,64 @@ export default function Assets() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDeleteAsset = () => {
+    if (assetToDelete) {
+      updateAsset(assetToDelete.id, { status: 'disposed', disposal_date: new Date().toISOString().split('T')[0] });
+      addAuditLog('delete', assetToDelete.id, assetToDelete.asset_code);
+      setShowDeleteDialog(false);
+      setAssetToDelete(null);
+    }
+  };
+
+  const handleTransferAsset = () => {
+    if (assetToTransfer) {
+      updateAsset(assetToTransfer.id, {
+        location: transferData.location,
+        transfer_history: [...(assetToTransfer.transfer_history || []), {
+          date: transferData.transfer_date,
+          from: assetToTransfer.location || 'N/A',
+          to: transferData.location,
+          notes: transferData.notes
+        }]
+      });
+      addAuditLog('transfer', assetToTransfer.id, `${assetToTransfer.asset_code} to ${transferData.location}`);
+      setShowTransferModal(false);
+      setAssetToTransfer(null);
+      setTransferData({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] });
+    }
+  };
+
+  const handleAddMaintenance = () => {
+    if (assetForMaintenance) {
+      const newRecord = {
+        date: maintenanceData.date,
+        type: maintenanceData.type,
+        description: maintenanceData.description,
+        cost: parseFloat(maintenanceData.cost) || 0
+      };
+      setMaintenanceHistory({
+        ...maintenanceHistory,
+        [assetForMaintenance.id]: [...(maintenanceHistory[assetForMaintenance.id] || []), newRecord]
+      });
+      addAuditLog('maintenance', assetForMaintenance.id, `${assetForMaintenance.asset_code} - ${maintenanceData.type}`);
+      setShowMaintenanceModal(false);
+      setAssetForMaintenance(null);
+      setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 });
+    }
+  };
+
+  const addAuditLog = (action, assetId, details) => {
+    const logEntry = {
+      id: Date.now(),
+      action,
+      assetId,
+      details,
+      timestamp: new Date().toISOString(),
+      user: 'Current User'
+    };
+    setAuditLog([logEntry, ...auditLog]);
   };
 
   const getStatusColor = (status) => {
@@ -250,52 +322,60 @@ export default function Assets() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Monitor className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Monitor className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_assets')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalAssets}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.totalAssets}</p>
-              <p className="text-sm text-slate-600">{t('total_assets')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('purchase_value')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('purchase_value')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <TrendingDown className="w-6 h-6 text-purple-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <TrendingDown className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('current_value')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.currentValue.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.currentValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('current_value')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <TrendingDown className="w-6 h-6 text-orange-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <TrendingDown className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('depreciation')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalDepreciation.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalDepreciation.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('depreciation')}</p>
             </CardContent>
           </Card>
         </div>
@@ -474,9 +554,22 @@ export default function Assets() {
                               </div>
                             )}
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setAssetToTransfer(asset); setShowTransferModal(true); }} title={t('transfer')}>
+                              <ArrowRightLeft className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setAssetForMaintenance(asset); setShowMaintenanceModal(true); }} title={t('add_maintenance')}>
+                              <Wrench className="w-4 h-4" />
+                            </Button>
+                            {asset.status !== 'disposed' && (
+                              <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => { setAssetToDelete(asset); setShowDeleteDialog(true); }} title={t('dispose')}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -736,6 +829,151 @@ export default function Assets() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('confirm_dispose')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('dispose_asset_confirm')} <strong>{assetToDelete?.asset_name}</strong> ({assetToDelete?.asset_code})? {t('action_cannot_undone')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setShowDeleteDialog(false); setAssetToDelete(null); }}>
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteAsset} className="bg-red-600 hover:bg-red-700">
+                {t('dispose')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Transfer Asset Modal */}
+        <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('transfer_asset')}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('asset')}</Label>
+                <Input value={`${assetToTransfer?.asset_name} (${assetToTransfer?.asset_code})`} disabled />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('current_location')}</Label>
+                <Input value={assetToTransfer?.location || t('not_set')} disabled />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('new_location')} *</Label>
+                <Input
+                  placeholder={t('enter_location')}
+                  value={transferData.location}
+                  onChange={(e) => setTransferData({...transferData, location: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('transfer_date')} *</Label>
+                <Input
+                  type="date"
+                  value={transferData.transfer_date}
+                  onChange={(e) => setTransferData({...transferData, transfer_date: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('notes')}</Label>
+                <Textarea
+                  placeholder={t('transfer_notes')}
+                  value={transferData.notes}
+                  onChange={(e) => setTransferData({...transferData, notes: e.target.value})}
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => { setShowTransferModal(false); setAssetToTransfer(null); setTransferData({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] }); }} className="flex-1">
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleTransferAsset}
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                  disabled={!transferData.location}
+                >
+                  {t('transfer')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Maintenance Modal */}
+        <Dialog open={showMaintenanceModal} onOpenChange={setShowMaintenanceModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('add_maintenance_record')}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('asset')}</Label>
+                <Input value={`${assetForMaintenance?.asset_name} (${assetForMaintenance?.asset_code})`} disabled />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium mb-1 block">{t('date')} *</Label>
+                  <Input
+                    type="date"
+                    value={maintenanceData.date}
+                    onChange={(e) => setMaintenanceData({...maintenanceData, date: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-1 block">{t('type')} *</Label>
+                  <Select value={maintenanceData.type} onValueChange={(value) => setMaintenanceData({...maintenanceData, type: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="routine">{t('routine')}</SelectItem>
+                      <SelectItem value="repair">{t('repair')}</SelectItem>
+                      <SelectItem value="inspection">{t('inspection')}</SelectItem>
+                      <SelectItem value="upgrade">{t('upgrade')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('description')} *</Label>
+                <Textarea
+                  placeholder={t('maintenance_description')}
+                  value={maintenanceData.description}
+                  onChange={(e) => setMaintenanceData({...maintenanceData, description: e.target.value})}
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">{t('cost')}</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={maintenanceData.cost}
+                  onChange={(e) => setMaintenanceData({...maintenanceData, cost: e.target.value})}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 }); }} className="flex-1">
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleAddMaintenance}
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                  disabled={!maintenanceData.description}
+                >
+                  {t('add_record')}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

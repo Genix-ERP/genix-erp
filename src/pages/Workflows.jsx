@@ -6,6 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Zap, 
   Search, 
@@ -34,6 +44,8 @@ export default function Workflows() {
   const [editingWorkflow, setEditingWorkflow] = useState(null);
   const [insights, setInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [workflowToDelete, setWorkflowToDelete] = useState(null);
 
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -145,6 +157,24 @@ export default function Workflows() {
     }
   };
 
+  const handleDeleteClick = (workflow) => {
+    setWorkflowToDelete(workflow);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!workflowToDelete) return;
+
+    try {
+      await Workflow.delete(workflowToDelete.id);
+      loadWorkflows();
+      setDeleteDialogOpen(false);
+      setWorkflowToDelete(null);
+    } catch (error) {
+      console.error("Error deleting workflow:", error);
+    }
+  };
+
   const calculateMetrics = () => {
     const totalSavings = workflows.reduce((sum, w) => sum + (w.cost_savings || 0), 0);
     const activeWorkflows = workflows.filter(w => w.status === "active").length;
@@ -186,58 +216,58 @@ export default function Workflows() {
         </div>
 
         {/* Metrics Cards - Fully Responsive */}
-        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-500 truncate">{t('monthly_savings')}</p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">${metrics.totalSavings.toLocaleString()}</p>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="w-5 h-5 text-green-600" />
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 truncate">{t('monthly_savings')}</p>
+                  <p className="text-2xl font-bold text-green-600 truncate">${metrics.totalSavings.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-500 truncate">{t('active_workflows')}</p>
-                  <p className="text-xl sm:text-2xl font-bold text-blue-600">{metrics.activeWorkflows}</p>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-5 h-5 text-blue-600" />
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 truncate">{t('active_workflows')}</p>
+                  <p className="text-2xl font-bold text-blue-600">{metrics.activeWorkflows}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-500 truncate">{t('success_rate')}</p>
-                  <p className="text-xl sm:text-2xl font-bold text-purple-600">{metrics.avgSuccessRate.toFixed(0)}%</p>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 truncate">{t('success_rate')}</p>
+                  <p className="text-2xl font-bold text-purple-600">{metrics.avgSuccessRate.toFixed(0)}%</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-500 truncate">{t('fully_automated')}</p>
-                  <p className="text-xl sm:text-2xl font-bold text-orange-600">{metrics.totalAutomations}</p>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-5 h-5 text-orange-600" />
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500 truncate">{t('fully_automated')}</p>
+                  <p className="text-2xl font-bold text-orange-600">{metrics.totalAutomations}</p>
                 </div>
               </div>
             </CardContent>
@@ -300,6 +330,7 @@ export default function Workflows() {
                 setShowForm(true);
               }}
               onToggleStatus={handleStatusToggle}
+              onDelete={handleDeleteClick}
             />
           ))}
         </div>
@@ -342,6 +373,32 @@ export default function Workflows() {
 
       {/* AI Chat Assistant */}
       <WorkflowAIChat onWorkflowUpdate={loadWorkflows} />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('delete_workflow') || 'Delete Workflow'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('delete_workflow_confirmation') || 'Are you sure you want to delete this workflow? This action cannot be undone.'}
+              {workflowToDelete && (
+                <span className="block mt-2 font-medium text-slate-900">
+                  {workflowToDelete.name}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('cancel') || 'Cancel'}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {t('delete') || 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

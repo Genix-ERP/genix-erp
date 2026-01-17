@@ -331,52 +331,60 @@ Provide only analysis results based on the numbers and specific contract data, n
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_contracts')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalContracts}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.totalContracts}</p>
-              <p className="text-sm text-slate-600">{t('total_contracts')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('active_contracts')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.activeContracts}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.activeContracts}</p>
-              <p className="text-sm text-slate-600">{t('active_contracts')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-purple-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_value')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('total_value')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-orange-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('expiring_soon')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.expiringSoon}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.expiringSoon}</p>
-              <p className="text-sm text-slate-600">{t('expiring_soon')}</p>
             </CardContent>
           </Card>
         </div>

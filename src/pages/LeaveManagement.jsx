@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { LeaveRequest, LeaveBalance } from '@/api/entities';
 import { useHR } from '@/components/contexts/HRContext';
 import { format, differenceInDays, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 
@@ -106,32 +107,31 @@ export default function LeaveManagement() {
     half_day_period: 'morning',
   });
 
-  // Load data from localStorage
+  // Load data from database
   useEffect(() => {
-    const storedRequests = localStorage.getItem('genix_leave_requests');
-    const storedBalances = localStorage.getItem('genix_leave_balances');
-
-    if (storedRequests) {
-      setLeaveRequests(JSON.parse(storedRequests));
-    } else {
-      // Generate sample data
-      const sampleRequests = generateSampleRequests();
-      setLeaveRequests(sampleRequests);
-      localStorage.setItem('genix_leave_requests', JSON.stringify(sampleRequests));
-    }
-
-    if (storedBalances) {
-      setLeaveBalances(JSON.parse(storedBalances));
-    } else {
-      // Initialize balances for all employees
-      const balances = {};
-      employees.forEach(emp => {
-        balances[emp.id] = getDefaultLeaveBalances();
-      });
-      setLeaveBalances(balances);
-      localStorage.setItem('genix_leave_balances', JSON.stringify(balances));
-    }
+    loadLeaveData();
   }, [employees]);
+
+  const loadLeaveData = async () => {
+    try {
+      const [requests, balances] = await Promise.all([
+        LeaveRequest.list(),
+        LeaveBalance.list()
+      ]);
+      setLeaveRequests(requests);
+
+      // Convert balance array to object keyed by employee_id
+      const balanceObj = {};
+      balances.forEach(balance => {
+        balanceObj[balance.employee_id] = balance;
+      });
+      setLeaveBalances(balanceObj);
+    } catch (error) {
+      console.error('Error loading leave data:', error);
+      setLeaveRequests([]);
+      setLeaveBalances({});
+    }
+  };
 
   // Generate sample leave requests
   const generateSampleRequests = () => {
@@ -166,18 +166,7 @@ export default function LeaveManagement() {
     return requests;
   };
 
-  // Save to localStorage when data changes
-  useEffect(() => {
-    if (leaveRequests.length > 0) {
-      localStorage.setItem('genix_leave_requests', JSON.stringify(leaveRequests));
-    }
-  }, [leaveRequests]);
-
-  useEffect(() => {
-    if (Object.keys(leaveBalances).length > 0) {
-      localStorage.setItem('genix_leave_balances', JSON.stringify(leaveBalances));
-    }
-  }, [leaveBalances]);
+  // Removed localStorage persistence - using database instead
 
   // Filter requests
   const filteredRequests = useMemo(() => {
@@ -206,7 +195,7 @@ export default function LeaveManagement() {
   }, [leaveRequests]);
 
   // Handle create request
-  const handleCreateRequest = () => {
+  const handleCreateRequest = async () => {
     const employee = employees.find(e => e.id === newRequest.employee_id);
     if (!employee) return;
 
@@ -215,7 +204,6 @@ export default function LeaveManagement() {
     const days = newRequest.half_day ? 0.5 : differenceInDays(endDate, startDate) + 1;
 
     const request = {
-      id: `LR-${Date.now()}`,
       employee_id: newRequest.employee_id,
       employee_name: employee.full_name,
       leave_type: newRequest.leave_type,
@@ -224,27 +212,34 @@ export default function LeaveManagement() {
       days,
       reason: newRequest.reason,
       status: 'pending',
-      created_at: new Date().toISOString(),
       half_day: newRequest.half_day,
       half_day_period: newRequest.half_day_period,
     };
 
-    setLeaveRequests(prev => [request, ...prev]);
+    try {
+      await LeaveRequest.create(request);
 
-    // Update pending balance
-    setLeaveBalances(prev => {
-      const empBalances = prev[newRequest.employee_id] || getDefaultLeaveBalances();
-      return {
-        ...prev,
-        [newRequest.employee_id]: {
-          ...empBalances,
-          [newRequest.leave_type]: {
-            ...empBalances[newRequest.leave_type],
-            pending: (empBalances[newRequest.leave_type]?.pending || 0) + days,
-          }
+      // Update pending balance
+      const empBalances = leaveBalances[newRequest.employee_id] || getDefaultLeaveBalances();
+      const updatedBalance = {
+        employee_id: newRequest.employee_id,
+        ...empBalances,
+        [newRequest.leave_type]: {
+          ...empBalances[newRequest.leave_type],
+          pending: (empBalances[newRequest.leave_type]?.pending || 0) + days,
         }
       };
-    });
+
+      if (empBalances.id) {
+        await LeaveBalance.update(empBalances.id, updatedBalance);
+      } else {
+        await LeaveBalance.create(updatedBalance);
+      }
+
+      await loadLeaveData();
+    } catch (error) {
+      console.error('Error creating leave request:', error);
+    }
 
     setShowCreateModal(false);
     setNewRequest({
@@ -259,57 +254,74 @@ export default function LeaveManagement() {
   };
 
   // Handle approve request
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedRequest) return;
 
-    setLeaveRequests(prev => prev.map(r =>
-      r.id === selectedRequest.id ? { ...r, status: 'approved', approved_at: new Date().toISOString() } : r
-    ));
+    try {
+      await LeaveRequest.update(selectedRequest.id, {
+        ...selectedRequest,
+        status: 'approved',
+        approved_at: new Date().toISOString()
+      });
 
-    // Update balances
-    setLeaveBalances(prev => {
-      const empBalances = prev[selectedRequest.employee_id] || getDefaultLeaveBalances();
+      // Update balances
+      const empBalances = leaveBalances[selectedRequest.employee_id] || getDefaultLeaveBalances();
       const leaveType = selectedRequest.leave_type;
-      return {
-        ...prev,
-        [selectedRequest.employee_id]: {
-          ...empBalances,
-          [leaveType]: {
-            ...empBalances[leaveType],
-            used: (empBalances[leaveType]?.used || 0) + selectedRequest.days,
-            pending: Math.max(0, (empBalances[leaveType]?.pending || 0) - selectedRequest.days),
-          }
+      const updatedBalance = {
+        employee_id: selectedRequest.employee_id,
+        ...empBalances,
+        [leaveType]: {
+          ...empBalances[leaveType],
+          used: (empBalances[leaveType]?.used || 0) + selectedRequest.days,
+          pending: Math.max(0, (empBalances[leaveType]?.pending || 0) - selectedRequest.days),
         }
       };
-    });
+
+      if (empBalances.id) {
+        await LeaveBalance.update(empBalances.id, updatedBalance);
+      }
+
+      await loadLeaveData();
+    } catch (error) {
+      console.error('Error approving leave request:', error);
+    }
 
     setShowApproveDialog(false);
     setSelectedRequest(null);
   };
 
   // Handle reject request
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selectedRequest) return;
 
-    setLeaveRequests(prev => prev.map(r =>
-      r.id === selectedRequest.id ? { ...r, status: 'rejected', reject_reason: rejectReason, rejected_at: new Date().toISOString() } : r
-    ));
+    try {
+      await LeaveRequest.update(selectedRequest.id, {
+        ...selectedRequest,
+        status: 'rejected',
+        reject_reason: rejectReason,
+        rejected_at: new Date().toISOString()
+      });
 
-    // Remove from pending
-    setLeaveBalances(prev => {
-      const empBalances = prev[selectedRequest.employee_id] || getDefaultLeaveBalances();
+      // Remove from pending
+      const empBalances = leaveBalances[selectedRequest.employee_id] || getDefaultLeaveBalances();
       const leaveType = selectedRequest.leave_type;
-      return {
-        ...prev,
-        [selectedRequest.employee_id]: {
-          ...empBalances,
-          [leaveType]: {
-            ...empBalances[leaveType],
-            pending: Math.max(0, (empBalances[leaveType]?.pending || 0) - selectedRequest.days),
-          }
+      const updatedBalance = {
+        employee_id: selectedRequest.employee_id,
+        ...empBalances,
+        [leaveType]: {
+          ...empBalances[leaveType],
+          pending: Math.max(0, (empBalances[leaveType]?.pending || 0) - selectedRequest.days),
         }
       };
-    });
+
+      if (empBalances.id) {
+        await LeaveBalance.update(empBalances.id, updatedBalance);
+      }
+
+      await loadLeaveData();
+    } catch (error) {
+      console.error('Error rejecting leave request:', error);
+    }
 
     setShowRejectDialog(false);
     setSelectedRequest(null);
@@ -400,10 +412,16 @@ export default function LeaveManagement() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-white border">
-            <TabsTrigger value="requests">{t('leave_requests') || "So'rovlar"}</TabsTrigger>
-            <TabsTrigger value="balances">{t('leave_balances') || "Balanslar"}</TabsTrigger>
-            <TabsTrigger value="calendar">{t('calendar') || "Kalendar"}</TabsTrigger>
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="requests" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('leave_requests') || "So'rovlar"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="balances" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('leave_balances') || "Balanslar"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('calendar') || "Kalendar"}</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Leave Requests Tab */}

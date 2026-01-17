@@ -68,43 +68,43 @@ export default function Manufacturing() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="overflow-x-auto">
             <TabsList className="inline-flex w-auto min-w-full gap-2 bg-white/80 backdrop-blur-sm p-2 rounded-xl shadow-sm">
-            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+            <TabsTrigger value="dashboard" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
             </TabsTrigger>
-            <TabsTrigger value="production" className="flex items-center gap-2">
+            <TabsTrigger value="production" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Factory className="w-4 h-4" />
               <span className="hidden sm:inline">{t('production') || 'Production'}</span>
             </TabsTrigger>
-            <TabsTrigger value="schedule" className="flex items-center gap-2">
+            <TabsTrigger value="schedule" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <CalendarDays className="w-4 h-4" />
               <span className="hidden sm:inline">{t('schedule') || 'Schedule'}</span>
             </TabsTrigger>
-            <TabsTrigger value="bom" className="flex items-center gap-2">
+            <TabsTrigger value="bom" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <ClipboardList className="w-4 h-4" />
               <span className="hidden sm:inline">{t('bom') || 'BOM'}</span>
             </TabsTrigger>
-            <TabsTrigger value="workcenters" className="flex items-center gap-2">
+            <TabsTrigger value="workcenters" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Cog className="w-4 h-4" />
               <span className="hidden sm:inline">{t('work_centers') || 'Work Centers'}</span>
             </TabsTrigger>
-            <TabsTrigger value="quality" className="flex items-center gap-2">
+            <TabsTrigger value="quality" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <PackageCheck className="w-4 h-4" />
               <span className="hidden sm:inline">{t('quality') || 'Quality'}</span>
             </TabsTrigger>
-            <TabsTrigger value="mrp" className="flex items-center gap-2">
+            <TabsTrigger value="mrp" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Zap className="w-4 h-4" />
               <span className="hidden sm:inline">{t('mrp') || 'MRP'}</span>
             </TabsTrigger>
-            <TabsTrigger value="shopfloor" className="flex items-center gap-2">
+            <TabsTrigger value="shopfloor" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Monitor className="w-4 h-4" />
               <span className="hidden sm:inline">{t('shop_floor_control') || 'Shop Floor'}</span>
             </TabsTrigger>
-            <TabsTrigger value="routing" className="flex items-center gap-2">
+            <TabsTrigger value="routing" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Route className="w-4 h-4" />
               <span className="hidden sm:inline">{t('routing_management') || 'Routing'}</span>
             </TabsTrigger>
-            <TabsTrigger value="equipment" className="flex items-center gap-2">
+            <TabsTrigger value="equipment" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Wrench className="w-4 h-4" />
               <span className="hidden sm:inline">{t('equipment_maintenance') || 'Equipment'}</span>
             </TabsTrigger>
