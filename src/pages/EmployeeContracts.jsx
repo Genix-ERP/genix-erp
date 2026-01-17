@@ -45,6 +45,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useHR } from '@/components/contexts/HRContext';
+import { EmployeeContract } from '@/api/entities';
 import { format, parseISO, differenceInDays, addMonths, isBefore, isAfter } from 'date-fns';
 
 const CONTRACT_TYPES = {
@@ -96,17 +97,20 @@ export default function EmployeeContracts() {
     status: 'active',
   });
 
-  // Load contracts from localStorage
+  // Load contracts from database
   useEffect(() => {
-    const stored = localStorage.getItem('genix_employee_contracts');
-    if (stored) {
-      setContracts(JSON.parse(stored));
-    } else {
-      const sampleContracts = generateSampleContracts();
-      setContracts(sampleContracts);
-      localStorage.setItem('genix_employee_contracts', JSON.stringify(sampleContracts));
-    }
+    loadContracts();
   }, [employees]);
+
+  const loadContracts = async () => {
+    try {
+      const data = await EmployeeContract.list();
+      setContracts(data);
+    } catch (error) {
+      console.error('Error loading contracts:', error);
+      setContracts([]);
+    }
+  };
 
   // Generate sample contracts
   const generateSampleContracts = () => {
@@ -141,12 +145,7 @@ export default function EmployeeContracts() {
     });
   };
 
-  // Save to localStorage when data changes
-  useEffect(() => {
-    if (contracts.length > 0) {
-      localStorage.setItem('genix_employee_contracts', JSON.stringify(contracts));
-    }
-  }, [contracts]);
+  // Removed localStorage persistence - using database instead
 
   // Calculate contract status based on dates
   const getContractStatus = (contract) => {
@@ -190,79 +189,106 @@ export default function EmployeeContracts() {
   }, [contracts]);
 
   // Handle create contract
-  const handleCreateContract = () => {
+  const handleCreateContract = async () => {
     const employee = employees.find(e => e.id === newContract.employee_id);
     if (!employee) return;
 
     setIsSubmitting(true);
 
     const contract = {
-      id: `CON-${Date.now()}`,
       ...newContract,
       employee_name: employee.full_name,
       job_title: employee.job_title,
       department: employee.department,
       salary: parseFloat(newContract.salary) || 0,
-      created_at: new Date().toISOString(),
     };
 
-    setContracts(prev => [contract, ...prev]);
-    setShowCreateModal(false);
-    resetForm();
-    setIsSubmitting(false);
+    try {
+      await EmployeeContract.create(contract);
+      await loadContracts();
+      setShowCreateModal(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error creating contract:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle update contract
-  const handleUpdateContract = () => {
+  const handleUpdateContract = async () => {
     if (!selectedContract) return;
 
     setIsSubmitting(true);
 
-    setContracts(prev => prev.map(c =>
-      c.id === selectedContract.id
-        ? { ...selectedContract, salary: parseFloat(selectedContract.salary) || 0 }
-        : c
-    ));
-
-    setShowEditModal(false);
-    setSelectedContract(null);
-    setIsSubmitting(false);
+    try {
+      await EmployeeContract.update(selectedContract.id, {
+        ...selectedContract,
+        salary: parseFloat(selectedContract.salary) || 0
+      });
+      await loadContracts();
+      setShowEditModal(false);
+      setSelectedContract(null);
+    } catch (error) {
+      console.error('Error updating contract:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle delete contract
-  const handleDeleteContract = () => {
+  const handleDeleteContract = async () => {
     if (!selectedContract) return;
 
-    setContracts(prev => prev.filter(c => c.id !== selectedContract.id));
-    setShowDeleteDialog(false);
-    setSelectedContract(null);
+    try {
+      await EmployeeContract.delete(selectedContract.id);
+      await loadContracts();
+      setShowDeleteDialog(false);
+      setSelectedContract(null);
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+    }
   };
 
   // Handle renew contract
-  const handleRenewContract = () => {
+  const handleRenewContract = async () => {
     if (!selectedContract) return;
+    setIsSubmitting(true);
 
     const oldEndDate = parseISO(selectedContract.end_date);
     const newEndDate = addMonths(oldEndDate, 12);
 
     const renewedContract = {
-      ...selectedContract,
-      id: `CON-${Date.now()}`,
+      employee_id: selectedContract.employee_id,
+      employee_name: selectedContract.employee_name,
+      job_title: selectedContract.job_title,
+      department: selectedContract.department,
+      contract_type: selectedContract.contract_type,
       start_date: selectedContract.end_date,
       end_date: newEndDate.toISOString().split('T')[0],
+      salary: selectedContract.salary,
       status: 'active',
-      created_at: new Date().toISOString(),
       renewed_from: selectedContract.id,
     };
 
-    // Mark old contract as terminated
-    setContracts(prev => [
-      renewedContract,
-      ...prev.map(c => c.id === selectedContract.id ? { ...c, status: 'terminated' } : c)
-    ]);
+    try {
+      // Create the renewed contract
+      await EmployeeContract.create(renewedContract);
 
-    setShowRenewModal(false);
-    setSelectedContract(null);
+      // Mark old contract as terminated
+      await EmployeeContract.update(selectedContract.id, {
+        ...selectedContract,
+        status: 'terminated'
+      });
+
+      await loadContracts();
+      setShowRenewModal(false);
+      setSelectedContract(null);
+    } catch (error) {
+      console.error('Error renewing contract:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {

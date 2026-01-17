@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download } from 'lucide-react';
+import { Plus, Search, Receipt, Upload, CheckCircle, XCircle, Clock, DollarSign, Brain, AlertTriangle, Target, Lightbulb, Edit2, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
@@ -33,6 +34,8 @@ export default function Expenses() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editClaim, setEditClaim] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [claimToDelete, setClaimToDelete] = useState(null);
 
   const [newClaim, setNewClaim] = useState({
     claim_number: '',
@@ -128,6 +131,20 @@ export default function Expenses() {
     updateExpense(claimId, updates);
   };
 
+  const handleDeleteClick = (claim) => {
+    setClaimToDelete(claim);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeleteClaim = () => {
+    if (claimToDelete) {
+      // For demo purposes, we'll update status to 'cancelled' instead of actually deleting
+      updateExpense(claimToDelete.id, { status: 'cancelled' });
+      setShowDeleteDialog(false);
+      setClaimToDelete(null);
+    }
+  };
+
   const handleRecommendationClick = (recommendation) => {
     // Generate proper prompt based on recommendation type and language
     let prompt = '';
@@ -212,7 +229,8 @@ export default function Expenses() {
       submitted: 'bg-blue-100 text-blue-800',
       approved: 'bg-green-100 text-green-800',
       rejected: 'bg-red-100 text-red-800',
-      paid: 'bg-purple-100 text-purple-800'
+      paid: 'bg-purple-100 text-purple-800',
+      cancelled: 'bg-slate-100 text-slate-800'
     };
     return colors[status] || colors.draft;
   };
@@ -248,52 +266,60 @@ export default function Expenses() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Receipt className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Receipt className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_claims')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalClaims}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.totalClaims}</p>
-              <p className="text-sm text-slate-600">{t('total_claims')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_amount')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalAmount.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalAmount.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('total_amount')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-yellow-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('pending_approval')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingApproval}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.pendingApproval}</p>
-              <p className="text-sm text-slate-600">{t('pending_approval')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-purple-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('pending_payment')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingPayment}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.pendingPayment}</p>
-              <p className="text-sm text-slate-600">{t('pending_payment')}</p>
             </CardContent>
           </Card>
         </div>
@@ -425,7 +451,9 @@ export default function Expenses() {
                     <SelectItem value="draft">{t('draft')}</SelectItem>
                     <SelectItem value="submitted">{t('submitted')}</SelectItem>
                     <SelectItem value="approved">{t('approved')}</SelectItem>
+                    <SelectItem value="rejected">{t('rejected')}</SelectItem>
                     <SelectItem value="paid">{t('paid')}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -493,6 +521,11 @@ export default function Expenses() {
                               {claim.status === 'approved' && (
                                 <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'paid')}>
                                   {t('pay')}
+                                </Button>
+                              )}
+                              {(claim.status === 'draft' || claim.status === 'rejected') && (
+                                <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(claim)} title={t('delete_claim')}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
                                 </Button>
                               )}
                             </div>
@@ -601,6 +634,27 @@ export default function Expenses() {
           </DialogContent>
         </Dialog>
 
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('confirm_delete_claim')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('delete_claim_confirm')} <strong>{claimToDelete?.claim_number}</strong>? {t('action_cannot_undone')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteClaim}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t('delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Edit Claim Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="max-w-2xl">
@@ -674,6 +728,7 @@ export default function Expenses() {
                       <SelectItem value="approved">{t('approved')}</SelectItem>
                       <SelectItem value="rejected">{t('rejected')}</SelectItem>
                       <SelectItem value="paid">{t('paid')}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

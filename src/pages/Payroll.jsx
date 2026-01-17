@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb } from 'lucide-react';
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzePayroll } from '@/api/services/aiAnalytics';
@@ -26,6 +27,10 @@ export default function Payroll() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editPayroll, setEditPayroll] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [payrollToDelete, setPayrollToDelete] = useState(null);
 
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
@@ -128,6 +133,53 @@ export default function Payroll() {
     updatePayroll(payrollId, { status: newStatus });
   };
 
+  const handleEditPayroll = (payroll) => {
+    setEditPayroll({
+      ...payroll,
+      basic_salary: payroll.basic_salary || 0,
+      overtime_hours: payroll.overtime_hours || 0,
+      bonuses: payroll.bonuses || 0,
+      allowances: payroll.allowances || 0
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePayroll = () => {
+    if (!editPayroll) return;
+
+    const calculated = calculatePayroll(editPayroll);
+
+    updatePayroll(editPayroll.id, {
+      employee_name: editPayroll.employee_name,
+      pay_period_start: editPayroll.pay_period_start,
+      pay_period_end: editPayroll.pay_period_end,
+      payment_date: editPayroll.payment_date,
+      basic_salary: parseFloat(editPayroll.basic_salary),
+      overtime_hours: parseFloat(editPayroll.overtime_hours),
+      bonuses: parseFloat(editPayroll.bonuses),
+      allowances: parseFloat(editPayroll.allowances),
+      ...calculated,
+      status: editPayroll.status
+    });
+
+    setShowEditModal(false);
+    setEditPayroll(null);
+  };
+
+  const handleDeleteClick = (payroll) => {
+    setPayrollToDelete(payroll);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeletePayroll = () => {
+    if (payrollToDelete) {
+      // Update status to 'cancelled' instead of actually deleting
+      updatePayroll(payrollToDelete.id, { status: 'cancelled' });
+      setShowDeleteDialog(false);
+      setPayrollToDelete(null);
+    }
+  };
+
   const handleRecommendationClick = (recommendation) => {
     // Generate proper prompt based on recommendation type and language
     let prompt = '';
@@ -220,7 +272,8 @@ export default function Payroll() {
       draft: 'bg-gray-100 text-gray-800',
       calculated: 'bg-blue-100 text-blue-800',
       approved: 'bg-green-100 text-green-800',
-      paid: 'bg-purple-100 text-purple-800'
+      paid: 'bg-purple-100 text-purple-800',
+      cancelled: 'bg-slate-100 text-slate-800'
     };
     return colors[status] || colors.draft;
   };
@@ -257,52 +310,60 @@ export default function Payroll() {
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('total_payrolls')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalPayrolls}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.totalPayrolls}</p>
-              <p className="text-sm text-slate-600">{t('total_payrolls')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <Calculator className="w-6 h-6 text-green-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Calculator className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('gross_pay')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalGrossPay.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalGrossPay.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('gross_pay')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-purple-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('net_pay')}</p>
+                  <p className="text-2xl font-bold text-slate-900">${metrics.totalNetPay.toLocaleString()}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalNetPay.toLocaleString()}</p>
-              <p className="text-sm text-slate-600">{t('net_pay')}</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-orange-600" />
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600">{t('pending_payments')}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.pendingPayments}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{metrics.pendingPayments}</p>
-              <p className="text-sm text-slate-600">{t('pending_payments')}</p>
             </CardContent>
           </Card>
         </div>
@@ -421,6 +482,7 @@ export default function Payroll() {
                     <SelectItem value="calculated">{t('calculated')}</SelectItem>
                     <SelectItem value="approved">{t('approved')}</SelectItem>
                     <SelectItem value="paid">{t('paid')}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -477,9 +539,19 @@ export default function Payroll() {
                                   {t('pay')}
                                 </Button>
                               )}
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (
+                                <Button size="sm" variant="ghost" onClick={() => handleEditPayroll(payroll)} title={t('edit')}>
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
                                 <Download className="w-4 h-4" />
                               </Button>
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (
+                                <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(payroll)} title={t('delete')}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -491,6 +563,29 @@ export default function Payroll() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('confirm_delete')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('delete_payroll_confirm')} <strong>{payrollToDelete?.payroll_number}</strong>? {t('action_cannot_undone')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setShowDeleteDialog(false); setPayrollToDelete(null); }}>
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeletePayroll}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t('delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Create Payroll Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -637,6 +732,163 @@ export default function Payroll() {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Payroll Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t('edit_payroll')} - {editPayroll?.payroll_number}</DialogTitle>
+            </DialogHeader>
+            {editPayroll && (
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
+                    <Input
+                      value={editPayroll.payroll_number}
+                      disabled
+                      className="bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
+                    <Select value={editPayroll.employee_name} onValueChange={(value) => {
+                      const selectedEmployee = employees.find(emp => emp.full_name === value);
+                      setEditPayroll({
+                        ...editPayroll,
+                        employee_name: value,
+                        basic_salary: selectedEmployee?.salary || editPayroll.basic_salary
+                      });
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map(emp => (
+                          <SelectItem key={emp.id} value={emp.full_name}>{emp.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('pay_period_start')} *</label>
+                    <Input
+                      type="date"
+                      value={editPayroll.pay_period_start}
+                      onChange={(e) => setEditPayroll({...editPayroll, pay_period_start: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('pay_period_end')} *</label>
+                    <Input
+                      type="date"
+                      value={editPayroll.pay_period_end}
+                      onChange={(e) => setEditPayroll({...editPayroll, pay_period_end: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('payment_date')} *</label>
+                    <Input
+                      type="date"
+                      value={editPayroll.payment_date}
+                      onChange={(e) => setEditPayroll({...editPayroll, payment_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3">{t('earnings')}</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('basic_salary')} *</label>
+                      <Input
+                        type="number"
+                        value={editPayroll.basic_salary}
+                        onChange={(e) => setEditPayroll({...editPayroll, basic_salary: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('overtime_hours')}</label>
+                      <Input
+                        type="number"
+                        value={editPayroll.overtime_hours}
+                        onChange={(e) => setEditPayroll({...editPayroll, overtime_hours: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('bonuses')}</label>
+                      <Input
+                        type="number"
+                        value={editPayroll.bonuses}
+                        onChange={(e) => setEditPayroll({...editPayroll, bonuses: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('allowances')}</label>
+                      <Input
+                        type="number"
+                        value={editPayroll.allowances}
+                        onChange={(e) => setEditPayroll({...editPayroll, allowances: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('status')}</label>
+                  <Select value={editPayroll.status} onValueChange={(value) => setEditPayroll({...editPayroll, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">{t('draft')}</SelectItem>
+                      <SelectItem value="calculated">{t('calculated')}</SelectItem>
+                      <SelectItem value="approved">{t('approved')}</SelectItem>
+                      <SelectItem value="paid">{t('paid')}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {editPayroll.basic_salary > 0 && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>{t('gross_pay')}:</span>
+                        <span className="font-semibold">${calculatePayroll(editPayroll).gross_pay.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>{t('total_deductions')}:</span>
+                        <span className="font-semibold">-${calculatePayroll(editPayroll).total_deductions.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t text-lg">
+                        <span className="font-bold">{t('net_pay')}:</span>
+                        <span className="font-bold text-green-600">${calculatePayroll(editPayroll).net_pay.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditPayroll(null); }} className="flex-1">
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    onClick={handleUpdatePayroll}
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600"
+                    disabled={!editPayroll.employee_name || !editPayroll.basic_salary}
+                  >
+                    {t('save_changes')}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

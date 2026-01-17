@@ -3,15 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Play, 
-  Pause, 
-  Edit, 
-  Clock, 
-  Users, 
+import {
+  Play,
+  Pause,
+  Edit,
+  Clock,
+  Users,
   DollarSign,
   TrendingUp,
-  Settings
+  Settings,
+  Trash2
 } from "lucide-react";
 
 const statusColors = {
@@ -36,7 +37,7 @@ const categoryIcons = {
   marketing: TrendingUp
 };
 
-export default function WorkflowCard({ workflow, onEdit, onToggleStatus }) {
+export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelete }) {
   const CategoryIcon = categoryIcons[workflow.category] || Settings;
 
   return (
@@ -131,6 +132,14 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus }) {
           >
             <Edit className="w-3 h-3 mr-1" />
             Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDelete(workflow)}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs sm:text-sm"
+          >
+            <Trash2 className="w-3 h-3" />
           </Button>
         </div>
       </CardContent>

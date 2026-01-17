@@ -265,10 +265,10 @@ export default function Notifications() {
                   <span className="text-sm font-medium text-slate-700">{t('status')}:</span>
                 </div>
                 <Tabs value={filter} onValueChange={setFilter} className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="all">{t('all')} ({notifications.length})</TabsTrigger>
-                    <TabsTrigger value="unread">{t('unread')} ({unreadCount})</TabsTrigger>
-                    <TabsTrigger value="read">{t('read')} ({notifications.length - unreadCount})</TabsTrigger>
+                  <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-wrap justify-start gap-1 h-auto">
+                    <TabsTrigger value="all" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('all')} ({notifications.length})</TabsTrigger>
+                    <TabsTrigger value="unread" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('unread')} ({unreadCount})</TabsTrigger>
+                    <TabsTrigger value="read" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('read')} ({notifications.length - unreadCount})</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -280,12 +280,12 @@ export default function Notifications() {
                   <span className="text-sm font-medium text-slate-700">{t('type')}:</span>
                 </div>
                 <Tabs value={typeFilter} onValueChange={setTypeFilter} className="w-full">
-                  <TabsList className="grid w-full grid-cols-5">
-                    <TabsTrigger value="all">{t('all_types') || 'All'}</TabsTrigger>
-                    <TabsTrigger value="info">{t('info')}</TabsTrigger>
-                    <TabsTrigger value="warning">{t('warning')}</TabsTrigger>
-                    <TabsTrigger value="success">{t('success')}</TabsTrigger>
-                    <TabsTrigger value="alert">{t('alert')}</TabsTrigger>
+                  <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-wrap justify-start gap-1 h-auto">
+                    <TabsTrigger value="all" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('all_types') || 'All'}</TabsTrigger>
+                    <TabsTrigger value="info" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('info')}</TabsTrigger>
+                    <TabsTrigger value="warning" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('warning')}</TabsTrigger>
+                    <TabsTrigger value="success" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('success')}</TabsTrigger>
+                    <TabsTrigger value="alert" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">{t('alert')}</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>

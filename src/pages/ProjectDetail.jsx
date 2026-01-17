@@ -389,26 +389,26 @@ export default function ProjectDetail() {
 
         {/* Tabs */}
         <Tabs defaultValue="tasks" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 gap-2">
-            <TabsTrigger value="tasks" className="flex items-center gap-2">
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="tasks" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <ListTodo className="w-4 h-4" />
-              {t('tasks') || 'Tasks'} ({taskStats.total})
+              <span className="hidden sm:inline">{t('tasks') || 'Tasks'} ({taskStats.total})</span>
             </TabsTrigger>
-            <TabsTrigger value="milestones" className="flex items-center gap-2">
+            <TabsTrigger value="milestones" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Target className="w-4 h-4" />
-              {t('milestones') || 'Milestones'} ({milestoneStats.total})
+              <span className="hidden sm:inline">{t('milestones') || 'Milestones'} ({milestoneStats.total})</span>
             </TabsTrigger>
-            <TabsTrigger value="timeline" className="flex items-center gap-2">
+            <TabsTrigger value="timeline" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <GanttChartSquare className="w-4 h-4" />
-              {t('timeline') || 'Timeline'}
+              <span className="hidden sm:inline">{t('timeline') || 'Timeline'}</span>
             </TabsTrigger>
-            <TabsTrigger value="team" className="flex items-center gap-2">
+            <TabsTrigger value="team" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Users className="w-4 h-4" />
-              {t('team') || 'Team'} ({team.length})
+              <span className="hidden sm:inline">{t('team') || 'Team'} ({team.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="overview" className="flex items-center gap-2">
+            <TabsTrigger value="overview" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <FileText className="w-4 h-4" />
-              {t('overview') || 'Overview'}
+              <span className="hidden sm:inline">{t('overview') || 'Overview'}</span>
             </TabsTrigger>
           </TabsList>
 

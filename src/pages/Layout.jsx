@@ -242,12 +242,6 @@ function LayoutContent({ children, currentPageName }) {
       badge: null
     },
     {
-      title: t("ai_assistant"),
-      url: createPageUrl("AIAssistant"),
-      icon: Bot,
-      badge: "New"
-    },
-    {
       title: t("workflows"),
       url: createPageUrl("Workflows"),
       icon: Zap,
@@ -264,13 +258,19 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Settings"),
       icon: Settings,
       badge: null
+    },
+    {
+      title: t("ai_assistant"),
+      url: createPageUrl("AIAssistant"),
+      icon: Bot,
+      badge: "New"
     }
   ];
 
   // Build dynamic navigation based on installed apps
   const getNavigationItems = () => {
     const dynamicItems = [];
-    
+
     // Add Dashboard first
     dynamicItems.push(coreNavigationItems[0]);
 
@@ -281,8 +281,18 @@ function LayoutContent({ children, currentPageName }) {
       }
     });
 
-    // Add remaining core items (AI Assistant, Workflows, Apps, Settings)
-    dynamicItems.push(...coreNavigationItems.slice(1));
+    // Add Workflows, Apps, Settings (excluding AI Assistant for now)
+    dynamicItems.push(...coreNavigationItems.slice(1, 4));
+
+    // Add Admin Settings right after Settings if user is admin or owner
+    if (isSiteAdmin() || isOwner()) {
+      dynamicItems.push({
+        title: t("admin_settings") || "Admin Settings",
+        url: createPageUrl("AdminSettings"),
+        icon: Cog,
+        badge: null
+      });
+    }
 
     // Add Admin Panel if user is site admin
     if (isSiteAdmin()) {
@@ -294,15 +304,8 @@ function LayoutContent({ children, currentPageName }) {
       });
     }
 
-    // Add Admin Settings if user is admin or owner
-    if (isSiteAdmin() || isOwner()) {
-      dynamicItems.push({
-        title: t("admin_settings") || "Admin Settings",
-        url: createPageUrl("AdminSettings"),
-        icon: Cog,
-        badge: null
-      });
-    }
+    // Add AI Assistant at the bottom
+    dynamicItems.push(coreNavigationItems[4]);
 
     return dynamicItems;
   };

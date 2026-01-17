@@ -38,6 +38,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useHR } from '@/components/contexts/HRContext';
+import { AttendanceRecord } from '@/api/entities';
 import { format, differenceInMinutes, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isToday, isSameDay } from 'date-fns';
 
 const ATTENDANCE_STATUS = {
@@ -72,18 +73,20 @@ export default function Attendance() {
     workHoursPerDay: 8,
   };
 
-  // Load attendance records from localStorage
+  // Load attendance records from database
   useEffect(() => {
-    const stored = localStorage.getItem('genix_attendance_records');
-    if (stored) {
-      setAttendanceRecords(JSON.parse(stored));
-    } else {
-      // Generate sample data for today
-      const sampleRecords = generateSampleRecords();
-      setAttendanceRecords(sampleRecords);
-      localStorage.setItem('genix_attendance_records', JSON.stringify(sampleRecords));
-    }
+    loadAttendanceRecords();
   }, [employees]);
+
+  const loadAttendanceRecords = async () => {
+    try {
+      const records = await AttendanceRecord.list();
+      setAttendanceRecords(records);
+    } catch (error) {
+      console.error('Error loading attendance records:', error);
+      setAttendanceRecords([]);
+    }
+  };
 
   // Generate sample attendance records
   const generateSampleRecords = () => {
@@ -137,12 +140,7 @@ export default function Attendance() {
     return records;
   };
 
-  // Save to localStorage when data changes
-  useEffect(() => {
-    if (attendanceRecords.length > 0) {
-      localStorage.setItem('genix_attendance_records', JSON.stringify(attendanceRecords));
-    }
-  }, [attendanceRecords]);
+  // Removed localStorage persistence - using database instead
 
   // Get today's attendance
   const todayRecords = useMemo(() => {
@@ -215,7 +213,7 @@ export default function Attendance() {
   };
 
   // Handle clock in
-  const handleClockIn = (employeeId) => {
+  const handleClockIn = async (employeeId) => {
     const employee = employees.find(e => e.id === employeeId);
     if (!employee) return;
 
@@ -225,28 +223,32 @@ export default function Attendance() {
 
     const existingRecord = attendanceRecords.find(r => r.employee_id === employeeId && r.date === today);
 
-    if (existingRecord) {
-      // Update existing record
-      setAttendanceRecords(prev => prev.map(r =>
-        r.id === existingRecord.id
-          ? { ...r, clock_in: now.toISOString(), status: isLate ? 'late' : 'present' }
-          : r
-      ));
-    } else {
-      // Create new record
-      const newRecord = {
-        id: `ATT-${today}-${employeeId}`,
-        employee_id: employeeId,
-        employee_name: employee.full_name,
-        department: employee.department,
-        date: today,
-        clock_in: now.toISOString(),
-        clock_out: null,
-        status: isLate ? 'late' : 'present',
-        break_duration: 0,
-        notes: '',
-      };
-      setAttendanceRecords(prev => [...prev, newRecord]);
+    try {
+      if (existingRecord) {
+        // Update existing record
+        await AttendanceRecord.update(existingRecord.id, {
+          ...existingRecord,
+          clock_in: now.toISOString(),
+          status: isLate ? 'late' : 'present'
+        });
+      } else {
+        // Create new record
+        const newRecord = {
+          employee_id: employeeId,
+          employee_name: employee.full_name,
+          department: employee.department,
+          date: today,
+          clock_in: now.toISOString(),
+          clock_out: null,
+          status: isLate ? 'late' : 'present',
+          break_duration: 0,
+          notes: '',
+        };
+        await AttendanceRecord.create(newRecord);
+      }
+      await loadAttendanceRecords();
+    } catch (error) {
+      console.error('Error clocking in:', error);
     }
 
     setShowClockInModal(false);
@@ -254,11 +256,20 @@ export default function Attendance() {
   };
 
   // Handle clock out
-  const handleClockOut = (recordId) => {
+  const handleClockOut = async (recordId) => {
     const now = new Date();
-    setAttendanceRecords(prev => prev.map(r =>
-      r.id === recordId ? { ...r, clock_out: now.toISOString() } : r
-    ));
+    const record = attendanceRecords.find(r => r.id === recordId);
+    if (!record) return;
+
+    try {
+      await AttendanceRecord.update(recordId, {
+        ...record,
+        clock_out: now.toISOString()
+      });
+      await loadAttendanceRecords();
+    } catch (error) {
+      console.error('Error clocking out:', error);
+    }
   };
 
   // Get employees who haven't clocked in today
@@ -365,10 +376,16 @@ export default function Attendance() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-white border">
-            <TabsTrigger value="today">{t('today') || "Bugun"}</TabsTrigger>
-            <TabsTrigger value="history">{t('history') || "Tarix"}</TabsTrigger>
-            <TabsTrigger value="summary">{t('summary') || "Xulosa"}</TabsTrigger>
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="today" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('today') || "Bugun"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('history') || "Tarix"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="summary" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <span>{t('summary') || "Xulosa"}</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Today's Attendance */}

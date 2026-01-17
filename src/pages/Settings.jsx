@@ -38,22 +38,22 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="profile">
-              <User className="w-4 h-4 mr-2" />
-              {t('profile')}
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="profile" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('profile')}</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription">
-              <Crown className="w-4 h-4 mr-2" />
-              {t('subscription')}
+            <TabsTrigger value="subscription" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Crown className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('subscription')}</span>
             </TabsTrigger>
-            <TabsTrigger value="notifications">
-              <Bell className="w-4 h-4 mr-2" />
-              {t('notifications')}
+            <TabsTrigger value="notifications" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Bell className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('notifications')}</span>
             </TabsTrigger>
-            <TabsTrigger value="security">
-              <Lock className="w-4 h-4 mr-2" />
-              {t('security')}
+            <TabsTrigger value="security" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Lock className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('security')}</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="profile" className="mt-6">

@@ -9,10 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck, Brain, AlertTriangle,
-  CheckCircle, Target, Lightbulb, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer
+  CheckCircle, Target, Lightbulb, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -168,13 +179,19 @@ export default function SalesOrders() {
   const [newOrder, setNewOrder] = useState({
     order_number: '',
     customer_name: '',
+    customer_id: '',
     order_date: new Date().toISOString().split('T')[0],
     delivery_date: '',
+    lines: [{ product_name: '', quantity: 1, unit_price: 0, description: '' }],
     subtotal: 0,
     tax_amount: 0,
     shipping_cost: 0,
     total_amount: 0
   });
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState(null);
 
   useEffect(() => {
     let filtered = salesOrders;
@@ -190,24 +207,96 @@ export default function SalesOrders() {
     setFilteredOrders(filtered);
   }, [salesOrders, searchQuery, statusFilter]);
 
+  // Calculate order totals from line items
+  const calculateOrderTotals = (lines) => {
+    const subtotal = lines.reduce((sum, line) => sum + (parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)), 0);
+    return subtotal;
+  };
+
+  const handleAddLine = (order, setOrder) => {
+    setOrder({
+      ...order,
+      lines: [...order.lines, { product_name: '', quantity: 1, unit_price: 0, description: '' }]
+    });
+  };
+
+  const handleRemoveLine = (order, setOrder, index) => {
+    const newLines = order.lines.filter((_, i) => i !== index);
+    setOrder({ ...order, lines: newLines.length > 0 ? newLines : [{ product_name: '', quantity: 1, unit_price: 0, description: '' }] });
+  };
+
+  const handleLineChange = (order, setOrder, index, field, value) => {
+    const newLines = [...order.lines];
+    newLines[index] = { ...newLines[index], [field]: value };
+    setOrder({ ...order, lines: newLines });
+  };
+
   const handleCreateOrder = () => {
-    const total = parseFloat(newOrder.subtotal) + parseFloat(newOrder.tax_amount) + parseFloat(newOrder.shipping_cost);
+    const subtotal = calculateOrderTotals(newOrder.lines);
+    const taxAmount = parseFloat(newOrder.tax_amount) || 0;
+    const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
+    const total = subtotal + taxAmount + shippingCost;
+
     createSalesOrder({
       ...newOrder,
       order_number: newOrder.order_number || `SO-${Date.now()}`,
-      subtotal: parseFloat(newOrder.subtotal),
-      tax_amount: parseFloat(newOrder.tax_amount),
-      shipping_cost: parseFloat(newOrder.shipping_cost),
+      subtotal,
+      tax_amount: taxAmount,
+      shipping_cost: shippingCost,
       total_amount: total,
       status: 'quotation',
       payment_status: 'unpaid'
     });
     setShowCreateModal(false);
+    resetOrderForm();
+    addAuditLog('create', 'new', newOrder.order_number || `SO-${Date.now()}`);
+  };
+
+  const handleEditOrder = () => {
+    const subtotal = calculateOrderTotals(editingOrder.lines);
+    const taxAmount = parseFloat(editingOrder.tax_amount) || 0;
+    const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
+    const total = subtotal + taxAmount + shippingCost;
+
+    updateSalesOrder(editingOrder.id, {
+      ...editingOrder,
+      subtotal,
+      tax_amount: taxAmount,
+      shipping_cost: shippingCost,
+      total_amount: total
+    });
+    setShowEditModal(false);
+    setEditingOrder(null);
+    addAuditLog('update', editingOrder.id, editingOrder.order_number);
+  };
+
+  const handleDeleteOrder = () => {
+    if (orderToDelete) {
+      // Since we don't have a delete function in the context, we'll need to update the status to cancelled
+      updateSalesOrder(orderToDelete.id, { status: 'cancelled' });
+      addAuditLog('delete', orderToDelete.id, orderToDelete.order_number);
+      setShowDeleteDialog(false);
+      setOrderToDelete(null);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (orderId, paymentStatus) => {
+    try {
+      await updateSalesOrder(orderId, { payment_status: paymentStatus });
+      addAuditLog('update', orderId, `Payment status: ${paymentStatus}`);
+    } catch (error) {
+      console.error('Failed to update payment status:', error);
+    }
+  };
+
+  const resetOrderForm = () => {
     setNewOrder({
       order_number: '',
       customer_name: '',
+      customer_id: '',
       order_date: new Date().toISOString().split('T')[0],
       delivery_date: '',
+      lines: [{ product_name: '', quantity: 1, unit_price: 0, description: '' }],
       subtotal: 0,
       tax_amount: 0,
       shipping_cost: 0,
@@ -321,86 +410,86 @@ export default function SalesOrders() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <ShoppingBag className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('orders')}</p>
-                  <p className="text-lg font-bold text-slate-900">{metrics.totalOrders}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                   <DollarSign className="w-5 h-5 text-green-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs text-slate-600">{t('revenue')}</p>
-                  <p className="text-lg font-bold text-slate-900">{formatCurrency(metrics.totalRevenue)}</p>
+                  <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(metrics.totalRevenue)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                   <FileText className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('quotations')}</p>
-                  <p className="text-lg font-bold text-slate-900">{metrics.totalQuotations}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalQuotations}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
+                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
                   <Receipt className="w-5 h-5 text-yellow-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('unpaid')}</p>
-                  <p className="text-lg font-bold text-slate-900">{metrics.unpaidInvoices}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.unpaidInvoices}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-lg">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
                   <RotateCcw className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('returns')}</p>
-                  <p className="text-lg font-bold text-slate-900">{metrics.totalReturns}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 rounded-lg">
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
                   <Tag className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('active_discounts')}</p>
-                  <p className="text-lg font-bold text-slate-900">{metrics.activeDiscounts}</p>
+                  <p className="text-2xl font-bold text-slate-900">{metrics.activeDiscounts}</p>
                 </div>
               </div>
             </CardContent>
@@ -493,45 +582,45 @@ export default function SalesOrders() {
 
         {/* Main Content with Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white/80 p-1 rounded-xl shadow-sm border">
-            <TabsTrigger value="orders" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <ShoppingBag className="w-4 h-4 mr-2" />
-              {t('orders')}
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="orders" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('orders')}</span>
               {tabCounts.orders > 0 && (
                 <Badge className="ml-2 bg-green-100 text-green-800">{tabCounts.orders}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="quotations" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <FileText className="w-4 h-4 mr-2" />
-              {t('quotations')}
+            <TabsTrigger value="quotations" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('quotations')}</span>
               {tabCounts.quotations > 0 && (
                 <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.quotations}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="invoices" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <Receipt className="w-4 h-4 mr-2" />
-              {t('invoices')}
+            <TabsTrigger value="invoices" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Receipt className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('invoices')}</span>
               {tabCounts.invoices > 0 && (
                 <Badge className="ml-2 bg-yellow-100 text-yellow-800">{tabCounts.invoices}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="returns" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <RotateCcw className="w-4 h-4 mr-2" />
-              {t('returns')}
+            <TabsTrigger value="returns" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('returns')}</span>
               {tabCounts.returns > 0 && (
                 <Badge className="ml-2 bg-red-100 text-red-800">{tabCounts.returns}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="discounts" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <Tag className="w-4 h-4 mr-2" />
-              {t('discounts')}
+            <TabsTrigger value="discounts" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Tag className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('discounts')}</span>
               {tabCounts.discounts > 0 && (
                 <Badge className="ml-2 bg-emerald-100 text-emerald-800">{tabCounts.discounts}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="data-[state=active]:bg-green-600 data-[state=active]:text-white rounded-lg px-4">
-              <BarChart3 className="w-4 h-4 mr-2" />
-              {t('analytics')}
+            <TabsTrigger value="analytics" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('analytics')}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -639,25 +728,49 @@ export default function SalesOrders() {
                                 <Badge className={getStatusColor(order.status)}>{t(order.status)}</Badge>
                               </TableCell>
                               <TableCell>
-                                <div className="flex gap-1">
+                                <div className="flex gap-1 flex-wrap">
                                   {(order.status === 'draft' || order.status === 'quotation') && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')}>
-                                      {t('confirm')}
+                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')} title={t('confirm')}>
+                                      <CheckCircle className="w-4 h-4" />
                                     </Button>
                                   )}
                                   {order.status === 'confirmed' && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')}>
-                                      {t('to_processing')}
+                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')} title={t('to_processing')}>
+                                      <Package className="w-4 h-4" />
                                     </Button>
                                   )}
                                   {order.status === 'processing' && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'shipped')}>
+                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'shipped')} title={t('ship')}>
                                       <Truck className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)}>
+                                  <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)} title={t('view')}>
                                     <Eye className="w-4 h-4" />
                                   </Button>
+                                  {(order.status === 'draft' || order.status === 'quotation') && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setEditingOrder({...order, lines: order.lines || [{ product_name: '', quantity: 1, unit_price: 0, description: '' }]});
+                                        setShowEditModal(true);
+                                      }}
+                                      title={t('edit')}
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  {order.status !== 'cancelled' && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-red-600 hover:text-red-700"
+                                      onClick={() => { setOrderToDelete(order); setShowDeleteDialog(true); }}
+                                      title={t('delete')}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -770,15 +883,15 @@ export default function SalesOrders() {
         </Tabs>
 
         {/* Create Order Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl">
+        <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) resetOrderForm(); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('create_new_order')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('order_number')}</label>
+                  <Label>{t('order_number')}</Label>
                   <Input
                     placeholder={t('automatic')}
                     value={newOrder.order_number}
@@ -786,10 +899,13 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
+                  <Label>{t('customer')} *</Label>
                   <Select
                     value={newOrder.customer_name}
-                    onValueChange={(value) => setNewOrder({...newOrder, customer_name: value})}
+                    onValueChange={(value) => {
+                      const customer = customers.find(c => c.company_name === value);
+                      setNewOrder({...newOrder, customer_name: value, customer_id: customer?.id || ''});
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_customer')} />
@@ -807,7 +923,7 @@ export default function SalesOrders() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('order_date')} *</label>
+                  <Label>{t('order_date')} *</Label>
                   <Input
                     type="date"
                     value={newOrder.order_date}
@@ -816,7 +932,7 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('delivery_date')}</label>
+                  <Label>{t('delivery_date')}</Label>
                   <Input
                     type="date"
                     value={newOrder.delivery_date}
@@ -825,28 +941,76 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('amount')} *</label>
-                  <Input
-                    type="number"
-                    placeholder="0"
-                    value={newOrder.subtotal}
-                    onChange={(e) => setNewOrder({...newOrder, subtotal: e.target.value})}
-                    required
-                  />
+              {/* Order Lines */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center mb-3">
+                  <Label className="text-base font-semibold">{t('order_items')}</Label>
+                  <Button size="sm" variant="outline" onClick={() => handleAddLine(newOrder, setNewOrder)}>
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
+                  </Button>
                 </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {newOrder.lines.map((line, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
+                      <div className="col-span-4">
+                        <Input
+                          placeholder={t('product_name')}
+                          value={line.product_name}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'product_name', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          placeholder={t('quantity')}
+                          value={line.quantity}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          placeholder={t('price')}
+                          value={line.unit_price}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <Input
+                          placeholder={t('description')}
+                          value={line.description}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveLine(newOrder, setNewOrder, index)}
+                          disabled={newOrder.lines.length === 1}
+                          className="text-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tax and Shipping */}
+              <div className="grid grid-cols-2 gap-4 border-t pt-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('tax')}</label>
+                  <Label>{t('tax')} (%)</Label>
                   <Input
                     type="number"
-                    placeholder="0"
+                    placeholder="12"
                     value={newOrder.tax_amount}
                     onChange={(e) => setNewOrder({...newOrder, tax_amount: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('shipping')}</label>
+                  <Label>{t('shipping')}</Label>
                   <Input
                     type="number"
                     placeholder="0"
@@ -856,23 +1020,38 @@ export default function SalesOrders() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-lg">{t('total_amount')}</span>
-                  <span className="text-2xl font-bold text-green-600">
-                    {formatCurrency(parseFloat(newOrder.subtotal || 0) + parseFloat(newOrder.tax_amount || 0) + parseFloat(newOrder.shipping_cost || 0))}
-                  </span>
+              {/* Totals */}
+              <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">{t('subtotal')}:</span>
+                    <span className="font-medium">{formatCurrency(calculateOrderTotals(newOrder.lines))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">{t('tax')}:</span>
+                    <span className="font-medium">{formatCurrency(parseFloat(newOrder.tax_amount || 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">{t('shipping')}:</span>
+                    <span className="font-medium">{formatCurrency(parseFloat(newOrder.shipping_cost || 0))}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-green-300">
+                    <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                    <span className="text-2xl font-bold text-green-600">
+                      {formatCurrency(calculateOrderTotals(newOrder.lines) + parseFloat(newOrder.tax_amount || 0) + parseFloat(newOrder.shipping_cost || 0))}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+                <Button variant="outline" onClick={() => { setShowCreateModal(false); resetOrderForm(); }} className="flex-1">
                   {t('cancel')}
                 </Button>
                 <Button
                   onClick={handleCreateOrder}
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
-                  disabled={!newOrder.customer_name || !newOrder.subtotal}
+                  disabled={!newOrder.customer_name || newOrder.lines.every(l => !l.product_name)}
                 >
                   {t('create')}
                 </Button>
@@ -926,6 +1105,187 @@ export default function SalesOrders() {
           generateConfig={generatePrintConfig}
           entityName={t('order')}
         />
+
+        {/* Edit Order Modal */}
+        {editingOrder && (
+          <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) setEditingOrder(null); }}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{t('edit_order')} - {editingOrder.order_number}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('customer')} *</Label>
+                    <Select
+                      value={editingOrder.customer_name}
+                      onValueChange={(value) => {
+                        const customer = customers.find(c => c.company_name === value);
+                        setEditingOrder({...editingOrder, customer_name: value, customer_id: customer?.id || ''});
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.company_name}>
+                            {customer.company_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>{t('delivery_date')}</Label>
+                    <Input
+                      type="date"
+                      value={editingOrder.delivery_date || ''}
+                      onChange={(e) => setEditingOrder({...editingOrder, delivery_date: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {/* Order Lines */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <Label className="text-base font-semibold">{t('order_items')}</Label>
+                    <Button size="sm" variant="outline" onClick={() => handleAddLine(editingOrder, setEditingOrder)}>
+                      <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
+                    </Button>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {editingOrder.lines.map((line, index) => (
+                      <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
+                        <div className="col-span-4">
+                          <Input
+                            placeholder={t('product_name')}
+                            value={line.product_name}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'product_name', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            placeholder={t('quantity')}
+                            value={line.quantity}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            placeholder={t('price')}
+                            value={line.unit_price}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Input
+                            placeholder={t('description')}
+                            value={line.description || ''}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index)}
+                            disabled={editingOrder.lines.length === 1}
+                            className="text-red-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tax and Shipping */}
+                <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                  <div>
+                    <Label>{t('tax')} (%)</Label>
+                    <Input
+                      type="number"
+                      value={editingOrder.tax_amount || 0}
+                      onChange={(e) => setEditingOrder({...editingOrder, tax_amount: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('shipping')}</Label>
+                    <Input
+                      type="number"
+                      value={editingOrder.shipping_cost || 0}
+                      onChange={(e) => setEditingOrder({...editingOrder, shipping_cost: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {/* Totals */}
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('subtotal')}:</span>
+                      <span className="font-medium">{formatCurrency(calculateOrderTotals(editingOrder.lines))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('tax')}:</span>
+                      <span className="font-medium">{formatCurrency(parseFloat(editingOrder.tax_amount || 0))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('shipping')}:</span>
+                      <span className="font-medium">{formatCurrency(parseFloat(editingOrder.shipping_cost || 0))}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                      <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                      <span className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(calculateOrderTotals(editingOrder.lines) + parseFloat(editingOrder.tax_amount || 0) + parseFloat(editingOrder.shipping_cost || 0))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowEditModal(false); setEditingOrder(null); }} className="flex-1">
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    onClick={handleEditOrder}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600"
+                    disabled={!editingOrder.customer_name || editingOrder.lines.every(l => !l.product_name)}
+                  >
+                    {t('save_changes')}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('confirm_delete')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('delete_order_confirm')} <strong>{orderToDelete?.order_number}</strong>? {t('action_cannot_undone')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setShowDeleteDialog(false); setOrderToDelete(null); }}>
+                {t('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteOrder}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t('delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
     </div>
