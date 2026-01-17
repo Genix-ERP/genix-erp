@@ -5,9 +5,9 @@ const LanguageContext = createContext();
 export function LanguageProvider({ children }) {
   const [language, setLanguage] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('erp_language') || 'en';
+      return localStorage.getItem('erp_language') || 'uz';
     }
-    return 'en';
+    return 'uz';
   });
 
   useEffect(() => {

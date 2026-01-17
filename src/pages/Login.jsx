@@ -59,25 +59,6 @@ export default function Login() {
           <CardDescription className="text-slate-500">
             Sign in to your account to continue
           </CardDescription>
-
-          {/* Backend Status Indicator */}
-          <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
-            backendAvailable
-              ? 'bg-green-100 text-green-700'
-              : 'bg-amber-100 text-amber-700'
-          }`}>
-            {backendAvailable ? (
-              <>
-                <Server className="w-3.5 h-3.5" />
-                Connected to Backend
-              </>
-            ) : (
-              <>
-                <ServerOff className="w-3.5 h-3.5" />
-                Demo Mode (Offline)
-              </>
-            )}
-          </div>
         </CardHeader>
 
         <CardContent className="pt-4">
@@ -152,17 +133,6 @@ export default function Login() {
               </p>
             </div>
           )}
-
-          {/* Demo credentials box */}
-          <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <p className="text-xs font-medium text-slate-500 mb-2">
-              {backendAvailable ? 'Or use Demo Credentials:' : 'Demo Credentials:'}
-            </p>
-            <div className="space-y-1 text-xs text-slate-600">
-              <p><span className="font-medium">Admin:</span> admin@genixerp.com / admin123</p>
-              <p><span className="font-medium">User:</span> user@genixerp.com / user123</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
