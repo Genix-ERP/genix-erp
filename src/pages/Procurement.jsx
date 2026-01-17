@@ -836,7 +836,7 @@ export default function Procurement() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
-                    <Select value={editPO.payment_terms || 'net_30'} onValueChange={(value) => setEditPO({...editPO, payment_terms: value})}>
+                    <Select value={editPO.payment_terms && editPO.payment_terms !== '' ? editPO.payment_terms : 'net_30'} onValueChange={(value) => setEditPO({...editPO, payment_terms: value})}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -853,7 +853,7 @@ export default function Procurement() {
 
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('status') || 'Status'}</label>
-                  <Select value={editPO.status || 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
+                  <Select value={editPO.status && editPO.status !== '' ? editPO.status : 'draft'} onValueChange={(value) => setEditPO({...editPO, status: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

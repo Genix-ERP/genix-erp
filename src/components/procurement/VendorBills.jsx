@@ -97,59 +97,6 @@ export default function VendorBills() {
     const storedBills = localStorage.getItem('genix_vendor_bills');
     if (storedBills) {
       setBills(JSON.parse(storedBills));
-    } else {
-      // Sample data
-      const sampleBills = [
-        {
-          id: 'BILL-001',
-          vendor_id: '1',
-          vendor_name: 'Tech Supplies Ltd',
-          bill_number: 'INV-2024-001',
-          bill_date: '2024-01-15',
-          due_date: '2024-02-14',
-          purchase_order_id: 'PO-001',
-          goods_receipt_id: 'GR-001',
-          payment_terms: '30',
-          currency: 'UZS',
-          subtotal: 4500000,
-          tax_amount: 450000,
-          total_amount: 4950000,
-          paid_amount: 0,
-          status: 'draft',
-          matching_status: 'pending',
-          notes: 'Office supplies delivery',
-          lines: [
-            { id: '1', description: 'Laptop HP ProBook', quantity: 5, unit_price: 800000, amount: 4000000 },
-            { id: '2', description: 'USB Drive 64GB', quantity: 10, unit_price: 50000, amount: 500000 }
-          ],
-          created_at: '2024-01-15T10:00:00Z'
-        },
-        {
-          id: 'BILL-002',
-          vendor_id: '2',
-          vendor_name: 'Office Equipment Co',
-          bill_number: 'INV-2024-002',
-          bill_date: '2024-01-16',
-          due_date: '2024-02-15',
-          purchase_order_id: 'PO-002',
-          goods_receipt_id: 'GR-002',
-          payment_terms: '30',
-          currency: 'UZS',
-          subtotal: 2700000,
-          tax_amount: 270000,
-          total_amount: 2970000,
-          paid_amount: 2970000,
-          status: 'paid',
-          matching_status: 'matched',
-          notes: 'Office furniture',
-          lines: [
-            { id: '1', description: 'Office Desk', quantity: 3, unit_price: 900000, amount: 2700000 }
-          ],
-          created_at: '2024-01-16T09:30:00Z'
-        }
-      ];
-      setBills(sampleBills);
-      localStorage.setItem('genix_vendor_bills', JSON.stringify(sampleBills));
     }
   }, []);
 
@@ -704,12 +651,13 @@ export default function VendorBills() {
               <div className="space-y-2">
                 <Label>{t('purchase_order') || 'Purchase Order (Optional)'}</Label>
                 <Select
-                  value={editingBill?.purchase_order_id || newBill.purchase_order_id}
+                  value={editingBill?.purchase_order_id || newBill.purchase_order_id || "none"}
                   onValueChange={(value) => {
+                    const po_id = value === "none" ? "" : value;
                     if (editingBill) {
-                      setEditingBill({ ...editingBill, purchase_order_id: value });
+                      setEditingBill({ ...editingBill, purchase_order_id: po_id });
                     } else {
-                      setNewBill({ ...newBill, purchase_order_id: value });
+                      setNewBill({ ...newBill, purchase_order_id: po_id });
                     }
                   }}
                 >
@@ -717,7 +665,7 @@ export default function VendorBills() {
                     <SelectValue placeholder={t('select_po') || 'Select PO'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('none') || 'None'}</SelectItem>
+                    <SelectItem value="none">{t('none') || 'None'}</SelectItem>
                     {purchaseOrders
                       .filter(po => po.vendor_id === (editingBill?.vendor_id || newBill.vendor_id))
                       .map(po => (

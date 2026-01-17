@@ -48,102 +48,12 @@ export default function SupplierPerformance() {
 
   // Load supplier performance data
   useEffect(() => {
-    // Sample performance data
-    const performanceData = [
-      {
-        id: '1',
-        vendor_name: 'Tech Supplies Ltd',
-        total_orders: 45,
-        on_time_deliveries: 42,
-        on_time_rate: 93.3,
-        quality_score: 95,
-        defect_rate: 2.1,
-        total_spend: 125000000,
-        avg_lead_time: 5.2,
-        price_competitiveness: 88,
-        response_time: 1.5,
-        performance_score: 92,
-        rating: 4.6,
-        trend: 'up',
-        issues: 3,
-        returns: 2
-      },
-      {
-        id: '2',
-        vendor_name: 'Office Equipment Co',
-        total_orders: 38,
-        on_time_deliveries: 35,
-        on_time_rate: 92.1,
-        quality_score: 91,
-        defect_rate: 3.5,
-        total_spend: 95000000,
-        avg_lead_time: 6.8,
-        price_competitiveness: 85,
-        response_time: 2.1,
-        performance_score: 89,
-        rating: 4.4,
-        trend: 'up',
-        issues: 4,
-        returns: 3
-      },
-      {
-        id: '3',
-        vendor_name: 'Industrial Parts Inc',
-        total_orders: 52,
-        on_time_deliveries: 46,
-        on_time_rate: 88.5,
-        quality_score: 87,
-        defect_rate: 5.2,
-        total_spend: 180000000,
-        avg_lead_time: 8.3,
-        price_competitiveness: 82,
-        response_time: 2.8,
-        performance_score: 85,
-        rating: 4.1,
-        trend: 'down',
-        issues: 8,
-        returns: 6
-      },
-      {
-        id: '4',
-        vendor_name: 'Quality Materials Ltd',
-        total_orders: 29,
-        on_time_deliveries: 28,
-        on_time_rate: 96.6,
-        quality_score: 98,
-        defect_rate: 0.8,
-        total_spend: 67000000,
-        avg_lead_time: 4.1,
-        price_competitiveness: 79,
-        response_time: 1.2,
-        performance_score: 94,
-        rating: 4.8,
-        trend: 'up',
-        issues: 1,
-        returns: 0
-      },
-      {
-        id: '5',
-        vendor_name: 'Budget Supplies Co',
-        total_orders: 31,
-        on_time_deliveries: 25,
-        on_time_rate: 80.6,
-        quality_score: 78,
-        defect_rate: 8.5,
-        total_spend: 52000000,
-        avg_lead_time: 10.2,
-        price_competitiveness: 95,
-        response_time: 3.5,
-        performance_score: 75,
-        rating: 3.8,
-        trend: 'down',
-        issues: 12,
-        returns: 9
-      }
-    ];
-
-    setSuppliers(performanceData);
-    setFilteredSuppliers(performanceData);
+    const stored = localStorage.getItem('genix_supplier_performance');
+    if (stored) {
+      const performanceData = JSON.parse(stored);
+      setSuppliers(performanceData);
+      setFilteredSuppliers(performanceData);
+    }
   }, []);
 
   // Filter suppliers
