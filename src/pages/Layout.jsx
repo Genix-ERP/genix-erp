@@ -364,18 +364,21 @@ function LayoutContent({ children, currentPageName }) {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-1">
-                  {navigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        className={`relative group hover:bg-[var(--genix-light-blue)]/50 hover:text-[var(--genix-blue)] transition-all duration-200 rounded-xl mb-1 h-11 ${
-                          location.pathname === item.url ? 'bg-gradient-to-r from-[var(--genix-blue)]/10 to-[var(--genix-purple)]/10 text-[var(--genix-blue)] shadow-sm border-l-2 border-[var(--genix-blue)]' : ''
-                        }`}
-                      >
-                        <NavLink item={item} isActive={location.pathname === item.url} />
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {navigationItems.map((item) => {
+                    const isActive = location.pathname === item.url;
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          className={`relative group hover:bg-[var(--genix-light-blue)]/50 hover:text-[var(--genix-blue)] transition-all duration-200 rounded-xl mb-1 h-11 ${
+                            isActive ? 'bg-gradient-to-r from-[var(--genix-blue)]/20 to-[var(--genix-purple)]/20 text-[var(--genix-blue)] font-semibold shadow-md border-l-4 border-[var(--genix-blue)]' : 'text-slate-600'
+                          }`}
+                        >
+                          <NavLink item={item} isActive={isActive} />
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

@@ -24,10 +24,11 @@ export const translations = {
     "value": "Value",
     "priority": "Priority",
     "category": "Category",
+    "uncategorized": "Uncategorized",
     "type": "Type",
     "active": "Active",
     "inactive": "Inactive",
-    
+
     // Navigation & Layout
     "dashboard": "Dashboard",
     "salesorders": "Sales Orders",
@@ -391,8 +392,8 @@ export const translations = {
     "one_time": "One Time",
     "daily": "Daily",
     "weekly": "Weekly",
-    "monthly": "Monthly",
-    "quarterly": "Quarterly",
+    "monthly": "Monthly (12 periods)",
+    "quarterly": "Quarterly (4 periods)",
     "count_options": "Count Options",
     "counter_selection": "Counter Selection",
 
@@ -1493,6 +1494,9 @@ export const translations = {
     "create_routing": "Create Routing",
     "edit_routing": "Edit Routing",
     "no_operations": "No operations defined",
+    "search_routings": "Search routings...",
+    "delete_routing": "Delete Routing",
+    "delete_routing_confirm": "This action cannot be undone. Are you sure you want to delete this routing?",
 
     // Equipment Maintenance
     "equipment_maintenance": "Equipment Maintenance",
@@ -1533,6 +1537,8 @@ export const translations = {
     "under_maintenance": "Under Maintenance",
     "out_of_service": "Out of Service",
     "maintenance_history": "Maintenance History",
+    "search_equipment": "Search equipment...",
+    "delete_equipment": "Delete Equipment",
 
     // Vendor Bills
     "vendor_bills_desc": "Manage vendor invoices and accounts payable",
@@ -2855,6 +2861,14 @@ export const translations = {
     "enable_multi_currency": "Enable Multi-Currency",
     "enable_multi_currency_desc": "Allow transactions in multiple currencies",
     "base_currency": "Base Currency",
+    "currencies": "Currencies",
+    "active_currencies": "active",
+    "new_currency": "New Currency",
+    "currency_name": "Name",
+    "current_rate": "Current Rate",
+    "change": "Change",
+    "rates_history": "Rate History",
+    "set_rate": "Set Rate",
     "exchange_rate_source": "Exchange Rate Source",
     "banking_settings": "Banking Settings",
     "banking_settings_desc": "Configure banking and reconciliation",
@@ -3000,10 +3014,11 @@ export const translations = {
     "value": "Qiymat",
     "priority": "Muhimlik",
     "category": "Kategoriya",
+    "uncategorized": "Kategoriyasiz",
     "type": "Tur",
     "active": "Faol",
     "inactive": "Nofaol",
-    
+
     // Navigation & Layout
     "dashboard": "Boshqaruv paneli",
     "salesorders": "Savdo buyurtmalari",
@@ -3276,8 +3291,8 @@ export const translations = {
     "one_time": "Bir martalik",
     "daily": "Kundalik",
     "weekly": "Haftalik",
-    "monthly": "Oylik",
-    "quarterly": "Choraklik",
+    "monthly": "Oylik (12 davr)",
+    "quarterly": "Choraklik (4 davr)",
     "count_options": "Hisob sozlamalari",
     "counter_selection": "Hisoblovchini tanlash",
 
@@ -3979,6 +3994,11 @@ export const translations = {
     "scrapped_by": "Kim tomonidan yaroqsiz deb topilgan",
     "scrap_analysis": "Yaroqsiz tahlili",
     "scrap_by_reason": "Sabab bo'yicha yaroqsiz",
+    "scrap_summary": "Yaroqsiz xulosa",
+    "total_financial_loss": "Jami moliyaviy yo'qotish",
+    "total_units_scrapped": "Jami yaroqsiz birliklar",
+    "avg_per_order": "Buyurtma uchun o'rtacha",
+    "no_scrap_data": "Yaroqsiz ma'lumotlar mavjud emas",
 
     // Compliance Panel
     "compliance_status": "Muvofiqlik holati",
@@ -4332,6 +4352,27 @@ export const translations = {
 
     // Finance Module Tabs
     "fiscal_periods": "Moliyaviy davrlar",
+    "open_years": "Ochiq yillar",
+    "closed_years": "Yopilgan yillar",
+    "open_periods": "ochiq davrlar",
+    "closed_periods": "yopilgan davrlar",
+    "no_fiscal_years": "Moliyaviy yillar yo'q",
+    "fiscal_year_description": "Hisob-kitob davrlarini boshqarish va operatsiyalarni qachon qabul qilish mumkinligini nazorat qilish uchun moliyaviy yillar yarating.",
+    "create_first_fiscal_year": "Boshlash uchun birinchi moliyaviy yilni yarating",
+    "periods_in_year": "yildagi davrlar",
+    "confirm_close_year": "Ushbu moliyaviy yilni yopishni xohlaysizmi? Barcha davrlar yopiladi.",
+    "confirm_close_period": "Ushbu davrni yopishni xohlaysizmi?",
+    "confirm_reopen_period": "Ushbu davrni qayta ochishni xohlaysizmi?",
+    "manage_fiscal_years_periods": "Moliyaviy yillar va hisob-kitob davrlarini boshqarish",
+    "new_fiscal_year": "Yangi moliyaviy yil",
+    "create_fiscal_year": "Moliyaviy yil yaratish",
+    "fiscal_year_modal_description": "Hisob-kitobingiz uchun yangi moliyaviy yilni aniqlang.",
+    "close_year": "Yilni yopish",
+    "close_fiscal_year": "Moliyaviy yilni yopish",
+    "close_year_warning": "Bu barcha ochiq davrlarni yopadi va ushbu moliyaviy yilga keyingi operatsiyalarni kiritishni oldini oladi. Bu amalni bekor qilib bo'lmaydi.",
+    "closing_year": "Yopilmoqda",
+    "auto_generate_periods": "Hisob-kitob davrlarini avtomatik yaratish",
+    "period_type": "Davr turi",
     "budgets": "Byudjetlar",
     "fixed_assets_module": "Asosiy vositalar",
 
@@ -4585,6 +4626,9 @@ export const translations = {
     "create_routing": "Marshrut yaratish",
     "edit_routing": "Marshrutni tahrirlash",
     "no_operations": "Operatsiyalar aniqlanmagan",
+    "search_routings": "Marshrutlarni qidirish...",
+    "delete_routing": "Marshrutni o'chirish",
+    "delete_routing_confirm": "Bu amalni qaytarib bo'lmaydi. Rostdan ham ushbu marshrutni o'chirmoqchimisiz?",
 
     // Equipment Maintenance
     "equipment_maintenance": "Uskunalarni saqlash",
@@ -4623,6 +4667,8 @@ export const translations = {
     "under_maintenance": "Texnik xizmatda",
     "out_of_service": "Ishlamayapti",
     "maintenance_history": "Texnik xizmat tarixi",
+    "search_equipment": "Uskunalarni qidirish...",
+    "delete_equipment": "Uskunani o'chirish",
 
     // Vendor Bills
     "vendor_bills_desc": "Yetkazib beruvchi hisob-fakturalari va to'lovlarni boshqarish",
@@ -5833,6 +5879,14 @@ export const translations = {
     "enable_multi_currency": "Ko'p valyutani yoqish",
     "enable_multi_currency_desc": "Bir nechta valyutada operatsiyalarga ruxsat berish",
     "base_currency": "Asosiy valyuta",
+    "currencies": "Valyutalar",
+    "active_currencies": "faol",
+    "new_currency": "Yangi valyuta",
+    "currency_name": "Nomi",
+    "current_rate": "Joriy kurs",
+    "change": "O'zgarish",
+    "rates_history": "Kurs tarixi",
+    "set_rate": "Kursni belgilash",
     "exchange_rate_source": "Valyuta kursi manbasi",
     "banking_settings": "Bank sozlamalari",
     "banking_settings_desc": "Bank va kelishtirishni sozlash",
@@ -5979,10 +6033,11 @@ export const translations = {
     "value": "Стоимость",
     "priority": "Приоритет",
     "category": "Категория",
+    "uncategorized": "Без категории",
     "type": "Тип",
     "active": "Активный",
     "inactive": "Неактивный",
-    
+
     // Navigation & Layout
     "dashboard": "Панель управления",
     "salesorders": "Заказы на продажу",
@@ -6603,8 +6658,8 @@ export const translations = {
     "one_time": "Однократно",
     "daily": "Ежедневно",
     "weekly": "Еженедельно",
-    "monthly": "Ежемесячно",
-    "quarterly": "Ежеквартально",
+    "monthly": "Ежемесячно (12 периодов)",
+    "quarterly": "Ежеквартально (4 периода)",
     "count_options": "Параметры подсчёта",
     "counter_selection": "Выбор счётчика",
 
@@ -7501,6 +7556,9 @@ export const translations = {
     "create_routing": "Создать маршрут",
     "edit_routing": "Редактировать маршрут",
     "no_operations": "Операции не определены",
+    "search_routings": "Поиск маршрутов...",
+    "delete_routing": "Удалить маршрут",
+    "delete_routing_confirm": "Это действие нельзя отменить. Вы уверены, что хотите удалить этот маршрут?",
 
     // Equipment Maintenance
     "equipment_maintenance": "Обслуживание оборудования",
@@ -7541,6 +7599,8 @@ export const translations = {
     "under_maintenance": "На обслуживании",
     "out_of_service": "Не работает",
     "maintenance_history": "История обслуживания",
+    "search_equipment": "Поиск оборудования...",
+    "delete_equipment": "Удалить оборудование",
 
     // Vendor Bills
     "vendor_bills_desc": "Управление счетами поставщиков и кредиторской задолженностью",

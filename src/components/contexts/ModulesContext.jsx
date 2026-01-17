@@ -9,27 +9,27 @@ const PERMISSIONS_KEY = 'genix_employee_permissions';
 // All available modules for permissions (matching sidebar structure)
 // Core modules are always visible, app modules depend on installation
 const CORE_MODULES = [
-  { id: 'dashboard', name: 'Dashboard', icon: 'LayoutDashboard', isCore: true },
-  { id: 'ai_assistant', name: 'AI Assistant', icon: 'Bot', isCore: true },
-  { id: 'workflows', name: 'Workflows', icon: 'Zap', isCore: true },
-  { id: 'apps', name: 'Apps', icon: 'Grid3x3', isCore: true },
-  { id: 'settings', name: 'Settings', icon: 'Settings', isCore: true },
-  { id: 'admin_panel', name: 'Admin Panel', icon: 'Shield', isCore: true, adminOnly: true }
+  { id: 'dashboard', nameKey: 'dashboard', icon: 'LayoutDashboard', isCore: true },
+  { id: 'ai_assistant', nameKey: 'ai_assistant', icon: 'Bot', isCore: true },
+  { id: 'workflows', nameKey: 'workflows', icon: 'Zap', isCore: true },
+  { id: 'apps', nameKey: 'apps', icon: 'Grid3x3', isCore: true },
+  { id: 'settings', nameKey: 'settings', icon: 'Settings', isCore: true },
+  { id: 'admin_panel', nameKey: 'admin_panel', icon: 'Shield', isCore: true, adminOnly: true }
 ];
 
 const APP_MODULES = [
-  { id: 'inventory', name: 'Inventory', icon: 'Package', appId: 'inventory' },
-  { id: 'customers', name: 'Customers', icon: 'Users', appId: 'crm' },
-  { id: 'financials', name: 'Financials', icon: 'DollarSign', appId: 'finance' },
-  { id: 'hr', name: 'HR', icon: 'Briefcase', appId: 'hr' },
-  { id: 'manufacturing', name: 'Manufacturing', icon: 'Zap', appId: 'manufacturing' },
-  { id: 'procurement', name: 'Procurement', icon: 'ShoppingCart', appId: 'procurement' },
-  { id: 'projects', name: 'Projects', icon: 'Briefcase', appId: 'projects' },
-  { id: 'sales_orders', name: 'Sales Orders', icon: 'ShoppingBag', appId: 'sales_orders' },
-  { id: 'assets', name: 'Assets', icon: 'Monitor', appId: 'assets' },
-  { id: 'expenses', name: 'Expenses', icon: 'Receipt', appId: 'expenses' },
-  { id: 'payroll', name: 'Payroll', icon: 'DollarSign', appId: 'payroll' },
-  { id: 'contracts', name: 'Contracts', icon: 'FileText', appId: 'contracts' }
+  { id: 'inventory', nameKey: 'inventory', icon: 'Package', appId: 'inventory' },
+  { id: 'customers', nameKey: 'customers', icon: 'Users', appId: 'crm' },
+  { id: 'financials', nameKey: 'financials', icon: 'DollarSign', appId: 'finance' },
+  { id: 'hr', nameKey: 'hr', icon: 'Briefcase', appId: 'hr' },
+  { id: 'manufacturing', nameKey: 'manufacturing', icon: 'Zap', appId: 'manufacturing' },
+  { id: 'procurement', nameKey: 'procurement', icon: 'ShoppingCart', appId: 'procurement' },
+  { id: 'projects', nameKey: 'projects', icon: 'Briefcase', appId: 'projects' },
+  { id: 'sales_orders', nameKey: 'sales_orders', icon: 'ShoppingBag', appId: 'sales_orders' },
+  { id: 'assets', nameKey: 'assets', icon: 'Monitor', appId: 'assets' },
+  { id: 'expenses', nameKey: 'expenses', icon: 'Receipt', appId: 'expenses' },
+  { id: 'payroll', nameKey: 'payroll', icon: 'DollarSign', appId: 'payroll' },
+  { id: 'contracts', nameKey: 'contracts', icon: 'FileText', appId: 'contracts' }
 ];
 
 const ALL_MODULES = [...CORE_MODULES, ...APP_MODULES];

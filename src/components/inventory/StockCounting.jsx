@@ -24,28 +24,28 @@ import { Label } from "@/components/ui/label";
 
 // SAP-style Count Types
 const countTypes = [
-  { value: 'full', label: 'Full Count', description: 'Count all items in warehouse' },
-  { value: 'cycle', label: 'Cycle Count', description: 'Based on ABC classification' },
-  { value: 'spot', label: 'Spot Check', description: 'Random sampling' },
-  { value: 'annual', label: 'Annual Count', description: 'Year-end inventory' },
+  { value: 'full', labelKey: 'full_count', descKey: 'count_all_items' },
+  { value: 'cycle', labelKey: 'cycle_count', descKey: 'based_on_abc' },
+  { value: 'spot', labelKey: 'spot_check', descKey: 'random_sampling' },
+  { value: 'annual', labelKey: 'annual_count', descKey: 'year_end_inventory' },
 ];
 
 // ABC Classification for cycle counting
 const abcClasses = [
-  { value: 'A', label: 'Class A', description: 'High value (count weekly)', frequency: 7 },
-  { value: 'B', label: 'Class B', description: 'Medium value (count monthly)', frequency: 30 },
-  { value: 'C', label: 'Class C', description: 'Low value (count quarterly)', frequency: 90 },
+  { value: 'A', labelKey: 'class_a', descKey: 'high_value_weekly', frequency: 7 },
+  { value: 'B', labelKey: 'class_b', descKey: 'medium_value_monthly', frequency: 30 },
+  { value: 'C', labelKey: 'class_c', descKey: 'low_value_quarterly', frequency: 90 },
 ];
 
 // Variance reasons (SAP)
 const varianceReasons = [
-  { value: 'theft', label: 'Theft/Shrinkage' },
-  { value: 'damage', label: 'Damaged Goods' },
-  { value: 'miscount', label: 'Previous Miscount' },
-  { value: 'data_entry', label: 'Data Entry Error' },
-  { value: 'unreported', label: 'Unreported Movement' },
-  { value: 'expired', label: 'Expired/Scrapped' },
-  { value: 'other', label: 'Other' },
+  { value: 'theft', labelKey: 'theft_shrinkage' },
+  { value: 'damage', labelKey: 'damaged_goods' },
+  { value: 'miscount', labelKey: 'previous_miscount' },
+  { value: 'data_entry', labelKey: 'data_entry_error' },
+  { value: 'unreported', labelKey: 'unreported_movement' },
+  { value: 'expired', labelKey: 'expired_scrapped' },
+  { value: 'other', labelKey: 'other' },
 ];
 
 export default function StockCounting() {
@@ -559,8 +559,8 @@ export default function StockCounting() {
                     }`}
                     onClick={() => setNewCount({ ...newCount, count_type: ct.value })}
                   >
-                    <p className="text-xs font-medium">{ct.label}</p>
-                    <p className="text-[10px] text-slate-500">{ct.description}</p>
+                    <p className="text-xs font-medium">{t(ct.labelKey)}</p>
+                    <p className="text-[10px] text-slate-500">{t(ct.descKey)}</p>
                   </div>
                 ))}
               </div>
@@ -583,8 +583,8 @@ export default function StockCounting() {
                       }`}
                       onClick={() => setNewCount({ ...newCount, abc_class: abc.value })}
                     >
-                      <p className="text-sm font-bold text-center">{abc.label}</p>
-                      <p className="text-[10px] text-slate-500 text-center">{abc.description}</p>
+                      <p className="text-sm font-bold text-center">{t(abc.labelKey)}</p>
+                      <p className="text-[10px] text-slate-500 text-center">{t(abc.descKey)}</p>
                     </div>
                   ))}
                 </div>
