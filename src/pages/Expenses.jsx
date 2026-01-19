@@ -250,7 +250,7 @@ export default function Expenses() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-6">
 
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -313,18 +313,18 @@ export default function Expenses() {
 
         {/* AI Insights Panel */}
         {(expenseAnalysis.insights.length > 0 || expenseAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-teal-50 to-cyan-50 border-teal-200/50">
+          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200/50">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-teal-600" />
+                <Brain className="w-5 h-5 text-blue-600" />
                 {t('ai_expense_insights')}
-                <Badge className="bg-teal-100 text-teal-700 text-xs">{t('live')}</Badge>
+                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {expenseAnalysis.insights.slice(0, 3).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-teal-100">
+                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
                     <div className="flex items-start gap-3">
                       {insight.type === 'positive' ? (
                         <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
@@ -337,7 +337,7 @@ export default function Expenses() {
                         <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
                         <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
                         {insight.metric && (
-                          <p className="text-lg font-bold text-teal-600 mt-1">{insight.metric}</p>
+                          <p className="text-lg font-bold text-blue-600 mt-1">{insight.metric}</p>
                         )}
                       </div>
                     </div>
@@ -350,7 +350,7 @@ export default function Expenses() {
                     <button
                       key={index}
                       onClick={() => handleRecommendationClick(rec)}
-                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-teal-100 hover:bg-teal-50 hover:border-teal-300 transition-colors cursor-pointer"
+                      className="flex items-center gap-2 text-xs bg-white rounded-full px-3 py-1.5 border border-blue-100 hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer"
                       title={t('ask_ai_about_this')}
                     >
                       <Lightbulb className="w-3 h-3 text-yellow-500" />
@@ -410,11 +410,11 @@ export default function Expenses() {
                   <Button
                     onClick={handleExportToExcel}
                     variant="outline"
-                    className="border-teal-200 text-teal-700 hover:bg-teal-50"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
                   >
                     <Download className="w-4 h-4 mr-2" /> {t('export')}
                   </Button>
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-teal-600 to-cyan-600">
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                     <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
                   </Button>
                 </div>
@@ -448,7 +448,7 @@ export default function Expenses() {
             <CardContent className="p-0">
               {isLoading ? (
                 <div className="flex items-center justify-center py-16">
-                  <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : filteredClaims.length === 0 ? (
                 <div className="text-center py-16">
@@ -532,7 +532,7 @@ export default function Expenses() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-teal-600" />
+                <Brain className="w-5 h-5 text-blue-600" />
                 {t('submit_expense_claim')}
               </DialogTitle>
             </DialogHeader>
@@ -611,7 +611,7 @@ export default function Expenses() {
                 </Button>
                 <Button
                   onClick={handleCreateClaim}
-                  className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   disabled={!newClaim.amount || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
@@ -734,7 +734,7 @@ export default function Expenses() {
                   </Button>
                   <Button
                     onClick={handleUpdateClaim}
-                    className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600"
+                    className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                     disabled={!editClaim.employee_name || isSubmitting}
                   >
                     {isSubmitting ? t('saving') : t('save_changes')}
