@@ -1741,6 +1741,8 @@ export const translations = {
     "app_payroll_description": "Automated payroll processing with tax calculations.",
     "app_contracts_name": "Contract Management",
     "app_contracts_description": "Manage contract lifecycle with automated renewals.",
+    "app_cargo_name": "Cargo Company",
+    "app_cargo_description": "International freight forwarding and distribution system for B2B/B2C logistics.",
 
     // Common UI Elements
     "submit": "Submit",
@@ -4946,6 +4948,8 @@ export const translations = {
     "app_payroll_description": "Soliq hisob-kitoblari bilan avtomatlashtirilgan ish haqini hisoblash.",
     "app_contracts_name": "Shartnomalarni boshqarish",
     "app_contracts_description": "Avtomatlashtirilgan yangilash bilan shartnoma hayot siklini boshqarish.",
+    "app_cargo_name": "Cargo kompaniyasi",
+    "app_cargo_description": "B2B/B2C logistika uchun xalqaro yuk tashish va taqsimlash tizimi.",
 
     // Common UI Elements
     "close": "Yopish",
@@ -7926,6 +7930,8 @@ export const translations = {
     "app_payroll_description": "Автоматизированный расчет зарплаты с налоговыми вычислениями.",
     "app_contracts_name": "Управление контрактами",
     "app_contracts_description": "Управление жизненным циклом контрактов с автоматическим продлением.",
+    "app_cargo_name": "Карго компания",
+    "app_cargo_description": "Международная система перевозки и распределения грузов для B2B/B2C логистики.",
 
     // Common UI Elements
     "submit": "Отправить",

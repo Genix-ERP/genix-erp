@@ -19,7 +19,8 @@ import {
   ShoppingBag,
   Monitor,
   Receipt,
-  FileText
+  FileText,
+  Ship
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
@@ -121,6 +122,14 @@ const appsList = [
     version: '1.0',
     icon: FileText,
     color: '#ec4899'
+  },
+  {
+    id: 'cargo',
+    nameKey: 'app_cargo_name',
+    descriptionKey: 'app_cargo_description',
+    version: '1.0',
+    icon: Ship,
+    color: '#0ea5e9'
   }
 ];
 
