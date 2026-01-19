@@ -10,10 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Package, Building2, FileText, DollarSign
+  Package, Building2, Plus, Trash2, ArrowRight
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { format } from 'date-fns';
 
 export default function CargoDistribution() {
   const { language } = useLanguage();
@@ -22,274 +23,456 @@ export default function CargoDistribution() {
     shipments,
     distributeGoods,
     calculateShipmentCosts,
-    calculateCostCoefficient,
-    SHIPMENT_STATUS
+    calculateCostCoefficient
   } = useCargoContext();
   const { companies } = useCompany();
 
-  const [selectedShipment, setSelectedShipment] = useState(null);
   const [showDistributionModal, setShowDistributionModal] = useState(false);
-  const [distributions, setDistributions] = useState([]);
+  const [selectedShipment, setSelectedShipment] = useState(null);
 
-  // Get only received shipments that haven't been distributed
-  const availableShipments = shipments.filter(s =>
-    s.status === SHIPMENT_STATUS.RECEIVED
-  );
+  // Distribution form state
+  const [recipientCompanyName, setRecipientCompanyName] = useState('');
+  const [recipientCompanyType, setRecipientCompanyType] = useState('B2B');
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [waybillNumber, setWaybillNumber] = useState('');
+  const [notes, setNotes] = useState('');
 
-  // Handle start distribution
-  const handleStartDistribution = (shipment) => {
+  // Handle open distribution modal
+  const handleOpenDistribution = (shipment) => {
     setSelectedShipment(shipment);
-    setDistributions([]);
+    setRecipientCompanyName('');
+    setRecipientCompanyType('B2B');
+    setSelectedItems([]);
+    setInvoiceNumber('');
+    setWaybillNumber('');
+    setNotes('');
     setShowDistributionModal(true);
   };
 
-  // Add distribution entry
-  const addDistribution = () => {
-    setDistributions([...distributions, {
-      company_id: '',
-      company_name: '',
-      company_type: 'B2B',
-      items: []
+  // Handle add item to distribution
+  const handleAddItemToDistribution = (shipmentItem) => {
+    const existing = selectedItems.find(i => i.shipment_item_id === shipmentItem.id);
+    if (existing) return; // Already added
+
+    setSelectedItems([...selectedItems, {
+      shipment_item_id: shipmentItem.id,
+      item_name: shipmentItem.item_name,
+      available_quantity: shipmentItem.quantity,
+      quantity: 1,
+      unit_cost: shipmentItem.unit_price
     }]);
   };
 
-  // Update distribution
-  const updateDistribution = (index, field, value) => {
-    const updated = [...distributions];
-    updated[index][field] = value;
-
-    // If company selected, get company name
-    if (field === 'company_id') {
-      const company = companies.find(c => c.id === parseInt(value));
-      if (company) {
-        updated[index].company_name = company.company_name;
-      }
-    }
-
-    setDistributions(updated);
+  // Update item quantity
+  const updateItemQuantity = (index, quantity) => {
+    const updated = [...selectedItems];
+    const maxQty = updated[index].available_quantity;
+    updated[index].quantity = Math.min(parseFloat(quantity) || 0, maxQty);
+    setSelectedItems(updated);
   };
 
-  // Add item to distribution
-  const addItemToDistribution = (distIndex, item, quantity) => {
-    const updated = [...distributions];
-    const costs = calculateShipmentCosts(selectedShipment);
-    const coefficient = calculateCostCoefficient(selectedShipment);
-
-    updated[distIndex].items.push({
-      item_name: item.name,
-      quantity: parseFloat(quantity),
-      unit_price: item.price,
-      allocated_cost: parseFloat(quantity) * item.price * coefficient
-    });
-
-    setDistributions(updated);
+  // Remove item from distribution
+  const removeItem = (index) => {
+    setSelectedItems(selectedItems.filter((_, i) => i !== index));
   };
 
-  // Calculate total for distribution
-  const calculateDistributionTotal = (dist) => {
-    return dist.items.reduce((sum, item) => sum + (item.quantity * item.unit_price) + item.allocated_cost, 0);
+  // Calculate totals
+  const calculateTotals = () => {
+    const itemsTotal = selectedItems.reduce((sum, item) =>
+      sum + (item.quantity * item.unit_cost), 0
+    );
+
+    // Calculate allocated costs (proportional share of shipment costs)
+    const shipmentCosts = selectedShipment ? calculateShipmentCosts(selectedShipment) : { total: 0 };
+    const coefficient = selectedShipment ? calculateCostCoefficient(selectedShipment) : 0;
+    const allocatedCosts = itemsTotal * coefficient;
+
+    return {
+      itemsTotal,
+      allocatedCosts,
+      total: itemsTotal + allocatedCosts
+    };
   };
 
   // Handle submit distribution
   const handleSubmitDistribution = () => {
-    if (!selectedShipment || distributions.length === 0) return;
+    if (!selectedShipment || !recipientCompanyName || selectedItems.length === 0) {
+      alert('Barcha maydonlarni to\'ldiring va kamida bitta tovar qo\'shing');
+      return;
+    }
 
-    const distributionData = distributions.map(dist => ({
-      ...dist,
-      total_cost: calculateDistributionTotal(dist)
-    }));
+    const totals = calculateTotals();
+
+    const distributionData = [{
+      recipient_company_name: recipientCompanyName,
+      recipient_company_type: recipientCompanyType,
+      invoice_number: invoiceNumber,
+      waybill_number: waybillNumber,
+      notes: notes,
+      items: selectedItems.map(item => ({
+        shipment_item_id: item.shipment_item_id,
+        quantity: item.quantity,
+        unit_cost: item.unit_cost,
+        total_cost: item.quantity * item.unit_cost
+      })),
+      total_items_cost: totals.itemsTotal,
+      allocated_costs: totals.allocatedCosts,
+      total_cost: totals.total
+    }];
 
     distributeGoods(selectedShipment.id, distributionData);
     setShowDistributionModal(false);
     setSelectedShipment(null);
-    setDistributions([]);
   };
+
+  // Get all shipments that have items (not just received)
+  const availableShipments = shipments.filter(s =>
+    s.items && s.items.length > 0
+  );
+
+  // Get distributed shipments for history
+  const distributedShipments = shipments.filter(s =>
+    s.distributions && s.distributions.length > 0
+  );
+
+  const totals = selectedShipment ? calculateTotals() : { itemsTotal: 0, allocatedCosts: 0, total: 0 };
 
   return (
     <div className="space-y-6">
-      {/* Available Shipments */}
+      {/* Header */}
+      <Card className="bg-gradient-to-r from-purple-50 to-blue-50">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">Tovarlarni taqsimlash</h2>
+              <p className="text-slate-600 mt-1">
+                Yukdagi tovarlarni B2B yoki B2C kompaniyalarga taqsimlang
+              </p>
+            </div>
+            <Package className="w-12 h-12 text-purple-600 opacity-50" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Available Shipments for Distribution */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            {t('received_shipments') || 'Qabul qilingan yuklar'}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Yuklar ro'yxati
+            </CardTitle>
+            <Badge variant="secondary">
+              {availableShipments.length} ta yuk mavjud
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           {availableShipments.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">
-                {t('no_received_shipments') || 'Taqsimlash uchun yuklar yo\'q'}
-              </p>
+              <p className="text-slate-500">Hozircha yuklar yo'q</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {availableShipments.map((shipment) => {
-                const costs = calculateShipmentCosts(shipment);
-                const itemsTotal = shipment.items?.reduce((sum, item) => sum + item.total, 0) || 0;
-
-                return (
-                  <div key={shipment.id} className="p-4 border rounded-lg hover:border-blue-300 transition-colors">
-                    <div className="flex items-start justify-between">
+              {availableShipments.map((shipment) => (
+                <Card key={shipment.id} className="border-2 hover:border-blue-300 transition-colors">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-semibold">{shipment.tracking_number}</h4>
-                          <Badge variant="outline">{shipment.supplier_country}</Badge>
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-semibold text-lg">{shipment.tracking_number}</h3>
+                          <Badge className={
+                            shipment.status === 'received' ? 'bg-green-500' :
+                            shipment.status === 'in_transit' ? 'bg-blue-500' :
+                            shipment.status === 'distributed' ? 'bg-purple-500' :
+                            'bg-slate-500'
+                          }>
+                            {shipment.status}
+                          </Badge>
                         </div>
-                        <p className="text-sm text-slate-600 mb-2">{shipment.supplier_company}</p>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
+                            <span className="text-slate-500">Davlat:</span>
+                            <span className="font-semibold ml-1">{shipment.supplier_country}</span>
+                          </div>
+                          <div>
                             <span className="text-slate-500">Tovarlar:</span>
-                            <span className="font-semibold ml-1">${itemsTotal.toLocaleString()}</span>
+                            <span className="font-semibold ml-1">{shipment.items?.length || 0} xil</span>
                           </div>
                           <div>
-                            <span className="text-slate-500">Xarajatlar:</span>
-                            <span className="font-semibold ml-1">${costs.total.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Jami:</span>
-                            <span className="font-semibold ml-1">${(itemsTotal + costs.total).toLocaleString()}</span>
+                            <span className="text-slate-500">Jami summa:</span>
+                            <span className="font-semibold ml-1">
+                              ${shipment.total_cost?.toLocaleString() || 0}
+                            </span>
                           </div>
                         </div>
                       </div>
                       <Button
-                        size="sm"
-                        onClick={() => handleStartDistribution(shipment)}
-                        className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                        onClick={() => handleOpenDistribution(shipment)}
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 text-white"
                       >
-                        {t('distribute') || 'Taqsimlash'}
+                        <ArrowRight className="w-4 h-4 mr-1" />
+                        Taqsimlash
                       </Button>
                     </div>
-                  </div>
-                );
-              })}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Distribution History */}
+      {distributedShipments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Taqsimlash tarixi
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tracking</TableHead>
+                  <TableHead>Kompaniya</TableHead>
+                  <TableHead>Turi</TableHead>
+                  <TableHead>Tovarlar</TableHead>
+                  <TableHead className="text-right">Summa</TableHead>
+                  <TableHead>Sana</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {distributedShipments.flatMap(shipment =>
+                  (shipment.distributions || []).map((dist, idx) => (
+                    <TableRow key={`${shipment.id}-${idx}`}>
+                      <TableCell className="font-medium">{shipment.tracking_number}</TableCell>
+                      <TableCell>{dist.recipient_company_name}</TableCell>
+                      <TableCell>
+                        <Badge variant={dist.recipient_company_type === 'B2B' ? 'default' : 'secondary'}>
+                          {dist.recipient_company_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{dist.items?.length || 0} xil</TableCell>
+                      <TableCell className="text-right font-semibold">
+                        ${dist.total_cost?.toLocaleString() || 0}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {dist.distribution_date ? format(new Date(dist.distribution_date), 'dd MMM yyyy') : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Distribution Modal */}
       <Dialog open={showDistributionModal} onOpenChange={setShowDistributionModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t('distribute_goods') || 'Tovarlarni taqsimlash'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Tovarlarni taqsimlash
+              {selectedShipment && (
+                <span className="text-sm font-normal text-slate-500">
+                  - {selectedShipment.tracking_number}
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
 
-          {selectedShipment && (
-            <div className="space-y-6">
-              {/* Shipment Info */}
+          <div className="space-y-6">
+            {/* Recipient Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Kompaniya nomi *</Label>
+                <Input
+                  placeholder="Kompaniya nomini kiriting"
+                  value={recipientCompanyName}
+                  onChange={(e) => setRecipientCompanyName(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Kompaniya turi *</Label>
+                <Select value={recipientCompanyType} onValueChange={setRecipientCompanyType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="B2B">B2B (Korxona)</SelectItem>
+                    <SelectItem value="B2C">B2C (Chakana)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Invoice & Waybill */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="flex items-center gap-2">
+                  Invoice raqami
+                  <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                </Label>
+                <Input
+                  placeholder="INV-2024-001"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="flex items-center gap-2">
+                  TTN raqami
+                  <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                </Label>
+                <Input
+                  placeholder="TTN-2024-001"
+                  value={waybillNumber}
+                  onChange={(e) => setWaybillNumber(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Available Items */}
+            <div>
+              <Label className="text-lg font-semibold mb-3 block">Mavjud tovarlar</Label>
               <Card className="bg-slate-50">
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-slate-600">Tracking:</span>
-                      <span className="font-semibold ml-2">{selectedShipment.tracking_number}</span>
+                  <div className="space-y-2">
+                    {selectedShipment?.items?.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                        <div className="flex-1">
+                          <div className="font-semibold">{item.item_name}</div>
+                          <div className="text-sm text-slate-600">
+                            Miqdor: {item.quantity} | Narx: ${item.unit_price}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAddItemToDistribution(item)}
+                          disabled={selectedItems.some(si => si.shipment_item_id === item.id)}
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          Qo'shish
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Selected Items */}
+            {selectedItems.length > 0 && (
+              <div>
+                <Label className="text-lg font-semibold mb-3 block">Taqsimlanayotgan tovarlar</Label>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tovar</TableHead>
+                      <TableHead>Miqdor</TableHead>
+                      <TableHead>Narx</TableHead>
+                      <TableHead>Jami</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedItems.map((item, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{item.item_name}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={item.available_quantity}
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantity(idx, e.target.value)}
+                            className="w-24"
+                          />
+                          <span className="text-xs text-slate-500 ml-2">
+                            / {item.available_quantity}
+                          </span>
+                        </TableCell>
+                        <TableCell>${item.unit_cost}</TableCell>
+                        <TableCell className="font-semibold">
+                          ${(item.quantity * item.unit_cost).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeItem(idx)}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {/* Cost Summary */}
+            {selectedItems.length > 0 && (
+              <Card className="bg-gradient-to-br from-blue-50 to-purple-50">
+                <CardContent className="p-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Tovarlar qiymati:</span>
+                      <span className="font-semibold">${totals.itemsTotal.toLocaleString()}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-600">Yetkazib beruvchi:</span>
-                      <span className="font-semibold ml-2">{selectedShipment.supplier_company}</span>
+                    <div className="flex justify-between text-sm">
+                      <span>Taqsimlangan xarajatlar:</span>
+                      <span className="font-semibold">${totals.allocatedCosts.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold border-t pt-2">
+                      <span>Jami:</span>
+                      <span>${totals.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </CardContent>
               </Card>
+            )}
 
-              {/* Distributions */}
-              {distributions.map((dist, distIndex) => (
-                <Card key={distIndex}>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Taqsimlash #{distIndex + 1}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Kompaniya</Label>
-                        <Select
-                          value={dist.company_id}
-                          onValueChange={(v) => updateDistribution(distIndex, 'company_id', v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Tanlang" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {companies.map(c => (
-                              <SelectItem key={c.id} value={c.id.toString()}>
-                                {c.company_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Turi</Label>
-                        <Select
-                          value={dist.company_type}
-                          onValueChange={(v) => updateDistribution(distIndex, 'company_type', v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="B2B">B2B</SelectItem>
-                            <SelectItem value="B2C">B2C</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {dist.items.length > 0 && (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Tovar</TableHead>
-                            <TableHead>Miqdor</TableHead>
-                            <TableHead>Narx</TableHead>
-                            <TableHead>Jami</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {dist.items.map((item, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{item.item_name}</TableCell>
-                              <TableCell>{item.quantity}</TableCell>
-                              <TableCell>${item.unit_price}</TableCell>
-                              <TableCell>${((item.quantity * item.unit_price) + item.allocated_cost).toFixed(2)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-
-                    <div className="text-right font-semibold">
-                      Jami: ${calculateDistributionTotal(dist).toFixed(2)}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={addDistribution}
-                  className="flex-1"
-                >
-                  <Building2 className="w-4 h-4 mr-2" />
-                  {t('add_company') || 'Kompaniya qo\'shish'}
-                </Button>
-                <Button
-                  onClick={handleSubmitDistribution}
-                  disabled={distributions.length === 0}
-                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  {t('complete_distribution') || 'Taqsimlashni tugatish'}
-                </Button>
-              </div>
+            {/* Notes */}
+            <div>
+              <Label className="flex items-center gap-2">
+                Izoh
+                <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+              </Label>
+              <Input
+                placeholder="Qo'shimcha ma'lumot kiriting..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </div>
-          )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowDistributionModal(false)}
+                className="flex-1"
+              >
+                Bekor qilish
+              </Button>
+              <Button
+                onClick={handleSubmitDistribution}
+                disabled={!recipientCompanyName || selectedItems.length === 0}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white"
+              >
+                Taqsimlashni tasdiqlash
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
