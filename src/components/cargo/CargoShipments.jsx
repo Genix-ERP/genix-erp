@@ -326,41 +326,56 @@ export default function CargoShipments() {
             {/* Items Section */}
             <div>
               <Label className="text-lg font-semibold">{t('goods_list') || 'Tovarlar ro\'yxati'}</Label>
+              <p className="text-sm text-slate-500 mt-1 mb-3">Yukdagi har bir tovar turini qo'shing (masalan: iPhone 15, Samsung TV, va h.k.)</p>
 
               {/* Add Item Form */}
               <Card className="mt-2 bg-slate-50">
                 <CardContent className="p-4">
                   <div className="grid grid-cols-5 gap-3 mb-3">
-                    <Input
-                      placeholder="Tovar nomi"
-                      value={currentItem.name}
-                      onChange={(e) => setCurrentItem({...currentItem, name: e.target.value})}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Miqdor"
-                      value={currentItem.quantity}
-                      onChange={(e) => setCurrentItem({...currentItem, quantity: Number(e.target.value)})}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Narx"
-                      value={currentItem.price}
-                      onChange={(e) => setCurrentItem({...currentItem, price: Number(e.target.value)})}
-                    />
-                    <Select value={currentItem.currency} onValueChange={(v) => setCurrentItem({...currentItem, currency: v})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="UZS">UZS</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button onClick={handleAddItem} size="sm">
-                      <Plus className="w-4 h-4 mr-1" />
-                      Qo'shish
-                    </Button>
+                    <div>
+                      <Label className="text-xs text-slate-600 mb-1">Tovar nomi *</Label>
+                      <Input
+                        placeholder="iPhone 15 Pro Max"
+                        value={currentItem.name}
+                        onChange={(e) => setCurrentItem({...currentItem, name: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600 mb-1">Miqdori *</Label>
+                      <Input
+                        type="number"
+                        placeholder="10"
+                        value={currentItem.quantity}
+                        onChange={(e) => setCurrentItem({...currentItem, quantity: Number(e.target.value)})}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600 mb-1">Birlik narxi *</Label>
+                      <Input
+                        type="number"
+                        placeholder="1200"
+                        value={currentItem.price}
+                        onChange={(e) => setCurrentItem({...currentItem, price: Number(e.target.value)})}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600 mb-1">Valyuta</Label>
+                      <Select value={currentItem.currency} onValueChange={(v) => setCurrentItem({...currentItem, currency: v})}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="USD">USD</SelectItem>
+                          <SelectItem value="UZS">UZS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end">
+                      <Button onClick={handleAddItem} size="sm" className="w-full">
+                        <Plus className="w-4 h-4 mr-1" />
+                        Qo'shish
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Items Table */}
@@ -399,11 +414,16 @@ export default function CargoShipments() {
             {/* Costs Section */}
             <div>
               <Label className="text-lg font-semibold">{t('costs') || 'Xarajatlar'}</Label>
+              <p className="text-sm text-slate-500 mt-1 mb-3">Yuk tashish bilan bog'liq barcha xarajatlarni kiriting (USD hisobida)</p>
               <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
-                  <Label>{t('transport_cost') || 'Transport xarajati'}</Label>
+                  <Label className="flex items-center gap-2">
+                    {t('transport_cost') || 'Transport xarajati'}
+                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                  </Label>
                   <Input
                     type="number"
+                    placeholder="5000"
                     value={formData.costs.transport}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -412,9 +432,13 @@ export default function CargoShipments() {
                   />
                 </div>
                 <div>
-                  <Label>{t('customs_cost') || 'Bojxona to\'lovi'}</Label>
+                  <Label className="flex items-center gap-2">
+                    {t('customs_cost') || 'Bojxona to\'lovi'}
+                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                  </Label>
                   <Input
                     type="number"
+                    placeholder="1200"
                     value={formData.costs.customs}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -423,9 +447,13 @@ export default function CargoShipments() {
                   />
                 </div>
                 <div>
-                  <Label>{t('insurance_cost') || 'Sug\'urta'}</Label>
+                  <Label className="flex items-center gap-2">
+                    {t('insurance_cost') || 'Sug\'urta'}
+                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                  </Label>
                   <Input
                     type="number"
+                    placeholder="800"
                     value={formData.costs.insurance}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -434,9 +462,13 @@ export default function CargoShipments() {
                   />
                 </div>
                 <div>
-                  <Label>{t('other_cost') || 'Boshqa xarajatlar'}</Label>
+                  <Label className="flex items-center gap-2">
+                    {t('other_cost') || 'Boshqa xarajatlar'}
+                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                  </Label>
                   <Input
                     type="number"
+                    placeholder="500"
                     value={formData.costs.other}
                     onChange={(e) => setFormData({
                       ...formData,
