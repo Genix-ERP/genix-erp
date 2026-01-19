@@ -285,15 +285,7 @@ function LayoutContent({ children, currentPageName }) {
     // Add Workflows, Apps, Settings (excluding AI Assistant for now)
     dynamicItems.push(...coreNavigationItems.slice(1, 4));
 
-    // Add Admin Settings right after Settings if user is admin or owner
-    if (isSiteAdmin() || isOwner()) {
-      dynamicItems.push({
-        title: t("admin_settings") || "Admin Settings",
-        url: createPageUrl("AdminSettings"),
-        icon: Cog,
-        badge: null
-      });
-    }
+    // Note: Admin Settings removed - "Settings" now opens AdminSettings directly
 
     // Add Admin Panel if user is site admin
     if (isSiteAdmin()) {
@@ -423,9 +415,7 @@ function LayoutContent({ children, currentPageName }) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block space-y-2">
-            {/* Company Switcher - Like Odoo */}
-            <CompanySwitcher />
+          <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block">
             {/* User Menu */}
             <UserMenu />
           </SidebarFooter>
@@ -446,6 +436,10 @@ function LayoutContent({ children, currentPageName }) {
                 </div>
               </div>
               <div className="flex items-center gap-2 md:gap-3">
+                {/* Company Switcher - Like Odoo in navbar */}
+                <div className="hidden md:block">
+                  <CompanySwitcher />
+                </div>
                 <LanguageSelector />
                 <Button
                   variant="ghost"

@@ -546,7 +546,11 @@ export default function AdminPanel() {
                                   </div>
                                   <div>
                                     <p className="font-medium">{user.full_name}</p>
-                                    <p className="text-xs text-slate-500">{format(new Date(user.created_date), 'MMM dd, yyyy')}</p>
+                                    {user.created_date && (
+                                      <p className="text-xs text-slate-500">
+                                        {format(new Date(user.created_date), 'MMM dd, yyyy')}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                               </TableCell>
@@ -583,9 +587,11 @@ export default function AdminPanel() {
                                     <p className={subInfo.isExpiring ? 'text-orange-600 font-semibold' : 'text-slate-600'}>
                                       {subInfo.daysRemaining > 0 ? `${subInfo.daysRemaining} days left` : 'Expired'}
                                     </p>
-                                    <p className="text-xs text-slate-500">
-                                      Ends: {format(parseISO(user.trial_end_date || user.subscription_end_date), 'MMM dd, yyyy')}
-                                    </p>
+                                    {(user.trial_end_date || user.subscription_end_date) && (
+                                      <p className="text-xs text-slate-500">
+                                        Ends: {format(parseISO(user.trial_end_date || user.subscription_end_date), 'MMM dd, yyyy')}
+                                      </p>
+                                    )}
                                   </div>
                                 ) : (
                                   <span className="text-xs text-slate-500">No expiry</span>
