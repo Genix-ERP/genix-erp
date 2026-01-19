@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useCompany } from './CompanyContext';
+import { cargoService } from '@/api/services/cargo';
 
 const CargoContext = createContext();
 
@@ -28,31 +29,85 @@ export const CargoProvider = ({ children }) => {
   // Company accounts (B2B/B2C companies)
   const [companyAccounts, setCompanyAccounts] = useState([]);
 
-  // Storage keys
+  // Storage keys (for localStorage fallback)
   const STORAGE_KEYS = {
     shipments: `genix_cargo_shipments_${activeCompany?.id}`,
     cash: `genix_cargo_cash_${activeCompany?.id}`,
     accounts: `genix_cargo_accounts_${activeCompany?.id}`
   };
 
-  // Load data from localStorage
+  // Use backend API (true) or localStorage (false)
+  const [useBackend, setUseBackend] = useState(true);
+
+  // Load data from backend or localStorage
   useEffect(() => {
     if (!activeCompany?.id) return;
 
-    try {
-      const savedShipments = localStorage.getItem(STORAGE_KEYS.shipments);
-      const savedCash = localStorage.getItem(STORAGE_KEYS.cash);
-      const savedAccounts = localStorage.getItem(STORAGE_KEYS.accounts);
-
-      if (savedShipments) setShipments(JSON.parse(savedShipments));
-      if (savedCash) setCargoCash(JSON.parse(savedCash));
-      if (savedAccounts) setCompanyAccounts(JSON.parse(savedAccounts));
-    } catch (error) {
-      console.error('Error loading cargo data:', error);
-    }
+    loadShipments();
+    loadCashSummary();
   }, [activeCompany?.id]);
 
-  // Save to localStorage
+  // Load shipments
+  const loadShipments = async () => {
+    if (!useBackend) {
+      // Load from localStorage
+      try {
+        const saved = localStorage.getItem(STORAGE_KEYS.shipments);
+        if (saved) setShipments(JSON.parse(saved));
+      } catch (error) {
+        console.error('Error loading shipments from localStorage:', error);
+      }
+      return;
+    }
+
+    // Load from backend
+    try {
+      setLoading(true);
+      const data = await cargoService.listShipments();
+      setShipments(data || []);
+    } catch (error) {
+      console.error('Error loading shipments from backend:', error);
+      // Fallback to localStorage
+      setUseBackend(false);
+      const saved = localStorage.getItem(STORAGE_KEYS.shipments);
+      if (saved) setShipments(JSON.parse(saved));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load cash summary
+  const loadCashSummary = async () => {
+    if (!useBackend) {
+      // Load from localStorage
+      try {
+        const savedCash = localStorage.getItem(STORAGE_KEYS.cash);
+        const savedAccounts = localStorage.getItem(STORAGE_KEYS.accounts);
+        if (savedCash) setCargoCash(JSON.parse(savedCash));
+        if (savedAccounts) setCompanyAccounts(JSON.parse(savedAccounts));
+      } catch (error) {
+        console.error('Error loading cash from localStorage:', error);
+      }
+      return;
+    }
+
+    // Load from backend
+    try {
+      const data = await cargoService.getCashSummary();
+      setCargoCash({
+        uzs_balance: data.uzs_balance || 0,
+        usd_balance: data.usd_balance || 0,
+        transactions: data.transactions || []
+      });
+    } catch (error) {
+      console.error('Error loading cash summary from backend:', error);
+      // Fallback to localStorage
+      const savedCash = localStorage.getItem(STORAGE_KEYS.cash);
+      if (savedCash) setCargoCash(JSON.parse(savedCash));
+    }
+  };
+
+  // Save to localStorage (fallback)
   const saveToStorage = useCallback((key, data) => {
     try {
       localStorage.setItem(key, JSON.stringify(data));
@@ -79,49 +134,74 @@ export const CargoProvider = ({ children }) => {
   };
 
   // Create new shipment
-  const createShipment = useCallback((shipmentData) => {
-    const newShipment = {
-      id: Date.now(),
-      ...shipmentData,
-      status: SHIPMENT_STATUS.ORDERED,
-      created_date: new Date().toISOString(),
-      status_history: [{
+  const createShipment = useCallback(async (shipmentData) => {
+    if (!useBackend) {
+      // Create locally
+      const newShipment = {
+        id: Date.now(),
+        ...shipmentData,
         status: SHIPMENT_STATUS.ORDERED,
-        date: new Date().toISOString(),
-        note: 'Shipment created'
-      }]
-    };
+        created_date: new Date().toISOString(),
+        status_history: [{
+          status: SHIPMENT_STATUS.ORDERED,
+          date: new Date().toISOString(),
+          note: 'Shipment created'
+        }]
+      };
 
-    const updatedShipments = [...shipments, newShipment];
-    setShipments(updatedShipments);
-    saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      const updatedShipments = [...shipments, newShipment];
+      setShipments(updatedShipments);
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      return newShipment;
+    }
 
-    return newShipment;
-  }, [shipments, saveToStorage, STORAGE_KEYS.shipments]);
+    // Create via backend
+    try {
+      const result = await cargoService.createShipment(shipmentData);
+      await loadShipments(); // Reload to get full data
+      return result;
+    } catch (error) {
+      console.error('Error creating shipment:', error);
+      throw error;
+    }
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
 
   // Update shipment status
-  const updateShipmentStatus = useCallback((shipmentId, newStatus, note = '') => {
-    const updatedShipments = shipments.map(s => {
-      if (s.id === shipmentId) {
-        return {
-          ...s,
-          status: newStatus,
-          status_history: [
-            ...s.status_history,
-            {
-              status: newStatus,
-              date: new Date().toISOString(),
-              note
-            }
-          ]
-        };
-      }
-      return s;
-    });
+  const updateShipmentStatus = useCallback(async (shipmentId, newStatus, note = '') => {
+    if (!useBackend) {
+      // Update locally
+      const updatedShipments = shipments.map(s => {
+        if (s.id === shipmentId) {
+          return {
+            ...s,
+            status: newStatus,
+            status_history: [
+              ...s.status_history,
+              {
+                status: newStatus,
+                date: new Date().toISOString(),
+                note
+              }
+            ]
+          };
+        }
+        return s;
+      });
 
-    setShipments(updatedShipments);
-    saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-  }, [shipments, saveToStorage, STORAGE_KEYS.shipments]);
+      setShipments(updatedShipments);
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      return;
+    }
+
+    // Update via backend
+    try {
+      await cargoService.updateShipmentStatus(shipmentId, { status: newStatus, note });
+      await loadShipments();
+    } catch (error) {
+      console.error('Error updating shipment status:', error);
+      throw error;
+    }
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
 
   // Update shipment
   const updateShipment = useCallback((shipmentId, updates) => {
@@ -129,118 +209,165 @@ export const CargoProvider = ({ children }) => {
       s.id === shipmentId ? { ...s, ...updates } : s
     );
     setShipments(updatedShipments);
-    saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-  }, [shipments, saveToStorage, STORAGE_KEYS.shipments]);
+    if (!useBackend) {
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+    }
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
 
   // Delete shipment
-  const deleteShipment = useCallback((shipmentId) => {
-    const updatedShipments = shipments.filter(s => s.id !== shipmentId);
-    setShipments(updatedShipments);
-    saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-  }, [shipments, saveToStorage, STORAGE_KEYS.shipments]);
+  const deleteShipment = useCallback(async (shipmentId) => {
+    if (!useBackend) {
+      // Delete locally
+      const updatedShipments = shipments.filter(s => s.id !== shipmentId);
+      setShipments(updatedShipments);
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      return;
+    }
+
+    // Delete via backend
+    try {
+      await cargoService.deleteShipment(shipmentId);
+      await loadShipments();
+    } catch (error) {
+      console.error('Error deleting shipment:', error);
+      throw error;
+    }
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
 
   // Distribute goods to B2B/B2C
-  const distributeGoods = useCallback((shipmentId, distribution) => {
+  const distributeGoods = useCallback(async (shipmentId, distribution) => {
     const shipment = shipments.find(s => s.id === shipmentId);
     if (!shipment) return;
 
-    // Update shipment with distribution info
-    updateShipment(shipmentId, {
-      distribution,
-      status: SHIPMENT_STATUS.DISTRIBUTED
-    });
+    if (!useBackend) {
+      // Distribute locally
+      updateShipment(shipmentId, {
+        distribution,
+        status: SHIPMENT_STATUS.DISTRIBUTED
+      });
 
-    // Update company accounts
-    distribution.forEach(dist => {
-      const existingAccount = companyAccounts.find(a => a.company_id === dist.company_id);
-      const totalCost = dist.total_cost || 0;
+      // Update company accounts
+      distribution.forEach(dist => {
+        const existingAccount = companyAccounts.find(a => a.company_id === dist.company_id);
+        const totalCost = dist.total_cost || 0;
 
-      if (existingAccount) {
-        const updatedAccounts = companyAccounts.map(a => {
-          if (a.company_id === dist.company_id) {
-            return {
-              ...a,
-              debt: (a.debt || 0) + totalCost,
-              balance: (a.balance || 0) - totalCost
-            };
+        if (existingAccount) {
+          const updatedAccounts = companyAccounts.map(a => {
+            if (a.company_id === dist.company_id) {
+              return {
+                ...a,
+                debt: (a.debt || 0) + totalCost,
+                balance: (a.balance || 0) - totalCost
+              };
+            }
+            return a;
+          });
+          setCompanyAccounts(updatedAccounts);
+          saveToStorage(STORAGE_KEYS.accounts, updatedAccounts);
+        } else {
+          const newAccount = {
+            company_id: dist.company_id,
+            company_name: dist.company_name,
+            company_type: dist.company_type,
+            debt: totalCost,
+            credit: 0,
+            balance: -totalCost,
+            created_date: new Date().toISOString()
+          };
+          const updatedAccounts = [...companyAccounts, newAccount];
+          setCompanyAccounts(updatedAccounts);
+          saveToStorage(STORAGE_KEYS.accounts, updatedAccounts);
+        }
+      });
+      return;
+    }
+
+    // Distribute via backend
+    try {
+      await cargoService.createDistribution(shipmentId, distribution[0]); // Backend expects single distribution
+      await loadShipments();
+    } catch (error) {
+      console.error('Error creating distribution:', error);
+      throw error;
+    }
+  }, [shipments, companyAccounts, updateShipment, useBackend, saveToStorage, STORAGE_KEYS.accounts]);
+
+  // Add cash transaction
+  const addCashTransaction = useCallback(async (transaction) => {
+    const { type, amount, currency, category, description, company_id } = transaction;
+
+    if (!useBackend) {
+      // Add locally
+      const newTransaction = {
+        id: Date.now(),
+        type,
+        amount,
+        currency,
+        category,
+        description,
+        company_id,
+        date: new Date().toISOString()
+      };
+
+      // Update balance
+      const updatedCash = { ...cargoCash };
+      const balanceKey = currency === 'USD' ? 'usd_balance' : 'uzs_balance';
+
+      if (type === 'income') {
+        updatedCash[balanceKey] += amount;
+      } else {
+        updatedCash[balanceKey] -= amount;
+      }
+
+      updatedCash.transactions = [...(cargoCash.transactions || []), newTransaction];
+
+      setCargoCash(updatedCash);
+      saveToStorage(STORAGE_KEYS.cash, updatedCash);
+
+      // Update company account if applicable
+      if (company_id) {
+        const updatedAccounts = companyAccounts.map(acc => {
+          if (acc.company_id === company_id) {
+            if (type === 'income') {
+              return {
+                ...acc,
+                credit: (acc.credit || 0) + amount,
+                balance: (acc.balance || 0) + amount
+              };
+            } else {
+              return {
+                ...acc,
+                debt: (acc.debt || 0) + amount,
+                balance: (acc.balance || 0) - amount
+              };
+            }
           }
-          return a;
+          return acc;
         });
         setCompanyAccounts(updatedAccounts);
         saveToStorage(STORAGE_KEYS.accounts, updatedAccounts);
-      } else {
-        const newAccount = {
-          company_id: dist.company_id,
-          company_name: dist.company_name,
-          company_type: dist.company_type,
-          debt: totalCost,
-          credit: 0,
-          balance: -totalCost,
-          created_date: new Date().toISOString()
-        };
-        const updatedAccounts = [...companyAccounts, newAccount];
-        setCompanyAccounts(updatedAccounts);
-        saveToStorage(STORAGE_KEYS.accounts, updatedAccounts);
       }
-    });
-  }, [shipments, companyAccounts, updateShipment, saveToStorage, STORAGE_KEYS.accounts]);
 
-  // Add cash transaction
-  const addCashTransaction = useCallback((transaction) => {
-    const { type, amount, currency, category, description, company_id } = transaction;
-
-    const newTransaction = {
-      id: Date.now(),
-      type, // 'income' or 'expense'
-      amount,
-      currency,
-      category,
-      description,
-      company_id,
-      date: new Date().toISOString()
-    };
-
-    // Update balance
-    const updatedCash = { ...cargoCash };
-    const balanceKey = currency === 'USD' ? 'usd_balance' : 'uzs_balance';
-
-    if (type === 'income') {
-      updatedCash[balanceKey] += amount;
-    } else {
-      updatedCash[balanceKey] -= amount;
+      return newTransaction;
     }
 
-    updatedCash.transactions = [...(cargoCash.transactions || []), newTransaction];
-
-    setCargoCash(updatedCash);
-    saveToStorage(STORAGE_KEYS.cash, updatedCash);
-
-    // Update company account if applicable
-    if (company_id) {
-      const updatedAccounts = companyAccounts.map(acc => {
-        if (acc.company_id === company_id) {
-          if (type === 'income') {
-            return {
-              ...acc,
-              credit: (acc.credit || 0) + amount,
-              balance: (acc.balance || 0) + amount
-            };
-          } else {
-            return {
-              ...acc,
-              debt: (acc.debt || 0) + amount,
-              balance: (acc.balance || 0) - amount
-            };
-          }
-        }
-        return acc;
+    // Add via backend
+    try {
+      const result = await cargoService.createCashTransaction({
+        transaction_type: type,
+        amount,
+        currency,
+        category,
+        description,
+        related_company_id: company_id
       });
-      setCompanyAccounts(updatedAccounts);
-      saveToStorage(STORAGE_KEYS.accounts, updatedAccounts);
+      await loadCashSummary();
+      return result;
+    } catch (error) {
+      console.error('Error creating cash transaction:', error);
+      throw error;
     }
-
-    return newTransaction;
-  }, [cargoCash, companyAccounts, saveToStorage, STORAGE_KEYS.cash, STORAGE_KEYS.accounts]);
+  }, [cargoCash, companyAccounts, useBackend, saveToStorage, STORAGE_KEYS.cash, STORAGE_KEYS.accounts]);
 
   // Get shipments by status
   const getShipmentsByStatus = useCallback((status) => {
@@ -289,6 +416,10 @@ export const CargoProvider = ({ children }) => {
     getShipmentsByStatus,
     calculateShipmentCosts,
     calculateCostCoefficient,
+
+    // Refresh methods
+    loadShipments,
+    loadCashSummary,
 
     // Helpers
     setLoading
