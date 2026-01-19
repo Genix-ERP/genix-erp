@@ -625,35 +625,6 @@ Only return the JSON, no other text.`;
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('hr_title')}</h1>
-            <p className="text-slate-600 mt-2">{t('hr_subtitle')}</p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            {isAssessingRisk && (
-              <Badge className="bg-purple-100 text-purple-700 border-purple-200 animate-pulse">
-                <Brain className="w-3 h-3 mr-1" />
-                AI Assessing Risk...
-              </Badge>
-            )}
-            <ImportExportButtons
-              onImport={() => setShowImportModal(true)}
-              onExport={() => setShowExportModal(true)}
-            />
-            {canCreate(MODULES.HR) && (
-              <Button
-                onClick={() => setShowAddModal(true)}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('add_employee')}
-              </Button>
-            )}
-          </div>
-        </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

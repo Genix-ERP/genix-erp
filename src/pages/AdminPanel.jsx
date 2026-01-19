@@ -27,7 +27,7 @@ import PermissionsManagement from '@/components/admin/PermissionsManagement';
 export default function AdminPanel() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isSiteAdmin } = useAuth();
   const {
     companyUsers,
     subscription,
@@ -99,7 +99,7 @@ export default function AdminPanel() {
 
   const loadData = async () => {
     try {
-      if (currentUser?.role !== 'admin' && currentUser?.role !== 'system_admin') {
+      if (!isSiteAdmin()) {
         navigate('/');
         return;
       }

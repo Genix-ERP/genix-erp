@@ -27,7 +27,8 @@ import {
   Download,
   Upload,
   Loader2,
-  Info
+  Info,
+  Crown
 } from 'lucide-react';
 
 // Import settings components
@@ -40,11 +41,15 @@ import ManufacturingSettings from '@/components/admin-settings/ManufacturingSett
 import HRSettings from '@/components/admin-settings/HRSettings';
 import FinanceSettings from '@/components/admin-settings/FinanceSettings';
 import ProjectSettings from '@/components/admin-settings/ProjectSettings';
+import CompanySettings from '@/components/settings/CompanySettings';
+import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 
 // Map settings sections to app IDs
 // 'general' is always shown, others depend on installed apps
 const SECTIONS = [
   { id: 'general', icon: Building2, label: 'general_settings', component: GeneralSettings, appIds: null }, // null = always show
+  { id: 'companies', icon: Building2, label: 'companies', component: CompanySettings, appIds: null },
+  { id: 'subscription', icon: Crown, label: 'subscription', component: SubscriptionSettings, appIds: null },
   { id: 'crm', icon: Target, label: 'crm_settings', component: CRMSettings, appIds: ['crm'] },
   { id: 'sales', icon: ShoppingCart, label: 'sales_settings', component: SalesSettings, appIds: ['sales_orders'] },
   { id: 'inventory', icon: Package, label: 'inventory_settings', component: InventorySettings, appIds: ['inventory'] },

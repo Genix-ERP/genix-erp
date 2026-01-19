@@ -9,6 +9,7 @@ import HR from "./HR";
 import Apps from "./Apps";
 import Customers from "./Customers";
 import Settings from "./Settings";
+import MySettings from "./MySettings";
 import Financials from "./Financials";
 import Notifications from "./Notifications";
 import AdminPanel from "./AdminPanel";
@@ -40,6 +41,7 @@ const PAGES = {
     Apps: Apps,
     Customers: Customers,
     Settings: Settings,
+    MySettings: MySettings,
     Financials: Financials,
     Notifications: Notifications,
     AdminPanel: AdminPanel,
@@ -119,6 +121,7 @@ function PagesContent() {
                                 <Route path="/apps" element={<Apps />} />
                                 <Route path="/customers" element={<Customers />} />
                                 <Route path="/settings" element={<Settings />} />
+                                <Route path="/my-settings" element={<MySettings />} />
                                 <Route path="/financials" element={<Financials />} />
                                 <Route path="/notifications" element={<Notifications />} />
                                 <Route path="/adminpanel" element={<AdminPanel />} />

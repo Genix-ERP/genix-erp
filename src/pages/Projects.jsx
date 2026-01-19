@@ -353,19 +353,6 @@ export default function Projects() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 md:p-8 rounded-2xl text-white shadow-xl">
-          <div className="flex items-center gap-3 mb-4">
-            <Briefcase className="w-8 h-8" />
-            <h1 className="text-2xl md:text-3xl font-bold">{t('project_management')}</h1>
-            <Badge className="bg-white/20 text-white border-white/30">
-              <Brain className="w-3 h-3 mr-1" />
-              {t('ai_powered')}
-            </Badge>
-          </div>
-          <p className="text-white/90">{t('project_management_subtitle')}</p>
-        </div>
-
         {/* Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="bg-white/80 backdrop-blur-sm">
