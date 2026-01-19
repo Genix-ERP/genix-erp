@@ -57,6 +57,7 @@ export default function CargoShipments() {
   });
 
   const [showExcelImport, setShowExcelImport] = useState(false);
+  const [showExtraFields, setShowExtraFields] = useState(false);
 
   // Countries list
   const countries = [
@@ -431,7 +432,8 @@ export default function CargoShipments() {
               {/* Add Item Form */}
               <Card className="mt-2 bg-slate-50">
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-6 gap-3 mb-3">
+                  {/* Main Fields */}
+                  <div className="grid grid-cols-5 gap-3 mb-3">
                     <div>
                       <Label className="text-xs text-slate-600 mb-1">Tovar nomi *</Label>
                       <Input
@@ -470,17 +472,6 @@ export default function CargoShipments() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <Label className="text-xs text-slate-600 mb-1">
-                        IMEI/Serial
-                        <span className="text-slate-400 ml-1">(ixtiyoriy)</span>
-                      </Label>
-                      <Input
-                        placeholder="352099001761481"
-                        value={currentItem.imei}
-                        onChange={(e) => setCurrentItem({...currentItem, imei: e.target.value})}
-                      />
-                    </div>
                     <div className="flex items-end">
                       <Button onClick={handleAddItem} size="sm" className="w-full">
                         <Plus className="w-4 h-4 mr-1" />
@@ -488,6 +479,43 @@ export default function CargoShipments() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Expandable Extra Fields */}
+                  {showExtraFields && (
+                    <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-white rounded-lg border border-slate-200">
+                      <div>
+                        <Label className="text-xs text-slate-600 mb-1">
+                          IMEI/Serial
+                          <span className="text-slate-400 ml-1">(ixtiyoriy)</span>
+                        </Label>
+                        <Input
+                          placeholder="352099001761481"
+                          value={currentItem.imei}
+                          onChange={(e) => setCurrentItem({...currentItem, imei: e.target.value})}
+                        />
+                      </div>
+                      {/* Add more extra fields here if needed */}
+                    </div>
+                  )}
+
+                  {/* Toggle Extra Fields Button */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowExtraFields(!showExtraFields)}
+                    className="text-xs text-slate-600 hover:text-slate-900"
+                  >
+                    {showExtraFields ? (
+                      <>
+                        <span className="mr-1">▼</span> Qo'shimcha maydonlarni yashirish
+                      </>
+                    ) : (
+                      <>
+                        <span className="mr-1">▶</span> Qo'shimcha maydonlar (IMEI, Serial, va h.k.)
+                      </>
+                    )}
+                  </Button>
 
                   {/* Items Table */}
                   {formData.items.length > 0 && (
