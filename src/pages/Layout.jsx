@@ -24,7 +24,8 @@ import {
   FileText,
   Shield,
   LogOut,
-  Cog
+  Cog,
+  Ship
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,7 @@ import { ManufacturingProvider } from "@/components/contexts/ManufacturingContex
 import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
 import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
+import { CargoProvider } from "@/components/contexts/CargoContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
@@ -231,6 +233,12 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Contracts"),
       icon: FileText,
       badge: null
+    },
+    'cargo': {
+      title: t("cargo") || 'Cargo',
+      url: createPageUrl("Cargo"),
+      icon: Ship,
+      badge: null
     }
   };
 
@@ -380,39 +388,6 @@ function LayoutContent({ children, currentPageName }) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-
-            <SidebarGroup className="mt-8 hidden md:block">
-              <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-2">
-                {t("ai_insights") || "AI Insights"}
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <div className="px-3 py-4 bg-gradient-to-br from-[var(--genix-blue)]/5 via-[var(--genix-purple)]/5 to-[var(--genix-blue)]/5 rounded-xl border border-[var(--genix-blue)]/10">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <div className={`w-2 h-2 ${dynamicInsights.revenueGrowth >= 0 ? 'bg-[var(--genix-green)]' : 'bg-red-500'} rounded-full animate-pulse`}></div>
-                      <span className="text-slate-600 text-xs">
-                        {t("revenue")} {dynamicInsights.revenueGrowth >= 0 ? '+' : ''}{dynamicInsights.revenueGrowth}%
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <div className={`w-2 h-2 ${dynamicInsights.lowStockCount > 0 ? 'bg-[var(--genix-orange)]' : 'bg-[var(--genix-green)]'} rounded-full`}></div>
-                      <span className="text-slate-600 text-xs">
-                        {dynamicInsights.lowStockCount > 0
-                          ? `${dynamicInsights.lowStockCount} ${t("low_stock_items").toLowerCase()}`
-                          : 'Stock levels OK'
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <div className="w-2 h-2 bg-[var(--genix-blue)] rounded-full"></div>
-                      <span className="text-slate-600 text-xs">
-                        {dynamicInsights.activeOrders} active orders
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </SidebarGroupContent>
-            </SidebarGroup>
           </SidebarContent>
 
           <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block">
@@ -503,9 +478,11 @@ export default function Layout({ children, currentPageName }) {
                             <ManufacturingProvider>
                               <HRProvider>
                                 <ProjectsProvider>
-                                  <AIProvider>
-                                    <LayoutContent children={children} currentPageName={currentPageName} />
-                                  </AIProvider>
+                                  <CargoProvider>
+                                    <AIProvider>
+                                      <LayoutContent children={children} currentPageName={currentPageName} />
+                                    </AIProvider>
+                                  </CargoProvider>
                                 </ProjectsProvider>
                               </HRProvider>
                             </ManufacturingProvider>

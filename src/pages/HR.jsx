@@ -634,10 +634,10 @@ Only return the JSON, no other text.`;
           <Card><CardContent className="p-6"><div className="flex justify-between items-center"><TrendingUp className="w-8 h-8 text-purple-600" /><div><p className="text-2xl font-bold">{metrics.avgPerformance}/5</p><p className="text-sm text-slate-500">{t('avg_performance')}</p></div></div></CardContent></Card>
         </div>
 
-        {/* Filters */}
+        {/* Filters and Actions */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex gap-4">
+            <div className="flex flex-col md:flex-row gap-4">
               <Input placeholder={t('search_employees_placeholder')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="flex-1" />
               <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
                 <SelectTrigger className="w-48"><SelectValue placeholder={t('all_departments')}/></SelectTrigger>
@@ -659,6 +659,21 @@ Only return the JSON, no other text.`;
                   <SelectItem value="terminated">{t('terminated')}</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="flex gap-2">
+                {canCreate(MODULES.HR) && (
+                  <Button
+                    onClick={() => setShowAddModal(true)}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('add_employee') || 'Xodim qo\'shish'}
+                  </Button>
+                )}
+                <ImportExportButtons
+                  onImport={() => setShowImportModal(true)}
+                  onExport={() => setShowExportModal(true)}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
