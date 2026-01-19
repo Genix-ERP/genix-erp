@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Pencil, Trash2, Ship, Plane, Truck, Train, Globe
+  Plus, Search, Eye, Pencil, Trash2, Ship, Plane, Truck, Train, Globe, Upload, FileSpreadsheet, Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { format } from 'date-fns';
@@ -51,8 +52,11 @@ export default function CargoShipments() {
     name: '',
     quantity: 0,
     price: 0,
-    currency: 'USD'
+    currency: 'USD',
+    imei: '' // IMEI or serial number
   });
+
+  const [showExcelImport, setShowExcelImport] = useState(false);
 
   // Countries list
   const countries = [
@@ -105,7 +109,7 @@ export default function CargoShipments() {
       items: [...formData.items, newItem]
     });
 
-    setCurrentItem({ name: '', quantity: 0, price: 0, currency: 'USD' });
+    setCurrentItem({ name: '', quantity: 0, price: 0, currency: 'USD', imei: '' });
   };
 
   // Remove item
@@ -146,6 +150,91 @@ export default function CargoShipments() {
     });
   };
 
+  // Download Excel template
+  const downloadExcelTemplate = () => {
+    const template = [
+      {
+        'Tracking Raqami': 'ABC123456789',
+        'Kompaniya': 'Samsung Electronics',
+        'Transport': 'air',
+        'Kutilayotgan Sana': '2024-02-15',
+        'Tovar Nomi': 'iPhone 15 Pro Max',
+        'Miqdor': 10,
+        'Birlik Narxi': 1200,
+        'Valyuta': 'USD',
+        'IMEI/Serial': '352099001761481',
+        'Transport Xarajati': 5000,
+        'Bojxona': 1200,
+        'Boshqa Xarajat': 500
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Yuklar');
+    XLSX.writeFile(wb, 'cargo_template.xlsx');
+  };
+
+  // Import from Excel
+  const handleExcelImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const workbook = XLSX.read(event.target.result, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
+
+        // Group rows by tracking number
+        const shipmentsMap = {};
+        data.forEach(row => {
+          const trackingNumber = row['Tracking Raqami'];
+          if (!trackingNumber) return;
+
+          if (!shipmentsMap[trackingNumber]) {
+            shipmentsMap[trackingNumber] = {
+              tracking_number: trackingNumber,
+              supplier_company: row['Kompaniya'] || '',
+              transport_type: row['Transport'] || 'air',
+              expected_date: row['Kutilayotgan Sana'] || '',
+              items: [],
+              costs: {
+                transport: Number(row['Transport Xarajati']) || 0,
+                customs: Number(row['Bojxona']) || 0,
+                other: Number(row['Boshqa Xarajat']) || 0
+              }
+            };
+          }
+
+          // Add item
+          shipmentsMap[trackingNumber].items.push({
+            name: row['Tovar Nomi'],
+            quantity: Number(row['Miqdor']),
+            price: Number(row['Birlik Narxi']),
+            currency: row['Valyuta'] || 'USD',
+            imei: row['IMEI/Serial'] || '',
+            total: Number(row['Miqdor']) * Number(row['Birlik Narxi'])
+          });
+        });
+
+        // Create shipments
+        Object.values(shipmentsMap).forEach(shipment => {
+          createShipment(shipment);
+        });
+
+        alert(`${Object.keys(shipmentsMap).length} ta yuk muvaffaqiyatli yuklandi!`);
+        e.target.value = ''; // Reset file input
+      } catch (error) {
+        console.error('Excel import error:', error);
+        alert('Excel faylini yuklashda xatolik yuz berdi');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   // Filter shipments
   const filteredShipments = shipments.filter(s =>
     s.tracking_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -167,6 +256,33 @@ export default function CargoShipments() {
                 className="pl-10"
               />
             </div>
+
+            {/* Excel Import Button */}
+            <input
+              type="file"
+              id="excel-import"
+              accept=".xlsx,.xls"
+              onChange={handleExcelImport}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById('excel-import').click()}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Excel yuklash
+            </Button>
+
+            {/* Download Template */}
+            <Button
+              variant="outline"
+              onClick={downloadExcelTemplate}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Shablon
+            </Button>
+
+            {/* New Shipment Button */}
             <Button
               onClick={() => setShowAddModal(true)}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -315,7 +431,7 @@ export default function CargoShipments() {
               {/* Add Item Form */}
               <Card className="mt-2 bg-slate-50">
                 <CardContent className="p-4">
-                  <div className="grid grid-cols-5 gap-3 mb-3">
+                  <div className="grid grid-cols-6 gap-3 mb-3">
                     <div>
                       <Label className="text-xs text-slate-600 mb-1">Tovar nomi *</Label>
                       <Input
@@ -353,6 +469,17 @@ export default function CargoShipments() {
                           <SelectItem value="UZS">UZS</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600 mb-1">
+                        IMEI/Serial
+                        <span className="text-slate-400 ml-1">(ixtiyoriy)</span>
+                      </Label>
+                      <Input
+                        placeholder="352099001761481"
+                        value={currentItem.imei}
+                        onChange={(e) => setCurrentItem({...currentItem, imei: e.target.value})}
+                      />
                     </div>
                     <div className="flex items-end">
                       <Button onClick={handleAddItem} size="sm" className="w-full">
