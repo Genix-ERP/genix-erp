@@ -55,12 +55,15 @@ export default function CargoDistribution() {
     const existing = selectedItems.find(i => i.shipment_item_id === shipmentItem.id);
     if (existing) return; // Already added
 
+    // Handle both 'price' (local) and 'unit_price' (backend) field names
+    const unitPrice = Number(shipmentItem.unit_price || shipmentItem.price || 0);
+
     setSelectedItems([...selectedItems, {
       shipment_item_id: shipmentItem.id,
-      item_name: shipmentItem.item_name,
-      available_quantity: shipmentItem.quantity,
+      item_name: shipmentItem.item_name || shipmentItem.name,
+      available_quantity: Number(shipmentItem.quantity || 0),
       quantity: 1,
-      unit_cost: shipmentItem.unit_price
+      unit_cost: unitPrice
     }]);
   };
 
@@ -79,9 +82,11 @@ export default function CargoDistribution() {
 
   // Calculate totals
   const calculateTotals = () => {
-    const itemsTotal = selectedItems.reduce((sum, item) =>
-      sum + (item.quantity * item.unit_cost), 0
-    );
+    const itemsTotal = selectedItems.reduce((sum, item) => {
+      const qty = Number(item.quantity) || 0;
+      const cost = Number(item.unit_cost) || 0;
+      return sum + (qty * cost);
+    }, 0);
 
     // Calculate allocated costs (proportional share of shipment costs)
     const shipmentCosts = selectedShipment ? calculateShipmentCosts(selectedShipment) : { total: 0 };
@@ -89,9 +94,9 @@ export default function CargoDistribution() {
     const allocatedCosts = itemsTotal * coefficient;
 
     return {
-      itemsTotal,
-      allocatedCosts,
-      total: itemsTotal + allocatedCosts
+      itemsTotal: Number(itemsTotal) || 0,
+      allocatedCosts: Number(allocatedCosts) || 0,
+      total: Number(itemsTotal + allocatedCosts) || 0
     };
   };
 
@@ -348,9 +353,9 @@ export default function CargoDistribution() {
                     {selectedShipment?.items?.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border">
                         <div className="flex-1">
-                          <div className="font-semibold">{item.item_name}</div>
+                          <div className="font-semibold">{item.item_name || item.name}</div>
                           <div className="text-sm text-slate-600">
-                            Miqdor: {item.quantity} | Narx: ${item.unit_price}
+                            Miqdor: {item.quantity} | Narx: ${item.unit_price || item.price || 0}
                           </div>
                         </div>
                         <Button
