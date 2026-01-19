@@ -190,7 +190,7 @@ export default function CashRegister() {
                 <p className="text-xs text-emerald-500 mt-1">{t('current_state') || 'Current state'}</p>
               </div>
               <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-                <PiggyBank className="w-7 h-7 text-emerald-600" />
+                <Wallet className="w-7 h-7 text-emerald-600" />
               </div>
             </div>
           </CardContent>
