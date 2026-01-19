@@ -351,7 +351,16 @@ export default function CargoShipments() {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-red-600">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600"
+                          onClick={() => {
+                            if (window.confirm('Bu yukni o\'chirmoqchimisiz?')) {
+                              deleteShipment(shipment.id);
+                            }
+                          }}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -634,6 +643,151 @@ export default function CargoShipments() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View/Edit Shipment Modal */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Yuk ma'lumotlari</DialogTitle>
+          </DialogHeader>
+
+          {selectedShipment && (
+            <div className="space-y-6">
+              {/* Shipment Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Asosiy ma'lumotlar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-slate-500">Tracking raqami</Label>
+                      <p className="font-semibold">{selectedShipment.tracking_number}</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Kompaniya</Label>
+                      <p className="font-semibold">{selectedShipment.supplier_company || '-'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Transport turi</Label>
+                      <div className="flex items-center gap-2">
+                        {getTransportIcon(selectedShipment.transport_type)}
+                        <span className="font-semibold">{selectedShipment.transport_type}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Kutilayotgan sana</Label>
+                      <p className="font-semibold">
+                        {selectedShipment.expected_date ? format(new Date(selectedShipment.expected_date), 'dd MMM yyyy') : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Holat</Label>
+                      <div className="mt-1">
+                        {getStatusBadge(selectedShipment.status)}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Items */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Tovarlar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nomi</TableHead>
+                        <TableHead>Miqdor</TableHead>
+                        <TableHead>Narx</TableHead>
+                        <TableHead>Jami</TableHead>
+                        <TableHead>IMEI/Serial</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedShipment.items?.map((item, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>{item.name || item.item_name}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{item.currency} {item.price || item.unit_price}</TableCell>
+                          <TableCell className="font-semibold">
+                            {item.currency} {((item.price || item.unit_price) * item.quantity).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                            {item.imei || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Costs */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Xarajatlar</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-slate-500">Transport</Label>
+                      <p className="font-semibold">${selectedShipment.transport_cost?.toLocaleString() || 0}</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Bojxona</Label>
+                      <p className="font-semibold">${selectedShipment.customs_cost?.toLocaleString() || 0}</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Boshqa</Label>
+                      <p className="font-semibold">${selectedShipment.other_cost?.toLocaleString() || 0}</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-500">Jami xarajatlar</Label>
+                      <p className="font-semibold text-lg">
+                        ${calculateShipmentCosts(selectedShipment).total.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Total Summary */}
+              <Card className="bg-gradient-to-br from-blue-50 to-purple-50">
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <Label className="text-slate-600">Tovarlar qiymati</Label>
+                      <p className="text-2xl font-bold text-slate-800">
+                        ${(selectedShipment.items?.reduce((sum, item) => sum + ((item.price || item.unit_price) * item.quantity), 0) || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-600">Jami summa (xarajatlar bilan)</Label>
+                      <p className="text-3xl font-bold text-blue-900">
+                        ${(
+                          (selectedShipment.items?.reduce((sum, item) => sum + ((item.price || item.unit_price) * item.quantity), 0) || 0) +
+                          calculateShipmentCosts(selectedShipment).total
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Actions */}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setShowViewModal(false)}>
+                  Yopish
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
