@@ -35,7 +35,6 @@ export default function CargoShipments() {
 
   // Form state for new shipment
   const [formData, setFormData] = useState({
-    supplier_country: '',
     supplier_company: '',
     tracking_number: '',
     expected_date: '',
@@ -44,7 +43,6 @@ export default function CargoShipments() {
     costs: {
       transport: 0,
       customs: 0,
-      insurance: 0,
       other: 0
     }
   });
@@ -127,7 +125,7 @@ export default function CargoShipments() {
 
   // Submit new shipment
   const handleSubmit = () => {
-    if (!formData.supplier_country || !formData.tracking_number || formData.items.length === 0) {
+    if (!formData.tracking_number || formData.items.length === 0) {
       alert('Please fill all required fields');
       return;
     }
@@ -139,13 +137,12 @@ export default function CargoShipments() {
 
   const resetForm = () => {
     setFormData({
-      supplier_country: '',
       supplier_company: '',
       tracking_number: '',
       expected_date: '',
       transport_type: '',
       items: [],
-      costs: { transport: 0, customs: 0, insurance: 0, other: 0 }
+      costs: { transport: 0, customs: 0, other: 0 }
     });
   };
 
@@ -268,22 +265,9 @@ export default function CargoShipments() {
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{t('supplier_country') || 'Yetkazib beruvchi davlat'} *</Label>
-                <Select value={formData.supplier_country} onValueChange={(v) => setFormData({...formData, supplier_country: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Davlatni tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {countries.map(c => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
                 <Label>{t('supplier_company') || 'Kompaniya nomi'}</Label>
                 <Input
+                  placeholder="Kompaniya nomini kiriting"
                   value={formData.supplier_company}
                   onChange={(e) => setFormData({...formData, supplier_company: e.target.value})}
                 />
@@ -443,21 +427,6 @@ export default function CargoShipments() {
                     onChange={(e) => setFormData({
                       ...formData,
                       costs: {...formData.costs, customs: Number(e.target.value)}
-                    })}
-                  />
-                </div>
-                <div>
-                  <Label className="flex items-center gap-2">
-                    {t('insurance_cost') || 'Sug\'urta'}
-                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    placeholder="800"
-                    value={formData.costs.insurance}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      costs: {...formData.costs, insurance: Number(e.target.value)}
                     })}
                   />
                 </div>
