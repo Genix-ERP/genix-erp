@@ -306,7 +306,7 @@ export default function Assets() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-6">
 
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -460,7 +460,7 @@ export default function Assets() {
                   >
                     <Download className="w-4 h-4 mr-2" /> {t('export')}
                   </Button>
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-orange-600 to-amber-600">
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                     <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
                   </Button>
                 </div>
@@ -493,7 +493,7 @@ export default function Assets() {
             <CardContent className="p-6">
               {isLoading ? (
                 <div className="flex items-center justify-center py-16">
-                  <div className="w-8 h-8 border-4 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : filteredAssets.length === 0 ? (
                 <div className="text-center py-16">
@@ -664,7 +664,7 @@ export default function Assets() {
                 </Button>
                 <Button
                   onClick={handleCreateAsset}
-                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   disabled={!newAsset.asset_name || !newAsset.purchase_cost || isSubmitting}
                 >
                   {isSubmitting ? t('adding') : t('add_asset')}
@@ -808,7 +808,7 @@ export default function Assets() {
                   </Button>
                   <Button
                     onClick={handleUpdateAsset}
-                    className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                    className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                     disabled={!editAsset.asset_name || isSubmitting}
                   >
                     {isSubmitting ? t('saving') : t('save_changes')}
@@ -885,7 +885,7 @@ export default function Assets() {
                 </Button>
                 <Button
                   onClick={handleTransferAsset}
-                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   disabled={!transferData.location}
                 >
                   {t('transfer')}
@@ -954,7 +954,7 @@ export default function Assets() {
                 </Button>
                 <Button
                   onClick={handleAddMaintenance}
-                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600"
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   disabled={!maintenanceData.description}
                 >
                   {t('add_record')}

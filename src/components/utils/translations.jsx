@@ -55,6 +55,8 @@ export const translations = {
     "owner": "Owner",
     "site_admin": "Site Administrator",
     "admin": "Admin",
+    "admin_panel_subtitle": "Complete user lifecycle management with subscription control",
+    "enterprise_edition": "Enterprise Edition",
     
     // Dashboard
     "welcome_to_ai_erp": "Welcome to your AI-powered ERP",
@@ -3074,6 +3076,8 @@ export const translations = {
     "my_settings": "Mening sozlamalarim",
     "my_settings_subtitle": "Shaxsiy profilingiz va xavfsizlik sozlamalarini boshqaring",
     "owner": "Egasi",
+    "admin_panel_subtitle": "Foydalanuvchilarni to'liq boshqarish va obuna nazorati",
+    "enterprise_edition": "Korxona nashri",
     "site_admin": "Sayt Administratori",
     "admin_panel": "Administrator Paneli",
     "admin": "Administrator",
@@ -6122,6 +6126,8 @@ export const translations = {
     "my_settings": "Мои настройки",
     "my_settings_subtitle": "Управление личным профилем и настройками безопасности",
     "owner": "Владелец",
+    "admin_panel_subtitle": "Полное управление пользователями и контроль подписки",
+    "enterprise_edition": "Корпоративная версия",
     "site_admin": "Администратор сайта",
     "apps": "Приложения",
     "settings": "Настройки",

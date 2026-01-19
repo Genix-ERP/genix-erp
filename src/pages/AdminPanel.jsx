@@ -358,10 +358,10 @@ export default function AdminPanel() {
             <Shield className="w-8 h-8" />
             <h1 className="text-2xl md:text-3xl font-bold">{t('admin_panel')}</h1>
             <Badge className="bg-white/20 text-white border-white/30">
-              Enterprise Edition
+              {t('enterprise_edition')}
             </Badge>
           </div>
-          <p className="text-white/90">Complete user lifecycle management with subscription control</p>
+          <p className="text-white/90">{t('admin_panel_subtitle')}</p>
         </div>
 
         {/* Metrics - Enhanced */}

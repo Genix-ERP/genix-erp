@@ -394,7 +394,7 @@ export default function SalesOrders() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="space-y-6">
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -471,8 +471,8 @@ export default function SalesOrders() {
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <Tag className="w-5 h-5 text-emerald-600" />
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Tag className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('active_discounts')}</p>
@@ -485,19 +485,19 @@ export default function SalesOrders() {
 
         {/* AI Insights Panel */}
         {((salesAnalysis?.insights?.length > 0) || (aiInsights?.insights?.length > 0) || (aiInsights?.recommendations?.length > 0)) && (
-          <Card className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200/50">
+          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200/50">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-emerald-600" />
+                <Brain className="w-5 h-5 text-blue-600" />
                 {t('ai_sales_analysis')}
-                <Badge className="bg-emerald-100 text-emerald-700 text-xs">{t('live')}</Badge>
+                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Sales Context Insights */}
                 {(aiInsights?.insights || []).slice(0, 2).map((insight, index) => (
-                  <div key={`sales-${index}`} className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
+                  <div key={`sales-${index}`} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
                     <div className="flex items-start gap-3">
                       {insight.type === 'positive' ? (
                         <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
@@ -514,7 +514,7 @@ export default function SalesOrders() {
                           {insight.descriptionKey ? t(insight.descriptionKey) : insight.description}
                         </p>
                         {insight.metric && (
-                          <p className="text-lg font-bold text-emerald-600 mt-2">
+                          <p className="text-lg font-bold text-blue-600 mt-2">
                             {typeof insight.metric === 'number' ? formatCurrency(insight.metric) : insight.metric}
                           </p>
                         )}
@@ -525,7 +525,7 @@ export default function SalesOrders() {
 
                 {/* Top Customer from orders analysis */}
                 {salesAnalysis?.topCustomers?.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100">
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
                     <div className="flex items-start gap-3">
                       <Target className="w-5 h-5 text-purple-500 mt-0.5" />
                       <div>
@@ -541,7 +541,7 @@ export default function SalesOrders() {
 
                 {/* Recommendations */}
                 {aiInsights?.recommendations?.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-100 md:col-span-2 lg:col-span-3">
+                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100 md:col-span-2 lg:col-span-3">
                     <div className="flex items-start gap-3">
                       <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
                       <div className="flex-1">
@@ -574,7 +574,7 @@ export default function SalesOrders() {
               <ShoppingBag className="w-4 h-4" />
               <span className="hidden sm:inline">{t('orders')}</span>
               {tabCounts.orders > 0 && (
-                <Badge className="ml-2 bg-green-100 text-green-800">{tabCounts.orders}</Badge>
+                <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.orders}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="quotations" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
@@ -602,7 +602,7 @@ export default function SalesOrders() {
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">{t('discounts')}</span>
               {tabCounts.discounts > 0 && (
-                <Badge className="ml-2 bg-emerald-100 text-emerald-800">{tabCounts.discounts}</Badge>
+                <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.discounts}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
@@ -648,7 +648,7 @@ export default function SalesOrders() {
                         <Printer className="w-4 h-4 mr-1" />
                         {t('print')}
                       </Button>
-                      <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-green-600 to-emerald-600">
+                      <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                         <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
                       </Button>
                     </div>
@@ -681,7 +681,7 @@ export default function SalesOrders() {
                 <CardContent className="p-0">
                   {ordersLoading ? (
                     <div className="flex items-center justify-center py-16">
-                      <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                   ) : filteredOrders.length === 0 ? (
                     <div className="text-center py-16">
@@ -1008,7 +1008,7 @@ export default function SalesOrders() {
               </div>
 
               {/* Totals */}
-              <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600">{t('subtotal')}:</span>
@@ -1022,9 +1022,9 @@ export default function SalesOrders() {
                     <span className="text-slate-600">{t('shipping')}:</span>
                     <span className="font-medium">{formatCurrency(parseFloat(newOrder.shipping_cost || 0))}</span>
                   </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-green-300">
+                  <div className="flex justify-between items-center pt-2 border-t border-blue-300">
                     <span className="font-semibold text-lg">{t('total_amount')}:</span>
-                    <span className="text-2xl font-bold text-green-600">
+                    <span className="text-2xl font-bold text-blue-600">
                       {formatCurrency(calculateOrderTotals(newOrder.lines) + parseFloat(newOrder.tax_amount || 0) + parseFloat(newOrder.shipping_cost || 0))}
                     </span>
                   </div>
@@ -1037,7 +1037,7 @@ export default function SalesOrders() {
                 </Button>
                 <Button
                   onClick={handleCreateOrder}
-                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   disabled={!newOrder.customer_name || newOrder.lines.every(l => !l.product_name)}
                 >
                   {t('create')}
