@@ -26,6 +26,7 @@ import {
   LogOut,
   Cog
 } from "lucide-react";
+import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -347,10 +348,6 @@ function LayoutContent({ children, currentPageName }) {
                 </span>
                 <div className="h-[1px] flex-1 bg-gradient-to-l from-[var(--genix-blue)] to-transparent opacity-30"></div>
               </div>
-              {/* Company Switcher */}
-              <div className="mt-2 border-t border-slate-200/60 pt-3">
-                <CompanySwitcher />
-              </div>
             </div>
           </SidebarHeader>
           
@@ -426,31 +423,11 @@ function LayoutContent({ children, currentPageName }) {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block">
-            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl hover:shadow-md transition-shadow duration-200">
-              <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-semibold text-sm">
-                  {currentUser?.full_name?.charAt(0) || 'U'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-slate-900 truncate">
-                  {currentUser?.full_name || 'User'}
-                </p>
-                <p className="text-[10px] text-slate-500 truncate">
-                  {isSiteAdmin() ? 'Sayt Administratori' : isOwner() ? 'Egasi' : 'Foydalanuvchi'}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                className="hover:bg-red-50 hover:text-red-600 rounded-full transition-all duration-200"
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+          <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block space-y-2">
+            {/* Company Switcher - Like Odoo */}
+            <CompanySwitcher />
+            {/* User Menu */}
+            <UserMenu />
           </SidebarFooter>
         </Sidebar>
 

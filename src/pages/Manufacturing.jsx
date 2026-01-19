@@ -43,26 +43,6 @@ export default function Manufacturing() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 p-6 md:p-8 rounded-2xl text-white relative overflow-hidden shadow-xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <Factory className="w-8 h-8" />
-              <h1 className="text-2xl md:text-3xl font-bold">{t('manufacturing_operations') || 'Manufacturing Operations'}</h1>
-              <Badge className="bg-white/20 text-white border-white/30">
-                <Brain className="w-3 h-3 mr-1" />
-                {t('ai_powered') || 'AI-Powered'}
-              </Badge>
-            </div>
-            <p className="text-white/90 text-base md:text-lg">
-              {t('manufacturing_subtitle') || 'Intelligent production planning, scheduling, and quality control powered by Genix AI'}
-            </p>
-          </div>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24"></div>
-        </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

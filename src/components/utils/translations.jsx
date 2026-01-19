@@ -48,7 +48,12 @@ export const translations = {
     "ai_assistant": "AI Assistant",
     "apps": "Apps",
     "settings": "Settings",
+    "companies": "Companies",
     "admin_panel": "Admin Panel",
+    "my_settings": "My Settings",
+    "my_settings_subtitle": "Manage your personal profile and security settings",
+    "owner": "Owner",
+    "site_admin": "Site Administrator",
     "admin": "Admin",
     
     // Dashboard
@@ -3065,6 +3070,11 @@ export const translations = {
     "ai_assistant": "AI Yordamchi",
     "apps": "Ilovalar",
     "settings": "Sozlamalar",
+    "companies": "Kompaniyalar",
+    "my_settings": "Mening sozlamalarim",
+    "my_settings_subtitle": "Shaxsiy profilingiz va xavfsizlik sozlamalarini boshqaring",
+    "owner": "Egasi",
+    "site_admin": "Sayt Administratori",
     "admin_panel": "Administrator Paneli",
     "admin": "Administrator",
     
@@ -6109,8 +6119,13 @@ export const translations = {
     "company": "Компания",
     "workflows": "Рабочие процессы",
     "ai_assistant": "ИИ Помощник",
+    "my_settings": "Мои настройки",
+    "my_settings_subtitle": "Управление личным профилем и настройками безопасности",
+    "owner": "Владелец",
+    "site_admin": "Администратор сайта",
     "apps": "Приложения",
     "settings": "Настройки",
+    "companies": "Компании",
     "admin_panel": "Панель Администратора",
     "admin": "Администратор",
     
