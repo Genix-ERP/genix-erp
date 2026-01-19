@@ -28,6 +28,7 @@ import AddCompany from "./AddCompany";
 import LeaveManagement from "./LeaveManagement";
 import Attendance from "./Attendance";
 import EmployeeContracts from "./EmployeeContracts";
+import Cargo from "./Cargo";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
@@ -60,6 +61,7 @@ const PAGES = {
     LeaveManagement: LeaveManagement,
     Attendance: Attendance,
     EmployeeContracts: EmployeeContracts,
+    Cargo: Cargo,
 }
 
 function _getCurrentPage(url) {
@@ -118,6 +120,7 @@ function PagesContent() {
                                 <Route path="/leave-management" element={<LeaveManagement />} />
                                 <Route path="/attendance" element={<Attendance />} />
                                 <Route path="/employee-contracts" element={<EmployeeContracts />} />
+                                <Route path="/cargo" element={<Cargo />} />
                                 <Route path="/apps" element={<Apps />} />
                                 <Route path="/customers" element={<Customers />} />
                                 <Route path="/settings" element={<Settings />} />
