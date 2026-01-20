@@ -16,7 +16,7 @@ export default function LanguageSelector() {
 
   return (
     <Select value={language} onValueChange={setLanguage}>
-      <SelectTrigger className="w-32">
+      <SelectTrigger className="w-36">
         <Globe className="w-4 h-4 mr-2" />
         <SelectValue>{currentLanguage.name}</SelectValue>
       </SelectTrigger>
