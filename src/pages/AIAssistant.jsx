@@ -196,7 +196,7 @@ export default function AIAssistant() {
                     onClick={() => setShowChat(false)}
                     className="rounded-xl"
                   >
-                    ← Back
+                    ← {t('back') || 'Orqaga'}
                   </Button>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">

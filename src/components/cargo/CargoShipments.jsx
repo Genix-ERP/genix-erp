@@ -146,10 +146,31 @@ export default function CargoShipments() {
       return;
     }
 
+    // Transform data to match backend expected format
+    const backendData = {
+      tracking_number: formData.tracking_number || '',
+      supplier_country: '',
+      supplier_company: formData.supplier_company || '',
+      expected_date: formData.expected_date || null,
+      transport_cost: Number(formData.costs?.transport || 0),
+      customs_cost: Number(formData.costs?.customs || 0),
+      insurance_cost: 0,
+      other_cost: Number(formData.costs?.other || 0),
+      notes: '',
+      items: formData.items.map(item => ({
+        item_name: item.name,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.price),
+        currency: item.currency || 'USD',
+        hs_code: '',
+        description: ''
+      }))
+    };
+
     if (isEditMode && selectedShipment) {
-      updateShipment(selectedShipment.id, formData);
+      updateShipment(selectedShipment.id, backendData);
     } else {
-      createShipment(formData);
+      createShipment(backendData);
     }
     setShowAddModal(false);
     setIsEditMode(false);
