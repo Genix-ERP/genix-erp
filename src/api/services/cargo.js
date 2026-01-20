@@ -57,6 +57,15 @@ export const cargoService = {
     return response.data.data;
   },
 
+  async updateCashTransaction(id, data) {
+    const response = await apiClient.put(`/cargo/cash/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteCashTransaction(id) {
+    await apiClient.delete(`/cargo/cash/${id}`);
+  },
+
   async getCashSummary() {
     const response = await apiClient.get('/cargo/cash/summary');
     return response.data.data;
