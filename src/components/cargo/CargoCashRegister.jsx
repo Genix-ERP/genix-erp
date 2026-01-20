@@ -27,6 +27,24 @@ export default function CargoCashRegister() {
   } = useCargoContext();
   const { companies } = useCompany();
 
+  // Helper function to safely format dates
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '-';
+    try {
+      // Extract string from object if needed
+      const dateStr = typeof dateValue === 'string' ? dateValue : (dateValue?.String || '');
+      if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
+
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '-';
+
+      return format(date, 'dd MMM yyyy, HH:mm');
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return '-';
+    }
+  };
+
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [transactionType, setTransactionType] = useState('income');
   const [filterType, setFilterType] = useState('all');
@@ -295,7 +313,7 @@ export default function CargoCashRegister() {
                   return (
                     <TableRow key={transaction.id}>
                       <TableCell className="text-sm">
-                        {format(new Date(transaction.date), 'dd MMM yyyy, HH:mm')}
+                        {formatDate(transaction.date)}
                       </TableCell>
                       <TableCell>
                         <Badge className={transaction.type === 'income' ? 'bg-green-500' : 'bg-red-500'}>

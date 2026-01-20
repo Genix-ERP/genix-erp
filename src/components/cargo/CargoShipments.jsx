@@ -231,21 +231,21 @@ export default function CargoShipments() {
     }
 
     setFormData({
-      supplier_company: shipment.supplier_company || '',
-      tracking_number: shipment.tracking_number || '',
+      supplier_company: extractString(shipment.supplier_company),
+      tracking_number: extractString(shipment.tracking_number),
       expected_date: expectedDateStr,
       items: shipment.items?.map(item => ({
-        name: item.item_name,
-        quantity: item.quantity,
-        price: item.unit_price,
-        currency: item.currency,
+        name: extractString(item.item_name || item.name),
+        quantity: Number(item.quantity || 0),
+        price: Number(item.unit_price || item.price || 0),
+        currency: extractString(item.currency || 'USD'),
         customFields: item.customFields || [],
-        total: item.total_price
+        total: Number(item.total_price || item.total || 0)
       })) || [],
       costs: {
-        transport: shipment.transport_cost || 0,
-        customs: shipment.customs_cost || 0,
-        other: shipment.other_cost || 0
+        transport: Number(shipment.transport_cost || 0),
+        customs: Number(shipment.customs_cost || 0),
+        other: Number(shipment.other_cost || 0)
       }
     });
     setShowAddModal(true);
