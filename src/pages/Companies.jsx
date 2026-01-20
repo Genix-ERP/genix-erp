@@ -22,7 +22,8 @@ import {
   Crown,
   AlertTriangle,
   Star,
-  MoreHorizontal
+  MoreHorizontal,
+  Eye
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -48,7 +49,9 @@ export default function Companies() {
   const [filteredCompanies, setFilteredCompanies] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
+  const [viewingCompany, setViewingCompany] = useState(null);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     company_code: "",
@@ -78,6 +81,11 @@ export default function Companies() {
     } else {
       setFilteredCompanies(companies);
     }
+  };
+
+  const handleView = (company) => {
+    setViewingCompany(company);
+    setShowViewModal(true);
   };
 
   const handleEdit = (company) => {
@@ -301,11 +309,18 @@ export default function Companies() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             {activeCompany?.id !== company.id && (
-                              <DropdownMenuItem onClick={() => handleSetActive(company)}>
-                                <Star className="w-4 h-4 mr-2 text-blue-600" />
-                                Faol qilish
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem onClick={() => handleSetActive(company)}>
+                                  <Star className="w-4 h-4 mr-2 text-blue-600" />
+                                  Faol qilish
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
                             )}
+                            <DropdownMenuItem onClick={() => handleView(company)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Ko'rish
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEdit(company)}>
                               <Edit className="w-4 h-4 mr-2" />
                               Tahrirlash
@@ -330,6 +345,108 @@ export default function Companies() {
           </div>
         </CardContent>
       </Card>
+
+      {/* View Company Dialog */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Kompaniya ma'lumotlari</DialogTitle>
+          </DialogHeader>
+          {viewingCompany && (
+            <div className="space-y-6">
+              {/* Company Header */}
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg">
+                <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] flex items-center justify-center text-white text-xl font-bold">
+                  {viewingCompany.company_name?.substring(0, 2).toUpperCase() || 'CO'}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-slate-900">{viewingCompany.company_name}</h3>
+                  <p className="text-slate-600">{viewingCompany.company_code}</p>
+                </div>
+                {activeCompany?.id === viewingCompany.id && (
+                  <Badge className="bg-blue-100 text-blue-700">
+                    <Star className="w-3 h-3 mr-1" />
+                    Faol kompaniya
+                  </Badge>
+                )}
+              </div>
+
+              {/* Company Details */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Kompaniya kodi</Label>
+                  <p className="font-medium text-slate-900">{viewingCompany.company_code}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Kompaniya nomi</Label>
+                  <p className="font-medium text-slate-900">{viewingCompany.company_name}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Mamlakat</Label>
+                  <p className="font-medium text-slate-900">{viewingCompany.country}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Valyuta</Label>
+                  <div>
+                    <Badge variant="outline" className="font-medium">{viewingCompany.currency}</Badge>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Buxgalteriya standarti</Label>
+                  <div>
+                    <Badge variant="secondary">{viewingCompany.accounting_standard}</Badge>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Holat</Label>
+                  <div>
+                    {viewingCompany.is_active !== false ? (
+                      <Badge className="bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Faol
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-red-100 text-red-800">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Nofaol
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Yaratilgan sana</Label>
+                  <p className="font-medium text-slate-900">
+                    {viewingCompany.created_date ? format(new Date(viewingCompany.created_date), 'dd.MM.yyyy HH:mm') : '-'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-500 text-sm">Yangilangan sana</Label>
+                  <p className="font-medium text-slate-900">
+                    {viewingCompany.updated_date ? format(new Date(viewingCompany.updated_date), 'dd.MM.yyyy HH:mm') : '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => setShowViewModal(false)}>
+                  Yopish
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowViewModal(false);
+                    handleEdit(viewingCompany);
+                  }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Tahrirlash
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Company Dialog */}
       <Dialog open={showEditForm} onOpenChange={setShowEditForm}>

@@ -169,83 +169,14 @@ export default function AdminSettings() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Settings className="w-8 h-8" />
-              <div>
-                <h1 className="text-2xl font-bold">{t('admin_settings')}</h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Import/Export */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  id="import-settings"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="hidden"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => document.getElementById('import-settings').click()}
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {t('import')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={exportSettings}
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  {t('export')}
-                </Button>
-              </div>
-
-              {/* Unsaved changes indicator */}
-              {hasUnsavedChanges() && (
-                <Badge variant="outline" className="bg-yellow-500/20 border-yellow-400 text-yellow-200">
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  {t('unsaved_changes')}
-                </Badge>
-              )}
-
-              {/* Save/Reset buttons */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={discardChanges}
-                disabled={!hasUnsavedChanges() || isSaving}
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                {t('discard')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={!hasUnsavedChanges() || isSaving}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                {t('save_settings')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">{/* Hidden input for import */}
+      <input
+        type="file"
+        id="import-settings"
+        accept=".json"
+        onChange={handleImport}
+        className="hidden"
+      />
 
       {/* Success/Error messages */}
       {showSaveSuccess && (
@@ -272,6 +203,63 @@ export default function AdminSettings() {
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Action buttons bar */}
+        <div className="mb-6 flex items-center justify-between bg-white rounded-xl shadow-sm border p-4">
+          <div className="flex items-center gap-3">
+            <Settings className="w-6 h-6 text-slate-700" />
+            <h1 className="text-xl font-bold text-slate-900">{t('admin_settings') || 'Ilova sozlamalari'}</h1>
+            {hasUnsavedChanges() && (
+              <Badge variant="outline" className="bg-yellow-50 border-yellow-400 text-yellow-700">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                {t('unsaved_changes') || 'Saqlanmagan o\'zgarishlar'}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('import-settings').click()}
+              className="text-slate-600"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {t('import') || 'Import'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportSettings}
+              className="text-slate-600"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {t('export') || 'Eksport'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={discardChanges}
+              disabled={!hasUnsavedChanges() || isSaving}
+              className="text-slate-600"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              {t('discard') || 'Bekor qilish'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!hasUnsavedChanges() || isSaving}
+              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {t('save_settings') || 'Saqlash'}
+            </Button>
+          </div>
+        </div>
+
         <div className="flex gap-6">
           {/* Sidebar Navigation */}
           <div className="w-64 flex-shrink-0">
