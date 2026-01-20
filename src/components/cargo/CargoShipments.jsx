@@ -82,14 +82,14 @@ export default function CargoShipments() {
 
   // Add item to shipment
   const handleAddItem = () => {
-    if (!currentItem.name || currentItem.quantity <= 0 || currentItem.price <= 0) {
-      alert('Please fill all item fields');
+    if (!currentItem.name || currentItem.quantity <= 0) {
+      alert('Iltimos tovar nomi va miqdorini kiriting');
       return;
     }
 
     const newItem = {
       ...currentItem,
-      total: currentItem.quantity * currentItem.price
+      total: currentItem.quantity * (currentItem.price || 0)
     };
 
     setFormData({
@@ -117,8 +117,8 @@ export default function CargoShipments() {
 
   // Submit new shipment
   const handleSubmit = () => {
-    if (!formData.tracking_number || formData.items.length === 0) {
-      alert('Please fill all required fields');
+    if (formData.items.length === 0) {
+      alert('Iltimos kamida bitta tovar qo\'shing');
       return;
     }
 
@@ -377,7 +377,7 @@ export default function CargoShipments() {
               </div>
 
               <div>
-                <Label>{t('tracking_number') || 'Tracking raqami'} *</Label>
+                <Label>{t('tracking_number') || 'Tracking raqami'}</Label>
                 <Input
                   value={formData.tracking_number}
                   onChange={(e) => setFormData({...formData, tracking_number: e.target.value})}
@@ -424,7 +424,7 @@ export default function CargoShipments() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-slate-600 mb-1">Birlik narxi *</Label>
+                      <Label className="text-xs text-slate-600 mb-1">Birlik narxi</Label>
                       <Input
                         type="number"
                         placeholder="1200"
