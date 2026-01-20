@@ -447,7 +447,7 @@ export default function Payroll() {
                   />
                 </div>
                 <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder={t('all_employees')} />
                   </SelectTrigger>
                   <SelectContent>

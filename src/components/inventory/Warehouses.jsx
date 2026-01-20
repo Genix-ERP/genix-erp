@@ -754,7 +754,7 @@ export default function Warehouses() {
 
       {/* Add Location Modal */}
       <Dialog open={showLocationModal} onOpenChange={setShowLocationModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -1011,7 +1011,7 @@ export default function Warehouses() {
 
       {/* Edit Location Modal */}
       <Dialog open={showEditLocationModal} onOpenChange={setShowEditLocationModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <LayoutGrid className="w-5 h-5 text-[var(--genix-blue)]" />

@@ -41,7 +41,7 @@ export default function InventoryForm({ item, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Card className="w-full max-w-[95vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{item ? "Edit Item" : "Add New Item"}</CardTitle>
           <Button variant="ghost" size="icon" onClick={onCancel}>

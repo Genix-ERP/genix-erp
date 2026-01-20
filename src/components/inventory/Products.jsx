@@ -792,13 +792,13 @@ export default function Products() {
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('sku_code')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
+                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('sku_code')}</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
+                    <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('stock')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('status')}</TableHead>
+                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('status')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-center min-w-[100px] whitespace-nowrap">{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -826,21 +826,21 @@ export default function Products() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <div>
                             <p className="font-mono text-sm text-slate-700">{product.sku || '-'}</p>
                             <p className="text-xs text-slate-500">{product.code}</p>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <Badge className={getTypeColor(product.type)}>
                             {product.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="hidden lg:table-cell text-slate-600">
                           {getCategoryName(product.category_id)}
                         </TableCell>
-                        <TableCell className="text-right font-medium text-slate-700 tabular-nums">
+                        <TableCell className="hidden md:table-cell text-right font-medium text-slate-700 tabular-nums">
                           ${(product.cost_price || 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
@@ -860,7 +860,7 @@ export default function Products() {
                             <span className="text-slate-400">N/A</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <Badge className={product.is_active
                             ? 'bg-green-100 text-green-800 border-green-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'

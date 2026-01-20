@@ -522,7 +522,7 @@ export default function Projects() {
               </div>
               {viewMode === 'grid' && (
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full sm:w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -830,7 +830,7 @@ export default function Projects() {
                     className="flex-1"
                   />
                   <Select value={newStatus.color} onValueChange={(value) => setNewStatus({...newStatus, color: value})}>
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-full sm:w-[120px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
