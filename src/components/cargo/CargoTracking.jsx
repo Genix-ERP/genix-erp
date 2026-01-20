@@ -167,8 +167,24 @@ export default function CargoTracking() {
 
               <CardContent className="space-y-6">
                 {/* Status Timeline */}
-                <div className="relative">
-                  <div className="flex justify-between items-center mb-4">
+                <div className="relative px-2">
+                  <div className="flex justify-between items-start relative">
+                    {/* Connecting line - gray background */}
+                    <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-200"></div>
+
+                    {/* Connecting line - colored progress */}
+                    {(() => {
+                      const steps = getStatusSteps();
+                      const currentIndex = steps.indexOf(shipment.status);
+                      const progressPercent = currentIndex >= 0 ? (currentIndex / (steps.length - 1)) * 100 : 0;
+                      return (
+                        <div
+                          className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-blue-500 via-orange-500 to-yellow-500 transition-all duration-500"
+                          style={{ width: `${progressPercent}%` }}
+                        ></div>
+                      );
+                    })()}
+
                     {getStatusSteps().map((status, index) => {
                       const stepConfig = statusConfig[status];
                       const StepIcon = stepConfig.icon;
@@ -176,10 +192,11 @@ export default function CargoTracking() {
                       const isCurrent = shipment.status === status;
 
                       return (
-                        <div key={status} className="flex flex-col items-center flex-1">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        <div key={status} className="flex flex-col items-center flex-1 relative z-10">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                             isCompleted ? stepConfig.color : 'bg-slate-200'
-                          } ${isCurrent ? 'ring-4 ring-offset-2 ring-' + stepConfig.color : ''}`}>
+                          } ${isCurrent ? 'ring-4 ring-offset-2' : ''}`}
+                          style={isCurrent ? { boxShadow: `0 0 0 4px ${stepConfig.color}20` } : {}}>
                             <StepIcon className={`w-5 h-5 ${isCompleted ? 'text-white' : 'text-slate-400'}`} />
                           </div>
                           <p className={`text-xs mt-2 text-center ${
@@ -187,18 +204,6 @@ export default function CargoTracking() {
                           }`}>
                             {stepConfig.label}
                           </p>
-                          {index < getStatusSteps().length - 1 && (
-                            <div className={`absolute top-5 h-0.5 ${
-                              isCompleted && isStatusCompleted(shipment, getStatusSteps()[index + 1])
-                                ? stepConfig.color
-                                : 'bg-slate-200'
-                            }`}
-                            style={{
-                              left: `${(index / (getStatusSteps().length - 1)) * 100 + 10}%`,
-                              width: `${100 / (getStatusSteps().length - 1) - 20}%`
-                            }}
-                            />
-                          )}
                         </div>
                       );
                     })}
