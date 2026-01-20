@@ -22,6 +22,32 @@ export default function CargoTracking() {
     SHIPMENT_STATUS
   } = useCargoContext();
 
+  // Helper function to extract string from sql.NullString objects
+  const extractString = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value.String !== undefined) return value.String || '';
+    return String(value);
+  };
+
+  // Helper function to safely format dates
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '-';
+    try {
+      // Extract string from object if needed
+      const dateStr = typeof dateValue === 'string' ? dateValue : (dateValue?.String || '');
+      if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
+
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '-';
+
+      return format(date, 'dd MMM yyyy, HH:mm');
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return '-';
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -63,10 +89,12 @@ export default function CargoTracking() {
   };
 
   // Filter shipments
-  const filteredShipments = shipments.filter(s =>
-    s.tracking_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.supplier_company?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredShipments = shipments.filter(s => {
+    const trackingNumber = extractString(s.tracking_number).toLowerCase();
+    const supplierCompany = extractString(s.supplier_company).toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return trackingNumber.includes(query) || supplierCompany.includes(query);
+  });
 
   // Get status steps for timeline
   const getStatusSteps = () => {
@@ -126,9 +154,9 @@ export default function CargoTracking() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-lg">{shipment.tracking_number}</CardTitle>
+                    <CardTitle className="text-lg">{extractString(shipment.tracking_number)}</CardTitle>
                     <p className="text-sm text-slate-500 mt-1">
-                      {shipment.supplier_company} • {shipment.supplier_country}
+                      {extractString(shipment.supplier_company)} • {extractString(shipment.supplier_country)}
                     </p>
                   </div>
                   <Badge className={`${config.color} text-white`}>
@@ -193,10 +221,10 @@ export default function CargoTracking() {
                             <div className="flex-1">
                               <p className="font-medium">{historyConfig.label}</p>
                               {history.note && (
-                                <p className="text-slate-500 text-xs">{history.note}</p>
+                                <p className="text-slate-500 text-xs">{extractString(history.note)}</p>
                               )}
                               <p className="text-slate-400 text-xs">
-                                {format(new Date(history.date), 'dd MMM yyyy, HH:mm')}
+                                {formatDate(history.date)}
                               </p>
                             </div>
                           </div>

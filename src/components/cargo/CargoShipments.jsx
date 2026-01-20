@@ -28,6 +28,14 @@ export default function CargoShipments() {
     calculateShipmentCosts
   } = useCargoContext();
 
+  // Helper function to extract string from sql.NullString objects
+  const extractString = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value.String !== undefined) return value.String || '';
+    return String(value);
+  };
+
   // Helper function to safely format dates
   const formatDate = (dateStr) => {
     if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
@@ -210,10 +218,22 @@ export default function CargoShipments() {
   const handleEditShipment = (shipment) => {
     setSelectedShipment(shipment);
     setIsEditMode(true);
+
+    // Safely extract expected_date from object or string
+    let expectedDateStr = '';
+    if (shipment.expected_date) {
+      const dateValue = typeof shipment.expected_date === 'string'
+        ? shipment.expected_date
+        : (shipment.expected_date?.String || '');
+      if (dateValue && dateValue !== '0001-01-01T00:00:00Z') {
+        expectedDateStr = dateValue.split('T')[0];
+      }
+    }
+
     setFormData({
       supplier_company: shipment.supplier_company || '',
       tracking_number: shipment.tracking_number || '',
-      expected_date: shipment.expected_date ? shipment.expected_date.split('T')[0] : '',
+      expected_date: expectedDateStr,
       items: shipment.items?.map(item => ({
         name: item.item_name,
         quantity: item.quantity,
@@ -315,10 +335,12 @@ export default function CargoShipments() {
   };
 
   // Filter shipments
-  const filteredShipments = shipments.filter(s =>
-    s.tracking_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.supplier_company?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredShipments = shipments.filter(s => {
+    const trackingNumber = extractString(s.tracking_number).toLowerCase();
+    const supplierCompany = extractString(s.supplier_company).toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return trackingNumber.includes(query) || supplierCompany.includes(query);
+  });
 
   return (
     <div className="space-y-6">
@@ -401,11 +423,11 @@ export default function CargoShipments() {
 
                 return (
                   <TableRow key={shipment.id}>
-                    <TableCell className="font-medium">{String(shipment.tracking_number || '')}</TableCell>
+                    <TableCell className="font-medium">{extractString(shipment.tracking_number)}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{String(shipment.supplier_company || '')}</p>
-                        <p className="text-xs text-slate-500">{String(shipment.supplier_country || '')}</p>
+                        <p className="font-medium">{extractString(shipment.supplier_company)}</p>
+                        <p className="text-xs text-slate-500">{extractString(shipment.supplier_country)}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -759,11 +781,11 @@ export default function CargoShipments() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-slate-500">Tracking raqami</Label>
-                      <p className="font-semibold">{String(selectedShipment.tracking_number || '')}</p>
+                      <p className="font-semibold">{extractString(selectedShipment.tracking_number)}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Kompaniya</Label>
-                      <p className="font-semibold">{selectedShipment.supplier_company || '-'}</p>
+                      <p className="font-semibold">{extractString(selectedShipment.supplier_company)}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Kutilayotgan sana</Label>
