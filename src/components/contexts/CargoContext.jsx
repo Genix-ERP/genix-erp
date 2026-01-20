@@ -224,15 +224,37 @@ export const CargoProvider = ({ children }) => {
   }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
 
   // Update shipment
-  const updateShipment = useCallback((shipmentId, updates) => {
-    const updatedShipments = shipments.map(s =>
-      s.id === shipmentId ? { ...s, ...updates } : s
-    );
-    setShipments(updatedShipments);
+  const updateShipment = useCallback(async (shipmentId, updates) => {
+    console.log('Updating shipment:', shipmentId, 'useBackend:', useBackend);
+
     if (!useBackend) {
+      // Update locally
+      const updatedShipments = shipments.map(s =>
+        s.id === shipmentId ? { ...s, ...updates } : s
+      );
+      setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      console.log('Shipment updated locally');
+      return;
     }
-  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
+
+    // Update via backend
+    try {
+      console.log('Attempting backend update...', updates);
+      await cargoService.updateShipment(shipmentId, updates);
+      await loadShipments(); // Reload to get updated data
+      console.log('Shipment updated from backend');
+    } catch (error) {
+      console.error('Error updating shipment from backend:', error);
+      // Fallback to local update if backend fails
+      const updatedShipments = shipments.map(s =>
+        s.id === shipmentId ? { ...s, ...updates } : s
+      );
+      setShipments(updatedShipments);
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      console.log('Fell back to local update');
+    }
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 
   // Delete shipment
   const deleteShipment = useCallback(async (shipmentId) => {
