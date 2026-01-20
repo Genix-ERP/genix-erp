@@ -20,6 +20,11 @@ export const cargoService = {
     return response.data.data;
   },
 
+  async updateShipment(id, data) {
+    const response = await apiClient.put(`/cargo/shipments/${id}`, data);
+    return response.data.data;
+  },
+
   async updateShipmentStatus(id, data) {
     const response = await apiClient.put(`/cargo/shipments/${id}/status`, data);
     return response.data.data;
