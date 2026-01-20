@@ -404,9 +404,11 @@ function LayoutContent({ children, currentPageName }) {
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
                     {currentPageName === 'AdminPanel' ? t('admin_panel') : (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
-                  <p className="text-slate-500 text-xs md:text-sm mt-0.5 hidden lg:block">
-                    {t("welcome_to_ai_erp") || "Welcome to your AI-powered ERP"}
-                  </p>
+                  {currentPageName !== 'AIAssistant' && (
+                    <p className="text-slate-500 text-xs md:text-sm mt-0.5 hidden lg:block">
+                      {t("welcome_to_ai_erp") || "Welcome to your AI-powered ERP"}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 md:gap-3">
