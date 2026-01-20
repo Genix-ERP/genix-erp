@@ -52,11 +52,10 @@ export default function CargoShipments() {
     quantity: 0,
     price: 0,
     currency: 'USD',
-    imei: '' // IMEI or serial number
+    customFields: [] // Array of {key: '', value: ''} objects
   });
 
   const [showExcelImport, setShowExcelImport] = useState(false);
-  const [showExtraFields, setShowExtraFields] = useState(false);
 
   // Countries list
   const countries = [
@@ -99,7 +98,30 @@ export default function CargoShipments() {
       items: [...formData.items, newItem]
     });
 
-    setCurrentItem({ name: '', quantity: 0, price: 0, currency: 'USD', imei: '' });
+    setCurrentItem({ name: '', quantity: 0, price: 0, currency: 'USD', customFields: [] });
+  };
+
+  // Add custom field to current item
+  const addCustomField = () => {
+    setCurrentItem({
+      ...currentItem,
+      customFields: [...currentItem.customFields, { key: '', value: '' }]
+    });
+  };
+
+  // Remove custom field
+  const removeCustomField = (index) => {
+    setCurrentItem({
+      ...currentItem,
+      customFields: currentItem.customFields.filter((_, i) => i !== index)
+    });
+  };
+
+  // Update custom field
+  const updateCustomField = (index, field, value) => {
+    const updated = [...currentItem.customFields];
+    updated[index][field] = value;
+    setCurrentItem({ ...currentItem, customFields: updated });
   };
 
   // Remove item
@@ -157,7 +179,7 @@ export default function CargoShipments() {
         quantity: item.quantity,
         price: item.unit_price,
         currency: item.currency,
-        imei: item.hs_code || '',
+        customFields: item.customFields || [],
         total: item.total_price
       })) || [],
       costs: {
@@ -499,41 +521,48 @@ export default function CargoShipments() {
                     </div>
                   </div>
 
-                  {/* Expandable Extra Fields */}
-                  {showExtraFields && (
-                    <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-white rounded-lg border border-slate-200">
-                      <div>
-                        <Label className="text-xs text-slate-600 mb-1">
-                          IMEI/Serial
-                          <span className="text-slate-400 ml-1">(ixtiyoriy)</span>
-                        </Label>
-                        <Input
-                          placeholder="352099001761481"
-                          value={currentItem.imei}
-                          onChange={(e) => setCurrentItem({...currentItem, imei: e.target.value})}
-                        />
-                      </div>
-                      {/* Add more extra fields here if needed */}
+                  {/* Custom Fields */}
+                  {currentItem.customFields.length > 0 && (
+                    <div className="space-y-2 mb-3 p-3 bg-white rounded-lg border border-slate-200">
+                      <Label className="text-xs font-semibold text-slate-700">Qo'shimcha ma'lumotlar</Label>
+                      {currentItem.customFields.map((field, index) => (
+                        <div key={index} className="grid grid-cols-3 gap-2">
+                          <Input
+                            placeholder="Maydon nomi (masalan: IMEI, Rang, Razmer)"
+                            value={field.key}
+                            onChange={(e) => updateCustomField(index, 'key', e.target.value)}
+                            className="text-xs"
+                          />
+                          <Input
+                            placeholder="Qiymat"
+                            value={field.value}
+                            onChange={(e) => updateCustomField(index, 'value', e.target.value)}
+                            className="text-xs"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeCustomField(index)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  {/* Toggle Extra Fields Button */}
+                  {/* Add Custom Field Button */}
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setShowExtraFields(!showExtraFields)}
-                    className="text-xs text-slate-600 hover:text-slate-900"
+                    onClick={addCustomField}
+                    className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                   >
-                    {showExtraFields ? (
-                      <>
-                        <span className="mr-1">▼</span> Qo'shimcha maydonlarni yashirish
-                      </>
-                    ) : (
-                      <>
-                        <span className="mr-1">▶</span> Qo'shimcha maydonlar (IMEI, Serial, va h.k.)
-                      </>
-                    )}
+                    <Plus className="w-3 h-3 mr-1" />
+                    Qo'shimcha maydon qo'shish (IMEI, Rang, va h.k.)
                   </Button>
 
                   {/* Items Table */}
@@ -551,7 +580,20 @@ export default function CargoShipments() {
                       <TableBody>
                         {formData.items.map((item, idx) => (
                           <TableRow key={idx}>
-                            <TableCell>{item.name}</TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{item.name}</p>
+                                {item.customFields && item.customFields.length > 0 && (
+                                  <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                                    {item.customFields.map((field, i) => (
+                                      field.key && field.value && (
+                                        <p key={i}>{field.key}: {field.value}</p>
+                                      )
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>{item.quantity}</TableCell>
                             <TableCell>{item.currency} {item.price}</TableCell>
                             <TableCell className="font-semibold">{item.currency} {item.total.toLocaleString()}</TableCell>
