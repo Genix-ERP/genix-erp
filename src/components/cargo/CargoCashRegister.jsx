@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCargoContext } from '@/components/contexts/CargoContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { cargoService } from '@/api/services/cargo';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,8 @@ export default function CargoCashRegister() {
     cargoCash,
     setCargoCash,
     companyAccounts,
-    addCashTransaction
+    addCashTransaction,
+    loadCashSummary
   } = useCargoContext();
   const { companies, activeCompany } = useCompany();
 
@@ -109,63 +111,18 @@ export default function CargoCashRegister() {
     // If editing, update the existing transaction
     if (editingTransactionId) {
       try {
-        // Find the old transaction to reverse its balance effect
-        const oldTransaction = cargoCash.transactions?.find(t => t.id === editingTransactionId);
-        if (!oldTransaction) {
-          alert('Tranzaksiya topilmadi');
-          return;
-        }
-
-        const oldType = extractString(oldTransaction.type);
-        const oldCurrency = extractString(oldTransaction.currency);
-        const oldAmount = oldTransaction.amount;
-
-        // Create updated transaction
-        const updatedTransaction = {
-          ...oldTransaction,
-          type: transactionType,
+        // Update via backend
+        await cargoService.updateCashTransaction(editingTransactionId, {
+          transaction_type: transactionType,
           amount: parseFloat(formData.amount),
           currency: formData.currency,
           category: formData.category,
           description: formData.description,
-          company_id: formData.company_id || null,
-          date: oldTransaction.date // Keep original date
-        };
+          related_company_id: formData.company_id || null
+        });
 
-        // Update transactions list
-        const updatedTransactions = (cargoCash.transactions || []).map(t =>
-          t.id === editingTransactionId ? updatedTransaction : t
-        );
-
-        // Calculate balance changes
-        const oldBalanceKey = oldCurrency === 'USD' ? 'usd_balance' : 'uzs_balance';
-        const newBalanceKey = formData.currency === 'USD' ? 'usd_balance' : 'uzs_balance';
-
-        let updatedCash = { ...cargoCash, transactions: updatedTransactions };
-
-        // Reverse old transaction effect
-        if (oldType === 'income') {
-          updatedCash[oldBalanceKey] -= oldAmount;
-        } else {
-          updatedCash[oldBalanceKey] += oldAmount;
-        }
-
-        // Apply new transaction effect
-        if (transactionType === 'income') {
-          updatedCash[newBalanceKey] += parseFloat(formData.amount);
-        } else {
-          updatedCash[newBalanceKey] -= parseFloat(formData.amount);
-        }
-
-        setCargoCash(updatedCash);
-
-        // Save to localStorage
-        const STORAGE_KEY = `genix_cargo_cash_${activeCompany?.id}`;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCash));
-        } catch (error) {
-          console.error('Error saving to localStorage:', error);
-        }
+        // Reload cash summary from backend to get fresh data
+        await loadCashSummary();
 
         alert('Tranzaksiya muvaffaqiyatli yangilandi');
       } catch (error) {
@@ -175,14 +132,20 @@ export default function CargoCashRegister() {
       }
     } else {
       // Add new transaction
-      addCashTransaction({
-        type: transactionType,
-        amount: parseFloat(formData.amount),
-        currency: formData.currency,
-        category: formData.category,
-        description: formData.description,
-        company_id: formData.company_id || null
-      });
+      try {
+        await addCashTransaction({
+          type: transactionType,
+          amount: parseFloat(formData.amount),
+          currency: formData.currency,
+          category: formData.category,
+          description: formData.description,
+          company_id: formData.company_id || null
+        });
+      } catch (error) {
+        console.error('Error adding transaction:', error);
+        alert('Tranzaksiya qo\'shishda xatolik yuz berdi');
+        return;
+      }
     }
 
     setShowTransactionModal(false);
@@ -216,52 +179,15 @@ export default function CargoCashRegister() {
     }
 
     try {
-      // Find the transaction to reverse its balance effect
-      const transaction = cargoCash.transactions?.find(t => t.id === transactionId);
-      if (!transaction) {
-        alert('Tranzaksiya topilmadi');
-        return;
-      }
+      // Delete via backend
+      await cargoService.deleteCashTransaction(transactionId);
 
-      const txType = extractString(transaction.type);
-      const txCurrency = extractString(transaction.currency);
-      const txAmount = transaction.amount;
-
-      // Update local state by filtering out the deleted transaction
-      const updatedTransactions = (cargoCash.transactions || []).filter(t => t.id !== transactionId);
-
-      // Reverse the balance changes
-      const balanceKey = txCurrency === 'USD' ? 'usd_balance' : 'uzs_balance';
-      const updatedCash = {
-        ...cargoCash,
-        transactions: updatedTransactions,
-        [balanceKey]: txType === 'income'
-          ? cargoCash[balanceKey] - txAmount  // Remove income
-          : cargoCash[balanceKey] + txAmount  // Add back expense
-      };
-
-      setCargoCash(updatedCash);
-
-      // Save to localStorage
-      const STORAGE_KEY = `genix_cargo_cash_${activeCompany?.id}`;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCash));
-      } catch (error) {
-        console.error('Error saving to localStorage:', error);
-      }
-
-      // Optionally try backend deletion (when endpoint becomes available)
-      // This will fail silently for now
-      try {
-        // await cargoService.deleteCashTransaction(transactionId);
-        console.log('Backend delete not yet implemented for transaction:', transactionId);
-      } catch (error) {
-        console.log('Backend delete failed (expected):', error);
-      }
+      // Reload cash summary from backend to get fresh data
+      await loadCashSummary();
 
       alert('Tranzaksiya muvaffaqiyatli o\'chirildi');
     } catch (error) {
-      console.error('Error deleting transaction:', error);
+      console.error('Error deleting transaction from backend:', error);
       alert('Tranzaksiyani o\'chirishda xatolik yuz berdi');
     }
   };

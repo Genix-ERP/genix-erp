@@ -184,7 +184,7 @@ export default function CargoShipments() {
   };
 
   // Submit new shipment
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (formData.items.length === 0) {
       alert('Iltimos kamida bitta tovar qo\'shing');
       return;
@@ -211,14 +211,21 @@ export default function CargoShipments() {
       }))
     };
 
-    if (isEditMode && selectedShipment) {
-      updateShipment(selectedShipment.id, backendData);
-    } else {
-      createShipment(backendData);
+    try {
+      if (isEditMode && selectedShipment) {
+        await updateShipment(selectedShipment.id, backendData);
+        alert('Yuk muvaffaqiyatli yangilandi');
+      } else {
+        await createShipment(backendData);
+        alert('Yuk muvaffaqiyatli yaratildi');
+      }
+      setShowAddModal(false);
+      setIsEditMode(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error saving shipment:', error);
+      alert('Yukni saqlashda xatolik yuz berdi');
     }
-    setShowAddModal(false);
-    setIsEditMode(false);
-    resetForm();
   };
 
   const resetForm = () => {
