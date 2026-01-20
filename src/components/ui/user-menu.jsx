@@ -38,16 +38,16 @@ export default function UserMenu({ compact = false }) {
         <Button
           variant="ghost"
           className={compact
-            ? "flex items-center gap-2 px-2 py-2 h-auto hover:bg-slate-100/80 rounded-full"
+            ? "flex items-center gap-1.5 px-2 py-1.5 h-auto hover:bg-slate-100/80 rounded-lg"
             : "w-full justify-between px-3 py-2 h-auto hover:bg-slate-100/80"
           }
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? 'gap-1.5' : 'gap-2'}`}>
             {/* User Avatar */}
             <div className={`bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0 ${
-              compact ? 'w-8 h-8' : 'w-10 h-10'
+              compact ? 'w-7 h-7' : 'w-10 h-10'
             }`}>
-              <span className={`text-white font-semibold ${compact ? 'text-xs' : 'text-sm'}`}>
+              <span className={`text-white font-semibold ${compact ? 'text-[10px]' : 'text-sm'}`}>
                 {currentUser?.full_name?.charAt(0) || 'U'}
               </span>
             </div>
@@ -64,13 +64,14 @@ export default function UserMenu({ compact = false }) {
               </div>
             )}
             {compact && (
-              <span className="text-sm font-medium text-slate-900 hidden lg:block">
+              <span className="text-xs font-medium text-slate-900 truncate max-w-[80px]">
                 {currentUser?.full_name || 'User'}
               </span>
             )}
           </div>
 
           {!compact && <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+          {compact && <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
 
