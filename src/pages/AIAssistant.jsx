@@ -86,13 +86,6 @@ export default function AIAssistant() {
           <div className="flex flex-col items-center justify-center min-h-screen p-6">
             <div className="w-full max-w-4xl mx-auto space-y-12 animate-fadeIn">
 
-              {/* Subtitle */}
-              <div className="text-center space-y-6">
-                <p className="text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-                  {t('ai_copilot_intro') || 'Your intelligent business copilot. Ask questions, analyze data, and automate workflows with natural language.'}
-                </p>
-              </div>
-
               {/* Search Box */}
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-all duration-500"></div>
