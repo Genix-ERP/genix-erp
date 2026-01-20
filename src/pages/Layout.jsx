@@ -400,7 +400,9 @@ function LayoutContent({ children, currentPageName }) {
                 <SidebarTrigger className="md:hidden hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
                 <div className="hidden md:block">
                   <h1 className="text-xl md:text-2xl font-bold text-[var(--genix-navy)]">
-                    {currentPageName === 'AdminPanel' ? t('admin_panel') : (t(currentPageName?.toLowerCase()) || t("dashboard"))}
+                    {currentPageName === 'AdminPanel' ? t('admin_panel') :
+                     currentPageName === 'AIAssistant' ? t('ai_assistant') :
+                     (t(currentPageName?.toLowerCase()) || t("dashboard"))}
                   </h1>
                 </div>
               </div>
