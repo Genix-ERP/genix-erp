@@ -407,30 +407,28 @@ export default function Payroll() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Payroll Trend */}
+        {chartData.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>{t('monthly_payroll')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Bar dataKey="amount" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Payroll Trend */}
-          {chartData.length > 0 && (
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>{t('monthly_payroll')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" fontSize={12} />
-                    <YAxis fontSize={12} />
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Bar dataKey="amount" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Payroll Table */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
+        {/* Payroll Table */}
+        <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
@@ -549,7 +547,6 @@ export default function Payroll() {
               )}
             </CardContent>
           </Card>
-        </div>
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

@@ -155,9 +155,29 @@ export const CargoProvider = ({ children }) => {
       return newShipment;
     }
 
-    // Create via backend
+    // Create via backend - Transform data to match backend schema
     try {
-      const result = await cargoService.createShipment(shipmentData);
+      const backendData = {
+        tracking_number: shipmentData.tracking_number || '',
+        supplier_country: shipmentData.supplier_country || '',
+        supplier_company: shipmentData.supplier_company || '',
+        expected_date: shipmentData.expected_date || null,
+        transport_cost: shipmentData.costs?.transport || 0,
+        customs_cost: shipmentData.costs?.customs || 0,
+        insurance_cost: shipmentData.costs?.insurance || 0,
+        other_cost: shipmentData.costs?.other || 0,
+        notes: shipmentData.notes || '',
+        items: shipmentData.items.map(item => ({
+          item_name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price || 0,
+          currency: item.currency,
+          hs_code: item.hs_code || '',
+          description: item.description || ''
+        }))
+      };
+
+      const result = await cargoService.createShipment(backendData);
       await loadShipments(); // Reload to get full data
       return result;
     } catch (error) {
