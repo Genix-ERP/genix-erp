@@ -64,21 +64,6 @@ export default function CompanySwitcher({ compact = false }) {
           }
         >
           <div className="flex items-center gap-2 min-w-0">
-            {/* Company Avatar */}
-            <div className={`rounded-lg bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] flex items-center justify-center text-white font-bold flex-shrink-0 ${
-              compact ? 'w-7 h-7 text-[10px]' : 'w-8 h-8 text-xs'
-            }`}>
-              {activeCompany?.logo_url ? (
-                <img
-                  src={activeCompany.logo_url}
-                  alt={activeCompany.company_name}
-                  className="w-full h-full object-cover rounded-lg"
-                />
-              ) : (
-                getInitials(activeCompany?.company_name)
-              )}
-            </div>
-
             {/* Company Info */}
             {!compact && (
               <div className="flex flex-col items-start min-w-0">
@@ -121,19 +106,6 @@ export default function CompanySwitcher({ compact = false }) {
             className="cursor-pointer"
           >
             <div className="flex items-center gap-3 w-full">
-              {/* Company Avatar */}
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 text-xs font-bold flex-shrink-0">
-                {company.logo_url ? (
-                  <img
-                    src={company.logo_url}
-                    alt={company.company_name}
-                    className="w-full h-full object-cover rounded-lg"
-                  />
-                ) : (
-                  getInitials(company.company_name)
-                )}
-              </div>
-
               {/* Company Info */}
               <div className="flex flex-col flex-1 min-w-0">
                 <span className="text-sm font-medium truncate">
