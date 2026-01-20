@@ -309,7 +309,7 @@ export default function Assets() {
       <div className="space-y-6">
 
         {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -474,7 +474,7 @@ export default function Assets() {
                   />
                 </div>
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full sm:w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -513,7 +513,7 @@ export default function Assets() {
                             </div>
                             <p className="text-sm text-slate-500 mb-3">{asset.asset_code}</p>
 
-                            <div className="grid grid-cols-4 gap-4 text-sm">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <p className="text-slate-500">{t('purchase_cost')}</p>
                                 <p className="font-semibold">${(asset.purchase_cost || 0).toLocaleString()}</p>
@@ -619,7 +619,7 @@ export default function Assets() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('purchase_cost')} *</label>
                   <Input
@@ -748,7 +748,7 @@ export default function Assets() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('purchase_cost')}</label>
                     <Input

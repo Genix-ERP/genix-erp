@@ -381,7 +381,7 @@ export default function RFQManagement() {
 
       {/* Create RFQ Form Modal */}
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Yangi taklif so'rovi (RFQ)</DialogTitle>
           </DialogHeader>
@@ -518,7 +518,7 @@ export default function RFQManagement() {
 
       {/* RFQ Details Modal */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>RFQ tafsilotlari</DialogTitle>
           </DialogHeader>

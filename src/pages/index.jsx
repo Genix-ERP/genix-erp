@@ -112,34 +112,34 @@ function PagesContent() {
                         <Layout currentPageName={currentPage}>
                             <Routes>
                                 <Route path="/" element={<Dashboard />} />
-                                <Route path="/dashboard" element={<Dashboard />} />
-                                <Route path="/aiassistant" element={<AIAssistant />} />
-                                <Route path="/inventory" element={<Inventory />} />
-                                <Route path="/workflows" element={<Workflows />} />
-                                <Route path="/hr" element={<HR />} />
-                                <Route path="/leave-management" element={<LeaveManagement />} />
-                                <Route path="/attendance" element={<Attendance />} />
-                                <Route path="/employee-contracts" element={<EmployeeContracts />} />
-                                <Route path="/cargo" element={<Cargo />} />
-                                <Route path="/apps" element={<Apps />} />
-                                <Route path="/customers" element={<Customers />} />
-                                <Route path="/settings" element={<Settings />} />
-                                <Route path="/my-settings" element={<MySettings />} />
-                                <Route path="/financials" element={<Financials />} />
-                                <Route path="/notifications" element={<Notifications />} />
-                                <Route path="/adminpanel" element={<AdminPanel />} />
-                                <Route path="/adminsettings" element={<AdminSettings />} />
-                                <Route path="/manufacturing" element={<Manufacturing />} />
-                                <Route path="/procurement" element={<Procurement />} />
-                                <Route path="/projects" element={<Projects />} />
-                                <Route path="/projects/:projectId" element={<ProjectDetail />} />
-                                <Route path="/salesorders" element={<SalesOrders />} />
-                                <Route path="/assets" element={<Assets />} />
-                                <Route path="/expenses" element={<Expenses />} />
-                                <Route path="/payroll" element={<Payroll />} />
-                                <Route path="/contracts" element={<Contracts />} />
-                                <Route path="/companies" element={<Companies />} />
-                                <Route path="/addcompany" element={<AddCompany />} />
+                                <Route path="dashboard" element={<Dashboard />} />
+                                <Route path="aiassistant" element={<AIAssistant />} />
+                                <Route path="inventory" element={<Inventory />} />
+                                <Route path="workflows" element={<Workflows />} />
+                                <Route path="hr" element={<HR />} />
+                                <Route path="leave-management" element={<LeaveManagement />} />
+                                <Route path="attendance" element={<Attendance />} />
+                                <Route path="employee-contracts" element={<EmployeeContracts />} />
+                                <Route path="cargo" element={<Cargo />} />
+                                <Route path="apps" element={<Apps />} />
+                                <Route path="customers" element={<Customers />} />
+                                <Route path="settings" element={<Settings />} />
+                                <Route path="my-settings" element={<MySettings />} />
+                                <Route path="financials" element={<Financials />} />
+                                <Route path="notifications" element={<Notifications />} />
+                                <Route path="adminpanel" element={<AdminPanel />} />
+                                <Route path="adminsettings" element={<AdminSettings />} />
+                                <Route path="manufacturing" element={<Manufacturing />} />
+                                <Route path="procurement" element={<Procurement />} />
+                                <Route path="projects" element={<Projects />} />
+                                <Route path="projects/:projectId" element={<ProjectDetail />} />
+                                <Route path="salesorders" element={<SalesOrders />} />
+                                <Route path="assets" element={<Assets />} />
+                                <Route path="expenses" element={<Expenses />} />
+                                <Route path="payroll" element={<Payroll />} />
+                                <Route path="contracts" element={<Contracts />} />
+                                <Route path="companies" element={<Companies />} />
+                                <Route path="addcompany" element={<AddCompany />} />
                             </Routes>
                         </Layout>
                     </ProtectedRoute>

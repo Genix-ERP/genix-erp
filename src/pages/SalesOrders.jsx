@@ -397,7 +397,7 @@ export default function SalesOrders() {
       <div className="space-y-6">
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -613,29 +613,28 @@ export default function SalesOrders() {
 
           {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Sales Trend Chart */}
-              {chartData.length > 0 && (
-                <Card className="bg-white/80 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg">{t('sales_trend')}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" fontSize={12} />
-                        <YAxis fontSize={12} />
-                        <Tooltip formatter={(value) => formatCurrency(value)} />
-                        <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              )}
+            {/* Sales Trend Chart */}
+            {chartData.length > 0 && (
+              <Card className="bg-white/80 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg">{t('sales_trend')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
-              {/* Orders Table */}
-              <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
+            {/* Orders Table */}
+            <Card className="bg-white/80 backdrop-blur-sm">
                 <CardHeader className="border-b">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <CardTitle className="text-lg">{t('orders')}</CardTitle>
@@ -664,7 +663,7 @@ export default function SalesOrders() {
                       />
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-[150px]">
+                      <SelectTrigger className="w-full sm:w-[150px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -768,7 +767,6 @@ export default function SalesOrders() {
                   )}
                 </CardContent>
               </Card>
-            </div>
           </TabsContent>
 
           {/* Quotations Tab */}

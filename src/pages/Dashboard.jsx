@@ -189,7 +189,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Business Health Score */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 min-w-[200px]">
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 w-full sm:min-w-[200px]">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="w-5 h-5" />
                     <span className="text-sm font-medium">Business Health</span>
@@ -365,7 +365,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 md:mt-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-6 md:mt-8">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200/50">
             <CardContent className="p-4">
               <div className="text-sm text-blue-600 font-medium">{t('sales_orders')}</div>

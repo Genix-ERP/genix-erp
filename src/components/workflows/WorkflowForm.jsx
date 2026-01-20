@@ -11,7 +11,7 @@ import { useTranslation } from "@/components/utils/translations";
 
 export default function WorkflowForm({ workflow, onSave, onCancel }) {
   const { language } = useLanguage();
-  const t = useTranslation(language);
+  const { t } = useTranslation(language);
 
   const [formData, setFormData] = useState({
     name: workflow?.name || "",
@@ -78,7 +78,7 @@ export default function WorkflowForm({ workflow, onSave, onCancel }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Card className="w-full max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{workflow ? t('edit_workflow') : t('create_new_workflow')}</CardTitle>
           <Button variant="ghost" size="icon" onClick={onCancel}>

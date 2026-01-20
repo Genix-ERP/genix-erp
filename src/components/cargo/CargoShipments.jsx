@@ -28,6 +28,19 @@ export default function CargoShipments() {
     calculateShipmentCosts
   } = useCargoContext();
 
+  // Helper function to safely format dates
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '-';
+      return format(date, 'dd MMM yyyy');
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return '-';
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -387,7 +400,7 @@ export default function CargoShipments() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {shipment.expected_date ? format(new Date(shipment.expected_date), 'dd MMM yyyy') : '-'}
+                      {formatDate(shipment.expected_date)}
                     </TableCell>
                     <TableCell>{getStatusBadge(shipment.status)}</TableCell>
                     <TableCell className="font-semibold">${total.toLocaleString()}</TableCell>
@@ -447,7 +460,7 @@ export default function CargoShipments() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {isEditMode ? (t('edit_shipment') || 'Yukni tahrirlash') : (t('new_shipment') || 'Yangi yuk buyurtmasi')}
@@ -495,7 +508,7 @@ export default function CargoShipments() {
               <Card className="mt-2 bg-slate-50">
                 <CardContent className="p-4">
                   {/* Main Fields */}
-                  <div className="grid grid-cols-5 gap-3 mb-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-3">
                     <div>
                       <Label className="text-xs text-slate-600 mb-1">Tovar nomi *</Label>
                       <Input
@@ -547,7 +560,7 @@ export default function CargoShipments() {
                     <div className="space-y-2 mb-3 p-3 bg-white rounded-lg border border-slate-200">
                       <Label className="text-xs font-semibold text-slate-700">Qo'shimcha ma'lumotlar</Label>
                       {currentItem.customFields.map((field, index) => (
-                        <div key={index} className="grid grid-cols-3 gap-2">
+                        <div key={index} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                           <Input
                             placeholder="Maydon nomi (masalan: IMEI, Rang, Razmer)"
                             value={field.key}
@@ -721,7 +734,7 @@ export default function CargoShipments() {
 
       {/* View/Edit Shipment Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Yuk ma'lumotlari</DialogTitle>
           </DialogHeader>
@@ -746,7 +759,7 @@ export default function CargoShipments() {
                     <div>
                       <Label className="text-slate-500">Kutilayotgan sana</Label>
                       <p className="font-semibold">
-                        {selectedShipment.expected_date ? format(new Date(selectedShipment.expected_date), 'dd MMM yyyy') : '-'}
+                        {formatDate(selectedShipment.expected_date)}
                       </p>
                     </div>
                     <div>

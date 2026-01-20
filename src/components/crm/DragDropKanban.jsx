@@ -364,7 +364,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                 const { opportunities: stageOpps, count, value } = stageData[stage.id] || { opportunities: [], count: 0, value: 0 };
 
                 return (
-                  <div key={stage.id} className="flex flex-col min-w-[280px] w-[280px] flex-shrink-0">
+                  <div key={stage.id} className="flex flex-col min-w-[240px] w-[240px] sm:min-w-[280px] sm:w-[280px] flex-shrink-0">
                     <div className={`${stage.bgClass} ${stage.borderClass} border-2 rounded-t-xl p-3 sm:p-4 shadow-sm`}>
                       <div className="flex items-center justify-between mb-2 gap-2">
                         <h3 className={`font-semibold ${stage.textClass} text-xs sm:text-sm truncate flex-1`}>

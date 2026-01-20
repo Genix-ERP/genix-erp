@@ -426,7 +426,7 @@ export default function ProjectDetail() {
               </CardHeader>
               <CardContent>
                 {/* Task Stats */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="text-center p-3 bg-slate-100 rounded-lg">
                     <div className="text-2xl font-bold">{taskStats.total}</div>
                     <div className="text-xs text-muted-foreground">{t('total') || 'Total'}</div>

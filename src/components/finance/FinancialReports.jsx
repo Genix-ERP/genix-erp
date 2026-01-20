@@ -513,7 +513,7 @@ export default function FinancialReports() {
 
       {/* Reports Tabs */}
       <Tabs defaultValue="pnl" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-white/80">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
           <TabsTrigger value="pnl">{t('profit_loss')}</TabsTrigger>
           <TabsTrigger value="balance">{t('balance_sheet')}</TabsTrigger>
           <TabsTrigger value="cashflow">{t('cash_flow')}</TabsTrigger>

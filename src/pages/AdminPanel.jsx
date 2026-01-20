@@ -364,7 +364,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Metrics - Enhanced */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
@@ -478,7 +478,7 @@ export default function AdminPanel() {
                     />
                   </div>
                   <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger className="w-full sm:w-[150px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -495,7 +495,7 @@ export default function AdminPanel() {
                     </SelectContent>
                   </Select>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[130px]">
+                    <SelectTrigger className="w-full sm:w-[130px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -603,7 +603,7 @@ export default function AdminPanel() {
                                       value={user.role} 
                                       onValueChange={(value) => updateUserRole(user.id, value)}
                                     >
-                                      <SelectTrigger className="h-8 w-[120px] text-xs">
+                                      <SelectTrigger className="h-8 w-full sm:w-[120px] text-xs">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
