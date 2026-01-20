@@ -37,6 +37,7 @@ export default function CompanySettings() {
   const {
     companies,
     activeCompany,
+    addCompany,
     updateCompany,
     deleteCompany,
     setActiveCompany,
@@ -48,11 +49,42 @@ export default function CompanySettings() {
   const [filteredCompanies, setFilteredCompanies] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
   const [error, setError] = useState(null);
+  const [addError, setAddError] = useState(null);
   const [formData, setFormData] = useState({
     company_code: "",
     company_name: "",
+    legal_name: "",
+    tax_id: "",
+    registration_number: "",
+    email: "",
+    phone: "",
+    website: "",
+    street: "",
+    city: "",
+    state: "",
+    postal_code: "",
+    country: "Uzbekistan",
+    currency: "UZS",
+    accounting_standard: "LOCAL_GAAP",
+    is_active: true
+  });
+
+  const [addFormData, setAddFormData] = useState({
+    company_code: "",
+    company_name: "",
+    legal_name: "",
+    tax_id: "",
+    registration_number: "",
+    email: "",
+    phone: "",
+    website: "",
+    street: "",
+    city: "",
+    state: "",
+    postal_code: "",
     country: "Uzbekistan",
     currency: "UZS",
     accounting_standard: "LOCAL_GAAP",
@@ -85,6 +117,16 @@ export default function CompanySettings() {
     setFormData({
       company_code: company.company_code || "",
       company_name: company.company_name || "",
+      legal_name: company.legal_name || "",
+      tax_id: company.tax_id || "",
+      registration_number: company.registration_number || "",
+      email: company.email || "",
+      phone: company.phone || "",
+      website: company.website || "",
+      street: company.street || "",
+      city: company.city || "",
+      state: company.state || "",
+      postal_code: company.postal_code || "",
       country: company.country || "Uzbekistan",
       currency: company.currency || "UZS",
       accounting_standard: company.accounting_standard || "LOCAL_GAAP",
@@ -123,6 +165,55 @@ export default function CompanySettings() {
 
   const handleSetActive = (company) => {
     setActiveCompany(company.id);
+  };
+
+  const handleAddClick = () => {
+    if (!canAddMore) {
+      setAddError(`Kompaniya limiti (${maxCompanies}) ga yetildi. Tarifni yangilash kerak.`);
+      return;
+    }
+    setAddFormData({
+      company_code: "",
+      company_name: "",
+      legal_name: "",
+      tax_id: "",
+      registration_number: "",
+      email: "",
+      phone: "",
+      website: "",
+      street: "",
+      city: "",
+      state: "",
+      postal_code: "",
+      country: "Uzbekistan",
+      currency: "UZS",
+      accounting_standard: "LOCAL_GAAP",
+      is_active: true
+    });
+    setAddError(null);
+    setShowAddForm(true);
+  };
+
+  const handleAddSubmit = async (e) => {
+    e.preventDefault();
+    setAddError(null);
+
+    if (!canAddMore) {
+      setAddError(`Kompaniya limiti (${maxCompanies}) ga yetildi.`);
+      return;
+    }
+
+    try {
+      const result = addCompany(addFormData, maxCompanies);
+      if (!result.success) {
+        setAddError(result.message || 'Xatolik yuz berdi');
+        return;
+      }
+      setShowAddForm(false);
+    } catch (err) {
+      console.error("Error adding company:", err);
+      setAddError('Kompaniyani qo\'shishda xatolik');
+    }
   };
 
   return (
@@ -188,18 +279,17 @@ export default function CompanySettings() {
                 className="pl-9"
               />
             </div>
-            <Link to="/addcompany">
-              <Button
-                disabled={!canAddMore}
-                className={canAddMore
-                  ? "bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] whitespace-nowrap"
-                  : "bg-slate-300 cursor-not-allowed whitespace-nowrap"
-                }
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Yangi kompaniya
-              </Button>
-            </Link>
+            <Button
+              onClick={handleAddClick}
+              disabled={!canAddMore}
+              className={canAddMore
+                ? "bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] whitespace-nowrap"
+                : "bg-slate-300 cursor-not-allowed whitespace-nowrap"
+              }
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Yangi kompaniya
+            </Button>
           </div>
 
           {/* Companies Table */}
@@ -303,14 +393,14 @@ export default function CompanySettings() {
 
       {/* Edit Company Dialog */}
       <Dialog open={showEditForm} onOpenChange={setShowEditForm}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5" />
               Kompaniyani tahrirlash
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleEditSubmit} className="space-y-4 py-4">
+          <form onSubmit={handleEditSubmit} className="space-y-6 py-4">
             {error && (
               <Alert variant="destructive">
                 <AlertTriangle className="w-4 h-4" />
@@ -318,96 +408,211 @@ export default function CompanySettings() {
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label>Kompaniya kodi *</Label>
-              <Input
-                value={formData.company_code}
-                onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
-                placeholder="MAIN"
-                required
-                disabled
-              />
-              <p className="text-xs text-slate-500">Kompaniya kodi o'zgartirilmaydi</p>
+            {/* Basic Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Asosiy ma'lumotlar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Kompaniya kodi *</Label>
+                  <Input
+                    value={formData.company_code}
+                    onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
+                    placeholder="MAIN"
+                    required
+                    disabled
+                  />
+                  <p className="text-xs text-slate-500">Kompaniya kodi o'zgartirilmaydi</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Kompaniya nomi *</Label>
+                  <Input
+                    value={formData.company_name}
+                    onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                    placeholder="Mening kompaniyam"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Huquqiy nom</Label>
+                  <Input
+                    value={formData.legal_name}
+                    onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
+                    placeholder="Kompaniyaning to'liq huquqiy nomi"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>INN (Soliq ID)</Label>
+                  <Input
+                    value={formData.tax_id}
+                    onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Ro'yxatdan o'tish raqami</Label>
+                  <Input
+                    value={formData.registration_number}
+                    onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                    placeholder="REG-123456"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Kompaniya nomi *</Label>
-              <Input
-                value={formData.company_name}
-                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                placeholder="Mening kompaniyam"
-                required
-              />
+            {/* Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Aloqa ma'lumotlari</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Elektron pochta</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="company@example.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Telefon</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+998 90 123 45 67"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Veb-sayt</Label>
+                  <Input
+                    value={formData.website}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                    placeholder="https://example.com"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Mamlakat</Label>
-              <Select
-                value={formData.country}
-                onValueChange={(value) => setFormData({ ...formData, country: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Uzbekistan">Uzbekistan</SelectItem>
-                  <SelectItem value="Kazakhstan">Kazakhstan</SelectItem>
-                  <SelectItem value="Kyrgyzstan">Kyrgyzstan</SelectItem>
-                  <SelectItem value="Tajikistan">Tajikistan</SelectItem>
-                  <SelectItem value="Turkmenistan">Turkmenistan</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Address */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Manzil</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Ko'cha</Label>
+                  <Input
+                    value={formData.street}
+                    onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                    placeholder="Ko'cha nomi, uy raqami"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Shahar</Label>
+                  <Input
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder="Toshkent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Viloyat/Region</Label>
+                  <Input
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    placeholder="Toshkent viloyati"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Pochta indeksi</Label>
+                  <Input
+                    value={formData.postal_code}
+                    onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                    placeholder="100000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Mamlakat</Label>
+                  <Select
+                    value={formData.country}
+                    onValueChange={(value) => setFormData({ ...formData, country: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Uzbekistan">Uzbekistan</SelectItem>
+                      <SelectItem value="Kazakhstan">Kazakhstan</SelectItem>
+                      <SelectItem value="Kyrgyzstan">Kyrgyzstan</SelectItem>
+                      <SelectItem value="Tajikistan">Tajikistan</SelectItem>
+                      <SelectItem value="Turkmenistan">Turkmenistan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Valyuta</Label>
-              <Select
-                value={formData.currency}
-                onValueChange={(value) => setFormData({ ...formData, currency: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UZS">UZS - O'zbek so'mi</SelectItem>
-                  <SelectItem value="USD">USD - US Dollar</SelectItem>
-                  <SelectItem value="EUR">EUR - Euro</SelectItem>
-                  <SelectItem value="RUB">RUB - Russian Ruble</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Settings */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Sozlamalar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Valyuta</Label>
+                  <Select
+                    value={formData.currency}
+                    onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UZS">UZS - O'zbek so'mi</SelectItem>
+                      <SelectItem value="USD">USD - US Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="RUB">RUB - Russian Ruble</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Buxgalteriya standarti</Label>
+                  <Select
+                    value={formData.accounting_standard}
+                    onValueChange={(value) => setFormData({ ...formData, accounting_standard: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOCAL_GAAP">Mahalliy standart</SelectItem>
+                      <SelectItem value="IFRS">IFRS</SelectItem>
+                      <SelectItem value="US_GAAP">US GAAP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="is_active"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="is_active" className="cursor-pointer">
+                    Kompaniya aktiv
+                  </Label>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Buxgalteriya standarti</Label>
-              <Select
-                value={formData.accounting_standard}
-                onValueChange={(value) => setFormData({ ...formData, accounting_standard: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LOCAL_GAAP">Mahalliy standart</SelectItem>
-                  <SelectItem value="IFRS">IFRS</SelectItem>
-                  <SelectItem value="US_GAAP">US GAAP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_active"
-                checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <Label htmlFor="is_active" className="cursor-pointer">
-                Kompaniya aktiv
-              </Label>
-            </div>
-
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 pt-4 border-t">
               <Button
                 type="button"
                 variant="outline"
@@ -421,6 +626,246 @@ export default function CompanySettings() {
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
               >
                 Saqlash
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Company Dialog */}
+      <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Yangi kompaniya qo'shish
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddSubmit} className="space-y-6 py-4">
+            {addError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="w-4 h-4" />
+                <AlertDescription>{addError}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Basic Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Asosiy ma'lumotlar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Kompaniya kodi *</Label>
+                  <Input
+                    value={addFormData.company_code}
+                    onChange={(e) => setAddFormData({ ...addFormData, company_code: e.target.value })}
+                    placeholder="COMP001"
+                    required
+                  />
+                  <p className="text-xs text-slate-500">Noyob identifikator (masalan: ACME01)</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Kompaniya nomi *</Label>
+                  <Input
+                    value={addFormData.company_name}
+                    onChange={(e) => setAddFormData({ ...addFormData, company_name: e.target.value })}
+                    placeholder="Mening kompaniyam"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Huquqiy nom</Label>
+                  <Input
+                    value={addFormData.legal_name}
+                    onChange={(e) => setAddFormData({ ...addFormData, legal_name: e.target.value })}
+                    placeholder="Kompaniyaning to'liq huquqiy nomi"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>INN (Soliq ID)</Label>
+                  <Input
+                    value={addFormData.tax_id}
+                    onChange={(e) => setAddFormData({ ...addFormData, tax_id: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Ro'yxatdan o'tish raqami</Label>
+                  <Input
+                    value={addFormData.registration_number}
+                    onChange={(e) => setAddFormData({ ...addFormData, registration_number: e.target.value })}
+                    placeholder="REG-123456"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Aloqa ma'lumotlari</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Elektron pochta</Label>
+                  <Input
+                    type="email"
+                    value={addFormData.email}
+                    onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
+                    placeholder="company@example.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Telefon</Label>
+                  <Input
+                    value={addFormData.phone}
+                    onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
+                    placeholder="+998 90 123 45 67"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Veb-sayt</Label>
+                  <Input
+                    value={addFormData.website}
+                    onChange={(e) => setAddFormData({ ...addFormData, website: e.target.value })}
+                    placeholder="https://example.com"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Manzil</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Ko'cha</Label>
+                  <Input
+                    value={addFormData.street}
+                    onChange={(e) => setAddFormData({ ...addFormData, street: e.target.value })}
+                    placeholder="Ko'cha nomi, uy raqami"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Shahar</Label>
+                  <Input
+                    value={addFormData.city}
+                    onChange={(e) => setAddFormData({ ...addFormData, city: e.target.value })}
+                    placeholder="Toshkent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Viloyat/Region</Label>
+                  <Input
+                    value={addFormData.state}
+                    onChange={(e) => setAddFormData({ ...addFormData, state: e.target.value })}
+                    placeholder="Toshkent viloyati"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Pochta indeksi</Label>
+                  <Input
+                    value={addFormData.postal_code}
+                    onChange={(e) => setAddFormData({ ...addFormData, postal_code: e.target.value })}
+                    placeholder="100000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Mamlakat</Label>
+                  <Select
+                    value={addFormData.country}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, country: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Uzbekistan">Uzbekistan</SelectItem>
+                      <SelectItem value="Kazakhstan">Kazakhstan</SelectItem>
+                      <SelectItem value="Kyrgyzstan">Kyrgyzstan</SelectItem>
+                      <SelectItem value="Tajikistan">Tajikistan</SelectItem>
+                      <SelectItem value="Turkmenistan">Turkmenistan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Settings */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Sozlamalar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Valyuta</Label>
+                  <Select
+                    value={addFormData.currency}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, currency: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UZS">UZS - O'zbek so'mi</SelectItem>
+                      <SelectItem value="USD">USD - US Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="RUB">RUB - Russian Ruble</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Buxgalteriya standarti</Label>
+                  <Select
+                    value={addFormData.accounting_standard}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, accounting_standard: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOCAL_GAAP">Mahalliy standart</SelectItem>
+                      <SelectItem value="IFRS">IFRS</SelectItem>
+                      <SelectItem value="US_GAAP">US GAAP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    id="add_is_active"
+                    checked={addFormData.is_active}
+                    onChange={(e) => setAddFormData({ ...addFormData, is_active: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="add_is_active" className="cursor-pointer">
+                    Kompaniya aktiv
+                  </Label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowAddForm(false)}
+                className="flex-1"
+              >
+                Bekor qilish
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                Qo'shish
               </Button>
             </div>
           </form>

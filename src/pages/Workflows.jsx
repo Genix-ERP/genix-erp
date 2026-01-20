@@ -201,7 +201,6 @@ export default function Workflows() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="w-full sm:w-auto">
             <h1 className="text-2xl sm:text-3xl font-bold text-[var(--genix-navy)] break-words">{t('workflows_title')}</h1>
-            <p className="text-sm sm:text-base text-slate-600 mt-2 break-words">{t('workflows_subtitle')}</p>
           </div>
           <Button
             onClick={() => {

@@ -274,9 +274,6 @@ export default function Apps() {
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[var(--genix-navy)] to-[var(--genix-blue)] bg-clip-text text-transparent mb-3">
               {t('apps_title')}
             </h1>
-            <p className="text-base md:text-lg text-slate-600 leading-relaxed max-w-2xl">
-              {t('apps_subtitle')}
-            </p>
           </div>
         </div>
 

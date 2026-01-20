@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Ship,
-  Package,
   TrendingUp,
   Clock,
   CheckCircle,
@@ -19,7 +18,6 @@ import { useTranslation } from '@/components/utils/translations';
 // Import Cargo components
 import CargoShipments from '@/components/cargo/CargoShipments';
 import CargoTracking from '@/components/cargo/CargoTracking';
-import CargoDistribution from '@/components/cargo/CargoDistribution';
 import CargoCashRegister from '@/components/cargo/CargoCashRegister';
 import CargoReports from '@/components/cargo/CargoReports';
 
@@ -57,9 +55,6 @@ export default function Cargo() {
             <h1 className="text-3xl font-bold text-[var(--genix-navy)]">
               {t('cargo_company') || 'Cargo kompaniyasi'}
             </h1>
-            <p className="text-slate-600 mt-2">
-              {t('cargo_subtitle') || 'Xalqaro yuk tashish va taqsimlash tizimi'}
-            </p>
           </div>
         </div>
 
@@ -195,10 +190,6 @@ export default function Cargo() {
               <Clock className="w-4 h-4" />
               <span>{t('tracking') || 'Kuzatish'}</span>
             </TabsTrigger>
-            <TabsTrigger value="distribution" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Package className="w-4 h-4" />
-              <span>{t('distribution') || 'Taqsimlash'}</span>
-            </TabsTrigger>
             <TabsTrigger value="cash" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <DollarSign className="w-4 h-4" />
               <span>{t('cash_register') || 'Kassa'}</span>
@@ -215,10 +206,6 @@ export default function Cargo() {
 
           <TabsContent value="tracking" className="mt-6">
             <CargoTracking />
-          </TabsContent>
-
-          <TabsContent value="distribution" className="mt-6">
-            <CargoDistribution />
           </TabsContent>
 
           <TabsContent value="cash" className="mt-6">

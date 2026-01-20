@@ -56,7 +56,7 @@ export default function AddCompany() {
       }
       setSuccess(true);
       setTimeout(() => {
-        navigate('/companies');
+        navigate('/settings?tab=companies');
       }, 1500);
     } catch (err) {
       console.error("Error saving company:", err);
@@ -68,9 +68,9 @@ export default function AddCompany() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
         <div className="max-w-2xl mx-auto">
-          <Link to="/companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
+          <Link to="/settings?tab=companies" className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6">
             <ArrowLeft className="w-4 h-4" />
-            Kompaniyalarga qaytish
+            Sozlamalarga qaytish
           </Link>
 
           <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">

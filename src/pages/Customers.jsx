@@ -228,8 +228,7 @@ export default function Customers() {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-[var(--genix-navy)] mb-2">{t('crm_title')}</h1>
-            <p className="text-base md:text-lg text-slate-600">{t('crm_subtitle')}</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-[var(--genix-navy)]">{t('crm_title')}</h1>
           </div>
         </div>
 

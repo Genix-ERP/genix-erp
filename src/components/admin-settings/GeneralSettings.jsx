@@ -6,7 +6,7 @@ import { SettingsSection, SettingsField, SettingsRow, SettingsDivider } from './
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Globe, Calendar } from 'lucide-react';
+import { Globe, Calendar } from 'lucide-react';
 
 const TIMEZONES = [
   { value: 'Asia/Tashkent', label: 'Tashkent (UTC+5)' },
@@ -59,117 +59,6 @@ export default function GeneralSettings() {
 
   return (
     <div className="space-y-4">
-      {/* Company Information */}
-      <SettingsSection
-        title={t('company_information')}
-        description={t('company_information_desc')}
-        icon={Building2}
-        onReset={() => resetSection('general')}
-        resetLabel={t('reset')}
-      >
-        <SettingsRow>
-          <SettingsField label={t('company_name')} required>
-            <Input
-              value={general.company?.name || ''}
-              onChange={(e) => updateSetting('general.company.name', e.target.value)}
-              placeholder={t('enter_company_name')}
-            />
-          </SettingsField>
-          <SettingsField label={t('legal_name')}>
-            <Input
-              value={general.company?.legal_name || ''}
-              onChange={(e) => updateSetting('general.company.legal_name', e.target.value)}
-              placeholder={t('enter_legal_name')}
-            />
-          </SettingsField>
-          <SettingsField label={t('tax_id')}>
-            <Input
-              value={general.company?.tax_id || ''}
-              onChange={(e) => updateSetting('general.company.tax_id', e.target.value)}
-              placeholder={t('enter_tax_id')}
-            />
-          </SettingsField>
-        </SettingsRow>
-
-        <SettingsRow>
-          <SettingsField label={t('registration_number')}>
-            <Input
-              value={general.company?.registration_number || ''}
-              onChange={(e) => updateSetting('general.company.registration_number', e.target.value)}
-              placeholder={t('enter_registration_number')}
-            />
-          </SettingsField>
-          <SettingsField label={t('email')}>
-            <Input
-              type="email"
-              value={general.company?.contact?.email || ''}
-              onChange={(e) => updateSetting('general.company.contact.email', e.target.value)}
-              placeholder="company@example.com"
-            />
-          </SettingsField>
-          <SettingsField label={t('phone')}>
-            <Input
-              value={general.company?.contact?.phone || ''}
-              onChange={(e) => updateSetting('general.company.contact.phone', e.target.value)}
-              placeholder="+998 90 123 45 67"
-            />
-          </SettingsField>
-        </SettingsRow>
-
-        <SettingsRow>
-          <SettingsField label={t('website')}>
-            <Input
-              value={general.company?.contact?.website || ''}
-              onChange={(e) => updateSetting('general.company.contact.website', e.target.value)}
-              placeholder="https://example.com"
-            />
-          </SettingsField>
-        </SettingsRow>
-
-        <SettingsDivider label={t('address')} />
-
-        <SettingsRow>
-          <SettingsField label={t('street')} className="md:col-span-2">
-            <Input
-              value={general.company?.address?.street || ''}
-              onChange={(e) => updateSetting('general.company.address.street', e.target.value)}
-              placeholder={t('enter_street')}
-            />
-          </SettingsField>
-          <SettingsField label={t('city')}>
-            <Input
-              value={general.company?.address?.city || ''}
-              onChange={(e) => updateSetting('general.company.address.city', e.target.value)}
-              placeholder={t('enter_city')}
-            />
-          </SettingsField>
-        </SettingsRow>
-
-        <SettingsRow>
-          <SettingsField label={t('state_region')}>
-            <Input
-              value={general.company?.address?.state || ''}
-              onChange={(e) => updateSetting('general.company.address.state', e.target.value)}
-              placeholder={t('enter_state')}
-            />
-          </SettingsField>
-          <SettingsField label={t('postal_code')}>
-            <Input
-              value={general.company?.address?.postal_code || ''}
-              onChange={(e) => updateSetting('general.company.address.postal_code', e.target.value)}
-              placeholder="100000"
-            />
-          </SettingsField>
-          <SettingsField label={t('country')}>
-            <Input
-              value={general.company?.address?.country || ''}
-              onChange={(e) => updateSetting('general.company.address.country', e.target.value)}
-              placeholder={t('enter_country')}
-            />
-          </SettingsField>
-        </SettingsRow>
-      </SettingsSection>
-
       {/* Localization */}
       <SettingsSection
         title={t('localization')}

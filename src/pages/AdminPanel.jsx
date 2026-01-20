@@ -361,7 +361,6 @@ export default function AdminPanel() {
               {t('enterprise_edition')}
             </Badge>
           </div>
-          <p className="text-white/90">{t('admin_panel_subtitle')}</p>
         </div>
 
         {/* Metrics - Enhanced */}

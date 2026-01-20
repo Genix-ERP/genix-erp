@@ -42,7 +42,6 @@ export default function CargoReports() {
       totalCosts: 0,
       transportCosts: 0,
       customsCosts: 0,
-      insuranceCosts: 0,
       otherCosts: 0
     };
 
@@ -56,7 +55,6 @@ export default function CargoReports() {
       stats.totalCosts += costs.total;
       stats.transportCosts += costs.transport;
       stats.customsCosts += costs.customs;
-      stats.insuranceCosts += costs.insurance;
       stats.otherCosts += costs.other;
     });
 
@@ -318,16 +316,6 @@ export default function CargoReports() {
                 </div>
 
                 <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-slate-600 mb-1">Sug'urta</div>
-                  <div className="text-2xl font-bold text-slate-900">
-                    ${stats.insuranceCosts.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {stats.totalCosts ? ((stats.insuranceCosts / stats.totalCosts) * 100).toFixed(1) : 0}%
-                  </div>
-                </div>
-
-                <div className="p-4 border rounded-lg">
                   <div className="text-sm text-slate-600 mb-1">Boshqa</div>
                   <div className="text-2xl font-bold text-slate-900">
                     ${stats.otherCosts.toLocaleString()}
@@ -422,7 +410,6 @@ export default function CargoReports() {
                     <TableHead>Tracking</TableHead>
                     <TableHead className="text-right">Transport</TableHead>
                     <TableHead className="text-right">Bojxona</TableHead>
-                    <TableHead className="text-right">Sug'urta</TableHead>
                     <TableHead className="text-right">Boshqa</TableHead>
                     <TableHead className="text-right">Jami xarajat</TableHead>
                   </TableRow>
@@ -436,7 +423,6 @@ export default function CargoReports() {
                         <TableCell className="font-medium">{shipment.tracking_number}</TableCell>
                         <TableCell className="text-right">${costs.transport.toLocaleString()}</TableCell>
                         <TableCell className="text-right">${costs.customs.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">${costs.insurance.toLocaleString()}</TableCell>
                         <TableCell className="text-right">${costs.other.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">
                           ${costs.total.toLocaleString()}

@@ -180,10 +180,7 @@ export default function Dashboard() {
                     <Bot className="w-6 h-6 md:w-8 md:h-8" />
                     <h2 className="text-xl md:text-2xl font-bold">{t('welcome_message')}</h2>
                   </div>
-                  <p className="text-white/90 text-base md:text-lg mb-4 md:mb-6">
-                    {t('dashboard_subtitle')}
-                  </p>
-                  <Link to={createPageUrl("AIAssistant")}>
+                  <Link to={createPageUrl("AIAssistant")} className="mt-4 md:mt-6">
                     <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm">
                       <Sparkles className="w-4 h-4 mr-2" />
                       {t('ask_ai_assistant')}
