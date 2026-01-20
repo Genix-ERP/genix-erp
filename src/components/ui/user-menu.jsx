@@ -52,7 +52,7 @@ export default function UserMenu({ compact = false }) {
               </span>
             </div>
 
-            {/* User Info - Only show in non-compact mode or always show name */}
+            {/* User Info - Only show in non-compact mode */}
             {!compact && (
               <div className="flex flex-col items-start min-w-0">
                 <span className="text-sm font-semibold text-slate-900 truncate max-w-[120px]">
@@ -62,11 +62,6 @@ export default function UserMenu({ compact = false }) {
                   {getRoleDisplay()}
                 </span>
               </div>
-            )}
-            {compact && (
-              <span className="text-xs font-medium text-slate-900 truncate max-w-[80px]">
-                {currentUser?.full_name || 'User'}
-              </span>
             )}
           </div>
 

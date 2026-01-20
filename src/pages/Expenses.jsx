@@ -363,46 +363,44 @@ export default function Expenses() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Category Breakdown */}
+        {chartData.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>{t('expenses_by_category')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={40}
+                    outerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                    paddingAngle={2}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Legend
+                    layout="horizontal"
+                    align="center"
+                    verticalAlign="bottom"
+                    wrapperStyle={{ paddingTop: '10px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Category Breakdown */}
-          {chartData.length > 0 && (
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>{t('expenses_by_category')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="45%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      fill="#8884d8"
-                      dataKey="value"
-                      paddingAngle={2}
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Legend
-                      layout="horizontal"
-                      align="center"
-                      verticalAlign="bottom"
-                      wrapperStyle={{ paddingTop: '10px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Claims Table */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
+        {/* Claims Table */}
+        <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('expense_claims')}</CardTitle>
@@ -525,7 +523,6 @@ export default function Expenses() {
               )}
             </CardContent>
           </Card>
-        </div>
 
         {/* Create Claim Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>

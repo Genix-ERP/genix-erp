@@ -414,41 +414,39 @@ export default function Assets() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Category Distribution */}
+        {chartData.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>{t('assets_by_category')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => entry.name}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Category Distribution */}
-          {chartData.length > 0 && (
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>{t('assets_by_category')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => entry.name}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Assets List */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm">
+        {/* Assets List */}
+        <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('fixed_assets')}</CardTitle>
@@ -565,7 +563,6 @@ export default function Assets() {
               )}
             </CardContent>
           </Card>
-        </div>
 
         {/* Create Asset Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
