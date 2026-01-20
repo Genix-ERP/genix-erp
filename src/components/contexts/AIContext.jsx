@@ -594,7 +594,9 @@ const generateDemoResponse = (message, context = {}, companyId = null, systemLan
   const t = (key) => getAIText(key, lang);
 
   // Sales & Revenue queries
-  if (lowerMessage.includes('sales') || lowerMessage.includes('revenue') || lowerMessage.includes('top customer')) {
+  if (lowerMessage.includes('sales') || lowerMessage.includes('revenue') || lowerMessage.includes('top customer') ||
+      lowerMessage.includes('savdo') || lowerMessage.includes('daromad') || lowerMessage.includes('sotuv') ||
+      lowerMessage.includes('buyurtma') || lowerMessage.includes('mijoz')) {
     const { salesOrders = [], customers = [] } = userData;
 
     if (salesOrders.length === 0) {
@@ -671,7 +673,10 @@ ${unpaidOrders.length > 0 ? `- Follow up on ${unpaidOrders.length} unpaid invoic
   }
 
   // Inventory queries
-  if (lowerMessage.includes('inventory') || lowerMessage.includes('stock') || lowerMessage.includes('reorder') || lowerMessage.includes('restock')) {
+  if (lowerMessage.includes('inventory') || lowerMessage.includes('stock') || lowerMessage.includes('reorder') || lowerMessage.includes('restock') ||
+      lowerMessage.includes('inventar') || lowerMessage.includes('ombor') || lowerMessage.includes('mahsulot') ||
+      lowerMessage.includes('tovar') || lowerMessage.includes('zaxira') || lowerMessage.includes('qaysi') ||
+      lowerMessage.includes('kam') || lowerMessage.includes('to\'ldir') || lowerMessage.includes('tugay')) {
     const { inventory = [] } = userData;
 
     if (inventory.length === 0) {
@@ -727,7 +732,9 @@ ${outOfStock.length > 0 ? `- Urgent: Restock ${outOfStock.length} out-of-stock i
   }
 
   // Financial queries
-  if (lowerMessage.includes('cash') || lowerMessage.includes('financial') || lowerMessage.includes('expense') || lowerMessage.includes('profit')) {
+  if (lowerMessage.includes('cash') || lowerMessage.includes('financial') || lowerMessage.includes('expense') || lowerMessage.includes('profit') ||
+      lowerMessage.includes('moliya') || lowerMessage.includes('pul') || lowerMessage.includes('xarajat') ||
+      lowerMessage.includes('foyda') || lowerMessage.includes('kassa') || lowerMessage.includes('oqim')) {
     const { salesOrders = [], purchaseOrders = [], expenses = [], financialTransactions = [] } = userData;
 
     const hasFinancialData = salesOrders.length > 0 || expenses.length > 0 || financialTransactions.length > 0;
@@ -2051,10 +2058,19 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
         return assistantMessage;
       }
 
-      if (isBackendConnected && activeConversation?.id) {
-        // Try backend
+      // Try backend AI service first
+      if (isBackendConnected) {
         try {
-          const response = await aiService.chat(content, activeConversation.id, context);
+          // Enhance context with business data for better AI responses
+          const enhancedContext = {
+            ...context,
+            company_id: activeCompany?.id,
+            user_language: currentLanguage,
+            business_data: getUserData(activeCompany?.id) // Send actual business data to AI
+          };
+
+          // Call backend AI without requiring conversation ID
+          const response = await aiService.chat(content, activeConversation?.id, enhancedContext);
           const assistantMessage = {
             id: `msg_${++messageIdCounter.current}`,
             role: 'assistant',
@@ -2067,11 +2083,11 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
           return assistantMessage;
         } catch (backendError) {
           console.warn('Backend AI error, using fallback:', backendError);
-          // Fall through to demo response
+          // Fall through to demo response only if backend fails
         }
       }
 
-      // Generate demo response with slight delay for realism
+      // Generate demo response with slight delay for realism (only as fallback)
       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
       const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage);

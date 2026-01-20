@@ -271,8 +271,7 @@ function LayoutContent({ children, currentPageName }) {
     {
       title: t("ai_assistant"),
       url: createPageUrl("AIAssistant"),
-      icon: Bot,
-      badge: "New"
+      icon: Bot
     }
   ];
 
@@ -300,8 +299,7 @@ function LayoutContent({ children, currentPageName }) {
       dynamicItems.push({
         title: t("admin_panel"),
         url: createPageUrl("AdminPanel"),
-        icon: Shield,
-        badge: "Admin"
+        icon: Shield
       });
     }
 
