@@ -147,7 +147,10 @@ export default function CargoShipments() {
 
   // Calculate total
   const calculateTotal = () => {
-    const itemsTotal = formData.items.reduce((sum, item) => sum + item.total, 0);
+    const itemsTotal = formData.items.reduce((sum, item) => {
+      const itemTotal = typeof item.total === 'number' ? item.total : (Number(item.quantity || 0) * Number(item.price || 0));
+      return sum + itemTotal;
+    }, 0);
     const costsTotal = Object.values(formData.costs).reduce((sum, cost) => sum + Number(cost), 0);
     return { itemsTotal, costsTotal, total: itemsTotal + costsTotal };
   };
@@ -387,7 +390,10 @@ export default function CargoShipments() {
             <TableBody>
               {filteredShipments.map((shipment) => {
                 const costs = calculateShipmentCosts(shipment);
-                const itemsTotal = shipment.items?.reduce((sum, item) => sum + item.total, 0) || 0;
+                const itemsTotal = shipment.items?.reduce((sum, item) => {
+                  const itemTotal = typeof item.total === 'number' ? item.total : ((item.quantity || 0) * (item.unit_price || item.price || 0));
+                  return sum + itemTotal;
+                }, 0) || 0;
                 const total = itemsTotal + costs.total;
 
                 return (
@@ -630,7 +636,7 @@ export default function CargoShipments() {
                             </TableCell>
                             <TableCell>{item.quantity}</TableCell>
                             <TableCell>{item.currency} {item.price}</TableCell>
-                            <TableCell className="font-semibold">{item.currency} {item.total.toLocaleString()}</TableCell>
+                            <TableCell className="font-semibold">{item.currency} {(typeof item.total === 'number' ? item.total : (item.quantity * item.price)).toLocaleString()}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(idx)}>
                                 <Trash2 className="w-4 h-4 text-red-600" />
@@ -816,20 +822,20 @@ export default function CargoShipments() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-slate-500">Transport</Label>
-                      <p className="font-semibold">${(selectedShipment.costs?.transport || 0).toLocaleString()}</p>
+                      <p className="font-semibold">${Number(selectedShipment.costs?.transport || selectedShipment.transport_cost || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Bojxona</Label>
-                      <p className="font-semibold">${(selectedShipment.costs?.customs || 0).toLocaleString()}</p>
+                      <p className="font-semibold">${Number(selectedShipment.costs?.customs || selectedShipment.customs_cost || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Boshqa</Label>
-                      <p className="font-semibold">${(selectedShipment.costs?.other || 0).toLocaleString()}</p>
+                      <p className="font-semibold">${Number(selectedShipment.costs?.other || selectedShipment.other_cost || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Jami xarajatlar</Label>
                       <p className="font-semibold text-lg">
-                        ${calculateShipmentCosts(selectedShipment).total.toLocaleString()}
+                        ${Number(calculateShipmentCosts(selectedShipment).total || 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
