@@ -155,19 +155,20 @@ export default function CargoCashRegister() {
   // Handle edit transaction
   const handleEditTransaction = (transaction) => {
     // Populate the form with transaction data
-    const transactionType = extractString(transaction.type);
+    // Backend returns transaction_type, not type
+    const txType = extractString(transaction.transaction_type) || extractString(transaction.type);
     const transactionCategory = extractString(transaction.category);
     const transactionCurrency = extractString(transaction.currency);
     const transactionDescription = extractString(transaction.description);
 
     setEditingTransactionId(transaction.id);
-    setTransactionType(transactionType);
+    setTransactionType(txType || 'expense');
     setFormData({
       amount: transaction.amount.toString(),
-      currency: transactionCurrency,
+      currency: transactionCurrency || 'USD',
       category: transactionCategory,
       description: transactionDescription,
-      company_id: transaction.company_id || ''
+      company_id: transaction.company_id || transaction.related_tenant_id || ''
     });
     setShowTransactionModal(true);
   };
@@ -194,7 +195,8 @@ export default function CargoCashRegister() {
 
   // Filter transactions
   const filteredTransactions = (cargoCash.transactions || []).filter(t => {
-    if (filterType !== 'all' && extractString(t.type) !== filterType) return false;
+    const txType = extractString(t.transaction_type) || extractString(t.type);
+    if (filterType !== 'all' && txType !== filterType) return false;
     if (filterCurrency !== 'all' && extractString(t.currency) !== filterCurrency) return false;
     return true;
   });
@@ -203,7 +205,8 @@ export default function CargoCashRegister() {
   const calculateTotals = () => {
     return filteredTransactions.reduce((acc, t) => {
       const key = extractString(t.currency) === 'USD' ? 'usd' : 'uzs';
-      if (extractString(t.type) === 'income') {
+      const txType = extractString(t.transaction_type) || extractString(t.type);
+      if (txType === 'income') {
         acc[key].income += t.amount;
       } else {
         acc[key].expense += t.amount;
@@ -392,32 +395,33 @@ export default function CargoCashRegister() {
               </TableHeader>
               <TableBody>
                 {[...filteredTransactions].reverse().map((transaction) => {
-                  const transactionType = extractString(transaction.type);
+                  // Backend returns transaction_type, not type
+                  const txType = extractString(transaction.transaction_type) || extractString(transaction.type);
                   const transactionCategory = extractString(transaction.category);
                   const transactionCurrency = extractString(transaction.currency);
 
-                  const categoryLabel = transactionType === 'income'
+                  const categoryLabel = txType === 'income'
                     ? incomeCategories.find(c => c.value === transactionCategory)?.label
                     : expenseCategories.find(c => c.value === transactionCategory)?.label;
 
                   return (
                     <TableRow key={transaction.id}>
                       <TableCell className="text-sm">
-                        {formatDate(transaction.date)}
+                        {formatDate(transaction.transaction_date || transaction.date)}
                       </TableCell>
                       <TableCell>
-                        <Badge className={transactionType === 'income' ? 'bg-green-500' : 'bg-red-500'}>
-                          {transactionType === 'income' ? 'Kirim' : 'Chiqim'}
+                        <Badge className={txType === 'income' ? 'bg-green-500' : 'bg-red-500'}>
+                          {txType === 'income' ? 'Kirim' : 'Chiqim'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{categoryLabel}</TableCell>
+                      <TableCell className="text-sm">{categoryLabel || transactionCategory}</TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {extractString(transaction.description) || '-'}
                       </TableCell>
                       <TableCell className={`text-right font-semibold ${
-                        transactionType === 'income' ? 'text-green-600' : 'text-red-600'
+                        txType === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {transactionType === 'income' ? '+' : '-'}
+                        {txType === 'income' ? '+' : '-'}
                         {transactionCurrency === 'USD' ? '$' : ''}
                         {transaction.amount.toLocaleString()}
                         {transactionCurrency === 'UZS' ? ' so\'m' : ''}
