@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Trash2, Upload, Download, Ship
+  Plus, Search, Eye, Trash2, Upload, Download, Ship, Pencil
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -22,6 +22,7 @@ export default function CargoShipments() {
   const {
     shipments,
     createShipment,
+    updateShipment,
     deleteShipment,
     SHIPMENT_STATUS,
     calculateShipmentCosts
@@ -31,6 +32,7 @@ export default function CargoShipments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Form state for new shipment
   const [formData, setFormData] = useState({
@@ -122,8 +124,13 @@ export default function CargoShipments() {
       return;
     }
 
-    createShipment(formData);
+    if (isEditMode && selectedShipment) {
+      updateShipment(selectedShipment.id, formData);
+    } else {
+      createShipment(formData);
+    }
     setShowAddModal(false);
+    setIsEditMode(false);
     resetForm();
   };
 
@@ -135,6 +142,31 @@ export default function CargoShipments() {
       items: [],
       costs: { transport: 0, customs: 0, other: 0 }
     });
+  };
+
+  // Open edit modal with shipment data
+  const handleEditShipment = (shipment) => {
+    setSelectedShipment(shipment);
+    setIsEditMode(true);
+    setFormData({
+      supplier_company: shipment.supplier_company || '',
+      tracking_number: shipment.tracking_number || '',
+      expected_date: shipment.expected_date ? shipment.expected_date.split('T')[0] : '',
+      items: shipment.items?.map(item => ({
+        name: item.item_name,
+        quantity: item.quantity,
+        price: item.unit_price,
+        currency: item.currency,
+        imei: item.hs_code || '',
+        total: item.total_price
+      })) || [],
+      costs: {
+        transport: shipment.transport_cost || 0,
+        customs: shipment.customs_cost || 0,
+        other: shipment.other_cost || 0
+      }
+    });
+    setShowAddModal(true);
   };
 
   // Download Excel template
@@ -331,6 +363,13 @@ export default function CargoShipments() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleEditShipment(shipment)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="text-red-600"
                           onClick={() => {
                             if (window.confirm('Bu yukni o\'chirmoqchimisiz?')) {
@@ -358,10 +397,18 @@ export default function CargoShipments() {
       </Card>
 
       {/* Add Shipment Modal */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+      <Dialog open={showAddModal} onOpenChange={(open) => {
+        setShowAddModal(open);
+        if (!open) {
+          setIsEditMode(false);
+          resetForm();
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t('new_shipment') || 'Yangi yuk buyurtmasi'}</DialogTitle>
+            <DialogTitle>
+              {isEditMode ? (t('edit_shipment') || 'Yukni tahrirlash') : (t('new_shipment') || 'Yangi yuk buyurtmasi')}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -602,7 +649,7 @@ export default function CargoShipments() {
                 onClick={handleSubmit}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {t('create') || 'Yaratish'}
+                {isEditMode ? (t('save') || 'Saqlash') : (t('create') || 'Yaratish')}
               </Button>
             </div>
           </div>
