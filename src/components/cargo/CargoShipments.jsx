@@ -37,9 +37,19 @@ export default function CargoShipments() {
   };
 
   // Helper function to safely format dates
-  const formatDate = (dateStr) => {
-    if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '-';
+
     try {
+      // Handle sql.NullTime format: {Time: "2026-01-23T00:00:00Z", Valid: true}
+      let dateStr = dateValue;
+      if (typeof dateValue === 'object') {
+        if (dateValue.Valid === false) return '-';
+        dateStr = dateValue.Time || dateValue.String || '';
+      }
+
+      if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return '-';
+
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return '-';
       return format(date, 'dd MMM yyyy');
@@ -243,14 +253,21 @@ export default function CargoShipments() {
     setSelectedShipment(shipment);
     setIsEditMode(true);
 
-    // Safely extract expected_date from object or string
+    // Safely extract expected_date from sql.NullTime object: {Time: "...", Valid: true}
     let expectedDateStr = '';
     if (shipment.expected_date) {
-      const dateValue = typeof shipment.expected_date === 'string'
-        ? shipment.expected_date
-        : (shipment.expected_date?.String || '');
-      if (dateValue && dateValue !== '0001-01-01T00:00:00Z') {
-        expectedDateStr = dateValue.split('T')[0];
+      // Handle sql.NullTime format
+      if (typeof shipment.expected_date === 'object') {
+        if (shipment.expected_date.Valid && shipment.expected_date.Time) {
+          const dateValue = shipment.expected_date.Time;
+          if (dateValue && dateValue !== '0001-01-01T00:00:00Z') {
+            expectedDateStr = dateValue.split('T')[0];
+          }
+        }
+      } else if (typeof shipment.expected_date === 'string') {
+        if (shipment.expected_date !== '0001-01-01T00:00:00Z') {
+          expectedDateStr = shipment.expected_date.split('T')[0];
+        }
       }
     }
 
