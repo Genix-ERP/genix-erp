@@ -80,13 +80,19 @@ export default function Projects() {
   useEffect(() => {
     let filtered = projects;
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(p => p.status === statusFilter);
+      filtered = filtered.filter(p => {
+        // Convert p.status to string if it's an object
+        const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+        return pStatus === statusFilter;
+      });
     }
     if (searchQuery) {
-      filtered = filtered.filter(p =>
-        p.project_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.client_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = filtered.filter(p => {
+        const projectName = String(p.project_name || '');
+        const clientName = String(p.client_name || '');
+        return projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               clientName.toLowerCase().includes(searchQuery.toLowerCase());
+      });
     }
     setFilteredProjects(filtered);
   }, [projects, searchQuery, statusFilter]);
@@ -197,7 +203,11 @@ export default function Projects() {
   const removeCustomStatus = (statusId) => {
     if (!customStatuses) return;
     // Don't remove if there are projects with this status
-    const hasProjects = projects.some(p => p.status === statusId);
+    const hasProjects = projects.some(p => {
+      // Convert p.status to string if it's an object
+      const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+      return pStatus === statusId;
+    });
     if (hasProjects) {
       alert(t('cannot_remove_status'));
       return;
@@ -206,28 +216,34 @@ export default function Projects() {
   };
 
   const getStatusColor = (status) => {
-    const found = (customStatuses || []).find(s => s.id === status);
+    // Convert status to string if it's an object
+    const statusStr = typeof status === 'string' ? status : (status?.String || status?.toString?.() || '');
+    const found = (customStatuses || []).find(s => s.id === statusStr);
     return found?.color || 'bg-gray-100 text-gray-800';
   };
 
   const getStatusLabel = (status) => {
+    // Convert status to string if it's an object
+    const statusStr = typeof status === 'string' ? status : (status?.String || status?.toString?.() || '');
     // For default statuses, always use translation
-    if (DEFAULT_STATUS_IDS.includes(status)) {
-      return t(status);
+    if (DEFAULT_STATUS_IDS.includes(statusStr)) {
+      return t(statusStr);
     }
     // For custom statuses, use the stored label
-    const found = (customStatuses || []).find(s => s.id === status);
-    return found?.label || status;
+    const found = (customStatuses || []).find(s => s.id === statusStr);
+    return found?.label || statusStr;
   };
 
   const getPriorityColor = (priority) => {
+    // Convert priority to string if it's an object
+    const priorityStr = typeof priority === 'string' ? priority : (priority?.String || priority?.toString?.() || 'medium');
     const colors = {
       low: 'bg-slate-100 text-slate-700',
       medium: 'bg-blue-100 text-blue-700',
       high: 'bg-orange-100 text-orange-700',
       critical: 'bg-red-100 text-red-700'
     };
-    return colors[priority] || colors.medium;
+    return colors[priorityStr] || colors.medium;
   };
 
   const colorOptions = [
@@ -245,9 +261,12 @@ export default function Projects() {
 
   const metrics = {
     totalProjects: projects.length,
-    activeProjects: projects.filter(p => p.status === 'active').length,
-    totalBudget: projects.reduce((sum, p) => sum + (p.budget || 0), 0),
-    avgProgress: projects.length > 0 ? Math.round(projects.reduce((sum, p) => sum + (p.progress_percentage || 0), 0) / projects.length) : 0
+    activeProjects: projects.filter(p => {
+      const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+      return pStatus === 'active';
+    }).length,
+    totalBudget: projects.reduce((sum, p) => sum + Number(p.budget || 0), 0),
+    avgProgress: projects.length > 0 ? Math.round(projects.reduce((sum, p) => sum + Number(p.progress_percentage || 0), 0) / projects.length) : 0
   };
 
   // Project Card Component
@@ -261,8 +280,8 @@ export default function Projects() {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-lg text-slate-900 mb-1 truncate">{project.project_name}</h3>
-            <p className="text-sm text-slate-500">{project.client_name}</p>
+            <h3 className="font-bold text-lg text-slate-900 mb-1 truncate">{String(project.project_name || '')}</h3>
+            <p className="text-sm text-slate-500">{String(project.client_name || '')}</p>
           </div>
           <div className="flex items-center gap-2">
             {!hideStatus && <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>}
@@ -276,31 +295,31 @@ export default function Projects() {
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-slate-600">{t('progress')}</span>
-            <span className="font-semibold">{project.progress_percentage || 0}%</span>
+            <span className="font-semibold">{Number(project.progress_percentage || 0)}%</span>
           </div>
-          <Progress value={project.progress_percentage || 0} className="h-2" />
+          <Progress value={Number(project.progress_percentage || 0)} className="h-2" />
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-slate-500 mb-1">{t('budget')}</p>
-            <p className="font-semibold">${(project.budget || 0).toLocaleString()}</p>
+            <p className="font-semibold">${Number(project.budget || 0).toLocaleString()}</p>
           </div>
           <div>
             <p className="text-slate-500 mb-1">{t('spent')}</p>
-            <p className="font-semibold">${(project.actual_cost || 0).toLocaleString()}</p>
+            <p className="font-semibold">${Number(project.actual_cost || 0).toLocaleString()}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {project.priority && (
             <Badge className={getPriorityColor(project.priority)} variant="outline">
-              {t(project.priority)}
+              {t(String(project.priority || 'medium'))}
             </Badge>
           )}
           <Badge variant="outline" className="text-xs">
             <Clock className="w-3 h-3 mr-1" />
-            {project.total_hours_logged || 0}h
+            {Number(project.total_hours_logged || 0)}h
           </Badge>
         </div>
       </CardContent>
@@ -319,7 +338,11 @@ export default function Projects() {
 
   // Kanban Column Component
   const KanbanColumn = ({ status }) => {
-    const columnProjects = filteredProjects.filter(p => p.status === status.id);
+    const columnProjects = filteredProjects.filter(p => {
+      // Convert p.status to string if it's an object
+      const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+      return pStatus === status.id;
+    });
 
     return (
       <div
@@ -859,14 +882,20 @@ export default function Projects() {
                       <GripVertical className="w-4 h-4 text-slate-400" />
                       <Badge className={status.color}>{getTranslatedStatusLabel(status)}</Badge>
                       <span className="text-xs text-slate-500">
-                        ({projects.filter(p => p.status === status.id).length} {t('projects')})
+                        ({projects.filter(p => {
+                          const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+                          return pStatus === status.id;
+                        }).length} {t('projects')})
                       </span>
                     </div>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => removeCustomStatus(status.id)}
-                      disabled={projects.some(p => p.status === status.id)}
+                      disabled={projects.some(p => {
+                        const pStatus = typeof p.status === 'string' ? p.status : (p.status?.String || p.status?.toString?.() || '');
+                        return pStatus === status.id;
+                      })}
                       className="text-red-500 hover:text-red-600 hover:bg-red-50"
                     >
                       <X className="w-4 h-4" />
