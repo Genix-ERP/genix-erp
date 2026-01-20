@@ -10,7 +10,8 @@ import {
   CheckCircle,
   DollarSign,
   Building2,
-  FileText
+  FileText,
+  Package
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
