@@ -156,6 +156,23 @@ export default function CargoShipments() {
     });
   };
 
+  // Edit item - populate form with existing item and remove from list
+  const handleEditItem = (index) => {
+    const itemToEdit = formData.items[index];
+
+    // Populate the form fields with the item data
+    setCurrentItem({
+      name: itemToEdit.name,
+      quantity: itemToEdit.quantity,
+      price: itemToEdit.price,
+      currency: itemToEdit.currency || 'USD',
+      customFields: itemToEdit.customFields || []
+    });
+
+    // Remove the item from the list so it can be re-added after editing
+    handleRemoveItem(index);
+  };
+
   // Calculate total
   const calculateTotal = () => {
     const itemsTotal = formData.items.reduce((sum, item) => {
@@ -639,7 +656,7 @@ export default function CargoShipments() {
                           <TableHead>Miqdor</TableHead>
                           <TableHead>Narx</TableHead>
                           <TableHead>Jami</TableHead>
-                          <TableHead></TableHead>
+                          <TableHead className="text-right">Amallar</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -663,9 +680,24 @@ export default function CargoShipments() {
                             <TableCell>{String(item.currency || 'USD')} {item.price}</TableCell>
                             <TableCell className="font-semibold">{String(item.currency || 'USD')} {(typeof item.total === 'number' ? item.total : (item.quantity * item.price)).toLocaleString()}</TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(idx)}>
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditItem(idx)}
+                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveItem(idx)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}

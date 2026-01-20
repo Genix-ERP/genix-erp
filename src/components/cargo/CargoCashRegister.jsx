@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  DollarSign, TrendingUp, TrendingDown, Plus, Filter, Building2
+  DollarSign, TrendingUp, TrendingDown, Plus, Filter, Building2, Edit, Trash2
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -113,6 +113,22 @@ export default function CargoCashRegister() {
 
     setShowTransactionModal(false);
     resetForm();
+  };
+
+  // Handle edit transaction
+  const handleEditTransaction = (transaction) => {
+    // Note: For now, we'll just show a message that edit is not supported
+    // In a full implementation, you would need to add update transaction API endpoint
+    alert('Edit functionality will be available soon. For now, please delete and create a new transaction.');
+  };
+
+  // Handle delete transaction
+  const handleDeleteTransaction = (transactionId) => {
+    if (confirm('Bu tranzaksiyani o\'chirishni xohlaysizmi?')) {
+      // Note: This needs a delete transaction API endpoint in the backend
+      // For now, we'll just show a message
+      alert('Delete functionality will be available soon when backend API is implemented.');
+    }
   };
 
   // Filter transactions
@@ -310,6 +326,7 @@ export default function CargoCashRegister() {
                   <TableHead>Kategoriya</TableHead>
                   <TableHead>Tavsif</TableHead>
                   <TableHead className="text-right">Summa</TableHead>
+                  <TableHead className="text-right">Amallar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -343,6 +360,26 @@ export default function CargoCashRegister() {
                         {transactionCurrency === 'USD' ? '$' : ''}
                         {transaction.amount.toLocaleString()}
                         {transactionCurrency === 'UZS' ? ' so\'m' : ''}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditTransaction(transaction)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteTransaction(transaction.id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
