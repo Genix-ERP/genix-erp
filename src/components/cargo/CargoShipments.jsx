@@ -82,6 +82,9 @@ export default function CargoShipments() {
 
   // Status badge color
   const getStatusBadge = (status) => {
+    // Convert status to string if it's an object
+    const statusStr = typeof status === 'string' ? status : (status?.String || status?.toString?.() || 'ordered');
+
     const statusConfig = {
       [SHIPMENT_STATUS.ORDERED]: { label: 'Buyurtma berildi', color: 'bg-blue-100 text-blue-700' },
       [SHIPMENT_STATUS.IN_TRANSIT]: { label: "Yo'lda", color: 'bg-orange-100 text-orange-700' },
@@ -90,7 +93,7 @@ export default function CargoShipments() {
       [SHIPMENT_STATUS.DISTRIBUTED]: { label: 'Taqsimlandi', color: 'bg-purple-100 text-purple-700' }
     };
 
-    const config = statusConfig[status] || statusConfig[SHIPMENT_STATUS.ORDERED];
+    const config = statusConfig[statusStr] || statusConfig[SHIPMENT_STATUS.ORDERED];
     return <Badge className={config.color}>{config.label}</Badge>;
   };
 
@@ -398,11 +401,11 @@ export default function CargoShipments() {
 
                 return (
                   <TableRow key={shipment.id}>
-                    <TableCell className="font-medium">{shipment.tracking_number}</TableCell>
+                    <TableCell className="font-medium">{String(shipment.tracking_number || '')}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{shipment.supplier_company}</p>
-                        <p className="text-xs text-slate-500">{shipment.supplier_country}</p>
+                        <p className="font-medium">{String(shipment.supplier_company || '')}</p>
+                        <p className="text-xs text-slate-500">{String(shipment.supplier_country || '')}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -635,8 +638,8 @@ export default function CargoShipments() {
                               </div>
                             </TableCell>
                             <TableCell>{item.quantity}</TableCell>
-                            <TableCell>{item.currency} {item.price}</TableCell>
-                            <TableCell className="font-semibold">{item.currency} {(typeof item.total === 'number' ? item.total : (item.quantity * item.price)).toLocaleString()}</TableCell>
+                            <TableCell>{String(item.currency || 'USD')} {item.price}</TableCell>
+                            <TableCell className="font-semibold">{String(item.currency || 'USD')} {(typeof item.total === 'number' ? item.total : (item.quantity * item.price)).toLocaleString()}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(idx)}>
                                 <Trash2 className="w-4 h-4 text-red-600" />
@@ -756,7 +759,7 @@ export default function CargoShipments() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-slate-500">Tracking raqami</Label>
-                      <p className="font-semibold">{selectedShipment.tracking_number}</p>
+                      <p className="font-semibold">{String(selectedShipment.tracking_number || '')}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Kompaniya</Label>
@@ -799,9 +802,9 @@ export default function CargoShipments() {
                         <TableRow key={idx}>
                           <TableCell>{item.name || item.item_name}</TableCell>
                           <TableCell>{item.quantity}</TableCell>
-                          <TableCell>{item.currency} {item.price || item.unit_price}</TableCell>
+                          <TableCell>{String(item.currency || 'USD')} {item.price || item.unit_price}</TableCell>
                           <TableCell className="font-semibold">
-                            {item.currency} {((item.price || item.unit_price) * item.quantity).toLocaleString()}
+                            {String(item.currency || 'USD')} {((item.price || item.unit_price) * item.quantity).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-xs text-slate-600">
                             {item.imei || '-'}
