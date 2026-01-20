@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Trash2, Upload, Download
+  Plus, Search, Eye, Trash2, Upload, Download, Ship
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
