@@ -151,7 +151,7 @@ export default function CargoShipments() {
       tracking_number: formData.tracking_number || '',
       supplier_country: '',
       supplier_company: formData.supplier_company || '',
-      expected_date: formData.expected_date || null,
+      expected_date: formData.expected_date ? new Date(formData.expected_date).toISOString() : null,
       transport_cost: Number(formData.costs?.transport || 0),
       customs_cost: Number(formData.costs?.customs || 0),
       insurance_cost: 0,
