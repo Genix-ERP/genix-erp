@@ -46,8 +46,11 @@ export default function CargoReports() {
     };
 
     shipments.forEach(shipment => {
-      // Calculate goods value
-      const goodsValue = shipment.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
+      // Calculate goods value - backend returns total_price, not total
+      const goodsValue = shipment.items?.reduce((sum, item) => {
+        const itemTotal = item.total_price || item.total || (item.quantity * item.unit_price) || 0;
+        return sum + itemTotal;
+      }, 0) || 0;
       stats.totalGoodsValue += goodsValue;
 
       // Calculate costs
