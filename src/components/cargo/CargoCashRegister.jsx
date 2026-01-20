@@ -58,6 +58,7 @@ export default function CargoCashRegister() {
   const [transactionType, setTransactionType] = useState('income');
   const [filterType, setFilterType] = useState('all');
   const [filterCurrency, setFilterCurrency] = useState('all');
+  const [editingTransactionId, setEditingTransactionId] = useState(null);
 
   // Transaction form state
   const [formData, setFormData] = useState({
@@ -97,20 +98,92 @@ export default function CargoCashRegister() {
       description: '',
       company_id: ''
     });
+    setEditingTransactionId(null);
+    setTransactionType('income');
   };
 
-  // Handle add transaction
-  const handleAddTransaction = () => {
+  // Handle add/update transaction
+  const handleAddTransaction = async () => {
     if (!formData.amount || !formData.category) return;
 
-    addCashTransaction({
-      type: transactionType,
-      amount: parseFloat(formData.amount),
-      currency: formData.currency,
-      category: formData.category,
-      description: formData.description,
-      company_id: formData.company_id || null
-    });
+    // If editing, update the existing transaction
+    if (editingTransactionId) {
+      try {
+        // Find the old transaction to reverse its balance effect
+        const oldTransaction = cargoCash.transactions?.find(t => t.id === editingTransactionId);
+        if (!oldTransaction) {
+          alert('Tranzaksiya topilmadi');
+          return;
+        }
+
+        const oldType = extractString(oldTransaction.type);
+        const oldCurrency = extractString(oldTransaction.currency);
+        const oldAmount = oldTransaction.amount;
+
+        // Create updated transaction
+        const updatedTransaction = {
+          ...oldTransaction,
+          type: transactionType,
+          amount: parseFloat(formData.amount),
+          currency: formData.currency,
+          category: formData.category,
+          description: formData.description,
+          company_id: formData.company_id || null,
+          date: oldTransaction.date // Keep original date
+        };
+
+        // Update transactions list
+        const updatedTransactions = (cargoCash.transactions || []).map(t =>
+          t.id === editingTransactionId ? updatedTransaction : t
+        );
+
+        // Calculate balance changes
+        const oldBalanceKey = oldCurrency === 'USD' ? 'usd_balance' : 'uzs_balance';
+        const newBalanceKey = formData.currency === 'USD' ? 'usd_balance' : 'uzs_balance';
+
+        let updatedCash = { ...cargoCash, transactions: updatedTransactions };
+
+        // Reverse old transaction effect
+        if (oldType === 'income') {
+          updatedCash[oldBalanceKey] -= oldAmount;
+        } else {
+          updatedCash[oldBalanceKey] += oldAmount;
+        }
+
+        // Apply new transaction effect
+        if (transactionType === 'income') {
+          updatedCash[newBalanceKey] += parseFloat(formData.amount);
+        } else {
+          updatedCash[newBalanceKey] -= parseFloat(formData.amount);
+        }
+
+        setCargoCash(updatedCash);
+
+        // Save to localStorage
+        const STORAGE_KEY = `genix_cargo_cash_${activeCompany?.id}`;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCash));
+        } catch (error) {
+          console.error('Error saving to localStorage:', error);
+        }
+
+        alert('Tranzaksiya muvaffaqiyatli yangilandi');
+      } catch (error) {
+        console.error('Error updating transaction:', error);
+        alert('Tranzaksiyani yangilashda xatolik yuz berdi');
+        return;
+      }
+    } else {
+      // Add new transaction
+      addCashTransaction({
+        type: transactionType,
+        amount: parseFloat(formData.amount),
+        currency: formData.currency,
+        category: formData.category,
+        description: formData.description,
+        company_id: formData.company_id || null
+      });
+    }
 
     setShowTransactionModal(false);
     resetForm();
@@ -124,6 +197,7 @@ export default function CargoCashRegister() {
     const transactionCurrency = extractString(transaction.currency);
     const transactionDescription = extractString(transaction.description);
 
+    setEditingTransactionId(transaction.id);
     setTransactionType(transactionType);
     setFormData({
       amount: transaction.amount.toString(),
@@ -133,11 +207,6 @@ export default function CargoCashRegister() {
       company_id: transaction.company_id || ''
     });
     setShowTransactionModal(true);
-
-    // Note: Since we don't have an update API endpoint yet,
-    // we need to delete the old transaction after user saves the edited one
-    // Store the transaction ID for deletion after save
-    // For now, this will create a new transaction instead of updating
   };
 
   // Handle delete transaction
@@ -460,7 +529,9 @@ export default function CargoCashRegister() {
       <Dialog open={showTransactionModal} onOpenChange={setShowTransactionModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('add_transaction') || 'Tranzaksiya qo\'shish'}</DialogTitle>
+            <DialogTitle>
+              {editingTransactionId ? 'Tranzaksiyani tahrirlash' : (t('add_transaction') || 'Tranzaksiya qo\'shish')}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -576,7 +647,7 @@ export default function CargoCashRegister() {
                 disabled={!formData.amount || !formData.category}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {t('add') || 'Qo\'shish'}
+                {editingTransactionId ? 'Yangilash' : (t('add') || 'Qo\'shish')}
               </Button>
             </div>
           </div>
