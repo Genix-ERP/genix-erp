@@ -27,6 +27,14 @@ export default function CargoCashRegister() {
   } = useCargoContext();
   const { companies } = useCompany();
 
+  // Helper function to extract string from sql.NullString objects
+  const extractString = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value.String !== undefined) return value.String || '';
+    return String(value);
+  };
+
   // Helper function to safely format dates
   const formatDate = (dateValue) => {
     if (!dateValue) return '-';
@@ -109,16 +117,16 @@ export default function CargoCashRegister() {
 
   // Filter transactions
   const filteredTransactions = (cargoCash.transactions || []).filter(t => {
-    if (filterType !== 'all' && t.type !== filterType) return false;
-    if (filterCurrency !== 'all' && t.currency !== filterCurrency) return false;
+    if (filterType !== 'all' && extractString(t.type) !== filterType) return false;
+    if (filterCurrency !== 'all' && extractString(t.currency) !== filterCurrency) return false;
     return true;
   });
 
   // Calculate totals
   const calculateTotals = () => {
     return filteredTransactions.reduce((acc, t) => {
-      const key = t.currency === 'USD' ? 'usd' : 'uzs';
-      if (t.type === 'income') {
+      const key = extractString(t.currency) === 'USD' ? 'usd' : 'uzs';
+      if (extractString(t.type) === 'income') {
         acc[key].income += t.amount;
       } else {
         acc[key].expense += t.amount;
@@ -306,9 +314,13 @@ export default function CargoCashRegister() {
               </TableHeader>
               <TableBody>
                 {[...filteredTransactions].reverse().map((transaction) => {
-                  const categoryLabel = transaction.type === 'income'
-                    ? incomeCategories.find(c => c.value === transaction.category)?.label
-                    : expenseCategories.find(c => c.value === transaction.category)?.label;
+                  const transactionType = extractString(transaction.type);
+                  const transactionCategory = extractString(transaction.category);
+                  const transactionCurrency = extractString(transaction.currency);
+
+                  const categoryLabel = transactionType === 'income'
+                    ? incomeCategories.find(c => c.value === transactionCategory)?.label
+                    : expenseCategories.find(c => c.value === transactionCategory)?.label;
 
                   return (
                     <TableRow key={transaction.id}>
@@ -316,21 +328,21 @@ export default function CargoCashRegister() {
                         {formatDate(transaction.date)}
                       </TableCell>
                       <TableCell>
-                        <Badge className={transaction.type === 'income' ? 'bg-green-500' : 'bg-red-500'}>
-                          {transaction.type === 'income' ? 'Kirim' : 'Chiqim'}
+                        <Badge className={transactionType === 'income' ? 'bg-green-500' : 'bg-red-500'}>
+                          {transactionType === 'income' ? 'Kirim' : 'Chiqim'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">{categoryLabel}</TableCell>
                       <TableCell className="text-sm text-slate-600">
-                        {transaction.description || '-'}
+                        {extractString(transaction.description) || '-'}
                       </TableCell>
                       <TableCell className={`text-right font-semibold ${
-                        transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                        transactionType === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {transaction.type === 'income' ? '+' : '-'}
-                        {transaction.currency === 'USD' ? '$' : ''}
+                        {transactionType === 'income' ? '+' : '-'}
+                        {transactionCurrency === 'USD' ? '$' : ''}
                         {transaction.amount.toLocaleString()}
-                        {transaction.currency === 'UZS' ? ' so\'m' : ''}
+                        {transactionCurrency === 'UZS' ? ' so\'m' : ''}
                       </TableCell>
                     </TableRow>
                   );
