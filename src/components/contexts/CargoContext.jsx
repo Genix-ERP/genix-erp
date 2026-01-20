@@ -236,23 +236,32 @@ export const CargoProvider = ({ children }) => {
 
   // Delete shipment
   const deleteShipment = useCallback(async (shipmentId) => {
+    console.log('Deleting shipment:', shipmentId, 'useBackend:', useBackend);
+
     if (!useBackend) {
       // Delete locally
       const updatedShipments = shipments.filter(s => s.id !== shipmentId);
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      console.log('Shipment deleted locally');
       return;
     }
 
     // Delete via backend
     try {
+      console.log('Attempting backend delete...');
       await cargoService.deleteShipment(shipmentId);
       await loadShipments();
+      console.log('Shipment deleted from backend');
     } catch (error) {
-      console.error('Error deleting shipment:', error);
-      throw error;
+      console.error('Error deleting shipment from backend:', error);
+      // Fallback to local delete if backend fails
+      const updatedShipments = shipments.filter(s => s.id !== shipmentId);
+      setShipments(updatedShipments);
+      saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
+      console.log('Fell back to local delete');
     }
-  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments]);
+  }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 
   // Distribute goods to B2B/B2C
   const distributeGoods = useCallback(async (shipmentId, distribution) => {
@@ -420,6 +429,7 @@ export const CargoProvider = ({ children }) => {
     shipments,
     loading,
     cargoCash,
+    setCargoCash,
     companyAccounts,
 
     // Constants
