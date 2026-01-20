@@ -411,11 +411,7 @@ function LayoutContent({ children, currentPageName }) {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 md:gap-3">
-                {/* Company Switcher - Like Odoo in navbar */}
-                <div className="hidden md:block">
-                  <CompanySwitcher />
-                </div>
+              <div className="flex items-center gap-1.5 md:gap-2">
                 <LanguageSelector />
                 <Button
                   variant="ghost"
@@ -431,7 +427,10 @@ function LayoutContent({ children, currentPageName }) {
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
                   </Button>
                 </Link>
-                <div className="hidden md:block">
+                {/* Company Switcher next to profile - Odoo style */}
+                <div className="hidden md:flex items-center gap-1.5 ml-1">
+                  <div className="w-px h-6 bg-slate-200"></div>
+                  <CompanySwitcher compact />
                   <UserMenu compact />
                 </div>
               </div>
