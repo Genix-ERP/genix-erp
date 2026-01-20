@@ -86,38 +86,8 @@ export default function AIAssistant() {
           <div className="flex flex-col items-center justify-center min-h-screen p-6">
             <div className="w-full max-w-4xl mx-auto space-y-12 animate-fadeIn">
 
-              {/* Logo Section */}
+              {/* Subtitle */}
               <div className="text-center space-y-6">
-                <div className="inline-flex items-center gap-3 mb-8">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-400 rounded-2xl blur-xl opacity-40 animate-pulse"></div>
-                    <div className="relative bg-gradient-to-br from-blue-500 to-purple-500 p-5 rounded-2xl shadow-2xl">
-                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="8" y="8" width="20" height="20" rx="4" fill="white" fillOpacity="0.9"/>
-                        <rect x="36" y="8" width="20" height="20" rx="4" fill="white" fillOpacity="0.7"/>
-                        <rect x="8" y="36" width="20" height="20" rx="4" fill="white" fillOpacity="0.7"/>
-                        <rect x="36" y="36" width="20" height="20" rx="4" fill="white"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <h1 className="text-6xl font-black tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-transparent">
-                    GENIX
-                  </h1>
-                </div>
-
-                {/* AI-Powered ERP Divider */}
-                <div className="flex items-center justify-center gap-6 mb-12">
-                  <div className="h-px w-32 bg-gradient-to-r from-transparent via-slate-300 to-slate-300"></div>
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-xl"></div>
-                    <h2 className="relative text-lg font-bold tracking-[0.3em] text-slate-400 uppercase">
-                      AI-Powered ERP
-                    </h2>
-                  </div>
-                  <div className="h-px w-32 bg-gradient-to-l from-transparent via-slate-300 to-slate-300"></div>
-                </div>
-
-                {/* Subtitle */}
                 <p className="text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
                   {t('ai_copilot_intro') || 'Your intelligent business copilot. Ask questions, analyze data, and automate workflows with natural language.'}
                 </p>

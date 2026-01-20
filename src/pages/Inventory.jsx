@@ -229,7 +229,6 @@ export default function Inventory() {
         {/* Header */}
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--genix-navy)]">{t('inventory_title')}</h1>
-          <p className="text-sm md:text-base text-slate-600 mt-2">{t('inventory_subtitle')}</p>
         </div>
 
         {/* Main Tabs */}

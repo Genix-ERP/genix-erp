@@ -21,7 +21,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 
-export default function UserMenu() {
+export default function UserMenu({ compact = false }) {
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -37,28 +37,40 @@ export default function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="w-full justify-between px-3 py-2 h-auto hover:bg-slate-100/80"
+          className={compact
+            ? "flex items-center gap-2 px-2 py-2 h-auto hover:bg-slate-100/80 rounded-full"
+            : "w-full justify-between px-3 py-2 h-auto hover:bg-slate-100/80"
+          }
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {/* User Avatar */}
-            <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-semibold text-sm">
+            <div className={`bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center flex-shrink-0 ${
+              compact ? 'w-8 h-8' : 'w-10 h-10'
+            }`}>
+              <span className={`text-white font-semibold ${compact ? 'text-xs' : 'text-sm'}`}>
                 {currentUser?.full_name?.charAt(0) || 'U'}
               </span>
             </div>
 
-            {/* User Info */}
-            <div className="flex flex-col items-start min-w-0">
-              <span className="text-sm font-semibold text-slate-900 truncate max-w-[120px]">
+            {/* User Info - Only show in non-compact mode or always show name */}
+            {!compact && (
+              <div className="flex flex-col items-start min-w-0">
+                <span className="text-sm font-semibold text-slate-900 truncate max-w-[120px]">
+                  {currentUser?.full_name || 'User'}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {getRoleDisplay()}
+                </span>
+              </div>
+            )}
+            {compact && (
+              <span className="text-sm font-medium text-slate-900 hidden lg:block">
                 {currentUser?.full_name || 'User'}
               </span>
-              <span className="text-[10px] text-slate-500">
-                {getRoleDisplay()}
-              </span>
-            </div>
+            )}
           </div>
 
-          <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          {!compact && <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
 

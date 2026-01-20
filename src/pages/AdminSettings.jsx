@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -66,7 +66,11 @@ export default function AdminSettings() {
   const { user, isSiteAdmin, isOwner } = useAuth();
   const { isAppInstalled, installedApps } = useInstalledApps();
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState('general');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeSection, setActiveSection] = useState(() => {
+    // Initialize from URL tab parameter, default to 'general'
+    return searchParams.get('tab') || 'general';
+  });
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   const {
@@ -99,6 +103,22 @@ export default function AdminSettings() {
       navigate('/');
     }
   }, [isLoading, user, canManageSettings, navigate]);
+
+  // Sync URL parameter when active section changes
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    if (currentTab !== activeSection) {
+      setSearchParams({ tab: activeSection });
+    }
+  }, [activeSection, searchParams, setSearchParams]);
+
+  // Sync active section when URL parameter changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeSection) {
+      setActiveSection(tabFromUrl);
+    }
+  }, [searchParams]);
 
   // Reset active section if it becomes unavailable
   useEffect(() => {
@@ -158,7 +178,6 @@ export default function AdminSettings() {
               <Settings className="w-8 h-8" />
               <div>
                 <h1 className="text-2xl font-bold">{t('admin_settings')}</h1>
-                <p className="text-slate-300 text-sm">{t('admin_settings_subtitle')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">

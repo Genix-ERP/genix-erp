@@ -44,7 +44,6 @@ export default function Financials() {
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--genix-navy)]">{t('financials_title')}</h1>
-          <p className="text-sm md:text-base text-slate-600 mt-2">{t('financials_subtitle')}</p>
         </div>
 
         <Tabs defaultValue="dashboard" className="w-full">

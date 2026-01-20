@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Pencil, Trash2, Ship, Plane, Truck, Train, Globe, Upload, FileSpreadsheet, Download
+  Plus, Search, Eye, Trash2, Upload, Download
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -22,10 +22,8 @@ export default function CargoShipments() {
   const {
     shipments,
     createShipment,
-    updateShipment,
     deleteShipment,
     SHIPMENT_STATUS,
-    TRANSPORT_TYPES,
     calculateShipmentCosts
   } = useCargoContext();
 
@@ -39,7 +37,6 @@ export default function CargoShipments() {
     supplier_company: '',
     tracking_number: '',
     expected_date: '',
-    transport_type: '',
     items: [],
     costs: {
       transport: 0,
@@ -68,16 +65,6 @@ export default function CargoShipments() {
     { value: 'other', label: 'Other' }
   ];
 
-  // Transport type icons
-  const getTransportIcon = (type) => {
-    switch (type) {
-      case TRANSPORT_TYPES.AIR: return <Plane className="w-4 h-4" />;
-      case TRANSPORT_TYPES.AUTO: return <Truck className="w-4 h-4" />;
-      case TRANSPORT_TYPES.RAIL: return <Train className="w-4 h-4" />;
-      case TRANSPORT_TYPES.SEA: return <Ship className="w-4 h-4" />;
-      default: return <Globe className="w-4 h-4" />;
-    }
-  };
 
   // Status badge color
   const getStatusBadge = (status) => {
@@ -145,7 +132,6 @@ export default function CargoShipments() {
       supplier_company: '',
       tracking_number: '',
       expected_date: '',
-      transport_type: '',
       items: [],
       costs: { transport: 0, customs: 0, other: 0 }
     });
@@ -157,7 +143,6 @@ export default function CargoShipments() {
       {
         'Tracking Raqami': 'ABC123456789',
         'Kompaniya': 'Samsung Electronics',
-        'Transport': 'air',
         'Kutilayotgan Sana': '2024-02-15',
         'Tovar Nomi': 'iPhone 15 Pro Max',
         'Miqdor': 10,
@@ -199,7 +184,6 @@ export default function CargoShipments() {
             shipmentsMap[trackingNumber] = {
               tracking_number: trackingNumber,
               supplier_company: row['Kompaniya'] || '',
-              transport_type: row['Transport'] || 'air',
               expected_date: row['Kutilayotgan Sana'] || '',
               items: [],
               costs: {
@@ -306,7 +290,6 @@ export default function CargoShipments() {
               <TableRow>
                 <TableHead>{t('tracking') || 'Tracking'}</TableHead>
                 <TableHead>{t('supplier') || 'Yetkazib beruvchi'}</TableHead>
-                <TableHead>{t('transport') || 'Transport'}</TableHead>
                 <TableHead>{t('expected_date') || 'Kutilayotgan sana'}</TableHead>
                 <TableHead>{t('status') || 'Holat'}</TableHead>
                 <TableHead>{t('total_cost') || 'Jami summa'}</TableHead>
@@ -326,12 +309,6 @@ export default function CargoShipments() {
                       <div>
                         <p className="font-medium">{shipment.supplier_company}</p>
                         <p className="text-xs text-slate-500">{shipment.supplier_country}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getTransportIcon(shipment.transport_type)}
-                        <span className="text-sm">{shipment.transport_type}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -417,20 +394,6 @@ export default function CargoShipments() {
                 />
               </div>
 
-              <div>
-                <Label>{t('transport_type') || 'Transport turi'}</Label>
-                <Select value={formData.transport_type} onValueChange={(v) => setFormData({...formData, transport_type: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Transport turini tanlang" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TRANSPORT_TYPES.AIR}>Avia</SelectItem>
-                    <SelectItem value={TRANSPORT_TYPES.AUTO}>Avtomobil</SelectItem>
-                    <SelectItem value={TRANSPORT_TYPES.RAIL}>Temir yo'l</SelectItem>
-                    <SelectItem value={TRANSPORT_TYPES.SEA}>Dengiz</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             {/* Items Section */}
@@ -671,13 +634,6 @@ export default function CargoShipments() {
                       <p className="font-semibold">{selectedShipment.supplier_company || '-'}</p>
                     </div>
                     <div>
-                      <Label className="text-slate-500">Transport turi</Label>
-                      <div className="flex items-center gap-2">
-                        {getTransportIcon(selectedShipment.transport_type)}
-                        <span className="font-semibold">{selectedShipment.transport_type}</span>
-                      </div>
-                    </div>
-                    <div>
                       <Label className="text-slate-500">Kutilayotgan sana</Label>
                       <p className="font-semibold">
                         {selectedShipment.expected_date ? format(new Date(selectedShipment.expected_date), 'dd MMM yyyy') : '-'}
@@ -737,15 +693,15 @@ export default function CargoShipments() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-slate-500">Transport</Label>
-                      <p className="font-semibold">${selectedShipment.transport_cost?.toLocaleString() || 0}</p>
+                      <p className="font-semibold">${(selectedShipment.costs?.transport || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Bojxona</Label>
-                      <p className="font-semibold">${selectedShipment.customs_cost?.toLocaleString() || 0}</p>
+                      <p className="font-semibold">${(selectedShipment.costs?.customs || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Boshqa</Label>
-                      <p className="font-semibold">${selectedShipment.other_cost?.toLocaleString() || 0}</p>
+                      <p className="font-semibold">${(selectedShipment.costs?.other || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Jami xarajatlar</Label>

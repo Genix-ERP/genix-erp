@@ -33,7 +33,6 @@ export default function MySettings() {
       <div className="max-w-4xl mx-auto space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('my_settings') || 'Mening sozlamalarim'}</h1>
-          <p className="text-slate-600 mt-2">{t('my_settings_subtitle') || 'Shaxsiy profilingiz va xavfsizlik sozlamalarini boshqaring'}</p>
         </div>
 
         <Tabs defaultValue={defaultTab} className="w-full">

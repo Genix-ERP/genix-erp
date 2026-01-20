@@ -391,8 +391,7 @@ function LayoutContent({ children, currentPageName }) {
           </SidebarContent>
 
           <SidebarFooter className="border-t border-slate-200/60 p-4 hidden md:block">
-            {/* User Menu */}
-            <UserMenu />
+            {/* Footer content can be added here if needed */}
           </SidebarFooter>
         </Sidebar>
 
@@ -430,11 +429,9 @@ function LayoutContent({ children, currentPageName }) {
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
                   </Button>
                 </Link>
-                <Link to={createPageUrl("Settings")} className="hidden md:inline-block">
-                  <Button variant="ghost" size="icon" className="hover:bg-slate-100 rounded-full transition-all duration-200">
-                    <Settings className="w-4 h-4 md:w-5 md:h-5" />
-                  </Button>
-                </Link>
+                <div className="hidden md:block">
+                  <UserMenu compact />
+                </div>
               </div>
             </div>
           </header>
