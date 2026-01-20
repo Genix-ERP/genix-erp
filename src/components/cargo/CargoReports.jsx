@@ -116,7 +116,6 @@ export default function CargoReports() {
                   <SelectItem value="overview">Umumiy ko'rinish</SelectItem>
                   <SelectItem value="shipments">Yuklar ro'yxati</SelectItem>
                   <SelectItem value="costs">Xarajatlar tahlili</SelectItem>
-                  <SelectItem value="distribution">Taqsimlash hisoboti</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -131,7 +130,6 @@ export default function CargoReports() {
                     <SelectItem value={SHIPMENT_STATUS.IN_TRANSIT}>Yo'lda</SelectItem>
                     <SelectItem value={SHIPMENT_STATUS.IN_CUSTOMS}>Bojxonada</SelectItem>
                     <SelectItem value={SHIPMENT_STATUS.RECEIVED}>Qabul qilindi</SelectItem>
-                    <SelectItem value={SHIPMENT_STATUS.DISTRIBUTED}>Taqsimlandi</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -149,7 +147,7 @@ export default function CargoReports() {
       {reportType === 'overview' && (
         <>
           {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-slate-600">Jami yuklar</CardTitle>
@@ -192,19 +190,6 @@ export default function CargoReports() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">Taqsimlandi</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">{stats.distributed}</div>
-                <div className="flex items-center gap-2 mt-2 text-xs text-purple-600">
-                  <BarChart3 className="w-3 h-3" />
-                  {distSummary.totalDistributions} taqsimlash
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Status Breakdown */}
@@ -216,7 +201,7 @@ export default function CargoReports() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-slate-600">Buyurtma</span>
@@ -265,19 +250,6 @@ export default function CargoReports() {
                     <div
                       className="bg-green-500 h-2 rounded-full"
                       style={{ width: `${stats.totalShipments ? (stats.received / stats.totalShipments * 100) : 0}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600">Taqsimlandi</span>
-                    <Badge className="bg-purple-500">{stats.distributed}</Badge>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div
-                      className="bg-purple-500 h-2 rounded-full"
-                      style={{ width: `${stats.totalShipments ? (stats.distributed / stats.totalShipments * 100) : 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -437,83 +409,6 @@ export default function CargoReports() {
         </Card>
       )}
 
-      {/* Distribution Report */}
-      {reportType === 'distribution' && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">Jami taqsimlashlar</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">{distSummary.totalDistributions}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">B2B</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-blue-600">{distSummary.b2bDistributions}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">B2C</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-purple-600">{distSummary.b2cDistributions}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Taqsimlangan yuklar</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {stats.distributed === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  Taqsimlangan yuklar yo'q
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {shipments
-                    .filter(s => s.status === SHIPMENT_STATUS.DISTRIBUTED && s.distribution)
-                    .map((shipment) => (
-                      <div key={shipment.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h4 className="font-semibold">{shipment.tracking_number}</h4>
-                            <p className="text-sm text-slate-500">{shipment.supplier_company}</p>
-                          </div>
-                          <Badge className="bg-purple-500">
-                            {shipment.distribution?.length} taqsimlash
-                          </Badge>
-                        </div>
-                        <div className="space-y-2">
-                          {shipment.distribution?.map((dist, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                              <div className="flex items-center gap-2">
-                                <Badge variant={dist.company_type === 'B2B' ? 'default' : 'secondary'}>
-                                  {dist.company_type}
-                                </Badge>
-                                <span className="text-sm">{dist.company_name}</span>
-                              </div>
-                              <span className="font-semibold">${dist.total_cost?.toLocaleString() || 0}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
     </div>
   );
 }

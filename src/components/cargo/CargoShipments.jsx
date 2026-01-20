@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  Plus, Search, Eye, Trash2, Upload, Download, Ship, Pencil
+  Plus, Search, Eye, Trash2, Upload, Download, Ship, Pencil, Edit
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -474,10 +474,16 @@ export default function CargoShipments() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-600"
-                          onClick={() => {
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={async () => {
                             if (window.confirm('Bu yukni o\'chirmoqchimisiz?')) {
-                              deleteShipment(shipment.id);
+                              try {
+                                await deleteShipment(shipment.id);
+                                alert('Yuk muvaffaqiyatli o\'chirildi');
+                              } catch (error) {
+                                console.error('Delete error:', error);
+                                alert('Yukni o\'chirishda xatolik yuz berdi');
+                              }
                             }
                           }}
                         >

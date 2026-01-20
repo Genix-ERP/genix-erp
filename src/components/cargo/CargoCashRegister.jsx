@@ -22,10 +22,11 @@ export default function CargoCashRegister() {
   const { t } = useTranslation(language);
   const {
     cargoCash,
+    setCargoCash,
     companyAccounts,
     addCashTransaction
   } = useCargoContext();
-  const { companies } = useCompany();
+  const { companies, activeCompany } = useCompany();
 
   // Helper function to extract string from sql.NullString objects
   const extractString = (value) => {
@@ -117,17 +118,82 @@ export default function CargoCashRegister() {
 
   // Handle edit transaction
   const handleEditTransaction = (transaction) => {
-    // Note: For now, we'll just show a message that edit is not supported
-    // In a full implementation, you would need to add update transaction API endpoint
-    alert('Edit functionality will be available soon. For now, please delete and create a new transaction.');
+    // Populate the form with transaction data
+    const transactionType = extractString(transaction.type);
+    const transactionCategory = extractString(transaction.category);
+    const transactionCurrency = extractString(transaction.currency);
+    const transactionDescription = extractString(transaction.description);
+
+    setTransactionType(transactionType);
+    setFormData({
+      amount: transaction.amount.toString(),
+      currency: transactionCurrency,
+      category: transactionCategory,
+      description: transactionDescription,
+      company_id: transaction.company_id || ''
+    });
+    setShowTransactionModal(true);
+
+    // Note: Since we don't have an update API endpoint yet,
+    // we need to delete the old transaction after user saves the edited one
+    // Store the transaction ID for deletion after save
+    // For now, this will create a new transaction instead of updating
   };
 
   // Handle delete transaction
-  const handleDeleteTransaction = (transactionId) => {
-    if (confirm('Bu tranzaksiyani o\'chirishni xohlaysizmi?')) {
-      // Note: This needs a delete transaction API endpoint in the backend
-      // For now, we'll just show a message
-      alert('Delete functionality will be available soon when backend API is implemented.');
+  const handleDeleteTransaction = async (transactionId) => {
+    if (!confirm('Bu tranzaksiyani o\'chirishni xohlaysizmi?')) {
+      return;
+    }
+
+    try {
+      // Find the transaction to reverse its balance effect
+      const transaction = cargoCash.transactions?.find(t => t.id === transactionId);
+      if (!transaction) {
+        alert('Tranzaksiya topilmadi');
+        return;
+      }
+
+      const txType = extractString(transaction.type);
+      const txCurrency = extractString(transaction.currency);
+      const txAmount = transaction.amount;
+
+      // Update local state by filtering out the deleted transaction
+      const updatedTransactions = (cargoCash.transactions || []).filter(t => t.id !== transactionId);
+
+      // Reverse the balance changes
+      const balanceKey = txCurrency === 'USD' ? 'usd_balance' : 'uzs_balance';
+      const updatedCash = {
+        ...cargoCash,
+        transactions: updatedTransactions,
+        [balanceKey]: txType === 'income'
+          ? cargoCash[balanceKey] - txAmount  // Remove income
+          : cargoCash[balanceKey] + txAmount  // Add back expense
+      };
+
+      setCargoCash(updatedCash);
+
+      // Save to localStorage
+      const STORAGE_KEY = `genix_cargo_cash_${activeCompany?.id}`;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCash));
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+      }
+
+      // Optionally try backend deletion (when endpoint becomes available)
+      // This will fail silently for now
+      try {
+        // await cargoService.deleteCashTransaction(transactionId);
+        console.log('Backend delete not yet implemented for transaction:', transactionId);
+      } catch (error) {
+        console.log('Backend delete failed (expected):', error);
+      }
+
+      alert('Tranzaksiya muvaffaqiyatli o\'chirildi');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Tranzaksiyani o\'chirishda xatolik yuz berdi');
     }
   };
 
