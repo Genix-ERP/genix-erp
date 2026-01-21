@@ -50,13 +50,44 @@ import {
   ArrowRightLeft,
   Settings2,
   BarChart3,
-  Target
+  Target,
+  HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required, className = "" }) => (
+  <Label className={`flex items-center ${className}`}>
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </Label>
+);
 
 // SAP Safety Stock Methods - use translation keys
 const safetyStockMethods = [
@@ -569,7 +600,11 @@ export default function ReorderRules() {
             {/* Product & Warehouse */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t('product') || 'Product'} *</Label>
+                <LabelWithHelp
+                  label={t('product') || 'Product'}
+                  required
+                  helpText={t('help_reorder_product') || "Qayta buyurtma qoidasi qo'llaniladigan mahsulot. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+                />
                 <Select
                   value={formData.product_id}
                   onValueChange={(value) => setFormData({ ...formData, product_id: value })}
@@ -587,7 +622,10 @@ export default function ReorderRules() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>{t('warehouse') || 'Warehouse'}</Label>
+                <LabelWithHelp
+                  label={t('warehouse') || 'Warehouse'}
+                  helpText={t('help_reorder_warehouse') || "Qoida qo'llaniladigan ombor. 'Barcha omborlar' tanlansa, umumiy zaxira hisobga olinadi."}
+                />
                 <Select
                   value={formData.warehouse_id || "all"}
                   onValueChange={(value) => setFormData({ ...formData, warehouse_id: value === "all" ? "" : value })}
@@ -636,7 +674,10 @@ export default function ReorderRules() {
             {/* Quantities */}
             <div className="grid grid-cols-4 gap-3">
               <div className="space-y-2">
-                <Label>{t('min_qty') || 'Min Qty'}</Label>
+                <LabelWithHelp
+                  label={t('min_qty') || 'Min Qty'}
+                  helpText={t('help_min_qty') || "Minimal zaxira darajasi. Bu miqdordan kam bo'lganda buyurtma tavsiya etiladi."}
+                />
                 <Input
                   type="number"
                   min="0"
@@ -645,7 +686,10 @@ export default function ReorderRules() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('max_qty') || 'Max Qty'}</Label>
+                <LabelWithHelp
+                  label={t('max_qty') || 'Max Qty'}
+                  helpText={t('help_max_qty') || "Maksimal zaxira darajasi. Buyurtma bu miqdorga yetguncha beriladi."}
+                />
                 <Input
                   type="number"
                   min="0"
@@ -654,7 +698,10 @@ export default function ReorderRules() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('reorder_qty') || 'Reorder Qty'}</Label>
+                <LabelWithHelp
+                  label={t('reorder_qty') || 'Reorder Qty'}
+                  helpText={t('help_reorder_qty') || "Tavsiya etiladigan buyurtma miqdori. Yetkazib beruvchi bilan kelishilgan optimal miqdor."}
+                />
                 <Input
                   type="number"
                   min="1"
@@ -663,7 +710,10 @@ export default function ReorderRules() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('lead_time_days') || 'Lead Time'}</Label>
+                <LabelWithHelp
+                  label={t('lead_time_days') || 'Lead Time'}
+                  helpText={t('help_lead_time') || "Yetkazib berish muddati (kunlarda). Buyurtmadan qabul qilishgacha o'rtacha vaqt."}
+                />
                 <Input
                   type="number"
                   min="0"

@@ -9,14 +9,44 @@ import {
   Plus, Search, Layers, ChevronRight, ChevronDown, Edit2, Trash2,
   Package, Copy, FileText, Calculator, AlertTriangle, CheckCircle2,
   Settings, Eye, Wrench, Calendar, GitBranch, Clock, Cog, Factory,
-  Timer, Users, ArrowRight
+  Timer, Users, ArrowRight, HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required, className = "" }) => (
+  <label className={`text-sm font-medium text-slate-700 mb-1 flex items-center ${className}`}>
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 // BOM Types
 const bomTypes = [
@@ -445,13 +475,6 @@ export default function BillOfMaterials() {
             <div className="text-center py-12">
               <Layers className="w-12 h-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">{t('no_boms') || 'No Bill of Materials found'}</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setShowCreateModal(true)}
-              >
-                {t('create_first_bom') || 'Create your first BOM'}
-              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -630,9 +653,11 @@ export default function BillOfMaterials() {
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('product') || 'Product'} *
-                </label>
+                <LabelWithHelp
+                  label={t('product') || 'Product'}
+                  required
+                  helpText={t('help_bom_product') || "Tayyor mahsulot. BOM bu mahsulotni ishlab chiqarish uchun kerakli komponentlarni belgilaydi."}
+                />
                 <Select value={formData.product_id} onValueChange={(v) => setFormData({ ...formData, product_id: v })}>
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_product') || 'Select product'} />
@@ -647,9 +672,11 @@ export default function BillOfMaterials() {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bom_type') || 'BOM Type'} *
-                </label>
+                <LabelWithHelp
+                  label={t('bom_type') || 'BOM Type'}
+                  required
+                  helpText={t('help_bom_type') || "BOM turi: Manufacturing - ishlab chiqarish, Kit - to'plam sifatida sotish, Phantom - oraliq yig'ish."}
+                />
                 <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
                   <SelectTrigger>
                     <SelectValue />
@@ -667,9 +694,11 @@ export default function BillOfMaterials() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bom_code') || 'BOM Code'} *
-                </label>
+                <LabelWithHelp
+                  label={t('bom_code') || 'BOM Code'}
+                  required
+                  helpText={t('help_bom_code') || "BOM kodi. Tizimda noyob identifikator sifatida ishlatiladi."}
+                />
                 <Input
                   placeholder="e.g., BOM-001"
                   value={formData.code}
@@ -677,9 +706,11 @@ export default function BillOfMaterials() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bom_name') || 'BOM Name'} *
-                </label>
+                <LabelWithHelp
+                  label={t('bom_name') || 'BOM Name'}
+                  required
+                  helpText={t('help_bom_name') || "BOM nomi. Hisobotlarda va ro'yxatlarda ko'rsatiladi."}
+                />
                 <Input
                   placeholder="e.g., Standard Assembly"
                   value={formData.name}
@@ -687,9 +718,11 @@ export default function BillOfMaterials() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('quantity') || 'Quantity'} *
-                </label>
+                <LabelWithHelp
+                  label={t('quantity') || 'Quantity'}
+                  required
+                  helpText={t('help_bom_quantity') || "Bir BOM orqali ishlab chiqariladigan tayyor mahsulot soni."}
+                />
                 <Input
                   type="number"
                   min="1"

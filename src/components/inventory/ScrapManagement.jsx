@@ -42,13 +42,44 @@ import {
   FileText,
   Eye,
   Ban,
-  Check
+  Check,
+  HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required, className = "" }) => (
+  <Label className={`flex items-center ${className}`}>
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </Label>
+);
 
 export default function ScrapManagement() {
   const { language } = useLanguage();
@@ -497,7 +528,11 @@ export default function ScrapManagement() {
           <div className="space-y-4">
             {/* Product */}
             <div className="space-y-2">
-              <Label>{t('product') || 'Product'} *</Label>
+              <LabelWithHelp
+                label={t('product') || 'Product'}
+                required
+                helpText={t('help_scrap_product') || "Chiqindiga chiqariladigan mahsulot. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+              />
               <Select
                 value={formData.product_id}
                 onValueChange={(value) => setFormData({ ...formData, product_id: value })}
@@ -517,7 +552,11 @@ export default function ScrapManagement() {
 
             {/* Warehouse */}
             <div className="space-y-2">
-              <Label>{t('warehouse') || 'Warehouse'} *</Label>
+              <LabelWithHelp
+                label={t('warehouse') || 'Warehouse'}
+                required
+                helpText={t('help_scrap_warehouse') || "Chiqindi mahsulot olinadigan ombor. Mavjud zaxira miqdori ko'rsatiladi."}
+              />
               <Select
                 value={formData.warehouse_id}
                 onValueChange={(value) => setFormData({ ...formData, warehouse_id: value })}
@@ -543,7 +582,11 @@ export default function ScrapManagement() {
             {/* Quantity & Date */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t('quantity') || 'Quantity'} *</Label>
+                <LabelWithHelp
+                  label={t('quantity') || 'Quantity'}
+                  required
+                  helpText={t('help_scrap_quantity') || "Chiqindiga chiqariladigan miqdor. Mavjud zaxiradan oshmasligi kerak."}
+                />
                 <Input
                   type="number"
                   min="1"
@@ -552,7 +595,10 @@ export default function ScrapManagement() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('scrap_date') || 'Scrap Date'}</Label>
+                <LabelWithHelp
+                  label={t('scrap_date') || 'Scrap Date'}
+                  helpText={t('help_scrap_date') || "Chiqindiga chiqarilgan sana. Hisobotlarda va tarixda ko'rsatiladi."}
+                />
                 <Input
                   type="date"
                   value={formData.scrap_date}
@@ -563,7 +609,11 @@ export default function ScrapManagement() {
 
             {/* Reason */}
             <div className="space-y-2">
-              <Label>{t('reason') || 'Reason'} *</Label>
+              <LabelWithHelp
+                label={t('reason') || 'Reason'}
+                required
+                helpText={t('help_scrap_reason') || "Chiqindi sababi: shikastlangan, muddati o'tgan, nuqsonli, eskirgan yoki sifat muammosi."}
+              />
               <Select
                 value={formData.reason}
                 onValueChange={(value) => setFormData({ ...formData, reason: value })}
@@ -583,7 +633,10 @@ export default function ScrapManagement() {
 
             {/* Reason Notes */}
             <div className="space-y-2">
-              <Label>{t('reason_notes') || 'Additional Notes'}</Label>
+              <LabelWithHelp
+                label={t('reason_notes') || 'Additional Notes'}
+                helpText={t('help_scrap_notes') || "Chiqindi haqida qo'shimcha tafsilotlar. Sababni aniqroq tushuntirish uchun."}
+              />
               <Textarea
                 value={formData.reason_notes}
                 onChange={(e) => setFormData({ ...formData, reason_notes: e.target.value })}
@@ -594,7 +647,10 @@ export default function ScrapManagement() {
 
             {/* Scrapped By */}
             <div className="space-y-2">
-              <Label>{t('scrapped_by') || 'Scrapped By'}</Label>
+              <LabelWithHelp
+                label={t('scrapped_by') || 'Scrapped By'}
+                helpText={t('help_scrapped_by') || "Chiqindiga chiqargan shaxs ismi. Mas'uliyat va audit uchun muhim."}
+              />
               <Input
                 value={formData.scrapped_by}
                 onChange={(e) => setFormData({ ...formData, scrapped_by: e.target.value })}

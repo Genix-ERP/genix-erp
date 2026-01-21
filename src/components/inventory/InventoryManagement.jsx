@@ -6,8 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, ArrowRightLeft, TrendingUp, TrendingDown,
   Warehouse, RotateCcw, Filter, Calendar, AlertCircle, CheckCircle,
-  ArrowUpRight, ArrowDownLeft, History, DollarSign
+  ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +23,30 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required }) => (
+  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 export default function InventoryManagement() {
   const { language } = useLanguage();
@@ -542,7 +572,11 @@ export default function InventoryManagement() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('product')} *</label>
+              <LabelWithHelp
+                label={t('product')}
+                required
+                helpText={t('help_adjust_product') || "Zaxirasini tuzatmoqchi bo'lgan mahsulotni tanlang. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+              />
               <Select
                 value={adjustForm.product_id}
                 onValueChange={(value) => setAdjustForm({...adjustForm, product_id: value})}
@@ -561,7 +595,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('warehouse')} *</label>
+              <LabelWithHelp
+                label={t('warehouse')}
+                required
+                helpText={t('help_adjust_warehouse') || "Zaxira tuzatiladigan omborni tanlang. Faqat faol omborlar ko'rsatiladi."}
+              />
               <Select
                 value={adjustForm.warehouse_id}
                 onValueChange={(value) => setAdjustForm({...adjustForm, warehouse_id: value})}
@@ -585,9 +623,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('quantity')} * <span className="text-slate-400">({t('use_negative_for_decrease')})</span>
-              </label>
+              <LabelWithHelp
+                label={`${t('quantity')} (${t('use_negative_for_decrease')})`}
+                required
+                helpText={t('help_adjust_quantity') || "Tuzatish miqdori. Ijobiy son zaxirani oshiradi, manfiy son kamaytiradi. Masalan: +10 qo'shadi, -5 ayiradi."}
+              />
               <Input
                 type="number"
                 placeholder={t('enter_quantity')}
@@ -598,7 +638,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reason')} *</label>
+              <LabelWithHelp
+                label={t('reason')}
+                required
+                helpText={t('help_adjust_reason') || "Tuzatish sababi. Bu ma'lumot audit izlari va hisobotlar uchun saqlanadi."}
+              />
               <Textarea
                 placeholder={t('reason_for_adjustment')}
                 value={adjustForm.reason}
@@ -609,7 +653,10 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reference')}</label>
+              <LabelWithHelp
+                label={t('reference')}
+                helpText={t('help_adjust_reference') || "Ixtiyoriy mos yozuv raqami. Tashqi hujjatlar yoki tizimlar bilan bog'lash uchun."}
+              />
               <Input
                 placeholder={t('optional_reference')}
                 value={adjustForm.reference}
@@ -652,7 +699,11 @@ export default function InventoryManagement() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('product')} *</label>
+              <LabelWithHelp
+                label={t('product')}
+                required
+                helpText={t('help_transfer_product') || "Ko'chirmoqchi bo'lgan mahsulotni tanlang. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+              />
               <Select
                 value={transferForm.product_id}
                 onValueChange={(value) => setTransferForm({...transferForm, product_id: value})}
@@ -671,7 +722,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('from_warehouse')} *</label>
+              <LabelWithHelp
+                label={t('from_warehouse')}
+                required
+                helpText={t('help_from_warehouse') || "Mahsulot olinadigan manba ombori. Mavjud zaxira miqdori ko'rsatiladi."}
+              />
               <Select
                 value={transferForm.from_warehouse_id}
                 onValueChange={(value) => setTransferForm({...transferForm, from_warehouse_id: value})}
@@ -695,7 +750,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('to_warehouse')} *</label>
+              <LabelWithHelp
+                label={t('to_warehouse')}
+                required
+                helpText={t('help_to_warehouse') || "Mahsulot yuboriladigan manzil ombori. Manba omboridan farqli bo'lishi kerak."}
+              />
               <Select
                 value={transferForm.to_warehouse_id}
                 onValueChange={(value) => setTransferForm({...transferForm, to_warehouse_id: value})}
@@ -716,7 +775,11 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('quantity')} *</label>
+              <LabelWithHelp
+                label={t('quantity')}
+                required
+                helpText={t('help_transfer_quantity') || "Ko'chirish miqdori. Manba omboridagi mavjud miqdordan oshmasligi kerak."}
+              />
               <Input
                 type="number"
                 min="1"
@@ -728,7 +791,10 @@ export default function InventoryManagement() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('notes')}</label>
+              <LabelWithHelp
+                label={t('notes')}
+                helpText={t('help_transfer_notes') || "Ko'chirish haqida qo'shimcha izohlar. Tarix va hisobotlarda ko'rsatiladi."}
+              />
               <Textarea
                 placeholder={t('optional_notes')}
                 value={transferForm.notes}

@@ -71,14 +71,54 @@ export const inventoryService = {
     await apiClient.delete(`/warehouses/${id}`);
   },
 
-  async listWarehouseLocations(warehouseId) {
-    const response = await apiClient.get(`/warehouses/${warehouseId}/locations`);
+  async listWarehouseLocations(warehouseId, params = {}) {
+    const response = await apiClient.get(`/warehouses/${warehouseId}/locations`, { params });
     return response.data.data;
   },
 
   async createWarehouseLocation(warehouseId, data) {
     const response = await apiClient.post(`/warehouses/${warehouseId}/locations`, data);
     return response.data.data;
+  },
+
+  async updateWarehouseLocation(warehouseId, locationId, data) {
+    const response = await apiClient.put(`/warehouses/${warehouseId}/locations/${locationId}`, data);
+    return response.data.data;
+  },
+
+  async deleteWarehouseLocation(warehouseId, locationId) {
+    await apiClient.delete(`/warehouses/${warehouseId}/locations/${locationId}`);
+  },
+
+  // All Locations (cross-warehouse view like Odoo)
+  async listAllLocations(params = {}) {
+    const response = await apiClient.get('/locations', { params });
+    return response.data.data;
+  },
+
+  // Operation Types
+  async listOperationTypes(params = {}) {
+    const response = await apiClient.get('/operation-types', { params });
+    return response.data.data;
+  },
+
+  async getWarehouseOperationTypes(warehouseId) {
+    const response = await apiClient.get(`/warehouses/${warehouseId}/operation-types`);
+    return response.data.data;
+  },
+
+  async createOperationType(data) {
+    const response = await apiClient.post('/operation-types', data);
+    return response.data.data;
+  },
+
+  async updateOperationType(id, data) {
+    const response = await apiClient.put(`/operation-types/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteOperationType(id) {
+    await apiClient.delete(`/operation-types/${id}`);
   },
 
   // Inventory Stock

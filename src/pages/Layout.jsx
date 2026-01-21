@@ -72,6 +72,8 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Navigation link that closes mobile sidebar on click
@@ -123,6 +125,7 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
+  const { canAccess } = usePermissions();
 
   // Expose AI chatbox opener globally
   React.useEffect(() => {
@@ -160,85 +163,98 @@ function LayoutContent({ children, currentPageName }) {
     return { lowStockCount, revenueGrowth, activeOrders };
   }, [inventory, financialTransactions, salesOrders]);
 
-  // Map app IDs to navigation items
+  // Map app IDs to navigation items with permission module keys
   const appNavigationMap = {
     'inventory': {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
       icon: Package,
-      badge: "3"
+      badge: "3",
+      permissionModule: MODULES.INVENTORY
     },
     'crm': {
       title: t("crm"),
       url: createPageUrl("Customers"),
       icon: Users,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.CUSTOMERS
     },
     'finance': {
       title: t("financials"),
       url: createPageUrl("Financials"),
       icon: DollarSign,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.FINANCIALS
     },
     'hr': {
       title: t("hr"),
       url: createPageUrl("HR"),
       icon: Briefcase,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.HR
     },
     'manufacturing': {
       title: t("manufacturing"),
       url: createPageUrl("Manufacturing"),
       icon: Zap,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.INVENTORY // Manufacturing uses inventory permission
     },
     'procurement': {
       title: t("procurement"),
       url: createPageUrl("Procurement"),
       icon: ShoppingCart,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.PURCHASES
     },
     'projects': {
       title: t("projects"),
       url: createPageUrl("Projects"),
       icon: Briefcase,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.PROJECTS
     },
     'sales_orders': {
       title: t("sales_orders"),
       url: createPageUrl("SalesOrders"),
       icon: ShoppingBag,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.SALES
     },
     'assets': {
       title: t("assets"),
       url: createPageUrl("Assets"),
       icon: Monitor,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.INVENTORY // Assets uses inventory permission
     },
     'expenses': {
       title: t("expenses"),
       url: createPageUrl("Expenses"),
       icon: Receipt,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.FINANCIALS
     },
     'payroll': {
       title: t("payroll"),
       url: createPageUrl("Payroll"),
       icon: DollarSign,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.HR
     },
     'contracts': {
       title: t("contracts"),
       url: createPageUrl("Contracts"),
       icon: FileText,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.CONTRACTS
     },
     'cargo': {
       title: t("cargo") || 'Cargo',
       url: createPageUrl("Cargo"),
       icon: Ship,
-      badge: null
+      badge: null,
+      permissionModule: MODULES.INVENTORY // Cargo uses inventory permission
     }
   };
 
@@ -275,17 +291,19 @@ function LayoutContent({ children, currentPageName }) {
     }
   ];
 
-  // Build dynamic navigation based on installed apps
+  // Build dynamic navigation based on installed apps AND user permissions
   const getNavigationItems = () => {
     const dynamicItems = [];
 
-    // Add Dashboard first
+    // Add Dashboard first (always visible)
     dynamicItems.push(coreNavigationItems[0]);
 
-    // Add installed app modules
+    // Add installed app modules - only if user has permission to access
     Object.keys(appNavigationMap).forEach(appId => {
-      if (isAppInstalled(appId)) {
-        dynamicItems.push(appNavigationMap[appId]);
+      const appConfig = appNavigationMap[appId];
+      // Check if app is installed AND user has permission to access the module
+      if (isAppInstalled(appId) && canAccess(appConfig.permissionModule)) {
+        dynamicItems.push(appConfig);
       }
     });
 
