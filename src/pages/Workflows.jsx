@@ -196,12 +196,9 @@ export default function Workflows() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="w-full sm:w-auto">
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--genix-navy)] break-words">{t('workflows_title')}</h1>
-          </div>
+
+        {/* Header with Action Button */}
+        <div className="flex justify-end">
           <Button
             onClick={() => {
               setEditingWorkflow(null);

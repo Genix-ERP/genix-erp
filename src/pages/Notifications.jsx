@@ -153,31 +153,18 @@ export default function Notifications() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-5xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Bell className="w-8 h-8 text-[var(--genix-navy)]" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </div>
-              <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('notifications')}</h1>
-            </div>
-            <p className="text-slate-600 mt-2">
-              {unreadCount > 0 
-                ? `${unreadCount} ${t('unread_notifications') || 'unread notifications'}`
-                : t('all_caught_up') || 'You\'re all caught up!'}
-            </p>
-          </div>
-          
+
+        {/* Header with Action Buttons */}
+        <div className="flex justify-between items-center gap-4">
+          <p className="text-slate-600">
+            {unreadCount > 0
+              ? `${unreadCount} ${t('unread_notifications') || 'unread notifications'}`
+              : t('all_caught_up') || 'You\'re all caught up!'}
+          </p>
+
           <div className="flex gap-2">
             {unreadCount > 0 && (
-              <Button 
+              <Button
                 onClick={handleMarkAllAsRead}
                 variant="outline"
                 className="flex items-center gap-2"
@@ -187,7 +174,7 @@ export default function Notifications() {
               </Button>
             )}
             {notifications.length > 0 && (
-              <Button 
+              <Button
                 onClick={handleDeleteAll}
                 variant="outline"
                 className="flex items-center gap-2 text-red-600 hover:text-red-700"

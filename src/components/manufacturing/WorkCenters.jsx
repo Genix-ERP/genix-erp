@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { Plus, Cog, AlertTriangle, CheckCircle, Wrench } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -219,17 +220,19 @@ export default function WorkCenters() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('work_center_code')}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_code" label={t('work_center_code')} helpText={t('help_workcenter_code')} />
                 <Input
+                  id="wc_code"
                   placeholder={t('auto_generated_if_empty')}
                   value={newWorkCenter.work_center_code}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, work_center_code: e.target.value})}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('name')} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_name" label={t('name')} helpText={t('help_workcenter_name')} required />
                 <Input
+                  id="wc_name"
                   placeholder={t('work_center_name')}
                   value={newWorkCenter.name}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
@@ -239,10 +242,10 @@ export default function WorkCenters() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('type')} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_type" label={t('type')} helpText={t('help_workcenter_type')} required />
                 <Select value={newWorkCenter.work_center_type} onValueChange={(value) => setNewWorkCenter({...newWorkCenter, work_center_type: value})}>
-                  <SelectTrigger>
+                  <SelectTrigger id="wc_type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -254,9 +257,10 @@ export default function WorkCenters() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('location')}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_location" label={t('location')} helpText={t('help_workcenter_location')} />
                 <Input
+                  id="wc_location"
                   placeholder={t('physical_location')}
                   value={newWorkCenter.location}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, location: e.target.value})}
@@ -265,27 +269,30 @@ export default function WorkCenters() {
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('capacity_per_day')}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_day')} helpText={t('help_workcenter_capacity')} />
                 <Input
+                  id="wc_capacity"
                   type="number"
                   placeholder="0"
                   value={newWorkCenter.capacity_per_day}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_day: e.target.value})}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('efficiency_percent')}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_efficiency" label={t('efficiency_percent')} helpText={t('help_workcenter_efficiency')} />
                 <Input
+                  id="wc_efficiency"
                   type="number"
                   placeholder="100"
                   value={newWorkCenter.efficiency_rate}
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, efficiency_rate: e.target.value})}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('cost_per_hour')}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_cost" label={t('cost_per_hour')} helpText={t('help_workcenter_cost')} />
                 <Input
+                  id="wc_cost"
                   type="number"
                   placeholder="0"
                   value={newWorkCenter.cost_per_hour}

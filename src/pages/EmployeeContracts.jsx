@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -311,12 +311,8 @@ export default function EmployeeContracts() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">{t('employee_contracts') || "Xodim shartnomalari"}</h1>
-            <p className="text-slate-600 mt-1">{t('employee_contracts_desc') || "Mehnat shartnomalarini boshqaring"}</p>
-          </div>
+        {/* Header with Action Button */}
+        <div className="flex justify-end">
           <Button
             onClick={() => setShowCreateModal(true)}
             className="bg-gradient-to-r from-blue-600 to-purple-600"
@@ -541,12 +537,12 @@ export default function EmployeeContracts() {
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
               <div className="space-y-2">
-                <Label>{t('employee') || "Xodim"} *</Label>
+                <LabelWithHelp htmlFor="contract_employee" label={t('employee') || "Xodim"} helpText={t('help_contract_employee')} required />
                 <Select
                   value={newContract.employee_id}
                   onValueChange={value => setNewContract({ ...newContract, employee_id: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="contract_employee">
                     <SelectValue placeholder={t('select_employee') || "Xodimni tanlang"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -558,12 +554,12 @@ export default function EmployeeContracts() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t('contract_type') || "Shartnoma turi"} *</Label>
+                <LabelWithHelp htmlFor="contract_type" label={t('contract_type') || "Shartnoma turi"} helpText={t('help_contract_type')} required />
                 <Select
                   value={newContract.contract_type}
                   onValueChange={value => setNewContract({ ...newContract, contract_type: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="contract_type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -576,16 +572,18 @@ export default function EmployeeContracts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('start_date') || "Boshlanish sanasi"} *</Label>
+                  <LabelWithHelp htmlFor="start_date" label={t('start_date') || "Boshlanish sanasi"} helpText={t('help_contract_start_date')} required />
                   <Input
+                    id="start_date"
                     type="date"
                     value={newContract.start_date}
                     onChange={e => setNewContract({ ...newContract, start_date: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('end_date') || "Tugash sanasi"} *</Label>
+                  <LabelWithHelp htmlFor="end_date" label={t('end_date') || "Tugash sanasi"} helpText={t('help_contract_end_date')} required />
                   <Input
+                    id="end_date"
                     type="date"
                     value={newContract.end_date}
                     onChange={e => setNewContract({ ...newContract, end_date: e.target.value })}
@@ -595,8 +593,9 @@ export default function EmployeeContracts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('salary') || "Maosh"} *</Label>
+                  <LabelWithHelp htmlFor="salary" label={t('salary') || "Maosh"} helpText={t('help_contract_salary')} required />
                   <Input
+                    id="salary"
                     type="number"
                     value={newContract.salary}
                     onChange={e => setNewContract({ ...newContract, salary: e.target.value })}
@@ -604,12 +603,12 @@ export default function EmployeeContracts() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('currency') || "Valyuta"}</Label>
+                  <LabelWithHelp htmlFor="currency" label={t('currency') || "Valyuta"} helpText={t('help_contract_currency')} />
                   <Select
                     value={newContract.currency}
                     onValueChange={value => setNewContract({ ...newContract, currency: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="currency">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -623,16 +622,18 @@ export default function EmployeeContracts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('working_hours') || "Haftalik soat"}</Label>
+                  <LabelWithHelp htmlFor="working_hours" label={t('working_hours') || "Haftalik soat"} helpText={t('help_contract_working_hours')} />
                   <Input
+                    id="working_hours"
                     type="number"
                     value={newContract.working_hours}
                     onChange={e => setNewContract({ ...newContract, working_hours: parseInt(e.target.value) || 40 })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('probation_period') || "Sinov muddati (oy)"}</Label>
+                  <LabelWithHelp htmlFor="probation_period" label={t('probation_period') || "Sinov muddati (oy)"} helpText={t('help_contract_probation')} />
                   <Input
+                    id="probation_period"
                     type="number"
                     value={newContract.probation_period}
                     onChange={e => setNewContract({ ...newContract, probation_period: parseInt(e.target.value) || 0 })}
@@ -641,8 +642,9 @@ export default function EmployeeContracts() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t('benefits') || "Imtiyozlar"}</Label>
+                <LabelWithHelp htmlFor="benefits" label={t('benefits') || "Imtiyozlar"} helpText={t('help_contract_benefits')} />
                 <Textarea
+                  id="benefits"
                   value={newContract.benefits}
                   onChange={e => setNewContract({ ...newContract, benefits: e.target.value })}
                   placeholder={t('enter_benefits') || "Tibbiy sug'urta, ta'til, bonus..."}
@@ -651,8 +653,9 @@ export default function EmployeeContracts() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t('terms') || "Shartlar"}</Label>
+                <LabelWithHelp htmlFor="terms" label={t('terms') || "Shartlar"} helpText={t('help_contract_terms')} />
                 <Textarea
+                  id="terms"
                   value={newContract.terms}
                   onChange={e => setNewContract({ ...newContract, terms: e.target.value })}
                   placeholder={t('enter_terms') || "Qo'shimcha shartlar..."}
@@ -756,12 +759,12 @@ export default function EmployeeContracts() {
             {selectedContract && (
               <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
                 <div className="space-y-2">
-                  <Label>{t('contract_type') || "Shartnoma turi"}</Label>
+                  <LabelWithHelp htmlFor="edit_contract_type" label={t('contract_type') || "Shartnoma turi"} helpText={t('help_contract_type')} />
                   <Select
                     value={selectedContract.contract_type}
                     onValueChange={value => setSelectedContract({ ...selectedContract, contract_type: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="edit_contract_type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -774,16 +777,18 @@ export default function EmployeeContracts() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('end_date') || "Tugash sanasi"}</Label>
+                    <LabelWithHelp htmlFor="edit_end_date" label={t('end_date') || "Tugash sanasi"} helpText={t('help_contract_end_date')} />
                     <Input
+                      id="edit_end_date"
                       type="date"
                       value={selectedContract.end_date}
                       onChange={e => setSelectedContract({ ...selectedContract, end_date: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>{t('salary') || "Maosh"}</Label>
+                    <LabelWithHelp htmlFor="edit_salary" label={t('salary') || "Maosh"} helpText={t('help_contract_salary')} />
                     <Input
+                      id="edit_salary"
                       type="number"
                       value={selectedContract.salary}
                       onChange={e => setSelectedContract({ ...selectedContract, salary: e.target.value })}
@@ -792,8 +797,9 @@ export default function EmployeeContracts() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('benefits') || "Imtiyozlar"}</Label>
+                  <LabelWithHelp htmlFor="edit_benefits" label={t('benefits') || "Imtiyozlar"} helpText={t('help_contract_benefits')} />
                   <Textarea
+                    id="edit_benefits"
                     value={selectedContract.benefits || ''}
                     onChange={e => setSelectedContract({ ...selectedContract, benefits: e.target.value })}
                     rows={2}

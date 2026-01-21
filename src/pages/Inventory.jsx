@@ -231,11 +231,6 @@ export default function Inventory() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6 md:space-y-8">
 
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[var(--genix-navy)]">{t('inventory_title')}</h1>
-        </div>
-
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">

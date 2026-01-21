@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 
@@ -69,7 +68,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               <h3 className="text-lg font-medium">{t('basic_information')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company_name">{t('company_name')} *</Label>
+                  <LabelWithHelp htmlFor="company_name" label={t('company_name')} helpText={t('help_customer_company')} required />
                   <Input
                     id="company_name"
                     value={formData.company_name}
@@ -78,7 +77,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="contact_name">{t('contact_name')} *</Label>
+                  <LabelWithHelp htmlFor="contact_name" label={t('contact_name')} helpText={t('help_customer_contact')} required />
                   <Input
                     id="contact_name"
                     value={formData.contact_name}
@@ -90,7 +89,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">{t('email')} *</Label>
+                  <LabelWithHelp htmlFor="email" label={t('email')} helpText={t('help_customer_email')} required />
                   <Input
                     id="email"
                     type="email"
@@ -100,7 +99,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">{t('phone')}</Label>
+                  <LabelWithHelp htmlFor="phone" label={t('phone')} helpText={t('help_customer_phone')} />
                   <Input
                     id="phone"
                     value={formData.phone}
@@ -111,7 +110,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="industry">{t('industry')}</Label>
+                  <LabelWithHelp htmlFor="industry" label={t('industry')} helpText={t('help_customer_industry')} />
                   <Select value={formData.industry} onValueChange={(value) => handleChange("industry", value)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -129,7 +128,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="status">{t('status')}</Label>
+                  <LabelWithHelp htmlFor="status" label={t('status')} helpText={t('help_customer_status')} />
                   <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -150,7 +149,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               <h3 className="text-lg font-medium">{t('business_details')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="annual_revenue">{t('annual_revenue_field')}</Label>
+                  <LabelWithHelp htmlFor="annual_revenue" label={t('annual_revenue_field')} helpText={t('help_customer_annual_revenue')} />
                   <Input
                     id="annual_revenue"
                     type="number"
@@ -160,7 +159,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="employee_count">{t('employee_count')}</Label>
+                  <LabelWithHelp htmlFor="employee_count" label={t('employee_count')} helpText={t('help_customer_employee_count')} />
                   <Input
                     id="employee_count"
                     type="number"
@@ -170,7 +169,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="monthly_value">{t('monthly_value')}</Label>
+                  <LabelWithHelp htmlFor="monthly_value" label={t('monthly_value')} helpText={t('help_customer_monthly_value')} />
                   <Input
                     id="monthly_value"
                     type="number"
@@ -183,7 +182,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="subscription_tier">{t('subscription_tier')}</Label>
+                <LabelWithHelp htmlFor="subscription_tier" label={t('subscription_tier')} helpText={t('help_customer_subscription')} />
                 <Select value={formData.subscription_tier} onValueChange={(value) => handleChange("subscription_tier", value)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -202,7 +201,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('address')}</h3>
               <div className="space-y-2">
-                <Label htmlFor="street">{t('street_address')}</Label>
+                <LabelWithHelp htmlFor="street" label={t('street_address')} helpText={t('help_customer_street')} />
                 <Input
                   id="street"
                   value={formData.address.street}
@@ -211,7 +210,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="city">{t('city')}</Label>
+                  <LabelWithHelp htmlFor="city" label={t('city')} helpText={t('help_customer_city')} />
                   <Input
                     id="city"
                     value={formData.address.city}
@@ -219,7 +218,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="state">{t('state')}</Label>
+                  <LabelWithHelp htmlFor="state" label={t('state')} helpText={t('help_customer_state')} />
                   <Input
                     id="state"
                     value={formData.address.state}
@@ -227,7 +226,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="zip">{t('zip_code')}</Label>
+                  <LabelWithHelp htmlFor="zip" label={t('zip_code')} helpText={t('help_customer_zip')} />
                   <Input
                     id="zip"
                     value={formData.address.zip}
@@ -235,7 +234,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="country">{t('country')}</Label>
+                  <LabelWithHelp htmlFor="country" label={t('country')} helpText={t('help_customer_country')} />
                   <Input
                     id="country"
                     value={formData.address.country}

@@ -336,12 +336,8 @@ export default function LeaveManagement() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">{t('leave_management') || "Ta'til boshqaruvi"}</h1>
-            <p className="text-slate-600 mt-1">{t('leave_management_desc') || "Xodimlar ta'tillarini boshqaring va kuzating"}</p>
-          </div>
+        {/* Header with Action Button */}
+        <div className="flex justify-end">
           <Button
             onClick={() => setShowCreateModal(true)}
             className="bg-gradient-to-r from-blue-600 to-purple-600"

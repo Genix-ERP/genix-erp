@@ -50,15 +50,6 @@ export default function Cargo() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-[var(--genix-navy)]">
-              {t('cargo_company') || 'Cargo kompaniyasi'}
-            </h1>
-          </div>
-        </div>
-
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 
@@ -42,7 +42,12 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="contact_name">{t('contact_name')} *</Label>
+              <LabelWithHelp
+                htmlFor="contact_name"
+                label={t('contact_name')}
+                helpText={t('help_lead_contact_name')}
+                required
+              />
               <Input
                 id="contact_name"
                 value={formData.contact_name}
@@ -53,7 +58,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="company_name">{t('company_name')}</Label>
+              <LabelWithHelp
+                htmlFor="company_name"
+                label={t('company_name')}
+                helpText={t('help_lead_company_name')}
+              />
               <Input
                 id="company_name"
                 value={formData.company_name}
@@ -64,7 +73,12 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="email">{t('email')} *</Label>
+                <LabelWithHelp
+                  htmlFor="email"
+                  label={t('email')}
+                  helpText={t('help_lead_email')}
+                  required
+                />
                 <Input
                   id="email"
                   type="email"
@@ -75,7 +89,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">{t('phone')}</Label>
+                <LabelWithHelp
+                  htmlFor="phone"
+                  label={t('phone')}
+                  helpText={t('help_lead_phone')}
+                />
                 <Input
                   id="phone"
                   value={formData.phone}
@@ -87,7 +105,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="status">{t('status')}</Label>
+                <LabelWithHelp
+                  htmlFor="status"
+                  label={t('status')}
+                  helpText={t('help_lead_status')}
+                />
                 <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -102,7 +124,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="source">{t('source')}</Label>
+                <LabelWithHelp
+                  htmlFor="source"
+                  label={t('source')}
+                  helpText={t('help_lead_source')}
+                />
                 <Select value={formData.source} onValueChange={(value) => handleChange("source", value)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -120,7 +146,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="notes">{t('notes')}</Label>
+              <LabelWithHelp
+                htmlFor="notes"
+                label={t('notes')}
+                helpText={t('help_lead_notes')}
+              />
               <Textarea
                 id="notes"
                 value={formData.notes}
