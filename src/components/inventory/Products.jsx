@@ -7,8 +7,14 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer
+  Layers, Printer, HelpCircle, Truck
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +34,30 @@ import {
   ImportExportButtons,
   useAuditTrail,
 } from '@/components/shared';
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required }) => (
+  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 export default function Products() {
   const { language } = useLanguage();
@@ -68,24 +98,94 @@ export default function Products() {
   const [editCategoryName, setEditCategoryName] = useState('');
   const { addAuditLog } = useAuditTrail('products');
 
-  // Export columns configuration
+  // Export columns configuration - comprehensive product fields
   const exportColumns = [
-    { key: 'code', label: 'Kod' },
+    // Basic Info
     { key: 'name', label: 'Nomi' },
-    { key: 'sku', label: 'SKU' },
     { key: 'barcode', label: 'Shtrix kod' },
     { key: 'type', label: 'Turi' },
+    { key: 'category_id', label: 'Kategoriya', render: (v) => categories.find(c => c.id === v)?.name || '-' },
+    { key: 'description', label: 'Tavsif' },
+    { key: 'tags', label: 'Teglar', render: (v) => (v || []).join(', ') },
+
+    // Pricing
     { key: 'cost_price', label: 'Tan narxi', render: (v) => `${(v || 0).toLocaleString()} UZS` },
     { key: 'list_price', label: 'Sotish narxi', render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'min_price', label: 'Minimal narx', render: (v) => v ? `${v.toLocaleString()} UZS` : '-' },
+    { key: 'wholesale_price', label: 'Ulgurji narx', render: (v) => v ? `${v.toLocaleString()} UZS` : '-' },
+
+    // Stock Settings
+    { key: 'is_stockable', label: 'Zaxira qilinadimi', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'track_inventory', label: 'Inventar kuzatish', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'min_stock_level', label: 'Minimal zaxira' },
+    { key: 'reorder_point', label: 'Qayta buyurtma nuqtasi' },
+    { key: 'reorder_quantity', label: 'Qayta buyurtma miqdori' },
+
+    // Sales & Purchase
+    { key: 'is_purchasable', label: 'Sotib olinadimi', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'is_sellable', label: 'Sotiladimi', render: (v) => v ? 'Ha' : 'Yo\'q' },
     { key: 'is_active', label: 'Holat', render: (v) => v ? 'Faol' : 'Nofaol' },
+
+    // Module Visibility (Odoo-style)
+    { key: 'can_be_sold', label: 'Sotish modulida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'can_be_purchased', label: 'Sotib olish modulida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'available_in_pos', label: 'POS modulida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'can_be_expensed', label: 'Xarajatlar modulida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'can_be_rented', label: 'Ijara modulida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'can_be_subcontracted', label: 'Subpudrat sifatida', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'is_overhead_expense', label: 'Nakladnoy xarajat', render: (v) => v ? 'Ha' : 'Yo\'q' },
+
+    // Identification
+    { key: 'brand', label: 'Brend' },
+    { key: 'manufacturer', label: 'Ishlab chiqaruvchi' },
+    { key: 'model_number', label: 'Model raqami' },
+    { key: 'upc', label: 'UPC' },
+    { key: 'ean', label: 'EAN' },
+    { key: 'isbn', label: 'ISBN' },
+    { key: 'mpn', label: 'MPN' },
+
+    // Physical Properties
+    { key: 'weight', label: 'Og\'irlik' },
+    { key: 'weight_unit', label: 'Og\'irlik birligi' },
+    { key: 'length', label: 'Uzunlik' },
+    { key: 'width', label: 'Kenglik' },
+    { key: 'height', label: 'Balandlik' },
+    { key: 'dimension_unit', label: 'O\'lcham birligi' },
+
+    // Additional Info
+    { key: 'warranty_months', label: 'Kafolat (oy)' },
+    { key: 'country_of_origin', label: 'Kelib chiqish mamlakatiy' },
+    { key: 'hs_code', label: 'HS kodi' },
+    { key: 'tax_class', label: 'Soliq sinfi' },
+
+    // Supplier Info
+    { key: 'supplier_sku', label: 'Yetkazib beruvchi SKU' },
+    { key: 'lead_time_days', label: 'Yetkazib berish muddati (kun)' },
+
+    // Storage
+    { key: 'shelf_life_days', label: 'Saqlash muddati (kun)' },
+    { key: 'storage_conditions', label: 'Saqlash sharoitlari' },
+    { key: 'requires_lot_tracking', label: 'Partiya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'requires_serial_tracking', label: 'Seriya kuzatuvi', render: (v) => v ? 'Ha' : 'Yo\'q' },
+
+    // Units of Measure
+    { key: 'inventory_uom', label: 'Inventar birligi' },
+    { key: 'sales_uom', label: 'Sotish birligi' },
+    { key: 'purchase_uom', label: 'Sotib olish birligi' },
+    { key: 'uom_conversion_factor', label: 'Birlik konvertatsiyasi' },
+
+    // Expiration
+    { key: 'track_expiration', label: 'Muddatni kuzatish', render: (v) => v ? 'Ha' : 'Yo\'q' },
+    { key: 'expiration_time_days', label: 'Yaroqlilik muddati (kun)' },
+    { key: 'removal_time_days', label: 'Olib tashlash muddati (kun)' },
+    { key: 'alert_time_days', label: 'Ogohlantirish muddati (kun)' },
   ];
 
   // Import columns configuration
   const importColumns = [
-    { key: 'code', label: 'Kod', required: true },
     { key: 'name', label: 'Nomi', required: true },
-    { key: 'sku', label: 'SKU' },
     { key: 'barcode', label: 'Shtrix kod' },
+    { key: 'tags', label: 'Teglar' },
     { key: 'cost_price', label: 'Tan narxi' },
     { key: 'list_price', label: 'Sotish narxi', required: true },
   ];
@@ -93,10 +193,9 @@ export default function Products() {
   const handleImport = async (data) => {
     for (const row of data) {
       const productData = {
-        code: row.code,
         name: row.name,
-        sku: row.sku || '',
         barcode: row.barcode || '',
+        tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
         type: 'product',
         cost_price: parseFloat(row.cost_price) || 0,
         list_price: parseFloat(row.list_price) || 0,
@@ -112,9 +211,7 @@ export default function Products() {
   };
 
   const [formData, setFormData] = useState({
-    code: '',
     name: '',
-    sku: '',
     barcode: '',
     type: 'product',
     category_id: '',
@@ -131,6 +228,14 @@ export default function Products() {
     is_purchasable: true,
     is_sellable: true,
     is_active: true,
+    // Module visibility (Odoo-style)
+    can_be_sold: true,
+    can_be_purchased: true,
+    available_in_pos: false,
+    can_be_expensed: false,
+    can_be_rented: false,
+    can_be_subcontracted: false,
+    is_overhead_expense: false,
     tags: [],
     // New advanced fields
     brand: '',
@@ -156,6 +261,8 @@ export default function Products() {
     has_variants: false,
     variant_attributes: [], // e.g., [{name: 'Color', values: ['Red', 'Blue']}, {name: 'Size', values: ['S', 'M', 'L']}]
     variants: [], // Generated variant combinations
+    // Bundle/Combo items (for type 'combo')
+    bundle_items: [], // [{product_id: '', quantity: 1, product_name: ''}]
     // Supplier info
     default_supplier_id: '',
     supplier_sku: '',
@@ -177,11 +284,6 @@ export default function Products() {
     sales_uom: 'unit',
     purchase_uom: 'unit',
     uom_conversion_factor: '1',
-    // Invoicing Policy (Odoo-style)
-    invoicing_policy: 'ordered', // 'ordered' or 'delivered'
-    // Valuation Method per product
-    valuation_method: 'fifo', // 'fifo', 'lifo', 'average', 'standard'
-    standard_cost: '',
     // Customer Lead Time
     customer_lead_time_days: '',
     // Expiration tracking
@@ -214,9 +316,8 @@ export default function Products() {
     if (searchQuery) {
       filtered = filtered.filter(product =>
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.barcode?.includes(searchQuery)
+        product.barcode?.includes(searchQuery) ||
+        (product.tags || []).some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 
@@ -246,9 +347,7 @@ export default function Products() {
 
   const resetForm = () => {
     setFormData({
-      code: '',
       name: '',
-      sku: '',
       barcode: '',
       type: 'product',
       category_id: '',
@@ -265,6 +364,14 @@ export default function Products() {
       is_purchasable: true,
       is_sellable: true,
       is_active: true,
+      // Module visibility (Odoo-style)
+      can_be_sold: true,
+      can_be_purchased: true,
+      available_in_pos: false,
+      can_be_expensed: false,
+      can_be_rented: false,
+      can_be_subcontracted: false,
+      is_overhead_expense: false,
       tags: [],
       // Advanced fields
       brand: '',
@@ -287,6 +394,7 @@ export default function Products() {
       has_variants: false,
       variant_attributes: [],
       variants: [],
+      bundle_items: [],
       default_supplier_id: '',
       supplier_sku: '',
       lead_time_days: '',
@@ -304,10 +412,6 @@ export default function Products() {
       sales_uom: 'unit',
       purchase_uom: 'unit',
       uom_conversion_factor: '1',
-      // Invoicing & Valuation
-      invoicing_policy: 'ordered',
-      valuation_method: 'fifo',
-      standard_cost: '',
       // Customer Lead Time
       customer_lead_time_days: '',
       // Expiration tracking
@@ -341,7 +445,6 @@ export default function Products() {
         warranty_months: parseInt(formData.warranty_months) || null,
         lead_time_days: parseInt(formData.lead_time_days) || null,
         shelf_life_days: parseInt(formData.shelf_life_days) || null,
-        standard_cost: parseFloat(formData.standard_cost) || null,
         customer_lead_time_days: parseInt(formData.customer_lead_time_days) || null,
         expiration_time_days: parseInt(formData.expiration_time_days) || null,
         removal_time_days: parseInt(formData.removal_time_days) || null,
@@ -364,9 +467,7 @@ export default function Products() {
     const hasAdvancedData = product.brand || product.manufacturer || product.weight ||
                            product.has_variants || product.warranty_months || product.hs_code;
     setFormData({
-      code: product.code || '',
       name: product.name || '',
-      sku: product.sku || '',
       barcode: product.barcode || '',
       type: product.type || 'product',
       category_id: product.category_id || '',
@@ -383,6 +484,14 @@ export default function Products() {
       is_purchasable: product.is_purchasable !== false,
       is_sellable: product.is_sellable !== false,
       is_active: product.is_active !== false,
+      // Module visibility (Odoo-style)
+      can_be_sold: product.can_be_sold !== false,
+      can_be_purchased: product.can_be_purchased !== false,
+      available_in_pos: product.available_in_pos || false,
+      can_be_expensed: product.can_be_expensed || false,
+      can_be_rented: product.can_be_rented || false,
+      can_be_subcontracted: product.can_be_subcontracted || false,
+      is_overhead_expense: product.is_overhead_expense || false,
       tags: product.tags || [],
       // Advanced fields
       brand: product.brand || '',
@@ -405,6 +514,7 @@ export default function Products() {
       has_variants: product.has_variants || false,
       variant_attributes: product.variant_attributes || [],
       variants: product.variants || [],
+      bundle_items: product.bundle_items || [],
       default_supplier_id: product.default_supplier_id || '',
       supplier_sku: product.supplier_sku || '',
       lead_time_days: product.lead_time_days?.toString() || '',
@@ -422,10 +532,6 @@ export default function Products() {
       sales_uom: product.sales_uom || 'unit',
       purchase_uom: product.purchase_uom || 'unit',
       uom_conversion_factor: product.uom_conversion_factor?.toString() || '1',
-      // Invoicing & Valuation
-      invoicing_policy: product.invoicing_policy || 'ordered',
-      valuation_method: product.valuation_method || 'fifo',
-      standard_cost: product.standard_cost?.toString() || '',
       // Customer Lead Time
       customer_lead_time_days: product.customer_lead_time_days?.toString() || '',
       // Expiration tracking
@@ -436,7 +542,7 @@ export default function Products() {
       removal_time_days: product.removal_time_days?.toString() || '',
       alert_time_days: product.alert_time_days?.toString() || ''
     });
-    setShowAdvancedFields(hasAdvancedData || product.track_expiration || product.valuation_method !== 'fifo');
+    setShowAdvancedFields(hasAdvancedData || product.track_expiration);
     setShowEditModal(true);
   };
 
@@ -459,7 +565,6 @@ export default function Products() {
         warranty_months: parseInt(formData.warranty_months) || null,
         lead_time_days: parseInt(formData.lead_time_days) || null,
         shelf_life_days: parseInt(formData.shelf_life_days) || null,
-        standard_cost: parseFloat(formData.standard_cost) || null,
         customer_lead_time_days: parseInt(formData.customer_lead_time_days) || null,
         expiration_time_days: parseInt(formData.expiration_time_days) || null,
         removal_time_days: parseInt(formData.removal_time_days) || null,
@@ -579,6 +684,13 @@ export default function Products() {
           >
             <Package className="w-4 h-4" />
             {t('products')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="categories"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Tag className="w-4 h-4" />
+            {t('categories')}
           </TabsTrigger>
           <TabsTrigger
             value="lots"
@@ -769,22 +881,11 @@ export default function Products() {
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 {searchQuery ? t('no_products_found') || 'No products found' : t('no_products_yet') || 'No products yet'}
               </h3>
-              <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
+              <p className="text-sm text-slate-500 max-w-md mx-auto">
                 {searchQuery
                   ? t('try_adjusting_search') || 'Try adjusting your search or filters'
                   : t('start_by_adding_product') || 'Start by adding your first product or service'}
               </p>
-              {!searchQuery && (
-                <Button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('add_first_product') || 'Add First Product'}
-                </Button>
-              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -792,7 +893,7 @@ export default function Products() {
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
-                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('sku_code')}</TableHead>
+                    <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('tags')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
@@ -827,9 +928,21 @@ export default function Products() {
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          <div>
-                            <p className="font-mono text-sm text-slate-700">{product.sku || '-'}</p>
-                            <p className="text-xs text-slate-500">{product.code}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {product.tags && product.tags.length > 0 ? (
+                              product.tags.slice(0, 2).map((tag, idx) => (
+                                <Badge key={idx} variant="secondary" className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5">
+                                  {tag}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                            {product.tags && product.tags.length > 2 && (
+                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5">
+                                +{product.tags.length - 2}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
@@ -907,6 +1020,116 @@ export default function Products() {
       </Card>
         </TabsContent>
 
+        {/* Categories Tab */}
+        <TabsContent value="categories" className="mt-0">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-xl flex items-center justify-center">
+                    <Tag className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-semibold text-slate-900">
+                      {t('product_categories')}
+                    </CardTitle>
+                    <p className="text-sm text-slate-500">
+                      {t('manage_categories_description')}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => setShowCategoryModal(true)}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('add_category')}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {categories.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                  <Tag className="w-12 h-12 text-slate-300 mb-3" />
+                  <p className="font-medium">{t('no_categories_yet')}</p>
+                  <p className="text-sm">{t('add_first_category')}</p>
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50/50">
+                        <TableHead className="font-semibold text-slate-700">{t('category_name')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('code')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('description')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">{t('products_count')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('actions')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {categories.map((category) => {
+                        const productCount = products.filter(p => p.category_id === category.id).length;
+                        return (
+                          <TableRow key={category.id} className="hover:bg-slate-50/50">
+                            <TableCell className="font-medium text-slate-900">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-purple-100 rounded-lg flex items-center justify-center">
+                                  <Tag className="w-4 h-4 text-blue-600" />
+                                </div>
+                                {category.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="bg-slate-50 text-slate-600 font-mono text-xs">
+                                {category.code}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-600 max-w-[200px] truncate">
+                              {category.description || '-'}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge className={productCount > 0 ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-600"}>
+                                {productCount} {t('products').toLowerCase()}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={category.is_active !== false ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                                {category.is_active !== false ? t('active') : t('inactive')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditCategoryClick(category)}
+                                  className="h-8 w-8 p-0 hover:bg-blue-50"
+                                >
+                                  <Pencil className="w-4 h-4 text-slate-500 hover:text-blue-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteCategoryClick(category)}
+                                  className="h-8 w-8 p-0 hover:bg-red-50"
+                                  disabled={productCount > 0}
+                                >
+                                  <Trash2 className="w-4 h-4 text-slate-500 hover:text-red-600" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Lots Tab */}
         <TabsContent value="lots" className="mt-0">
           <LotTracking />
@@ -941,23 +1164,32 @@ export default function Products() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                  <LabelWithHelp
+                    label={t('name')}
+                    required
+                    helpText={t('help_product_name') || "Mahsulot nomi sotuvda va hisobotlarda ko'rsatiladi"}
+                  />
                   <Input
-                    placeholder={t('code_placeholder')}
-                    value={formData.code}
-                    onChange={(e) => setFormData({...formData, code: e.target.value})}
+                    placeholder={t('product_name_placeholder')}
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('type')} *</label>
+                  <LabelWithHelp
+                    label={t('type')}
+                    required
+                    helpText={t('help_product_type') || "Mahsulot - omborda saqlanadi. Xizmat - omborda saqlanmaydi. To'plam - bir nechta mahsulotlardan tashkil topgan"}
+                  />
                   <Select
                     value={formData.type}
                     onValueChange={(value) => setFormData({
                       ...formData,
                       type: value,
                       is_stockable: value === 'product',
-                      track_inventory: value === 'product'
+                      track_inventory: value === 'product',
+                      bundle_items: value === 'bundle' ? formData.bundle_items : []
                     })}
                   >
                     <SelectTrigger>
@@ -971,26 +1203,12 @@ export default function Products() {
                   </Select>
                 </div>
               </div>
-              <div className="mt-4">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
-                <Input
-                  placeholder={t('product_name_placeholder')}
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-4 mt-4">
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('sku')}</label>
-                  <Input
-                    placeholder={t('sku')}
-                    value={formData.sku}
-                    onChange={(e) => setFormData({...formData, sku: e.target.value})}
+                  <LabelWithHelp
+                    label={t('barcode')}
+                    helpText={t('help_barcode') || "Mahsulotning shtrix-kodi. Skaner yordamida tez qidirish uchun ishlatiladi"}
                   />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('barcode')}</label>
                   <Input
                     placeholder={t('barcode')}
                     value={formData.barcode}
@@ -998,7 +1216,10 @@ export default function Products() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('category')}</label>
+                  <LabelWithHelp
+                    label={t('category')}
+                    helpText={t('help_category') || "Mahsulotlar kategoriyasi. Hisobotlar va filtrlar uchun ishlatiladi"}
+                  />
                   <div className="flex gap-2">
                     <Select
                       value={formData.category_id}
@@ -1028,6 +1249,44 @@ export default function Products() {
                 </div>
               </div>
               <div className="mt-4">
+                <LabelWithHelp
+                  label={t('tags')}
+                  helpText={t('help_tags') || "Teglar mahsulotlarni guruhlash va qidirish uchun ishlatiladi"}
+                />
+                <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-slate-50 min-h-[42px]">
+                  {(formData.tags || []).map((tag, index) => (
+                    <Badge key={index} variant="secondary" className="bg-blue-100 text-blue-700 px-2 py-1 flex items-center gap-1">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newTags = formData.tags.filter((_, i) => i !== index);
+                          setFormData({...formData, tags: newTags});
+                        }}
+                        className="ml-1 hover:text-red-500"
+                      >
+                        <XCircle className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  <Input
+                    placeholder={t('add_tag_placeholder') || "Teg qo'shish (Enter bosing)"}
+                    className="border-0 bg-transparent p-0 h-6 min-w-[120px] flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target.value.trim()) {
+                        e.preventDefault();
+                        const newTag = e.target.value.trim();
+                        if (!formData.tags?.includes(newTag)) {
+                          setFormData({...formData, tags: [...(formData.tags || []), newTag]});
+                        }
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{t('tags_hint') || "Teglarni qo'shish uchun yozing va Enter bosing"}</p>
+              </div>
+              <div className="mt-4">
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description')}</label>
                 <Textarea
                   placeholder={t('product_description_placeholder')}
@@ -1036,6 +1295,124 @@ export default function Products() {
                   rows={2}
                 />
               </div>
+
+              {/* Bundle Items - Only show when type is 'bundle' */}
+              {formData.type === 'bundle' && (
+                <div className="mt-4 p-4 border border-orange-200 rounded-lg bg-orange-50/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-orange-600" />
+                      {t('bundle_items') || "To'plam tarkibi"}
+                    </h4>
+                    <Badge className="bg-orange-100 text-orange-700 text-xs">
+                      {formData.bundle_items?.length || 0} {t('items') || "element"}
+                    </Badge>
+                  </div>
+
+                  {/* Bundle items list */}
+                  {formData.bundle_items && formData.bundle_items.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {formData.bundle_items.map((item, index) => {
+                        const product = products.find(p => p.id === item.product_id);
+                        return (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
+                            <div className="w-8 h-8 bg-slate-100 rounded flex items-center justify-center flex-shrink-0">
+                              <Package className="w-4 h-4 text-slate-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">
+                                {product?.name || item.product_name || t('unknown_product')}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {t('price')}: ${product?.list_price?.toLocaleString() || 0}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const newItems = [...formData.bundle_items];
+                                  newItems[index].quantity = parseInt(e.target.value) || 1;
+                                  setFormData({...formData, bundle_items: newItems});
+                                }}
+                                className="w-16 h-8 text-center text-sm"
+                              />
+                              <span className="text-xs text-slate-500">{t('qty') || 'dona'}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newItems = formData.bundle_items.filter((_, i) => i !== index);
+                                  setFormData({...formData, bundle_items: newItems});
+                                }}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add product to bundle */}
+                  <div className="flex gap-2">
+                    <Select
+                      value=""
+                      onValueChange={(productId) => {
+                        if (productId && !formData.bundle_items?.some(item => item.product_id === productId)) {
+                          const product = products.find(p => p.id === productId);
+                          setFormData({
+                            ...formData,
+                            bundle_items: [
+                              ...(formData.bundle_items || []),
+                              { product_id: productId, quantity: 1, product_name: product?.name || '' }
+                            ]
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder={t('select_product_to_add') || "Mahsulot qo'shish..."} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products
+                          .filter(p => p.type !== 'bundle' && p.is_active && !formData.bundle_items?.some(item => item.product_id === p.id))
+                          .map(product => (
+                            <SelectItem key={product.id} value={product.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{product.name}</span>
+                                <span className="text-slate-500">- ${product.list_price?.toLocaleString() || 0}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Bundle price summary */}
+                  {formData.bundle_items && formData.bundle_items.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-orange-200">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-600">{t('total_items_price') || "Elementlar narxi jami"}:</span>
+                        <span className="font-semibold text-slate-900">
+                          ${formData.bundle_items.reduce((sum, item) => {
+                            const product = products.find(p => p.id === item.product_id);
+                            return sum + ((product?.list_price || 0) * (item.quantity || 1));
+                          }, 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-orange-600 mt-1">
+                        {t('bundle_price_hint') || "To'plam narxini quyida alohida belgilashingiz mumkin"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Pricing */}
@@ -1043,7 +1420,10 @@ export default function Products() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('pricing')}</h4>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('cost_price')}</label>
+                  <LabelWithHelp
+                    label={t('cost_price')}
+                    helpText={t('help_cost_price') || "Mahsulotning sotib olish narxi. Foyda hisoblash uchun ishlatiladi"}
+                  />
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -1057,7 +1437,11 @@ export default function Products() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('list_price')} *</label>
+                  <LabelWithHelp
+                    label={t('list_price')}
+                    required
+                    helpText={t('help_list_price') || "Sotish narxi. Bu narx mijozlarga ko'rsatiladi"}
+                  />
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -1072,7 +1456,10 @@ export default function Products() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('min_price')}</label>
+                  <LabelWithHelp
+                    label={t('min_price')}
+                    helpText={t('help_min_price') || "Minimal sotish narxi. Chegirma berilganda ham bu narxdan past bo'lmasligi kerak"}
+                  />
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -1094,7 +1481,10 @@ export default function Products() {
                 <h4 className="font-semibold text-slate-900 mb-3">{t('inventory_settings')}</h4>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('min_stock_level')}</label>
+                    <LabelWithHelp
+                      label={t('min_stock_level')}
+                      helpText={t('help_min_stock') || "Minimal zaxira miqdori. Omborda shu miqdordan kam bo'lmasligi kerak"}
+                    />
                     <Input
                       type="number"
                       placeholder="0"
@@ -1103,7 +1493,10 @@ export default function Products() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reorder_point')}</label>
+                    <LabelWithHelp
+                      label={t('reorder_point')}
+                      helpText={t('help_reorder_point') || "Qayta buyurtma nuqtasi. Zaxira shu miqdorga tushganda ogohlantirish beriladi"}
+                    />
                     <Input
                       type="number"
                       placeholder="0"
@@ -1112,7 +1505,10 @@ export default function Products() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('reorder_qty')}</label>
+                    <LabelWithHelp
+                      label={t('reorder_qty')}
+                      helpText={t('help_reorder_qty') || "Qayta buyurtma miqdori. Avtomatik buyurtmada tavsiya etiladigan miqdor"}
+                    />
                     <Input
                       type="number"
                       placeholder="0"
@@ -1127,14 +1523,20 @@ export default function Products() {
                       checked={formData.is_stockable}
                       onCheckedChange={(checked) => setFormData({...formData, is_stockable: checked})}
                     />
-                    <span className="text-sm text-slate-700">{t('stockable')}</span>
+                    <span className="text-sm text-slate-700 flex items-center">
+                      {t('stockable')}
+                      <FieldHelp text={t('help_stockable') || "Omborda saqlanadigan mahsulot. O'chirilsa, ombor hisobi yuritilmaydi"} />
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={formData.track_inventory}
                       onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
                     />
-                    <span className="text-sm text-slate-700">{t('track_inventory')}</span>
+                    <span className="text-sm text-slate-700 flex items-center">
+                      {t('track_inventory')}
+                      <FieldHelp text={t('help_track_inventory') || "Ombor harakatlarini kuzatish. Kirim va chiqimlar qayd etiladi"} />
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1146,24 +1548,134 @@ export default function Products() {
               <div className="flex flex-wrap gap-6">
                 <div className="flex items-center gap-2">
                   <Switch
-                    checked={formData.is_purchasable}
-                    onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked})}
+                    checked={formData.is_purchasable && formData.is_sellable}
+                    onCheckedChange={(checked) => setFormData({...formData, is_purchasable: checked, is_sellable: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('can_be_purchased')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.is_sellable}
-                    onCheckedChange={(checked) => setFormData({...formData, is_sellable: checked})}
-                  />
-                  <span className="text-sm text-slate-700">{t('can_be_sold')}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('can_buy_sell') || "Sotish/Sotib olish"}
+                    <FieldHelp text={t('help_can_buy_sell') || "Bu mahsulotni sotib olish va sotish mumkin. O'chirilsa, mahsulot faqat ko'rish uchun bo'ladi"} />
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={formData.is_active}
                     onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('active')}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('active')}
+                    <FieldHelp text={t('help_active') || "Faol mahsulot. O'chirilsa, mahsulot sotuvda ko'rinmaydi"} />
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Module Visibility (Odoo-style) */}
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                {t('module_visibility') || 'Modul korinishi'}
+                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
+              </h4>
+              <p className="text-xs text-slate-500 mb-3">
+                {t('module_visibility_desc') || "Mahsulot qaysi modullarda ko'rinishini belgilang"}
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="can_be_sold"
+                    checked={formData.can_be_sold}
+                    onChange={(e) => setFormData({...formData, can_be_sold: e.target.checked})}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  />
+                  <label htmlFor="can_be_sold" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <ShoppingCart className="w-4 h-4 mr-1 text-blue-500" />
+                    {t('sales') || 'Sotish'}
+                    <FieldHelp text={t('help_can_be_sold') || "Bu mahsulot Sotish modulida ko'rinadi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="can_be_purchased"
+                    checked={formData.can_be_purchased}
+                    onChange={(e) => setFormData({...formData, can_be_purchased: e.target.checked})}
+                    className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
+                  />
+                  <label htmlFor="can_be_purchased" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <Archive className="w-4 h-4 mr-1 text-green-500" />
+                    {t('purchase') || 'Sotib olish'}
+                    <FieldHelp text={t('help_can_be_purchased') || "Bu mahsulot Sotib olish modulida ko'rinadi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="available_in_pos"
+                    checked={formData.available_in_pos}
+                    onChange={(e) => setFormData({...formData, available_in_pos: e.target.checked})}
+                    className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+                  />
+                  <label htmlFor="available_in_pos" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <Printer className="w-4 h-4 mr-1 text-purple-500" />
+                    {t('pos') || 'Savdo nuqtasi'}
+                    <FieldHelp text={t('help_available_in_pos') || "Bu mahsulot POS (Savdo nuqtasi) modulida ko'rinadi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="can_be_expensed"
+                    checked={formData.can_be_expensed}
+                    onChange={(e) => setFormData({...formData, can_be_expensed: e.target.checked})}
+                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
+                  />
+                  <label htmlFor="can_be_expensed" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <DollarSign className="w-4 h-4 mr-1 text-orange-500" />
+                    {t('expenses') || 'Xarajatlar'}
+                    <FieldHelp text={t('help_can_be_expensed') || "Bu mahsulot Xarajatlar modulida ko'rinadi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-cyan-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="can_be_rented"
+                    checked={formData.can_be_rented}
+                    onChange={(e) => setFormData({...formData, can_be_rented: e.target.checked})}
+                    className="w-4 h-4 text-cyan-600 rounded border-slate-300 focus:ring-cyan-500"
+                  />
+                  <label htmlFor="can_be_rented" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <History className="w-4 h-4 mr-1 text-cyan-500" />
+                    {t('rental') || 'Ijara'}
+                    <FieldHelp text={t('help_can_be_rented') || "Bu mahsulot Ijara modulida ko'rinadi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="can_be_subcontracted"
+                    checked={formData.can_be_subcontracted}
+                    onChange={(e) => setFormData({...formData, can_be_subcontracted: e.target.checked})}
+                    className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                  />
+                  <label htmlFor="can_be_subcontracted" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <Layers className="w-4 h-4 mr-1 text-red-500" />
+                    {t('subcontracting') || 'Subpudrat'}
+                    <FieldHelp text={t('help_can_be_subcontracted') || "Bu mahsulot Ishlab chiqarish modulida subpudrat sifatida ishlatiladi"} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="is_overhead_expense"
+                    checked={formData.is_overhead_expense}
+                    onChange={(e) => setFormData({...formData, is_overhead_expense: e.target.checked})}
+                    className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+                  />
+                  <label htmlFor="is_overhead_expense" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                    <Truck className="w-4 h-4 mr-1 text-amber-500" />
+                    {t('overhead_expense') || 'Nakladnoy xarajat'}
+                    <FieldHelp text={t('help_is_overhead_expense') || "Bu mahsulot nakladnoy xarajatlar (transport, bojxona, yuk tashish) sifatida ishlatiladi"} />
+                  </label>
                 </div>
               </div>
             </div>
@@ -1647,70 +2159,6 @@ export default function Products() {
                   </div>
                 </div>
 
-                {/* Invoicing & Valuation (Odoo-style) */}
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    {t('invoicing_valuation') || 'Invoicing & Valuation'}
-                    <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('invoicing_policy') || 'Invoicing Policy'}</label>
-                      <Select
-                        value={formData.invoicing_policy}
-                        onValueChange={(value) => setFormData({...formData, invoicing_policy: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ordered">{t('invoice_on_order') || 'Ordered Quantities'}</SelectItem>
-                          <SelectItem value="delivered">{t('invoice_on_delivery') || 'Delivered Quantities'}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {formData.invoicing_policy === 'ordered'
-                          ? (t('invoice_order_desc') || 'Invoice when order is confirmed')
-                          : (t('invoice_delivery_desc') || 'Invoice when delivery is completed')
-                        }
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('valuation_method') || 'Valuation Method'}</label>
-                      <Select
-                        value={formData.valuation_method}
-                        onValueChange={(value) => setFormData({...formData, valuation_method: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="fifo">{t('fifo') || 'FIFO (First In, First Out)'}</SelectItem>
-                          <SelectItem value="lifo">{t('lifo') || 'LIFO (Last In, First Out)'}</SelectItem>
-                          <SelectItem value="average">{t('weighted_average') || 'Weighted Average'}</SelectItem>
-                          <SelectItem value="standard">{t('standard_cost') || 'Standard Cost'}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {formData.valuation_method === 'standard' && (
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('standard_cost_value') || 'Standard Cost Value'}</label>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            className="pl-9"
-                            value={formData.standard_cost}
-                            onChange={(e) => setFormData({...formData, standard_cost: e.target.value})}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {/* Customer Lead Time */}
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">{t('delivery_lead_times') || 'Delivery & Lead Times'}</h4>
@@ -1876,20 +2324,27 @@ export default function Products() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">{t('code') || 'Code'}</p>
-                  <p className="text-sm font-semibold text-slate-900">{selectedProduct.code}</p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">{t('sku') || 'SKU'}</p>
-                  <p className="text-sm font-semibold text-slate-900">{selectedProduct.sku || '-'}</p>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('category') || 'Category'}</p>
                   <p className="text-sm font-semibold text-slate-900">{getCategoryName(selectedProduct.category_id)}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('barcode') || 'Barcode'}</p>
                   <p className="text-sm font-semibold text-slate-900">{selectedProduct.barcode || '-'}</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-2">{t('tags') || 'Tags'}</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedProduct.tags && selectedProduct.tags.length > 0 ? (
+                    selectedProduct.tags.map((tag, idx) => (
+                      <Badge key={idx} variant="secondary" className="bg-blue-100 text-blue-700 px-2 py-1">
+                        {tag}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-slate-400 text-sm">-</span>
+                  )}
                 </div>
               </div>
 
@@ -1914,6 +2369,41 @@ export default function Products() {
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('description') || 'Description'}</p>
                   <p className="text-sm text-slate-700">{selectedProduct.description}</p>
+                </div>
+              )}
+
+              {/* Bundle Items in Detail Modal */}
+              {selectedProduct.type === 'bundle' && selectedProduct.bundle_items && selectedProduct.bundle_items.length > 0 && (
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <p className="text-xs text-orange-600 mb-2 font-medium flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    {t('bundle_items') || "To'plam tarkibi"}
+                  </p>
+                  <div className="space-y-2">
+                    {selectedProduct.bundle_items.map((item, idx) => {
+                      const product = products.find(p => p.id === item.product_id);
+                      return (
+                        <div key={idx} className="flex items-center justify-between text-sm bg-white p-2 rounded border border-orange-100">
+                          <span className="text-slate-700">{product?.name || item.product_name}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                              x{item.quantity}
+                            </Badge>
+                            <span className="text-slate-500">${((product?.list_price || 0) * item.quantity).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="pt-2 border-t border-orange-200 flex justify-between text-sm font-semibold">
+                      <span className="text-orange-700">{t('total_items_price') || "Jami"}:</span>
+                      <span className="text-orange-700">
+                        ${selectedProduct.bundle_items.reduce((sum, item) => {
+                          const product = products.find(p => p.id === item.product_id);
+                          return sum + ((product?.list_price || 0) * (item.quantity || 1));
+                        }, 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 

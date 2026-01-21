@@ -24,7 +24,9 @@ import {
   ClipboardList,
   DollarSign,
   Bell,
-  Trash2
+  Trash2,
+  Settings2,
+  MapPin
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -40,10 +42,13 @@ import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
 import InventoryManagement from "@/components/inventory/InventoryManagement";
 import StockCounting from "@/components/inventory/StockCounting";
+import StockTransfers from "@/components/inventory/StockTransfers";
 // BOM moved to Manufacturing module - it's a manufacturing concept, not inventory
 import InventoryValuation from "@/components/inventory/InventoryValuation";
 import ReorderRules from "@/components/inventory/ReorderRules";
 import ScrapManagement from "@/components/inventory/ScrapManagement";
+import OperationTypes from "@/components/inventory/OperationTypes";
+import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -259,12 +264,38 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
+              value="operations"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('operation_types') || "Operatsiya turlari"}</span>
+              <span className="sm:hidden">{t('operations') || "Operatsiyalar"}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="locations"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <MapPin className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('locations') || "Lokatsiyalar"}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
               value="stock"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Box className="w-4 h-4" />
               <span className="hidden sm:inline">{t('stock_management')}</span>
               <span className="sm:hidden">{t('stock')}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="transfers"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('transfers') || "Ko'chirishlar"}</span>
+              <span className="sm:hidden">{t('transfers') || "Ko'chirish"}</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -378,29 +409,6 @@ export default function Inventory() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-500">{t('fifo_items')}</p>
-                      <p className="text-lg font-bold text-green-600">{metrics.fifoItems}</p>
-                    </div>
-                    <Target className="w-6 h-6 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-500">{t('wac_items')}</p>
-                      <p className="text-lg font-bold text-blue-600">{metrics.wacItems}</p>
-                    </div>
-                    <BarChart3 className="w-6 h-6 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
             {/* Compliance Panel */}
@@ -420,9 +428,24 @@ export default function Inventory() {
             <Warehouses />
           </TabsContent>
 
+          {/* Operation Types Tab */}
+          <TabsContent value="operations" className="mt-6">
+            <OperationTypes />
+          </TabsContent>
+
+          {/* Locations Tab */}
+          <TabsContent value="locations" className="mt-6">
+            <WarehouseLocations />
+          </TabsContent>
+
           {/* Stock Management Tab */}
           <TabsContent value="stock" className="mt-6">
             <InventoryManagement />
+          </TabsContent>
+
+          {/* Transfers Tab */}
+          <TabsContent value="transfers" className="mt-6">
+            <StockTransfers />
           </TabsContent>
 
           {/* COGS Tab */}

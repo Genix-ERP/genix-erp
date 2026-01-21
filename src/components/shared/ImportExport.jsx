@@ -50,7 +50,6 @@ export const EXPORT_FORMATS = {
   xlsx: { label: "Excel (.xlsx)", icon: FileSpreadsheet, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
   csv: { label: "CSV (.csv)", icon: FileSpreadsheet, mimeType: "text/csv" },
   pdf: { label: "PDF (.pdf)", icon: FileText, mimeType: "application/pdf" },
-  json: { label: "JSON (.json)", icon: FileText, mimeType: "application/json" },
 };
 
 // Parse Excel/CSV file

@@ -47,11 +47,22 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 
 // Label template configurations - keys for translation
+// Standard thermal printer label sizes
 const LABEL_TEMPLATE_KEYS = {
-  small: { nameKey: "label_small", width: 30, height: 20, fontSize: 8, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  medium: { nameKey: "label_medium", width: 50, height: 30, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  large: { nameKey: "label_large", width: 70, height: 40, fontSize: 12, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
-  shelf: { nameKey: "label_shelf", width: 100, height: 50, fontSize: 14, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
+  // Small labels - jewelry, electronics
+  small_30x20: { nameKey: "label_30x20", width: 30, height: 20, fontSize: 7, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  // Common small retail label
+  small_40x30: { nameKey: "label_40x30", width: 40, height: 30, fontSize: 8, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  // Standard thermal label - most common
+  medium_58x40: { nameKey: "label_58x40", width: 58, height: 40, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  // 60x40 - popular in Uzbekistan
+  medium_60x40: { nameKey: "label_60x40", width: 60, height: 40, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
+  // Large POS label
+  large_80x50: { nameKey: "label_80x50", width: 80, height: 50, fontSize: 12, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
+  // Large shelf label
+  shelf_100x70: { nameKey: "label_100x70", width: 100, height: 70, fontSize: 14, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
+  // Custom size - will use settings
+  custom: { nameKey: "label_custom", width: 0, height: 0, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
 };
 
 // Barcode generator (simplified SVG barcode)
@@ -116,16 +127,8 @@ export default function PriceLabelPrinting() {
   const { products, items } = useInventory();
   const printRef = useRef(null);
 
-  // Build LABEL_TEMPLATES with translated names
-  const LABEL_TEMPLATES = Object.fromEntries(
-    Object.entries(LABEL_TEMPLATE_KEYS).map(([key, config]) => [
-      key,
-      { ...config, name: t(config.nameKey) }
-    ])
-  );
-
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("medium");
+  const [selectedTemplate, setSelectedTemplate] = useState("medium_58x40");
   const [labelQueue, setLabelQueue] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -142,6 +145,10 @@ export default function PriceLabelPrinting() {
       showStock: false,
       currency: "UZS",
       priceFormat: "full",
+      // Custom label size
+      customWidth: 50,
+      customHeight: 30,
+      customFontSize: 10,
     };
     try {
       const saved = localStorage.getItem('genix_label_settings');
@@ -155,6 +162,23 @@ export default function PriceLabelPrinting() {
   };
 
   const [customSettings, setCustomSettings] = useState(getInitialSettings);
+
+  // Build LABEL_TEMPLATES with translated names (after customSettings is defined)
+  const LABEL_TEMPLATES = Object.fromEntries(
+    Object.entries(LABEL_TEMPLATE_KEYS).map(([key, config]) => {
+      // For custom template, use settings values
+      if (key === 'custom') {
+        return [key, {
+          ...config,
+          name: `${t(config.nameKey)} (${customSettings.customWidth}x${customSettings.customHeight}mm)`,
+          width: customSettings.customWidth,
+          height: customSettings.customHeight,
+          fontSize: customSettings.customFontSize,
+        }];
+      }
+      return [key, { ...config, name: t(config.nameKey) }];
+    })
+  );
 
   // Save settings to localStorage when they change
   useEffect(() => {
@@ -749,6 +773,59 @@ export default function PriceLabelPrinting() {
                   <SelectItem value="rounded">{t('rounded_format')}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Custom Label Size */}
+            <div className="space-y-3 border-t pt-4">
+              <Label className="text-sm font-medium">{t('custom_label_size')}</Label>
+              <p className="text-xs text-slate-500">{t('custom_label_size_desc')}</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="customWidth" className="text-xs text-slate-500">{t('width')} (mm)</Label>
+                  <Input
+                    id="customWidth"
+                    type="number"
+                    min="20"
+                    max="200"
+                    value={customSettings.customWidth}
+                    onChange={(e) => setCustomSettings(prev => ({
+                      ...prev,
+                      customWidth: Math.max(20, Math.min(200, parseInt(e.target.value) || 50))
+                    }))}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="customHeight" className="text-xs text-slate-500">{t('height')} (mm)</Label>
+                  <Input
+                    id="customHeight"
+                    type="number"
+                    min="15"
+                    max="150"
+                    value={customSettings.customHeight}
+                    onChange={(e) => setCustomSettings(prev => ({
+                      ...prev,
+                      customHeight: Math.max(15, Math.min(150, parseInt(e.target.value) || 30))
+                    }))}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="customFontSize" className="text-xs text-slate-500">{t('font_size')} (px)</Label>
+                  <Input
+                    id="customFontSize"
+                    type="number"
+                    min="6"
+                    max="24"
+                    value={customSettings.customFontSize}
+                    onChange={(e) => setCustomSettings(prev => ({
+                      ...prev,
+                      customFontSize: Math.max(6, Math.min(24, parseInt(e.target.value) || 10))
+                    }))}
+                    className="h-9"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">

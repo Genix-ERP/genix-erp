@@ -606,9 +606,11 @@ export function InventoryProvider({ children }) {
     try {
       const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
+      console.log('[InventoryContext] Backend available:', isAvailable);
 
       if (isAvailable) {
         try {
+          console.log('[InventoryContext] Fetching data from backend API...');
           const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
             inventoryService.listProducts(),
             inventoryService.listCategories(),
@@ -617,20 +619,52 @@ export function InventoryProvider({ children }) {
             inventoryService.listInventoryMovements()
           ]);
 
-          setProducts(productsData?.length > 0 ? productsData : sampleProducts);
-          setCategories(categoriesData?.length > 0 ? categoriesData : sampleCategories);
-          setWarehouses(warehousesData?.length > 0 ? warehousesData : sampleWarehouses);
-          setInventory(inventoryData?.length > 0 ? inventoryData : sampleInventory);
-          setStockMovements(movementsData?.length > 0 ? movementsData : sampleStockMovements);
+          console.log('[InventoryContext] API Response:', {
+            products: productsData?.length || 0,
+            categories: categoriesData?.length || 0,
+            warehouses: warehousesData?.length || 0,
+            inventory: inventoryData?.length || 0,
+            movements: movementsData?.length || 0
+          });
+
+          // When backend is available, use backend data directly (even if empty)
+          // This ensures data is consistent across all devices
+          setProducts(productsData || []);
+          setCategories(categoriesData || []);
+          setWarehouses(warehousesData || []);
+          setInventory(inventoryData || []);
+          setStockMovements(movementsData || []);
+
+          // Also load lots, stock counts, BOMs, reorder rules, scrap orders from backend
+          // For now, these still fall back to localStorage until backend endpoints are ready
+          const companyId = activeCompany?.id;
+          const demoMode = isDemoMode();
+
+          const getLocalData = (key, sampleData) => {
+            const storageKey = getStorageKey(key, companyId);
+            const stored = localStorage.getItem(storageKey);
+            if (stored) return JSON.parse(stored);
+            return demoMode ? sampleData : [];
+          };
+
+          setLots(getLocalData(LOTS_STORAGE_KEY, sampleLots));
+          setStockCounts(getLocalData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
+          setBOMs(getLocalData(BOMS_STORAGE_KEY, sampleBOMs));
+          setBOMLines(getLocalData(BOM_LINES_STORAGE_KEY, sampleBOMLines));
+          setReorderRules(getLocalData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
+          setScrapOrders(getLocalData(SCRAP_ORDERS_STORAGE_KEY, sampleScrapOrders));
         } catch (apiError) {
-          console.warn('API call failed, falling back to localStorage:', apiError);
+          console.error('[InventoryContext] API call failed:', apiError);
+          console.error('[InventoryContext] Error details:', apiError.response?.data || apiError.message);
+          console.warn('[InventoryContext] Falling back to localStorage');
           loadFromLocalStorage();
         }
       } else {
+        console.log('[InventoryContext] Backend not available, using localStorage');
         loadFromLocalStorage();
       }
     } catch (err) {
-      console.error('Error loading inventory data:', err);
+      console.error('[InventoryContext] Error loading inventory data:', err);
       setError(err.message);
       loadFromLocalStorage();
     } finally {
@@ -653,7 +687,6 @@ export function InventoryProvider({ children }) {
   // ================== PRODUCTS ==================
   const createProduct = useCallback(async (productData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
@@ -664,10 +697,13 @@ export function InventoryProvider({ children }) {
         setProducts(prev => [...prev, newProduct]);
         return newProduct;
       } catch (err) {
-        console.error('API error, falling back to local:', err);
+        console.error('API error creating product:', err);
+        throw err; // Re-throw to let caller handle the error
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
     const newProduct = {
       id: `prod_${Date.now()}`,
       ...productData,
@@ -681,16 +717,20 @@ export function InventoryProvider({ children }) {
 
   const updateProduct = useCallback(async (id, productData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        await inventoryService.updateProduct(id, productData);
+        const updatedProduct = await inventoryService.updateProduct(id, productData);
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...productData, ...updatedProduct } : p));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error updating product:', err);
+        throw err;
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
     const updated = products.map(p => p.id === id ? { ...p, ...productData } : p);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setProducts(updated);
@@ -698,16 +738,20 @@ export function InventoryProvider({ children }) {
 
   const deleteProduct = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
         await inventoryService.deleteProduct(id);
+        setProducts(prev => prev.filter(p => p.id !== id));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error deleting product:', err);
+        throw err;
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(PRODUCTS_STORAGE_KEY, companyId);
     const updated = products.filter(p => p.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setProducts(updated);
@@ -716,7 +760,6 @@ export function InventoryProvider({ children }) {
   // ================== CATEGORIES ==================
   const createCategory = useCallback(async (categoryData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
@@ -724,10 +767,13 @@ export function InventoryProvider({ children }) {
         setCategories(prev => [...prev, newCategory]);
         return newCategory;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error creating category:', err);
+        throw err;
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
     const newCategory = {
       id: `cat_${Date.now()}`,
       ...categoryData,
@@ -741,16 +787,20 @@ export function InventoryProvider({ children }) {
 
   const updateCategory = useCallback(async (id, categoryData) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        await inventoryService.updateCategory(id, categoryData);
+        const updatedCategory = await inventoryService.updateCategory(id, categoryData);
+        setCategories(prev => prev.map(c => c.id === id ? { ...c, ...categoryData, ...updatedCategory } : c));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error updating category:', err);
+        throw err;
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
     const updated = categories.map(c => c.id === id ? { ...c, ...categoryData } : c);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setCategories(updated);
@@ -758,16 +808,20 @@ export function InventoryProvider({ children }) {
 
   const deleteCategory = useCallback(async (id) => {
     const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
         await inventoryService.deleteCategory(id);
+        setCategories(prev => prev.filter(c => c.id !== id));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error deleting category:', err);
+        throw err;
       }
     }
 
+    // Only use localStorage when backend is not available
+    const storageKey = getStorageKey(CATEGORIES_STORAGE_KEY, companyId);
     const updated = categories.filter(c => c.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setCategories(updated);

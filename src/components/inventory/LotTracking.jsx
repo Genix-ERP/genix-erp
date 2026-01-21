@@ -7,8 +7,14 @@ import {
   Plus, Search, Package, Calendar, AlertTriangle, Clock, CheckCircle,
   Warehouse, Tag, Hash, Layers, TrendingDown, ChevronDown, ChevronRight,
   FileText, Barcode, Eye, Edit, Trash2, MoreHorizontal, Shield, Globe,
-  Award, FileCheck, ClipboardCheck, QrCode, Beaker
+  Award, FileCheck, ClipboardCheck, QrCode, Beaker, HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +28,30 @@ import { format, differenceInDays } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required }) => (
+  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 // SAP Quality Status options
 const qualityStatuses = [
@@ -525,7 +555,11 @@ export default function LotTracking() {
               </p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-sm font-medium">{t('lot_number')} *</label>
+                  <LabelWithHelp
+                    label={t('lot_number')}
+                    required
+                    helpText={t('help_lot_number') || "Partiya raqami. FIFO/FEFO hisob-kitobi va kuzatuv uchun ishlatiladi. Noyob bo'lishi kerak."}
+                  />
                   <Input
                     value={newLot.lot_number}
                     onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
@@ -533,7 +567,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('received_date')}</label>
+                  <LabelWithHelp
+                    label={t('received_date')}
+                    helpText={t('help_received_date') || "Partiya qabul qilingan sana. Inventar harakati va hisobotlar uchun muhim."}
+                  />
                   <Input
                     type="date"
                     value={newLot.received_date}
@@ -541,7 +578,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('quality_status') || 'Quality Status'}</label>
+                  <LabelWithHelp
+                    label={t('quality_status') || 'Quality Status'}
+                    helpText={t('help_quality_status') || "Sifat holati: Released - sotishga tayyor, Blocked - to'xtatilgan, In QC - tekshiruvda, Quarantine - karantinda."}
+                  />
                   <Select
                     value={newLot.quality_status}
                     onValueChange={(v) => setNewLot({ ...newLot, quality_status: v })}
@@ -562,7 +602,11 @@ export default function LotTracking() {
 
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <label className="text-sm font-medium">{t('product')} *</label>
+                  <LabelWithHelp
+                    label={t('product')}
+                    required
+                    helpText={t('help_lot_product') || "Partiya tegishli bo'lgan mahsulot. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+                  />
                   <Select
                     value={newLot.product_id}
                     onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
@@ -578,7 +622,11 @@ export default function LotTracking() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('warehouse')} *</label>
+                  <LabelWithHelp
+                    label={t('warehouse')}
+                    required
+                    helpText={t('help_lot_warehouse') || "Partiya saqlanadigan ombor. Ko'chirish operatsiyalari bilan o'zgartirilishi mumkin."}
+                  />
                   <Select
                     value={newLot.warehouse_id}
                     onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
@@ -597,7 +645,11 @@ export default function LotTracking() {
 
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <label className="text-sm font-medium">{t('quantity')} *</label>
+                  <LabelWithHelp
+                    label={t('quantity')}
+                    required
+                    helpText={t('help_lot_quantity') || "Partiyadagi mahsulotlar soni. Sotish va ko'chirish bilan kamayadi."}
+                  />
                   <Input
                     type="number"
                     value={newLot.quantity}
@@ -606,7 +658,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('unit_cost')}</label>
+                  <LabelWithHelp
+                    label={t('unit_cost')}
+                    helpText={t('help_lot_unit_cost') || "Bir birlik tannarxi. FIFO/WAC hisob-kitoblarida ishlatiladi."}
+                  />
                   <Input
                     type="number"
                     value={newLot.unit_cost}
@@ -624,7 +679,10 @@ export default function LotTracking() {
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium">{t('gtin') || 'GTIN (Barcode)'}</label>
+                  <LabelWithHelp
+                    label={t('gtin') || 'GTIN (Barcode)'}
+                    helpText={t('help_gtin') || "Global Trade Item Number - xalqaro mahsulot identifikatori. Shtrix kod skanerlash uchun ishlatiladi."}
+                  />
                   <Input
                     value={newLot.gtin}
                     onChange={(e) => setNewLot({ ...newLot, gtin: e.target.value })}
@@ -632,7 +690,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('gs1_batch') || 'GS1-128 Batch'}</label>
+                  <LabelWithHelp
+                    label={t('gs1_batch') || 'GS1-128 Batch'}
+                    helpText={t('help_gs1_batch') || "GS1-128 partiya kodi. Logistika va zanjir kuzatuvi uchun xalqaro standart."}
+                  />
                   <Input
                     value={newLot.gs1_batch}
                     onChange={(e) => setNewLot({ ...newLot, gs1_batch: e.target.value })}
@@ -649,7 +710,10 @@ export default function LotTracking() {
               </p>
               <div className="grid grid-cols-4 gap-3">
                 <div>
-                  <label className="text-sm font-medium">{t('grade') || 'Grade'}</label>
+                  <LabelWithHelp
+                    label={t('grade') || 'Grade'}
+                    helpText={t('help_lot_grade') || "Sifat darajasi: A - premium, B - standart, C - iqtisodiy, X - nuqsonli."}
+                  />
                   <Select
                     value={newLot.lot_grade || '__none__'}
                     onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v === '__none__' ? '' : v })}
@@ -666,7 +730,10 @@ export default function LotTracking() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('color') || 'Color'}</label>
+                  <LabelWithHelp
+                    label={t('color') || 'Color'}
+                    helpText={t('help_lot_color') || "Partiya rangi. Bir xil mahsulotning turli ranglarini ajratish uchun."}
+                  />
                   <Input
                     value={newLot.lot_color}
                     onChange={(e) => setNewLot({ ...newLot, lot_color: e.target.value })}
@@ -674,7 +741,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('size') || 'Size'}</label>
+                  <LabelWithHelp
+                    label={t('size') || 'Size'}
+                    helpText={t('help_lot_size') || "Partiya o'lchami. S, M, L yoki raqamli o'lchamlar."}
+                  />
                   <Input
                     value={newLot.lot_size}
                     onChange={(e) => setNewLot({ ...newLot, lot_size: e.target.value })}
@@ -682,7 +752,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('country_of_origin') || 'Origin'}</label>
+                  <LabelWithHelp
+                    label={t('country_of_origin') || 'Origin'}
+                    helpText={t('help_country_of_origin') || "Kelib chiqish mamlakatي. Bojxona va muvofiqlik hisob-kitoblari uchun muhim."}
+                  />
                   <Input
                     value={newLot.country_of_origin}
                     onChange={(e) => setNewLot({ ...newLot, country_of_origin: e.target.value })}
@@ -695,7 +768,10 @@ export default function LotTracking() {
             {/* Dates Section */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('manufacture_date')}</label>
+                <LabelWithHelp
+                  label={t('manufacture_date')}
+                  helpText={t('help_manufacture_date') || "Ishlab chiqarilgan sana. FEFO (First Expired, First Out) uchun muhim."}
+                />
                 <Input
                   type="date"
                   value={newLot.manufacture_date}
@@ -703,7 +779,10 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">{t('expiry_date')}</label>
+                <LabelWithHelp
+                  label={t('expiry_date')}
+                  helpText={t('help_expiry_date') || "Yaroqlilik muddati. Muddati yaqinlashganda tizim ogohlantirish beradi."}
+                />
                 <Input
                   type="date"
                   value={newLot.expiry_date}
@@ -719,7 +798,10 @@ export default function LotTracking() {
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium">{t('coa_url') || 'Certificate of Analysis URL'}</label>
+                  <LabelWithHelp
+                    label={t('coa_url') || 'Certificate of Analysis URL'}
+                    helpText={t('help_coa_url') || "Tahlil sertifikati havolasi. Sifat tekshiruvi hujjatini saqlash uchun."}
+                  />
                   <Input
                     value={newLot.certificate_of_analysis}
                     onChange={(e) => setNewLot({ ...newLot, certificate_of_analysis: e.target.value })}
@@ -727,7 +809,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('test_results') || 'Test Results'}</label>
+                  <LabelWithHelp
+                    label={t('test_results') || 'Test Results'}
+                    helpText={t('help_test_results') || "Sifat testi natijalari. O'tdi/O'tmadi yoki batafsil ma'lumot."}
+                  />
                   <Input
                     value={newLot.test_results}
                     onChange={(e) => setNewLot({ ...newLot, test_results: e.target.value })}
@@ -737,7 +822,10 @@ export default function LotTracking() {
               </div>
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <label className="text-sm font-medium">{t('inspection_date') || 'Inspection Date'}</label>
+                  <LabelWithHelp
+                    label={t('inspection_date') || 'Inspection Date'}
+                    helpText={t('help_inspection_date') || "Tekshiruv o'tkazilgan sana. Sifat nazorati tarixi uchun."}
+                  />
                   <Input
                     type="date"
                     value={newLot.inspection_date}
@@ -745,7 +833,10 @@ export default function LotTracking() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('inspector_name') || 'Inspector Name'}</label>
+                  <LabelWithHelp
+                    label={t('inspector_name') || 'Inspector Name'}
+                    helpText={t('help_inspector_name') || "Tekshiruvchi ismi. Mas'uliyat va audit izlari uchun."}
+                  />
                   <Input
                     value={newLot.inspector_name}
                     onChange={(e) => setNewLot({ ...newLot, inspector_name: e.target.value })}
@@ -756,7 +847,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('supplier')}</label>
+              <LabelWithHelp
+                label={t('supplier')}
+                helpText={t('help_lot_supplier') || "Partiya yetkazib beruvchisi. Kuzatuv va sifat muammolarini aniqlash uchun."}
+              />
               <Input
                 value={newLot.supplier}
                 onChange={(e) => setNewLot({ ...newLot, supplier: e.target.value })}
@@ -765,7 +859,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('serial_numbers_comma_separated')}</label>
+              <LabelWithHelp
+                label={t('serial_numbers_comma_separated')}
+                helpText={t('help_serial_numbers') || "Seriya raqamlari vergul bilan ajratilgan. Har bir birlikni alohida kuzatish uchun."}
+              />
               <Input
                 value={newLot.serial_numbers}
                 onChange={(e) => setNewLot({ ...newLot, serial_numbers: e.target.value })}
@@ -897,7 +994,10 @@ export default function LotTracking() {
           <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('lot_number')}</label>
+                <LabelWithHelp
+                  label={t('lot_number')}
+                  helpText={t('help_lot_number') || "Partiya raqami. FIFO/FEFO hisob-kitobi va kuzatuv uchun ishlatiladi."}
+                />
                 <Input
                   value={newLot.lot_number}
                   onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
@@ -905,7 +1005,10 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">{t('received_date')}</label>
+                <LabelWithHelp
+                  label={t('received_date')}
+                  helpText={t('help_received_date') || "Partiya qabul qilingan sana. Inventar harakati va hisobotlar uchun muhim."}
+                />
                 <Input
                   type="date"
                   value={newLot.received_date}
@@ -915,7 +1018,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('product')}</label>
+              <LabelWithHelp
+                label={t('product')}
+                helpText={t('help_lot_product') || "Partiya tegishli bo'lgan mahsulot."}
+              />
               <Select
                 value={newLot.product_id}
                 onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
@@ -932,7 +1038,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('warehouse')}</label>
+              <LabelWithHelp
+                label={t('warehouse')}
+                helpText={t('help_lot_warehouse') || "Partiya saqlanadigan ombor."}
+              />
               <Select
                 value={newLot.warehouse_id}
                 onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
@@ -950,7 +1059,10 @@ export default function LotTracking() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('quantity')}</label>
+                <LabelWithHelp
+                  label={t('quantity')}
+                  helpText={t('help_lot_quantity') || "Partiyadagi mahsulotlar soni."}
+                />
                 <Input
                   type="number"
                   value={newLot.quantity}
@@ -959,7 +1071,10 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">{t('unit_cost')}</label>
+                <LabelWithHelp
+                  label={t('unit_cost')}
+                  helpText={t('help_lot_unit_cost') || "Bir birlik tannarxi."}
+                />
                 <Input
                   type="number"
                   value={newLot.unit_cost}
@@ -971,7 +1086,10 @@ export default function LotTracking() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('manufacture_date')}</label>
+                <LabelWithHelp
+                  label={t('manufacture_date')}
+                  helpText={t('help_manufacture_date') || "Ishlab chiqarilgan sana."}
+                />
                 <Input
                   type="date"
                   value={newLot.manufacture_date}
@@ -979,7 +1097,10 @@ export default function LotTracking() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">{t('expiry_date')}</label>
+                <LabelWithHelp
+                  label={t('expiry_date')}
+                  helpText={t('help_expiry_date') || "Yaroqlilik muddati."}
+                />
                 <Input
                   type="date"
                   value={newLot.expiry_date}
@@ -989,7 +1110,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('supplier')}</label>
+              <LabelWithHelp
+                label={t('supplier')}
+                helpText={t('help_lot_supplier') || "Partiya yetkazib beruvchisi."}
+              />
               <Input
                 value={newLot.supplier}
                 onChange={(e) => setNewLot({ ...newLot, supplier: e.target.value })}
@@ -998,7 +1122,10 @@ export default function LotTracking() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('serial_numbers_comma_separated')}</label>
+              <LabelWithHelp
+                label={t('serial_numbers_comma_separated')}
+                helpText={t('help_serial_numbers') || "Seriya raqamlari vergul bilan ajratilgan."}
+              />
               <Input
                 value={newLot.serial_numbers}
                 onChange={(e) => setNewLot({ ...newLot, serial_numbers: e.target.value })}

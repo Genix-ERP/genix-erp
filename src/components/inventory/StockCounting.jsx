@@ -6,8 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, ClipboardCheck, Calendar, CheckCircle, Clock, AlertCircle,
   Warehouse, Package, ArrowUp, ArrowDown, Minus, Edit, Eye, FileText,
-  User, Check, X, EyeOff, RefreshCw, BarChart3, Target, Repeat, CalendarClock
+  User, Check, X, EyeOff, RefreshCw, BarChart3, Target, Repeat, CalendarClock, HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +27,30 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { hrService } from "@/api/services/hr";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required }) => (
+  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 // SAP-style Count Types
 const countTypes = [
@@ -593,7 +623,11 @@ export default function StockCounting() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('warehouse')} *</label>
+                <LabelWithHelp
+                  label={t('warehouse')}
+                  required
+                  helpText={t('help_count_warehouse') || "Hisoblash o'tkaziladigan ombor. Tanlanganidan so'ng mahsulotlar ro'yxati ko'rsatiladi."}
+                />
                 <Select
                   value={newCount.warehouse_id}
                   onValueChange={(v) => setNewCount({ ...newCount, warehouse_id: v, selected_products: [] })}
@@ -609,7 +643,10 @@ export default function StockCounting() {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium">{t('date')}</label>
+                <LabelWithHelp
+                  label={t('date')}
+                  helpText={t('help_count_date') || "Hisoblash sanasi. Hisobotlarda va tarixda ko'rsatiladi."}
+                />
                 <Input
                   type="date"
                   value={newCount.count_date}
@@ -620,7 +657,10 @@ export default function StockCounting() {
 
             {/* Product selection - show products in selected warehouse */}
             <div>
-              <label className="text-sm font-medium">{t('products')}</label>
+              <LabelWithHelp
+                label={t('products')}
+                helpText={t('help_count_products') || "Hisoblash uchun mahsulotlarni tanlang. Bo'sh = barcha mahsulotlar hisoblanadi."}
+              />
               <p className="text-xs text-slate-500 mb-2">{t('select_products_to_count')}</p>
               <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-2">
                 {!newCount.warehouse_id ? (
@@ -710,7 +750,11 @@ export default function StockCounting() {
             {/* Counter Selection */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">{t('counted_by')} *</label>
+                <LabelWithHelp
+                  label={t('counted_by')}
+                  required
+                  helpText={t('help_counted_by') || "Hisoblashni amalga oshiruvchi xodim. Mas'uliyat va audit uchun muhim."}
+                />
                 {employees.length > 0 ? (
                   <Select
                     value={newCount.counted_by}
@@ -737,7 +781,10 @@ export default function StockCounting() {
               </div>
               {newCount.allow_multiple_counters && (
                 <div>
-                  <label className="text-sm font-medium">{t('second_counter') || 'Second Counter'}</label>
+                  <LabelWithHelp
+                    label={t('second_counter') || 'Second Counter'}
+                    helpText={t('help_second_counter') || "Ikkinchi hisoblaguvchi. Mustaqil hisoblash uchun birinchi hisoblaguvchidan farqli bo'lishi kerak."}
+                  />
                   {employees.length > 0 ? (
                     <Select
                       value={newCount.second_counter}
@@ -878,7 +925,10 @@ export default function StockCounting() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">{t('notes')}</label>
+              <LabelWithHelp
+                label={t('notes')}
+                helpText={t('help_count_notes') || "Hisoblash haqida qo'shimcha izohlar. Maxsus ko'rsatmalar yoki sharhlar uchun."}
+              />
               <Textarea
                 value={newCount.notes}
                 onChange={(e) => setNewCount({ ...newCount, notes: e.target.value })}
@@ -917,7 +967,10 @@ export default function StockCounting() {
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium">{t('approved_by')}</label>
+              <LabelWithHelp
+                label={t('approved_by')}
+                helpText={t('help_approved_by') || "Hisoblashni tasdiqlagan shaxs. Odatda ombor menejeri yoki buxgalter."}
+              />
               {employees.length > 0 ? (
                 <Select
                   value={approvedBy}

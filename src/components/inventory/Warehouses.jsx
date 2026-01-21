@@ -7,8 +7,14 @@ import {
   Plus, Search, Warehouse, Pencil, Trash2, Eye, MapPin, Phone,
   Mail, User, ChevronRight, ChevronDown, AlertCircle, CheckCircle,
   Building2, Package, LayoutGrid, Truck, PackageCheck, RotateCcw,
-  ClipboardCheck, Barcode, Box, Layers
+  ClipboardCheck, Barcode, Box, Layers, HelpCircle
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +23,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+
+// Field Help Component - Odoo-style tooltip for field explanations
+const FieldHelp = ({ text }) => (
+  <TooltipProvider delayDuration={200}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+);
+
+// Label with help tooltip
+const LabelWithHelp = ({ label, helpText, required }) => (
+  <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+    {label}{required && ' *'}
+    {helpText && <FieldHelp text={helpText} />}
+  </label>
+);
 
 export default function Warehouses() {
   const { language } = useLanguage();
@@ -60,7 +90,9 @@ export default function Warehouses() {
     email: '',
     manager_name: '',
     is_active: true,
-    is_default: false
+    is_default: false,
+    reception_steps: 1,  // 1=Direct, 2=Input+Stock, 3=Input+QC+Stock
+    delivery_steps: 1    // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
   });
 
   const [locationForm, setLocationForm] = useState({
@@ -128,7 +160,9 @@ export default function Warehouses() {
       email: '',
       manager_name: '',
       is_active: true,
-      is_default: false
+      is_default: false,
+      reception_steps: 1,
+      delivery_steps: 1
     });
   };
 
@@ -179,7 +213,9 @@ export default function Warehouses() {
       email: warehouse.email || '',
       manager_name: warehouse.manager_name || '',
       is_active: warehouse.is_active !== false,
-      is_default: warehouse.is_default || false
+      is_default: warehouse.is_default || false,
+      reception_steps: warehouse.reception_steps || 1,
+      delivery_steps: warehouse.delivery_steps || 1
     });
     setShowEditModal(true);
   };
@@ -418,22 +454,11 @@ export default function Warehouses() {
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 {searchQuery ? t('no_results_found') : t('no_warehouses_yet')}
               </h3>
-              <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
+              <p className="text-sm text-slate-500 max-w-md mx-auto">
                 {searchQuery
                   ? t('search')
                   : t('setup_first_warehouse')}
               </p>
-              {!searchQuery && (
-                <Button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_warehouse')}
-                </Button>
-              )}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -620,7 +645,11 @@ export default function Warehouses() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                <LabelWithHelp
+                  label={t('code')}
+                  required
+                  helpText={t('help_warehouse_code') || "Omborni tezkor aniqlash uchun qisqa kod (masalan, WH-01). Tizimda noyob bo'lishi kerak."}
+                />
                 <Input
                   placeholder={t('warehouse_code_placeholder')}
                   value={formData.code}
@@ -629,7 +658,11 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+                <LabelWithHelp
+                  label={t('name')}
+                  required
+                  helpText={t('help_warehouse_name') || "Omborning to'liq nomi. Bu nom hisobotlarda va hujjatlarda ko'rsatiladi."}
+                />
                 <Input
                   placeholder={t('warehouse_name_placeholder')}
                   value={formData.name}
@@ -640,7 +673,10 @@ export default function Warehouses() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('address')}</label>
+              <LabelWithHelp
+                label={t('address')}
+                helpText={t('help_warehouse_address') || "Omborning to'liq manzili. Yetkazib berish va logistika uchun ishlatiladi."}
+              />
               <Input
                 placeholder={t('street_address')}
                 value={formData.address}
@@ -650,7 +686,10 @@ export default function Warehouses() {
 
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('city')}</label>
+                <LabelWithHelp
+                  label={t('city')}
+                  helpText={t('help_city') || "Shahar nomi. Mintaqaviy hisobotlar va filtrlash uchun ishlatiladi."}
+                />
                 <Input
                   placeholder={t('city')}
                   value={formData.city}
@@ -658,7 +697,10 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('state')}</label>
+                <LabelWithHelp
+                  label={t('state')}
+                  helpText={t('help_state') || "Viloyat yoki hudud. Soliq va yetkazib berish hisob-kitoblari uchun ishlatilishi mumkin."}
+                />
                 <Input
                   placeholder={t('state')}
                   value={formData.state}
@@ -666,7 +708,10 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('country')}</label>
+                <LabelWithHelp
+                  label={t('country')}
+                  helpText={t('help_country') || "Mamlakat. Xalqaro operatsiyalar va valyuta hisob-kitoblari uchun muhim."}
+                />
                 <Input
                   placeholder={t('country')}
                   value={formData.country}
@@ -674,7 +719,10 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('postal_code')}</label>
+                <LabelWithHelp
+                  label={t('postal_code')}
+                  helpText={t('help_postal_code') || "Pochta indeksi. Yetkazib berish xizmatlari bilan integratsiya uchun ishlatiladi."}
+                />
                 <Input
                   placeholder={t('zip')}
                   value={formData.postal_code}
@@ -685,7 +733,10 @@ export default function Warehouses() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('phone')}</label>
+                <LabelWithHelp
+                  label={t('phone')}
+                  helpText={t('help_warehouse_phone') || "Ombor bilan bog'lanish uchun telefon raqami. Yetkazib beruvchilar va kurierlar uchun."}
+                />
                 <Input
                   placeholder={t('phone_number')}
                   value={formData.phone}
@@ -693,7 +744,10 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('email')}</label>
+                <LabelWithHelp
+                  label={t('email')}
+                  helpText={t('help_warehouse_email') || "Ombor elektron pochtasi. Avtomatik bildirishnomalar va xabarlar uchun ishlatiladi."}
+                />
                 <Input
                   type="email"
                   placeholder={t('email')}
@@ -702,7 +756,10 @@ export default function Warehouses() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('manager')}</label>
+                <LabelWithHelp
+                  label={t('manager')}
+                  helpText={t('help_warehouse_manager') || "Ombor mas'uli. Bu shaxs ombor operatsiyalari uchun javobgar bo'ladi."}
+                />
                 <Input
                   placeholder={t('manager_name')}
                   value={formData.manager_name}
@@ -717,15 +774,102 @@ export default function Warehouses() {
                   checked={formData.is_active}
                   onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
                 />
-                <span className="text-sm text-slate-700">{t('active')}</span>
+                <span className="text-sm text-slate-700 flex items-center">
+                  {t('active')}
+                  <FieldHelp text={t('help_warehouse_active') || "Faol omborlar inventar operatsiyalarida ishlatiladi. Nofaol omborlar yashirinadi."} />
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={formData.is_default}
                   onCheckedChange={(checked) => setFormData({...formData, is_default: checked})}
                 />
-                <span className="text-sm text-slate-700">{t('default_warehouse')}</span>
+                <span className="text-sm text-slate-700 flex items-center">
+                  {t('default_warehouse')}
+                  <FieldHelp text={t('help_default_warehouse') || "Standart ombor yangi operatsiyalarda avtomatik tanlanadi. Faqat bitta standart ombor bo'lishi mumkin."} />
+                </span>
               </div>
+            </div>
+
+            {/* Odoo-style Warehouse Operations */}
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                {t('warehouse_operations') || 'Warehouse Operations'}
+                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <LabelWithHelp
+                    label={t('reception_steps') || 'Incoming Shipments'}
+                    helpText={t('help_reception_steps') || "Qabul qilish bosqichlari: 1-bosqich = to'g'ridan-to'g'ri omborga, 2-bosqich = kirish zonasi + ombor, 3-bosqich = kirish + sifat nazorati + ombor"}
+                  />
+                  <Select
+                    value={String(formData.reception_steps)}
+                    onValueChange={(value) => setFormData({...formData, reception_steps: parseInt(value)})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4" />
+                          {t('reception_1_step') || '1-step: Receive goods directly (stock)'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="2">
+                        <div className="flex items-center gap-2">
+                          <Truck className="w-4 h-4" />
+                          {t('reception_2_step') || '2-step: Input → Stock'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="3">
+                        <div className="flex items-center gap-2">
+                          <ClipboardCheck className="w-4 h-4" />
+                          {t('reception_3_step') || '3-step: Input → Quality → Stock'}
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <LabelWithHelp
+                    label={t('delivery_steps') || 'Outgoing Shipments'}
+                    helpText={t('help_delivery_steps') || "Jo'natish bosqichlari: 1-bosqich = to'g'ridan-to'g'ri jo'natish, 2-bosqich = yig'ish + jo'natish, 3-bosqich = yig'ish + qadoqlash + jo'natish"}
+                  />
+                  <Select
+                    value={String(formData.delivery_steps)}
+                    onValueChange={(value) => setFormData({...formData, delivery_steps: parseInt(value)})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">
+                        <div className="flex items-center gap-2">
+                          <PackageCheck className="w-4 h-4" />
+                          {t('delivery_1_step') || '1-step: Ship directly from stock'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="2">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4" />
+                          {t('delivery_2_step') || '2-step: Pick → Ship'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="3">
+                        <div className="flex items-center gap-2">
+                          <Box className="w-4 h-4" />
+                          {t('delivery_3_step') || '3-step: Pick → Pack → Ship'}
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {t('warehouse_operations_desc') || 'Configure multi-step operations for receiving and shipping. More steps provide better tracking and quality control.'}
+              </p>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -770,7 +914,11 @@ export default function Warehouses() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                  <LabelWithHelp
+                    label={t('code')}
+                    required
+                    helpText={t('help_location_code') || "Joylashuv koordinatasi (masalan, A-01-02-03). Tez topish va skanerlash uchun ishlatiladi."}
+                  />
                   <Input
                     placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
                     value={locationForm.code}
@@ -779,7 +927,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location_type') || 'Location Type'}</label>
+                  <LabelWithHelp
+                    label={t('location_type') || 'Location Type'}
+                    helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
+                  />
                   <Select
                     value={locationForm.type}
                     onValueChange={(value) => setLocationForm({...locationForm, type: value})}
@@ -829,7 +980,11 @@ export default function Warehouses() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+                <LabelWithHelp
+                  label={t('name')}
+                  required
+                  helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
+                />
                 <Input
                   placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
                   value={locationForm.name}
@@ -839,7 +994,10 @@ export default function Warehouses() {
               </div>
               {selectedWarehouse?.locations?.length > 0 && (
                 <div className="mt-4">
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('parent_location') || 'Parent Location'}</label>
+                  <LabelWithHelp
+                    label={t('parent_location') || 'Parent Location'}
+                    helpText={t('help_parent_location') || "Iyerarxik tuzilma yaratish uchun ota joylashuvni tanlang. Masalan: Zona > Yo'lak > Stelling > Javon > Quti."}
+                  />
                   <Select
                     value={locationForm.parent_id || '__none__'}
                     onValueChange={(value) => setLocationForm({...locationForm, parent_id: value === '__none__' ? '' : value})}
@@ -867,7 +1025,10 @@ export default function Warehouses() {
               </h4>
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('aisle') || 'Aisle'}</label>
+                  <LabelWithHelp
+                    label={t('aisle') || 'Aisle'}
+                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (masalan, A, B, 1, 2). Omborning asosiy bo'linishi."}
+                  />
                   <Input
                     placeholder="A"
                     value={locationForm.aisle}
@@ -875,7 +1036,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('rack') || 'Rack'}</label>
+                  <LabelWithHelp
+                    label={t('rack') || 'Rack'}
+                    helpText={t('help_rack') || "Stelling raqami yo'lak ichida. Vertikal saqlash birliklarini belgilaydi."}
+                  />
                   <Input
                     placeholder="01"
                     value={locationForm.rack}
@@ -883,7 +1047,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('shelf') || 'Shelf'}</label>
+                  <LabelWithHelp
+                    label={t('shelf') || 'Shelf'}
+                    helpText={t('help_shelf') || "Javon darajasi stelling ichida. Balandlik bo'yicha joylashuvni ko'rsatadi."}
+                  />
                   <Input
                     placeholder="02"
                     value={locationForm.shelf}
@@ -891,7 +1058,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bin') || 'Bin'}</label>
+                  <LabelWithHelp
+                    label={t('bin') || 'Bin'}
+                    helpText={t('help_bin') || "Quti yoki bo'lim raqami. Eng kichik saqlash birligi."}
+                  />
                   <Input
                     placeholder="03"
                     value={locationForm.bin}
@@ -907,7 +1077,10 @@ export default function Warehouses() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('capacity_settings') || 'Capacity Settings'}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity') || 'Capacity'}</label>
+                  <LabelWithHelp
+                    label={t('capacity') || 'Capacity'}
+                    helpText={t('help_location_capacity') || "Joylashuvning maksimal sig'imi. Sig'im chegaralanganda ogohlantirish beriladi."}
+                  />
                   <Input
                     type="number"
                     placeholder="100"
@@ -916,7 +1089,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity_unit') || 'Unit'}</label>
+                  <LabelWithHelp
+                    label={t('capacity_unit') || 'Unit'}
+                    helpText={t('help_capacity_unit') || "Sig'im o'lchov birligi: dona, kilogramm, kub metr yoki pallet."}
+                  />
                   <Select
                     value={locationForm.capacity_unit}
                     onValueChange={(value) => setLocationForm({...locationForm, capacity_unit: value})}
@@ -937,10 +1113,15 @@ export default function Warehouses() {
 
             {/* Barcode */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block flex items-center gap-2">
-                <Barcode className="w-4 h-4" />
-                {t('location_barcode') || 'Location Barcode'}
-              </label>
+              <LabelWithHelp
+                label={
+                  <span className="flex items-center gap-2">
+                    <Barcode className="w-4 h-4" />
+                    {t('location_barcode') || 'Location Barcode'}
+                  </span>
+                }
+                helpText={t('help_location_barcode') || "Joylashuv shtrix kodi. Mobil skaner bilan tez aniqlash uchun ishlatiladi."}
+              />
               <Input
                 placeholder={t('barcode_placeholder') || 'Scan or enter barcode'}
                 value={locationForm.barcode}
@@ -960,21 +1141,30 @@ export default function Warehouses() {
                     checked={locationForm.is_scrap_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_scrap_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_scrap_location') || 'Scrap Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_scrap_location') || 'Scrap Location'}
+                    <FieldHelp text={t('help_scrap_location') || "Chiqindilar joylashuvi. Yaroqsiz yoki buzilgan mahsulotlar bu yerga o'tkaziladi."} />
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={locationForm.is_return_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_return_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_return_location') || 'Return Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_return_location') || 'Return Location'}
+                    <FieldHelp text={t('help_return_location') || "Qaytarilgan tovarlar joylashuvi. Mijozlardan qaytgan mahsulotlar bu yerda tekshiriladi."} />
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={locationForm.is_replenish_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_replenish_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_replenish_location') || 'Replenish Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_replenish_location') || 'Replenish Location'}
+                    <FieldHelp text={t('help_replenish_location') || "To'ldirish joylashuvi. Avtomatik to'ldirish qoidalari bu joylashuvdan boshlanadi."} />
+                  </span>
                 </div>
               </div>
             </div>
@@ -985,7 +1175,10 @@ export default function Warehouses() {
                 checked={locationForm.is_active}
                 onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}
               />
-              <span className="text-sm text-slate-700">{t('active')}</span>
+              <span className="text-sm text-slate-700 flex items-center">
+                {t('active')}
+                <FieldHelp text={t('help_location_active') || "Faol joylashuvlar inventar operatsiyalarida ishlatiladi. Nofaol joylashuvlar yangi o'tkazmalar uchun mavjud emas."} />
+              </span>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -1027,7 +1220,11 @@ export default function Warehouses() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                  <LabelWithHelp
+                    label={t('code')}
+                    required
+                    helpText={t('help_location_code') || "Joylashuv koordinatasi (masalan, A-01-02-03). Tez topish va skanerlash uchun ishlatiladi."}
+                  />
                   <Input
                     placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
                     value={locationForm.code}
@@ -1036,7 +1233,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location_type') || 'Location Type'}</label>
+                  <LabelWithHelp
+                    label={t('location_type') || 'Location Type'}
+                    helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
+                  />
                   <Select
                     value={locationForm.type}
                     onValueChange={(value) => setLocationForm({...locationForm, type: value})}
@@ -1056,7 +1256,11 @@ export default function Warehouses() {
                 </div>
               </div>
               <div className="mt-4">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+                <LabelWithHelp
+                  label={t('name')}
+                  required
+                  helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
+                />
                 <Input
                   placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
                   value={locationForm.name}
@@ -1074,7 +1278,10 @@ export default function Warehouses() {
               </h4>
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('aisle') || 'Aisle'}</label>
+                  <LabelWithHelp
+                    label={t('aisle') || 'Aisle'}
+                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (masalan, A, B, 1, 2). Omborning asosiy bo'linishi."}
+                  />
                   <Input
                     placeholder="A"
                     value={locationForm.aisle}
@@ -1082,7 +1289,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('rack') || 'Rack'}</label>
+                  <LabelWithHelp
+                    label={t('rack') || 'Rack'}
+                    helpText={t('help_rack') || "Stelling raqami yo'lak ichida. Vertikal saqlash birliklarini belgilaydi."}
+                  />
                   <Input
                     placeholder="01"
                     value={locationForm.rack}
@@ -1090,7 +1300,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('shelf') || 'Shelf'}</label>
+                  <LabelWithHelp
+                    label={t('shelf') || 'Shelf'}
+                    helpText={t('help_shelf') || "Javon darajasi stelling ichida. Balandlik bo'yicha joylashuvni ko'rsatadi."}
+                  />
                   <Input
                     placeholder="02"
                     value={locationForm.shelf}
@@ -1098,7 +1311,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bin') || 'Bin'}</label>
+                  <LabelWithHelp
+                    label={t('bin') || 'Bin'}
+                    helpText={t('help_bin') || "Quti yoki bo'lim raqami. Eng kichik saqlash birligi."}
+                  />
                   <Input
                     placeholder="03"
                     value={locationForm.bin}
@@ -1113,7 +1329,10 @@ export default function Warehouses() {
               <h4 className="font-semibold text-slate-900 mb-3">{t('capacity_settings') || 'Capacity Settings'}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity') || 'Capacity'}</label>
+                  <LabelWithHelp
+                    label={t('capacity') || 'Capacity'}
+                    helpText={t('help_location_capacity') || "Joylashuvning maksimal sig'imi. Sig'im chegaralanganda ogohlantirish beriladi."}
+                  />
                   <Input
                     type="number"
                     placeholder="100"
@@ -1122,7 +1341,10 @@ export default function Warehouses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">{t('capacity_unit') || 'Unit'}</label>
+                  <LabelWithHelp
+                    label={t('capacity_unit') || 'Unit'}
+                    helpText={t('help_capacity_unit') || "Sig'im o'lchov birligi: dona, kilogramm, kub metr yoki pallet."}
+                  />
                   <Select
                     value={locationForm.capacity_unit}
                     onValueChange={(value) => setLocationForm({...locationForm, capacity_unit: value})}
@@ -1143,10 +1365,15 @@ export default function Warehouses() {
 
             {/* Barcode */}
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block flex items-center gap-2">
-                <Barcode className="w-4 h-4" />
-                {t('location_barcode') || 'Location Barcode'}
-              </label>
+              <LabelWithHelp
+                label={
+                  <span className="flex items-center gap-2">
+                    <Barcode className="w-4 h-4" />
+                    {t('location_barcode') || 'Location Barcode'}
+                  </span>
+                }
+                helpText={t('help_location_barcode') || "Joylashuv shtrix kodi. Mobil skaner bilan tez aniqlash uchun ishlatiladi."}
+              />
               <Input
                 placeholder={t('barcode_placeholder') || 'Scan or enter barcode'}
                 value={locationForm.barcode}
@@ -1163,21 +1390,30 @@ export default function Warehouses() {
                     checked={locationForm.is_scrap_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_scrap_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_scrap_location') || 'Scrap Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_scrap_location') || 'Scrap Location'}
+                    <FieldHelp text={t('help_scrap_location') || "Chiqindilar joylashuvi. Yaroqsiz yoki buzilgan mahsulotlar bu yerga o'tkaziladi."} />
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={locationForm.is_return_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_return_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_return_location') || 'Return Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_return_location') || 'Return Location'}
+                    <FieldHelp text={t('help_return_location') || "Qaytarilgan tovarlar joylashuvi. Mijozlardan qaytgan mahsulotlar bu yerda tekshiriladi."} />
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={locationForm.is_replenish_location}
                     onCheckedChange={(checked) => setLocationForm({...locationForm, is_replenish_location: checked})}
                   />
-                  <span className="text-sm text-slate-700">{t('is_replenish_location') || 'Replenish Location'}</span>
+                  <span className="text-sm text-slate-700 flex items-center">
+                    {t('is_replenish_location') || 'Replenish Location'}
+                    <FieldHelp text={t('help_replenish_location') || "To'ldirish joylashuvi. Avtomatik to'ldirish qoidalari bu joylashuvdan boshlanadi."} />
+                  </span>
                 </div>
               </div>
             </div>
@@ -1188,7 +1424,10 @@ export default function Warehouses() {
                 checked={locationForm.is_active}
                 onCheckedChange={(checked) => setLocationForm({...locationForm, is_active: checked})}
               />
-              <span className="text-sm text-slate-700">{t('active')}</span>
+              <span className="text-sm text-slate-700 flex items-center">
+                {t('active')}
+                <FieldHelp text={t('help_location_active') || "Faol joylashuvlar inventar operatsiyalarida ishlatiladi. Nofaol joylashuvlar yangi o'tkazmalar uchun mavjud emas."} />
+              </span>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -1335,6 +1574,32 @@ export default function Warehouses() {
                 <div className="p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-600 mb-1">{t('stock_items')}</p>
                   <p className="text-lg font-bold text-green-700">{getWarehouseStockCount(selectedWarehouse.id).toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Warehouse Operations Steps */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <p className="text-xs text-orange-600 mb-1 flex items-center gap-1">
+                    <Truck className="w-3 h-3" /> {t('reception_steps') || 'Incoming Shipments'}
+                  </p>
+                  <p className="text-sm font-medium text-orange-700">
+                    {selectedWarehouse.reception_steps === 1 && (t('reception_1_step') || '1-step: Direct to Stock')}
+                    {selectedWarehouse.reception_steps === 2 && (t('reception_2_step') || '2-step: Input → Stock')}
+                    {selectedWarehouse.reception_steps === 3 && (t('reception_3_step') || '3-step: Input → QC → Stock')}
+                    {!selectedWarehouse.reception_steps && (t('reception_1_step') || '1-step: Direct to Stock')}
+                  </p>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-lg">
+                  <p className="text-xs text-purple-600 mb-1 flex items-center gap-1">
+                    <PackageCheck className="w-3 h-3" /> {t('delivery_steps') || 'Outgoing Shipments'}
+                  </p>
+                  <p className="text-sm font-medium text-purple-700">
+                    {selectedWarehouse.delivery_steps === 1 && (t('delivery_1_step') || '1-step: Direct from Stock')}
+                    {selectedWarehouse.delivery_steps === 2 && (t('delivery_2_step') || '2-step: Pick → Ship')}
+                    {selectedWarehouse.delivery_steps === 3 && (t('delivery_3_step') || '3-step: Pick → Pack → Ship')}
+                    {!selectedWarehouse.delivery_steps && (t('delivery_1_step') || '1-step: Direct from Stock')}
+                  </p>
                 </div>
               </div>
 
