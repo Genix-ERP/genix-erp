@@ -86,7 +86,10 @@ export function InstalledAppsProvider({ children }) {
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
     try {
-      if (backendAvailable) {
+      // Check backend availability fresh each time
+      const isAvailable = await checkBackendHealth();
+
+      if (isAvailable) {
         // Install via backend
         await installedAppsService.installApp({
           app_id: appData.app_id,
@@ -126,14 +129,17 @@ export function InstalledAppsProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setInstalledApps(updated);
     }
-  }, [installedApps, activeCompany, backendAvailable, loadInstalledApps]);
+  }, [installedApps, activeCompany, loadInstalledApps]);
 
   const uninstallApp = useCallback(async (appId) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
     try {
-      if (backendAvailable) {
+      // Check backend availability fresh each time
+      const isAvailable = await checkBackendHealth();
+
+      if (isAvailable) {
         // Uninstall via backend
         await installedAppsService.uninstallApp(appId);
 
@@ -152,7 +158,7 @@ export function InstalledAppsProvider({ children }) {
       localStorage.setItem(storageKey, JSON.stringify(updated));
       setInstalledApps(updated);
     }
-  }, [installedApps, activeCompany, backendAvailable, loadInstalledApps]);
+  }, [installedApps, activeCompany, loadInstalledApps]);
 
   const refreshInstalledApps = useCallback(async () => {
     await loadInstalledApps();
