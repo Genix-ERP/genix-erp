@@ -333,6 +333,31 @@ export default function LeadsKanban({
         </div>
       )}
 
+      {/* Lead Statistics - Summary at top */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-[var(--genix-blue)]" />
+            {t('lead_summary')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {stages.map(stage => {
+              const count = stageData[stage.id]?.count || 0;
+              const StageIcon = stage.icon;
+              return (
+                <div key={stage.id} className={`text-center p-4 ${stage.bgClass} rounded-xl border ${stage.borderClass}`}>
+                  <StageIcon className={`w-6 h-6 mx-auto mb-2 ${stage.textClass}`} />
+                  <div className={`text-2xl font-bold ${stage.textClass}`}>{count}</div>
+                  <div className="text-xs text-slate-600 mt-1 capitalize">{stage.name}</div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl overflow-visible">
         <CardHeader className="border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -449,30 +474,6 @@ export default function LeadsKanban({
         </CardContent>
       </Card>
 
-      {/* Lead Statistics */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-[var(--genix-blue)]" />
-            {t('lead_summary')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            {stages.map(stage => {
-              const count = stageData[stage.id]?.count || 0;
-              const StageIcon = stage.icon;
-              return (
-                <div key={stage.id} className={`text-center p-4 ${stage.bgClass} rounded-xl border ${stage.borderClass}`}>
-                  <StageIcon className={`w-6 h-6 mx-auto mb-2 ${stage.textClass}`} />
-                  <div className={`text-2xl font-bold ${stage.textClass}`}>{count}</div>
-                  <div className="text-xs text-slate-600 mt-1 capitalize">{stage.name}</div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

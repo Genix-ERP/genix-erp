@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import {
   Plus, Target, TrendingUp, TrendingDown, AlertTriangle,
   DollarSign, Edit2, Trash2, BarChart3, PieChart, CheckCircle2,
@@ -459,18 +460,19 @@ export default function BudgetManagement() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="budget_code" label={t('code') || 'Code'} helpText={t('help_budget_code')} required />
                 <Input
+                  id="budget_code"
                   placeholder="e.g., BUD-2025-01"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('budget_type') || 'Budget Type'} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="budget_type" label={t('budget_type') || 'Budget Type'} helpText={t('help_budget_type')} required />
                 <Select value={formData.budget_type} onValueChange={(v) => setFormData({ ...formData, budget_type: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="budget_type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -482,9 +484,10 @@ export default function BudgetManagement() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>
+            <div className="space-y-2">
+              <LabelWithHelp htmlFor="budget_name" label={t('name') || 'Name'} helpText={t('help_budget_name')} required />
               <Input
+                id="budget_name"
                 placeholder={t('budget_name') || 'Budget name'}
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -492,17 +495,19 @@ export default function BudgetManagement() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('start_date') || 'Start Date'} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="start_date" label={t('start_date') || 'Start Date'} helpText={t('help_budget_period')} required />
                 <Input
+                  id="start_date"
                   type="date"
                   value={formData.start_date}
                   onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('end_date') || 'End Date'} *</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="end_date" label={t('end_date') || 'End Date'} helpText={t('help_budget_period')} required />
                 <Input
+                  id="end_date"
                   type="date"
                   value={formData.end_date}
                   onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
@@ -511,19 +516,20 @@ export default function BudgetManagement() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('total_amount') || 'Total Amount'}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="total_amount" label={t('total_amount') || 'Total Amount'} helpText={t('help_budget_amount')} />
                 <Input
+                  id="total_amount"
                   type="number"
                   placeholder="0"
                   value={formData.total_amount}
                   onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('status') || 'Status'}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="budget_status" label={t('status') || 'Status'} helpText={t('help_budget_status')} />
                 <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="budget_status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -535,9 +541,10 @@ export default function BudgetManagement() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description') || 'Description'}</label>
+            <div className="space-y-2">
+              <LabelWithHelp htmlFor="budget_description" label={t('description') || 'Description'} helpText={t('help_budget_description')} />
               <Textarea
+                id="budget_description"
                 placeholder={t('budget_description_placeholder') || 'Budget description...'}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -583,10 +590,10 @@ export default function BudgetManagement() {
           <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
             <h4 className="font-medium text-slate-700">{t('add_budget_line') || 'Add Budget Line'}</h4>
             <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('account') || 'Account'}</label>
+              <div className="col-span-2 space-y-2">
+                <LabelWithHelp htmlFor="line_account" label={t('account') || 'Account'} helpText={t('help_budget_account')} />
                 <Select value={lineFormData.account_id} onValueChange={(v) => setLineFormData({ ...lineFormData, account_id: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="line_account">
                     <SelectValue placeholder={t('select_account') || 'Select account'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -601,9 +608,10 @@ export default function BudgetManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('planned_amount') || 'Planned Amount'}</label>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="planned_amount" label={t('planned_amount') || 'Planned Amount'} helpText={t('help_budget_planned')} />
                 <Input
+                  id="planned_amount"
                   type="number"
                   placeholder="0"
                   value={lineFormData.planned_amount}

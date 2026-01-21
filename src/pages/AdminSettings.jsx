@@ -206,8 +206,6 @@ export default function AdminSettings() {
         {/* Action buttons bar */}
         <div className="mb-6 flex items-center justify-between bg-white rounded-xl shadow-sm border p-4">
           <div className="flex items-center gap-3">
-            <Settings className="w-6 h-6 text-slate-700" />
-            <h1 className="text-xl font-bold text-slate-900">{t('admin_settings') || 'Ilova sozlamalari'}</h1>
             {hasUnsavedChanges() && (
               <Badge variant="outline" className="bg-yellow-50 border-yellow-400 text-yellow-700">
                 <AlertTriangle className="w-3 h-3 mr-1" />

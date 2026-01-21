@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Users,
   Search,
-  Plus,
   TrendingUp,
   Phone,
   PhoneCall,
@@ -15,14 +14,8 @@ import {
   UserPlus,
   Building,
   Target,
-  Trash2,
-  Brain,
-  AlertTriangle,
-  CheckCircle,
-  DollarSign,
-  Lightbulb
+  Trash2
 } from "lucide-react";
-import { analyzeCRM } from "@/api/services/aiAnalytics";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,9 +101,6 @@ export default function Customers() {
       setActiveTab("calls");
     }
   };
-
-  // AI Analysis
-  const crmAnalysis = useMemo(() => analyzeCRM(customers, leads, opportunities), [customers, leads, opportunities]);
 
   useEffect(() => {
     let filtered = customers;
@@ -225,100 +215,8 @@ export default function Customers() {
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-8">
 
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-[var(--genix-navy)]">{t('crm_title')}</h1>
-          </div>
-        </div>
-
         {/* Metrics */}
         <CustomerMetrics customers={customers} leads={leads} opportunities={opportunities} language={language} />
-
-        {/* AI Insights Panel */}
-        {(crmAnalysis.insights.length > 0 || crmAnalysis.recommendations.length > 0) && (
-          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-indigo-600" />
-                {t('ai_crm_insights')}
-                <Badge className="bg-indigo-100 text-indigo-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Key Metrics */}
-                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">{t('monthly_recurring')}</p>
-                      <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.totalMRR.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Target className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">{t('pipeline_value')}</p>
-                      <p className="text-lg font-bold text-slate-900">${crmAnalysis.metrics.pipelineValue.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Insights */}
-                {crmAnalysis.insights.slice(0, 2).map((insight, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' || insight.type === 'negative' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{insight.title}</h4>
-                        <p className="text-xs text-slate-600 mt-0.5">{insight.description}</p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-indigo-600 mt-1">{insight.metric}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Recommendations */}
-              {crmAnalysis.recommendations.length > 0 && (
-                <div className="mt-4 bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                  <div className="flex items-start gap-3">
-                    <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-slate-900 text-sm mb-2">{t('ai_recommendations')}</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {crmAnalysis.recommendations.map((rec, index) => (
-                          <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1.5">
-                            <span className={`w-2 h-2 rounded-full ${
-                              rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
-                            }`} />
-                            <span className="text-slate-700">{rec.action}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

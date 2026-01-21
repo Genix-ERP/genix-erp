@@ -2,9 +2,10 @@ import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { useTranslation } from "@/components/utils/translations";
 import {
   Select,
   SelectContent,
@@ -59,7 +60,8 @@ import {
   useAuditTrail,
 } from "@/components/shared";
 
-export default function Suppliers() {
+export default function Suppliers({ language = 'en' }) {
+  const { t } = useTranslation(language);
   const {
     suppliers,
     createSupplier,
@@ -485,27 +487,30 @@ export default function Suppliers() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Kompaniya nomi *</Label>
+                <LabelWithHelp htmlFor="supplier_name" label={t('company_name')} helpText={t('help_supplier_name')} required />
                 <Input
+                  id="supplier_name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Kompaniya nomi"
+                  placeholder={t('company_name')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Mas'ul shaxs</Label>
+                <LabelWithHelp htmlFor="contact_person" label={t('contact_name')} helpText={t('help_supplier_contact')} />
                 <Input
+                  id="contact_person"
                   value={formData.contact_person}
                   onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                  placeholder="Ism familiya"
+                  placeholder={t('enter_name')}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Email</Label>
+                <LabelWithHelp htmlFor="supplier_email" label={t('email')} helpText={t('help_supplier_email')} />
                 <Input
+                  id="supplier_email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -513,8 +518,9 @@ export default function Suppliers() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Telefon</Label>
+                <LabelWithHelp htmlFor="supplier_phone" label={t('phone')} helpText={t('help_supplier_phone')} />
                 <Input
+                  id="supplier_phone"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="+998 XX XXX XX XX"
@@ -523,35 +529,37 @@ export default function Suppliers() {
             </div>
 
             <div className="space-y-2">
-              <Label>Manzil</Label>
+              <LabelWithHelp htmlFor="supplier_address" label={t('address')} helpText={t('help_supplier_address')} />
               <Textarea
+                id="supplier_address"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="To'liq manzil"
+                placeholder={t('address')}
                 rows={2}
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>INN (STIR)</Label>
+                <LabelWithHelp htmlFor="tax_id" label={t('tax_id') || 'INN (STIR)'} helpText={t('help_supplier_tax_id')} />
                 <Input
+                  id="tax_id"
                   value={formData.tax_id}
                   onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
                   placeholder="123456789"
                 />
               </div>
               <div className="space-y-2">
-                <Label>To'lov shartlari</Label>
+                <LabelWithHelp htmlFor="payment_terms" label={t('payment_terms')} helpText={t('help_supplier_payment_terms')} />
                 <Select
                   value={formData.payment_terms}
                   onValueChange={(value) => setFormData({ ...formData, payment_terms: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="payment_terms">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="prepaid">Oldindan to'lov</SelectItem>
+                    <SelectItem value="prepaid">{t('prepaid') || 'Oldindan to\'lov'}</SelectItem>
                     <SelectItem value="net_15">Net 15</SelectItem>
                     <SelectItem value="net_30">Net 30</SelectItem>
                     <SelectItem value="net_60">Net 60</SelectItem>
@@ -560,12 +568,12 @@ export default function Suppliers() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Valyuta</Label>
+                <LabelWithHelp htmlFor="currency" label={t('currency')} helpText={t('help_supplier_currency')} />
                 <Select
                   value={formData.currency}
                   onValueChange={(value) => setFormData({ ...formData, currency: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="currency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -579,11 +587,12 @@ export default function Suppliers() {
             </div>
 
             <div className="space-y-2">
-              <Label>Kategoriyalar (vergul bilan ajrating)</Label>
+              <LabelWithHelp htmlFor="categories" label={t('categories')} helpText={t('help_supplier_categories')} />
               <Input
+                id="categories"
                 value={formData.categories}
                 onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
-                placeholder="Elektronika, Ofis jihozlari, ..."
+                placeholder={t('categories_placeholder') || 'Elektronika, Ofis jihozlari, ...'}
               />
             </div>
 

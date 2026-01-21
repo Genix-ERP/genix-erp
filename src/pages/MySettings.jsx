@@ -31,9 +31,6 @@ export default function MySettings() {
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-[var(--genix-navy)]">{t('my_settings') || 'Mening sozlamalarim'}</h1>
-        </div>
 
         <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">

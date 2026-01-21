@@ -22,12 +22,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck, Brain, AlertTriangle,
-  CheckCircle, Target, Lightbulb, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X
+  Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
+  CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { analyzeSales } from '@/api/services/aiAnalytics';
 import { salesService } from '@/api/services/sales';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -58,7 +57,6 @@ export default function SalesOrders() {
     invoices = [],
     returns = [],
     discounts = [],
-    getAIInsights,
     isLoading: salesLoading
   } = useSales();
 
@@ -154,27 +152,6 @@ export default function SalesOrders() {
       ],
     };
   };
-
-  // AI Analysis - combining both contexts
-  const salesAnalysis = useMemo(() => {
-    try {
-      return analyzeSales(salesOrders, customers, language) || {
-        insights: [],
-        recommendations: [],
-        topCustomers: [],
-        metrics: {}
-      };
-    } catch (error) {
-      console.error('Error analyzing sales:', error);
-      return {
-        insights: [],
-        recommendations: [],
-        topCustomers: [],
-        metrics: {}
-      };
-    }
-  }, [salesOrders, customers, language]);
-  const aiInsights = getAIInsights || { insights: [], recommendations: [], metrics: {} };
 
   const [newOrder, setNewOrder] = useState({
     order_number: '',
@@ -483,90 +460,6 @@ export default function SalesOrders() {
           </Card>
         </div>
 
-        {/* AI Insights Panel */}
-        {((salesAnalysis?.insights?.length > 0) || (aiInsights?.insights?.length > 0) || (aiInsights?.recommendations?.length > 0)) && (
-          <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5 text-blue-600" />
-                {t('ai_sales_analysis')}
-                <Badge className="bg-blue-100 text-blue-700 text-xs">{t('live')}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Sales Context Insights */}
-                {(aiInsights?.insights || []).slice(0, 2).map((insight, index) => (
-                  <div key={`sales-${index}`} className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                    <div className="flex items-start gap-3">
-                      {insight.type === 'positive' ? (
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                      ) : insight.type === 'warning' ? (
-                        <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
-                      ) : (
-                        <Target className="w-5 h-5 text-blue-500 mt-0.5" />
-                      )}
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">
-                          {insight.titleKey ? t(insight.titleKey) : insight.title}
-                        </h4>
-                        <p className="text-xs text-slate-600 mt-1">
-                          {insight.descriptionKey ? t(insight.descriptionKey) : insight.description}
-                        </p>
-                        {insight.metric && (
-                          <p className="text-lg font-bold text-blue-600 mt-2">
-                            {typeof insight.metric === 'number' ? formatCurrency(insight.metric) : insight.metric}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Top Customer from orders analysis */}
-                {salesAnalysis?.topCustomers?.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                    <div className="flex items-start gap-3">
-                      <Target className="w-5 h-5 text-purple-500 mt-0.5" />
-                      <div>
-                        <h4 className="font-medium text-slate-900 text-sm">{t('top_customer')}</h4>
-                        <p className="text-xs text-slate-600 mt-1">{salesAnalysis.topCustomers[0].name}</p>
-                        <p className="text-lg font-bold text-purple-600 mt-2">
-                          {formatCurrency(salesAnalysis.topCustomers[0].revenue)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Recommendations */}
-                {aiInsights?.recommendations?.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100 md:col-span-2 lg:col-span-3">
-                    <div className="flex items-start gap-3">
-                      <Lightbulb className="w-5 h-5 text-yellow-500 mt-0.5" />
-                      <div className="flex-1">
-                        <h4 className="font-medium text-slate-900 text-sm">{t('ai_recommendations')}</h4>
-                        <div className="flex flex-wrap gap-3 mt-2">
-                          {(aiInsights?.recommendations || []).slice(0, 4).map((rec, index) => (
-                            <div key={index} className="flex items-center gap-2 text-xs bg-slate-50 rounded-full px-3 py-1">
-                              <span className={`w-2 h-2 rounded-full ${
-                                rec.impact === 'high' ? 'bg-red-400' : rec.impact === 'medium' ? 'bg-yellow-400' : 'bg-blue-400'
-                              }`} />
-                              <span className="text-slate-700">
-                                {rec.actionKey ? t(rec.actionKey) : rec.action}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Main Content with Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
@@ -828,39 +721,18 @@ export default function SalesOrders() {
                       <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.avgOrderValue)}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('conversion_rate')}</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        {aiInsights.metrics?.conversionRate?.toFixed(1) || 0}%
-                      </p>
+                      <p className="text-sm text-slate-600">{t('total_orders')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('return_rate')}</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        {aiInsights.metrics?.returnRate?.toFixed(1) || 0}%
-                      </p>
+                      <p className="text-sm text-slate-600">{t('returns')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('outstanding_amount')}</p>
-                      <p className="text-2xl font-bold text-red-600">
-                        {formatCurrency(aiInsights.metrics?.totalOutstanding || 0)}
-                      </p>
+                      <p className="text-sm text-slate-600">{t('unpaid_invoices')}</p>
+                      <p className="text-2xl font-bold text-red-600">{metrics.unpaidInvoices}</p>
                     </div>
                   </div>
-
-                  {/* Top Customers */}
-                  {salesAnalysis?.topCustomers?.length > 0 && (
-                    <div className="pt-4 border-t">
-                      <h4 className="font-medium text-slate-900 mb-3">{t('top_customers')}</h4>
-                      <div className="space-y-2">
-                        {(salesAnalysis?.topCustomers || []).slice(0, 5).map((customer, index) => (
-                          <div key={index} className="flex justify-between items-center p-2 bg-slate-50 rounded">
-                            <span className="text-sm">{customer.name}</span>
-                            <span className="font-medium text-green-600">{formatCurrency(customer.revenue)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </div>

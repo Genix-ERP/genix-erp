@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { LabelWithHelp } from "@/components/ui/field-help";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Target, DollarSign, Percent, Calendar, X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
@@ -68,7 +68,7 @@ export default function OpportunityForm({ opportunity, onSave, onCancel, languag
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="name">{t('name')} *</Label>
+            <LabelWithHelp htmlFor="name" label={t('name')} helpText={t('help_opportunity_name')} required />
             <Input
               id="name"
               value={formData.name}
@@ -80,9 +80,9 @@ export default function OpportunityForm({ opportunity, onSave, onCancel, languag
 
           {/* Stage */}
           <div className="space-y-2">
-            <Label>{t('stage')} *</Label>
+            <LabelWithHelp htmlFor="stage" label={t('stage')} helpText={t('help_opportunity_stage')} required />
             <Select value={formData.stage} onValueChange={(value) => handleChange('stage', value)}>
-              <SelectTrigger>
+              <SelectTrigger id="stage">
                 <SelectValue placeholder={t('select_stage')} />
               </SelectTrigger>
               <SelectContent>
@@ -97,10 +97,7 @@ export default function OpportunityForm({ opportunity, onSave, onCancel, languag
 
           {/* Expected Value */}
           <div className="space-y-2">
-            <Label htmlFor="expected_value" className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              {t('expected_value')}
-            </Label>
+            <LabelWithHelp htmlFor="expected_value" label={t('expected_value')} helpText={t('help_opportunity_value')} />
             <Input
               id="expected_value"
               type="number"
@@ -114,10 +111,7 @@ export default function OpportunityForm({ opportunity, onSave, onCancel, languag
 
           {/* Probability */}
           <div className="space-y-2">
-            <Label htmlFor="probability" className="flex items-center gap-2">
-              <Percent className="w-4 h-4" />
-              {t('probability')} (%)
-            </Label>
+            <LabelWithHelp htmlFor="probability" label={`${t('probability')} (%)`} helpText={t('help_opportunity_probability')} />
             <Input
               id="probability"
               type="number"
@@ -131,10 +125,7 @@ export default function OpportunityForm({ opportunity, onSave, onCancel, languag
 
           {/* Expected Close Date */}
           <div className="space-y-2">
-            <Label htmlFor="expected_close_date" className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              {t('expected_close_date')}
-            </Label>
+            <LabelWithHelp htmlFor="expected_close_date" label={t('expected_close_date')} helpText={t('help_opportunity_close_date')} />
             <Input
               id="expected_close_date"
               type="date"

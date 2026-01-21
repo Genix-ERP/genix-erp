@@ -42,9 +42,6 @@ export default function Financials() {
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[var(--genix-navy)]">{t('financials_title')}</h1>
-        </div>
 
         <Tabs defaultValue="dashboard" className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
