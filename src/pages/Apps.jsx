@@ -274,13 +274,16 @@ export default function Apps() {
     setLoadingAppId(app.id);
     try {
       if (action === 'install') {
-        installApp({
+        await installApp({
           app_id: app.id,
-          app_name: app.name,
-          version: app.version
+          app_name: t(app.nameKey),
+          description: t(app.descriptionKey),
+          version: app.version,
+          icon: app.icon?.name || '',
+          color: app.color || ''
         });
       } else if (action === 'uninstall') {
-        uninstallApp(app.id);
+        await uninstallApp(app.id);
       }
     } catch (error) {
       console.error(`Error ${action}ing app:`, error);
