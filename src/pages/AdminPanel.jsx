@@ -76,10 +76,7 @@ export default function AdminPanel() {
     duration: 12 // months
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
+  // Filter users when filters change
   useEffect(() => {
     let filtered = users;
     if (roleFilter !== 'all') {
@@ -97,27 +94,57 @@ export default function AdminPanel() {
     setFilteredUsers(filtered);
   }, [users, searchQuery, roleFilter, statusFilter]);
 
+  const [loadError, setLoadError] = useState(null);
+
   const loadData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       if (!isSiteAdmin()) {
         navigate('/');
         return;
       }
 
-      // Use companyUsers from SubscriptionContext
-      setUsers(companyUsers);
-      setFilteredUsers(companyUsers);
+      // Fetch all system users from the backend API
+      const response = await apiClient.get('/admin/users');
+      const backendUsers = response.data?.data || [];
+
+      // Map backend response to expected format (tenant owners only)
+      const mappedUsers = backendUsers.map(u => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name || `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+        role: u.role || 'owner',
+        status: u.is_active === false ? 'blocked' : 'active',
+        subscription_status: u.subscription_status || 'trial',
+        subscription_plan: u.subscription_plan || 'free',
+        is_blocked: u.is_active === false,
+        created_date: u.created_at,
+        last_login_at: u.last_login_at,
+        tenant_id: u.tenant_id,
+        tenant_name: u.tenant_name,
+        tenant_code: u.tenant_code,
+        user_count: u.user_count || 1,
+        is_system_admin: u.is_system_admin
+      }));
+
+      setUsers(mappedUsers);
+      setFilteredUsers(mappedUsers);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading data from backend:', error);
+      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to load users';
+      setLoadError(`API Error: ${errorMsg} (Status: ${error.response?.status || 'unknown'})`);
+      setUsers([]);
+      setFilteredUsers([]);
     }
     setIsLoading(false);
   };
 
-  // Sync users when companyUsers changes
+  // Load data when component mounts
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setUsers(companyUsers);
-    setFilteredUsers(companyUsers);
-  }, [companyUsers]);
+    loadData();
+  }, []);
 
   const handleInviteUser = async () => {
     if (!inviteData.email || !inviteData.full_name) {
@@ -512,6 +539,17 @@ export default function AdminPanel() {
                 {isLoading ? (
                   <div className="flex items-center justify-center py-16">
                     <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : loadError ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="text-red-500 mb-4">
+                      <AlertTriangle className="w-12 h-12" />
+                    </div>
+                    <p className="text-lg font-medium text-slate-900 mb-2">Failed to load users</p>
+                    <p className="text-sm text-red-600 mb-4">{loadError}</p>
+                    <Button onClick={loadData} variant="outline">
+                      Retry
+                    </Button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">

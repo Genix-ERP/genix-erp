@@ -3,37 +3,68 @@ import apiClient, { setTokens, clearTokens } from '../client';
 export const authService = {
   // Register a new user
   async register(data) {
+    // Generate tenant_code from company name if not provided
+    // Append random suffix to ensure uniqueness
+    const baseCode = data.companyName?.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40) || 'tenant';
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const tenantCode = data.tenantCode || `${baseCode}_${randomSuffix}`;
+
     const response = await apiClient.post('/auth/register', {
       email: data.email,
       password: data.password,
       first_name: data.firstName,
       last_name: data.lastName,
-      company_name: data.companyName,
-      tenant_code: data.tenantCode,
+      tenant_name: data.companyName,
+      tenant_code: tenantCode,
     });
 
-    const { access_token, refresh_token, user } = response.data.data;
+    const { access_token, refresh_token, user, tenant } = response.data.data;
     setTokens(access_token, refresh_token);
     localStorage.setItem('user', JSON.stringify(user));
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
     }
+    if (tenant) {
+      localStorage.setItem('tenant', JSON.stringify(tenant));
+    }
+
+    // Create the initial organization with the user's company name
+    try {
+      const companyName = data.companyName || `${data.firstName}'s Company`;
+      const companyCode = companyName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'MAIN';
+      await apiClient.post('/organizations', {
+        code: companyCode,
+        name: companyName,
+        type: 'company',
+        country: 'Uzbekistan',
+        currency: 'UZS',
+        accounting_standard: 'LOCAL_GAAP'
+      });
+    } catch (orgError) {
+      console.error('Error creating initial organization:', orgError);
+      // Don't fail registration if org creation fails
+    }
 
     return response.data.data;
   },
 
-  // Login
-  async login(email, password) {
-    const response = await apiClient.post('/auth/login', {
-      email,
-      password,
-    });
+  // Login with optional tenant_id for multi-tenant scenarios
+  async login(email, password, tenantId = null) {
+    const payload = { email, password };
+    if (tenantId) {
+      payload.tenant_id = tenantId;
+    }
 
-    const { access_token, refresh_token, user } = response.data.data;
+    const response = await apiClient.post('/auth/login', payload);
+
+    const { access_token, refresh_token, user, tenant } = response.data.data;
     setTokens(access_token, refresh_token);
     localStorage.setItem('user', JSON.stringify(user));
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
+    }
+    if (tenant) {
+      localStorage.setItem('tenant', JSON.stringify(tenant));
     }
 
     return response.data.data;
@@ -92,6 +123,40 @@ export const authService = {
   async verifyEmail(token) {
     const response = await apiClient.post('/auth/verify-email', { token });
     return response.data;
+  },
+
+  // Validate invitation token
+  async validateInvite(token) {
+    const response = await apiClient.get(`/auth/validate-invite?token=${token}`);
+    return response.data.data;
+  },
+
+  // Accept invitation and set password
+  async acceptInvite(token, password) {
+    const response = await apiClient.post('/auth/accept-invite', {
+      token,
+      password,
+    });
+
+    const { access_token, refresh_token, user, tenant } = response.data.data;
+    setTokens(access_token, refresh_token);
+    localStorage.setItem('user', JSON.stringify(user));
+    if (user.tenant_id) {
+      localStorage.setItem('tenantId', user.tenant_id);
+    }
+    if (tenant) {
+      localStorage.setItem('tenant', JSON.stringify(tenant));
+    }
+
+    return response.data.data;
+  },
+
+  // Send invitation to a user (admin only)
+  async sendInvite(userId) {
+    const response = await apiClient.post('/auth/send-invite', {
+      user_id: userId,
+    });
+    return response.data.data;
   },
 
   // Check if user is authenticated

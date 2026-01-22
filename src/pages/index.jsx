@@ -1,6 +1,7 @@
 import Layout from "./Layout.jsx";
 import Login from "./Login";
 import Register from "./Register";
+import AcceptInvite from "./AcceptInvite";
 import Dashboard from "./Dashboard";
 import AIAssistant from "./AIAssistant";
 import Inventory from "./Inventory";
@@ -96,6 +97,25 @@ function ProtectedRoute({ children }) {
     return children;
 }
 
+// Admin-only route wrapper (for site_admin and owner)
+function AdminRoute({ children }) {
+    const { isOwner, isLoading } = useAuth();
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    if (!isOwner()) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return children;
+}
+
 // Create a wrapper component that uses useLocation inside the Router context
 function PagesContent() {
     const location = useLocation();
@@ -105,6 +125,7 @@ function PagesContent() {
         <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route
                 path="/*"
                 element={
@@ -121,9 +142,9 @@ function PagesContent() {
                                 <Route path="attendance" element={<Attendance />} />
                                 <Route path="employee-contracts" element={<EmployeeContracts />} />
                                 <Route path="cargo" element={<Cargo />} />
-                                <Route path="apps" element={<Apps />} />
+                                <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
                                 <Route path="customers" element={<Customers />} />
-                                <Route path="settings" element={<Settings />} />
+                                <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
                                 <Route path="my-settings" element={<MySettings />} />
                                 <Route path="financials" element={<Financials />} />
                                 <Route path="notifications" element={<Notifications />} />
@@ -138,8 +159,8 @@ function PagesContent() {
                                 <Route path="expenses" element={<Expenses />} />
                                 <Route path="payroll" element={<Payroll />} />
                                 <Route path="contracts" element={<Contracts />} />
-                                <Route path="companies" element={<Companies />} />
-                                <Route path="addcompany" element={<AddCompany />} />
+                                <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
+                                <Route path="addcompany" element={<AdminRoute><AddCompany /></AdminRoute>} />
                             </Routes>
                         </Layout>
                     </ProtectedRoute>
