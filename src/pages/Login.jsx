@@ -6,13 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, Server, ServerOff } from 'lucide-react';
+import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [tenants, setTenants] = useState(null);
+  const [selectedTenantId, setSelectedTenantId] = useState(null);
   const { login, backendAvailable } = useAuth();
   const navigate = useNavigate();
 
@@ -21,7 +23,27 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password);
+    const result = await login(email, password, selectedTenantId);
+
+    if (result.success) {
+      navigate('/');
+    } else if (result.tenantSelectionRequired) {
+      // Show tenant selection UI
+      setTenants(result.tenants);
+      setError('');
+    } else {
+      setError(result.error);
+    }
+
+    setIsLoading(false);
+  };
+
+  const handleTenantSelect = async (tenantId) => {
+    setSelectedTenantId(tenantId);
+    setError('');
+    setIsLoading(true);
+
+    const result = await login(email, password, tenantId);
 
     if (result.success) {
       navigate('/');
@@ -32,6 +54,88 @@ export default function Login() {
     setIsLoading(false);
   };
 
+  const handleBackToLogin = () => {
+    setTenants(null);
+    setSelectedTenantId(null);
+    setError('');
+  };
+
+  // Tenant selection screen
+  if (tenants && tenants.length > 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <style>
+          {`
+            :root {
+              --genix-navy: #0B1426;
+              --genix-blue: #0EA5E9;
+              --genix-light-blue: #E0F2FE;
+              --genix-purple: #8B5CF6;
+              --genix-green: #10B981;
+            }
+          `}
+        </style>
+
+        <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
+          <CardHeader className="text-center pb-2">
+            <img
+              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+              alt="Genix Logo"
+              className="h-20 w-auto object-contain mx-auto mb-4"
+            />
+            <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
+              Select Company
+            </CardTitle>
+            <CardDescription className="text-slate-500">
+              Your email is associated with multiple companies. Please select one to continue.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="pt-4">
+            {error && (
+              <Alert variant="destructive" className="bg-red-50 border-red-200 mb-4">
+                <AlertDescription className="text-red-700">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-3">
+              {tenants.map((tenant) => (
+                <Button
+                  key={tenant.id}
+                  variant="outline"
+                  className="w-full h-auto py-4 px-4 justify-start hover:bg-[var(--genix-light-blue)] hover:border-[var(--genix-blue)] transition-all"
+                  onClick={() => handleTenantSelect(tenant.id)}
+                  disabled={isLoading}
+                >
+                  <Building2 className="w-5 h-5 mr-3 text-[var(--genix-blue)]" />
+                  <div className="text-left">
+                    <div className="font-medium text-slate-800">{tenant.name}</div>
+                    <div className="text-xs text-slate-500">Code: {tenant.code}</div>
+                  </div>
+                </Button>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <Button
+                variant="ghost"
+                className="w-full text-slate-600"
+                onClick={handleBackToLogin}
+                disabled={isLoading}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Normal login screen
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <style>

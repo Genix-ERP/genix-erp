@@ -2,15 +2,18 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useSubscription } from "@/components/contexts/SubscriptionContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Building2,
   Plus,
@@ -35,6 +38,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Companies() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const { toast } = useToast();
+
   const {
     companies,
     activeCompany,
@@ -50,8 +57,10 @@ export default function Companies() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showEditForm, setShowEditForm] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingCompany, setEditingCompany] = useState(null);
   const [viewingCompany, setViewingCompany] = useState(null);
+  const [companyToDelete, setCompanyToDelete] = useState(null);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     company_code: "",
@@ -107,25 +116,56 @@ export default function Companies() {
     setError(null);
 
     try {
-      const result = updateCompany(editingCompany.id, formData);
+      const result = await updateCompany(editingCompany.id, formData);
       if (!result.success) {
-        setError(result.message || 'Xatolik yuz berdi');
+        setError(result.message || t('error_occurred') || 'Xatolik yuz berdi');
         return;
       }
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: t('company_updated') || 'Kompaniya yangilandi',
+      });
       setShowEditForm(false);
       setEditingCompany(null);
     } catch (err) {
       console.error("Error saving company:", err);
-      setError('Kompaniyani saqlashda xatolik');
+      setError(t('error_saving_company') || 'Kompaniyani saqlashda xatolik');
     }
   };
 
-  const handleDelete = async (company) => {
-    if (confirm(`"${company.company_name}" kompaniyasini o'chirishni xohlaysizmi?`)) {
-      const result = deleteCompany(company.id);
+  const handleDeleteClick = (company) => {
+    setCompanyToDelete(company);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!companyToDelete) return;
+
+    try {
+      const result = await deleteCompany(companyToDelete.id);
       if (!result.success) {
-        setError(result.message || 'O\'chirishda xatolik');
+        setError(result.message || t('error_deleting_company') || "O'chirishda xatolik");
+        toast({
+          title: t('error') || 'Xato',
+          description: result.message || t('error_deleting_company') || "O'chirishda xatolik",
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: t('success') || 'Muvaffaqiyat',
+          description: t('company_deleted') || "Kompaniya o'chirildi",
+        });
       }
+    } catch (err) {
+      console.error("Error deleting company:", err);
+      toast({
+        title: t('error') || 'Xato',
+        description: t('error_deleting_company') || "O'chirishda xatolik",
+        variant: 'destructive',
+      });
+    } finally {
+      setShowDeleteConfirm(false);
+      setCompanyToDelete(null);
     }
   };
 
@@ -327,12 +367,12 @@ export default function Companies() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => handleDelete(company)}
+                              onClick={() => handleDeleteClick(company)}
                               disabled={companies.length <= 1}
                               className="text-red-600 focus:text-red-600"
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
-                              O'chirish
+                              {t('delete') || "O'chirish"}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -541,13 +581,47 @@ export default function Companies() {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowEditForm(false)}>
-                Bekor qilish
+                {t('cancel') || 'Bekor qilish'}
               </Button>
               <Button type="submit" className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                Saqlash
+                {t('save') || 'Saqlash'}
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              {t('delete_company') || "Kompaniyani o'chirish"}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {t('delete_company_confirm') || "Haqiqatan ham"} <strong>"{companyToDelete?.company_name}"</strong> {t('delete_company_confirm_suffix') || "kompaniyasini o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                setCompanyToDelete(null);
+              }}
+            >
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('delete') || "O'chirish"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

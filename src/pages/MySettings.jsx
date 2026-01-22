@@ -1,9 +1,19 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Bell, LogOut, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/components/contexts/AuthContext";
 
 import ProfileSettings from "@/components/settings/ProfileSettings";
@@ -19,13 +29,13 @@ export default function MySettings() {
   const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') || 'profile';
-  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  const handleLogout = async () => {
-    if (confirm(t('logout_confirm'))) {
-      setIsLoggingOut(true);
-      logout();
-    }
+  const handleLogout = () => {
+    setShowLogoutDialog(false);
+    setIsLoggingOut(true);
+    logout();
   };
 
   return (
@@ -71,7 +81,7 @@ export default function MySettings() {
               {t('logout_description')}
             </p>
             <Button
-              onClick={handleLogout}
+              onClick={() => setShowLogoutDialog(true)}
               disabled={isLoggingOut}
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
@@ -91,6 +101,27 @@ export default function MySettings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('logout') || 'Chiqish'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('logout_confirm') || 'Tizimdan chiqishni xohlaysizmi?'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {t('logout') || 'Chiqish'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
