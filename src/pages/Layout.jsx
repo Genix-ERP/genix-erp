@@ -273,6 +273,15 @@ function LayoutContent({ children, currentPageName }) {
       badge: null
     },
     {
+      title: t("ai_assistant"),
+      url: createPageUrl("AIAssistant"),
+      icon: Bot
+    }
+  ];
+
+  // Admin-only items (visible to site_admin and owner)
+  const adminNavigationItems = [
+    {
       title: t("apps"),
       url: createPageUrl("Apps"),
       icon: Grid3x3,
@@ -283,11 +292,6 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Settings"),
       icon: Settings,
       badge: null
-    },
-    {
-      title: t("ai_assistant"),
-      url: createPageUrl("AIAssistant"),
-      icon: Bot
     }
   ];
 
@@ -307,10 +311,13 @@ function LayoutContent({ children, currentPageName }) {
       }
     });
 
-    // Add Workflows, Apps, Settings (excluding AI Assistant for now)
-    dynamicItems.push(...coreNavigationItems.slice(1, 4));
+    // Add Workflows (always visible)
+    dynamicItems.push(coreNavigationItems[1]);
 
-    // Note: Admin Settings removed - "Settings" now opens AdminSettings directly
+    // Add Apps and Settings only for admins (site_admin or owner)
+    if (isOwner()) {
+      dynamicItems.push(...adminNavigationItems);
+    }
 
     // Add Admin Panel if user is site admin
     if (isSiteAdmin()) {
@@ -322,7 +329,7 @@ function LayoutContent({ children, currentPageName }) {
     }
 
     // Add AI Assistant at the bottom
-    dynamicItems.push(coreNavigationItems[4]);
+    dynamicItems.push(coreNavigationItems[2]);
 
     return dynamicItems;
   };

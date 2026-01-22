@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle, SettingsDivider } from './SettingsSection';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Receipt, Clock, MapPin, Wallet } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import apiClient from '@/api/client';
+import { hrService } from "@/api/services/hr";
+import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search } from 'lucide-react';
 
 const PAY_PERIODS = [
   { value: 'weekly', label: 'Weekly' },
@@ -17,8 +23,162 @@ export default function HRSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { settings, updateSetting, resetSection } = useAdminSettings();
+  const { toast } = useToast();
 
   const hr = settings.hr || {};
+
+  // Employee company assignment state
+  const [employees, setEmployees] = useState([]);
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showCompanyAssignModal, setShowCompanyAssignModal] = useState(false);
+  const [employeeOrganizations, setEmployeeOrganizations] = useState([]);
+  const [availableOrganizations, setAvailableOrganizations] = useState([]);
+  const [selectedOrgToAssign, setSelectedOrgToAssign] = useState('');
+
+  // Load employees
+  const loadEmployees = useCallback(async () => {
+    try {
+      const data = await hrService.listEmployees({ sort_by: 'full_name', sort_order: 'ASC' });
+      const mapped = (data || []).map(emp => ({
+        id: emp.id,
+        full_name: emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        email: emp.email || '',
+        job_title: emp.job_title || '',
+        department: emp.department || 'other',
+        status: emp.status || 'active',
+      }));
+      setEmployees(mapped);
+      setFilteredEmployees(mapped);
+    } catch (error) {
+      console.error("Error loading employees:", error);
+    }
+  }, []);
+
+  // Load employee's organization assignments
+  const loadEmployeeOrganizations = useCallback(async (employeeId) => {
+    try {
+      const response = await apiClient.get(`/employees/${employeeId}/organizations`);
+      setEmployeeOrganizations(response.data?.data || []);
+    } catch (error) {
+      console.error("Error loading employee organizations:", error);
+      setEmployeeOrganizations([]);
+    }
+  }, []);
+
+  // Load available organizations
+  const loadAvailableOrganizations = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/organizations');
+      setAvailableOrganizations(response.data?.data || []);
+    } catch (error) {
+      console.error("Error loading organizations:", error);
+      setAvailableOrganizations([]);
+    }
+  }, []);
+
+  // Assign employee to organization
+  const handleAssignToOrganization = async () => {
+    if (!selectedEmployee || !selectedOrgToAssign) return;
+
+    try {
+      await apiClient.post('/employee-organizations', {
+        employee_id: selectedEmployee.id,
+        organization_id: selectedOrgToAssign,
+        is_primary: employeeOrganizations.length === 0,
+      });
+
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: t('employee_assigned_to_company') || "Xodim kompaniyaga qo'shildi",
+      });
+
+      await loadEmployeeOrganizations(selectedEmployee.id);
+      setSelectedOrgToAssign('');
+    } catch (error) {
+      console.error("Error assigning employee:", error);
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || t('failed_to_assign_employee') || "Xodimni qo'shishda xatolik",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Remove employee from organization
+  const handleRemoveFromOrganization = async (assignmentId) => {
+    try {
+      await apiClient.delete(`/employee-organizations/${assignmentId}`);
+
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: t('employee_removed_from_company') || "Xodim kompaniyadan olib tashlandi",
+      });
+
+      if (selectedEmployee) {
+        await loadEmployeeOrganizations(selectedEmployee.id);
+      }
+    } catch (error) {
+      console.error("Error removing employee:", error);
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || t('failed_to_remove_employee') || "Xodimni olib tashlashda xatolik",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Set primary organization
+  const handleSetPrimaryOrganization = async (assignmentId) => {
+    try {
+      await apiClient.put(`/employee-organizations/${assignmentId}`, {
+        is_primary: true,
+      });
+
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: t('primary_company_set') || "Asosiy kompaniya o'rnatildi",
+      });
+
+      if (selectedEmployee) {
+        await loadEmployeeOrganizations(selectedEmployee.id);
+      }
+    } catch (error) {
+      console.error("Error setting primary:", error);
+      toast({
+        title: t('error') || 'Xato',
+        description: t('failed_to_set_primary') || "Asosiy kompaniyani o'rnatishda xatolik",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Open company assignment modal
+  const handleManageCompanies = (employee) => {
+    setSelectedEmployee(employee);
+    loadEmployeeOrganizations(employee.id);
+    loadAvailableOrganizations();
+    setShowCompanyAssignModal(true);
+  };
+
+  // Filter employees based on search
+  useEffect(() => {
+    if (employeeSearchQuery) {
+      const filtered = employees.filter(e =>
+        e.full_name.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+        e.email.toLowerCase().includes(employeeSearchQuery.toLowerCase())
+      );
+      setFilteredEmployees(filtered);
+    } else {
+      setFilteredEmployees(employees);
+    }
+  }, [employeeSearchQuery, employees]);
+
+  // Load employees on mount
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
 
   return (
     <div className="space-y-4">
@@ -237,6 +397,170 @@ export default function HRSettings() {
           </SettingsField>
         </SettingsRow>
       </SettingsSection>
+
+      {/* Employee Company Assignments */}
+      <SettingsSection
+        title={t('employee_company_assignments') || 'Xodim kompaniya tayinlashlari'}
+        description={t('employee_company_assignments_desc') || "Xodimlarni kompaniyalarga tayinlash va boshqarish"}
+        icon={Building2}
+      >
+        <div className="space-y-4">
+          {/* Search employees */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder={t('search_employees') || "Xodimlarni qidirish..."}
+              value={employeeSearchQuery}
+              onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {/* Employee list with company management */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {filteredEmployees.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-4">
+                {t('no_employees_found') || 'Xodimlar topilmadi'}
+              </p>
+            ) : (
+              filteredEmployees.map((employee) => (
+                <div
+                  key={employee.id}
+                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center text-white font-semibold">
+                      {employee.full_name?.charAt(0)?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-800">{employee.full_name}</p>
+                      <p className="text-sm text-slate-500">{employee.job_title || employee.email}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleManageCompanies(employee)}
+                    className="gap-2"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    {t('manage_companies') || 'Kompaniyalar'}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Company Assignment Modal */}
+      <Dialog open={showCompanyAssignModal} onOpenChange={setShowCompanyAssignModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              {t('manage_companies') || 'Kompaniyalarni boshqarish'}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedEmployee && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center text-white font-semibold">
+                  {selectedEmployee.full_name?.charAt(0)?.toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-medium">{selectedEmployee.full_name}</p>
+                  <p className="text-sm text-slate-500">{selectedEmployee.job_title}</p>
+                </div>
+              </div>
+
+              {/* Current assignments */}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">
+                  {t('assigned_companies') || 'Tayinlangan kompaniyalar'}
+                </p>
+                {employeeOrganizations.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic p-3 bg-slate-50 rounded-lg">
+                    {t('no_companies_assigned') || 'Hech qanday kompaniya tayinlanmagan'}
+                  </p>
+                ) : (
+                  employeeOrganizations.map((eo) => (
+                    <div key={eo.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-slate-500" />
+                        <span className="font-medium">{eo.organization_name}</span>
+                        <span className="text-xs text-slate-400">({eo.organization_code})</span>
+                        {eo.is_primary && (
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                            {t('primary') || 'Asosiy'}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!eo.is_primary && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSetPrimaryOrganization(eo.id)}
+                            title={t('set_as_primary') || 'Asosiy qilib belgilash'}
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleRemoveFromOrganization(eo.id)}
+                        >
+                          <XIcon className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Add to organization */}
+              <div className="pt-4 border-t space-y-3">
+                <p className="text-sm font-medium text-slate-700">
+                  {t('add_to_company') || "Kompaniyaga qo'shish"}
+                </p>
+                <div className="flex gap-2">
+                  <Select value={selectedOrgToAssign} onValueChange={setSelectedOrgToAssign}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder={t('select_company') || 'Kompaniyani tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableOrganizations
+                        .filter(org => !employeeOrganizations.some(eo => eo.organization_id === org.id))
+                        .map((org) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            {org.name} ({org.code})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={handleAssignToOrganization}
+                    disabled={!selectedOrgToAssign}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    {t('add') || "Qo'shish"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button variant="outline" onClick={() => setShowCompanyAssignModal(false)}>
+                  {t('close') || 'Yopish'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

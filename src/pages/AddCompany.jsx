@@ -25,6 +25,7 @@ export default function AddCompany() {
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     company_code: "",
     company_name: "",
@@ -41,17 +42,30 @@ export default function AddCompany() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent double submission
+    if (isSubmitting) {
+      console.log('Already submitting, skipping...');
+      return;
+    }
+
     setError(null);
+    setIsSubmitting(true);
 
     if (!canAddMore) {
       setError(`Kompaniya limiti (${maxCompanies}) ga yetildi. Tarifni yangilang.`);
+      setIsSubmitting(false);
       return;
     }
 
     try {
-      const result = addCompany(formData, maxCompanies);
-      if (!result.success) {
-        setError(result.message || 'Xatolik yuz berdi');
+      console.log('Calling addCompany...');
+      const result = await addCompany(formData, maxCompanies);
+      console.log('addCompany result:', result);
+      if (!result || !result.success) {
+        console.log('addCompany failed with:', result);
+        setError(result?.message || 'Xatolik yuz berdi');
+        setIsSubmitting(false);
         return;
       }
       setSuccess(true);
@@ -60,7 +74,8 @@ export default function AddCompany() {
       }, 1500);
     } catch (err) {
       console.error("Error saving company:", err);
-      setError('Kompaniyani saqlashda xatolik');
+      setError(err?.message || 'Kompaniyani saqlashda xatolik');
+      setIsSubmitting(false);
     }
   };
 

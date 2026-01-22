@@ -165,7 +165,7 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, tenantId = null) => {
     setIsLoading(true);
     setError(null);
 
@@ -176,13 +176,17 @@ export function AuthProvider({ children }) {
 
       if (isAvailable) {
         // Use real backend authentication
-        const data = await authService.login(email, password);
+        const data = await authService.login(email, password, tenantId);
         // Add derived role to user data
         const userData = { ...data.user, role: deriveRole(data.user) };
         setUser(userData);
         setIsAuthenticated(true);
         // Also save to genixerp_user for consistency
         localStorage.setItem('genixerp_user', JSON.stringify(userData));
+        // Save tenant info
+        if (data.tenant) {
+          localStorage.setItem('tenant', JSON.stringify(data.tenant));
+        }
         return { success: true, data };
       } else {
         // Fallback to demo users
@@ -208,6 +212,15 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid email or password');
       }
     } catch (err) {
+      // Check if this is a tenant selection required error
+      if (err.response?.status === 409 && err.response?.data?.data?.tenants) {
+        return {
+          success: false,
+          tenantSelectionRequired: true,
+          tenants: err.response.data.data.tenants,
+          error: 'Please select a company to continue'
+        };
+      }
       const message = err.response?.data?.error?.message || err.message || 'Login failed';
       setError(message);
       setIsAuthenticated(false);
@@ -264,6 +277,8 @@ export function AuthProvider({ children }) {
       setUser(null);
       setIsAuthenticated(false);
       localStorage.removeItem('genixerp_user');
+      localStorage.removeItem('tenant');
+      localStorage.removeItem('tenantId');
       setIsLoading(false);
     }
   }, [backendAvailable]);

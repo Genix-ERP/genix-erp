@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
+import apiClient from "@/api/client";
+import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +94,7 @@ export default function HR() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const { addAuditLog } = useAuditTrail('employees');
+  const { toast } = useToast();
 
   // Export columns configuration
   const exportColumns = [
@@ -162,6 +165,7 @@ export default function HR() {
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
     email: '',
+    password: '',
     phone: '',
     job_title: '',
     department: 'engineering',
@@ -312,13 +316,31 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
-    if (!newEmployee.full_name || !newEmployee.job_title) {
-      console.log("Validation failed: full_name or job_title is missing");
+    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.password) {
+      toast({
+        title: t('error') || 'Xato',
+        description: t('required_fields_error') || "Ism, lavozim, email va parol to'ldirilishi shart",
+        variant: 'destructive',
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // First create user account (validates email uniqueness per tenant)
+      const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
+      const firstName = nameParts[0] || 'User';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
+
+      await apiClient.post('/users', {
+        email: newEmployee.email,
+        password: newEmployee.password,
+        first_name: firstName,
+        last_name: lastName,
+        phone: newEmployee.phone || '',
+      });
+
+      // User created successfully, now create employee record
       const employeeData = {
         full_name: newEmployee.full_name,
         email: newEmployee.email || '',
@@ -333,14 +355,18 @@ Only return the JSON, no other text.`;
         permission: newEmployee.permission
       };
 
-      console.log("Creating employee with data:", employeeData);
       await hrService.createEmployee(employeeData);
-      console.log("Employee created successfully");
+
+      toast({
+        title: t('success') || 'Muvaffaqiyatli',
+        description: t('employee_created_success') || 'Xodim va foydalanuvchi hisobi yaratildi.',
+      });
 
       setShowAddModal(false);
       setNewEmployee({
         full_name: '',
         email: '',
+        password: '',
         phone: '',
         job_title: '',
         department: 'engineering',
@@ -354,7 +380,19 @@ Only return the JSON, no other text.`;
       await loadEmployees();
     } catch (error) {
       console.error("Error adding employee:", error);
-      alert("Failed to add employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+      if (error.response?.status === 409) {
+        toast({
+          title: t('error') || 'Xato',
+          description: t('email_already_exists') || 'Bu email bilan foydalanuvchi allaqachon mavjud.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: t('error') || 'Xato',
+          description: error.response?.data?.error?.message || error.message || t('employee_add_error') || "Xodim qo'shishda xatolik yuz berdi",
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -576,13 +614,35 @@ Only return the JSON, no other text.`;
 
     setIsSubmitting(true);
     try {
+      // Delete the employee
       await hrService.deleteEmployee(selectedEmployee.id);
+
+      // Also delete the associated user if they have an email
+      if (selectedEmployee.email) {
+        try {
+          // Find user by email and delete
+          const usersResponse = await apiClient.get('/users', {
+            params: { search: selectedEmployee.email }
+          });
+          const user = usersResponse.data?.data?.find(u => u.email === selectedEmployee.email);
+          if (user) {
+            await apiClient.delete(`/users/${user.id}`);
+          }
+        } catch (userError) {
+          console.log('Could not delete associated user:', userError.message);
+        }
+      }
+
       setShowDeleteDialog(false);
       setSelectedEmployee(null);
       await loadEmployees();
     } catch (error) {
       console.error("Error deleting employee:", error);
-      alert("Failed to delete employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || error.message || t('delete_employee_error') || "Xodimni o'chirishda xatolik",
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -797,7 +857,7 @@ Only return the JSON, no other text.`;
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>{t('email')}</Label>
+                  <Label>{t('email')} *</Label>
                   <Input
                     type="email"
                     value={newEmployee.email}
@@ -806,13 +866,23 @@ Only return the JSON, no other text.`;
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('phone')}</Label>
+                  <Label>{t('password')} *</Label>
                   <Input
-                    value={newEmployee.phone}
-                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    placeholder={t('enter_phone')}
+                    type="password"
+                    value={newEmployee.password}
+                    onChange={e => setNewEmployee({...newEmployee, password: e.target.value})}
+                    placeholder={t('enter_password')}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('phone')}</Label>
+                <Input
+                  value={newEmployee.phone}
+                  onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
+                  placeholder={t('enter_phone')}
+                />
               </div>
 
               <div className="space-y-2">
@@ -900,7 +970,7 @@ Only return the JSON, no other text.`;
                 </Button>
                 <Button
                   onClick={handleAddEmployee}
-                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title}
+                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.password}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
                   {isSubmitting ? t('saving') : t('add_employee')}

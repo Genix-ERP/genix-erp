@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import apiClient from '@/api/client';
 
-const COMPANIES_KEY = 'genix_companies';
 const ACTIVE_COMPANY_KEY = 'genix_active_company';
 
 const CompanyContext = createContext();
@@ -11,7 +11,7 @@ const getCurrentUserId = () => {
     const userData = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
     if (userData) {
       const user = JSON.parse(userData);
-      return user.id || user.email; // Use ID or email as fallback
+      return user.id || user.email;
     }
   } catch (e) {
     console.error('Error getting user ID:', e);
@@ -31,42 +31,80 @@ export function CompanyProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
 
-  // Load companies from storage (user-scoped)
-  const loadCompanies = useCallback(() => {
+  // Use ref to always have access to latest companies without causing stale closures
+  const companiesRef = useRef(companies);
+  useEffect(() => {
+    companiesRef.current = companies;
+  }, [companies]);
+
+  // Load companies from backend API
+  const loadCompanies = useCallback(async () => {
     try {
       const userId = getCurrentUserId();
       setCurrentUserId(userId);
+      setIsLoading(true);
 
-      const companiesKey = getUserStorageKey(COMPANIES_KEY);
-      const activeKey = getUserStorageKey(ACTIVE_COMPANY_KEY);
+      // Try to load from backend API
+      const response = await apiClient.get('/organizations');
+      // Backend returns { success: true, data: [...] }
+      let companiesList = Array.isArray(response.data?.data) ? response.data.data : [];
 
-      const stored = localStorage.getItem(companiesKey);
-      let companiesList = [];
+      // Map backend format to frontend format
+      // Note: Backend returns null for empty optional fields, so we use fallback values
+      companiesList = companiesList.map(org => ({
+        id: org.id,
+        company_code: org.code || '',
+        company_name: org.name || '',
+        country: org.country ?? 'Uzbekistan',
+        currency: org.currency ?? 'UZS',
+        accounting_standard: org.accounting_standard ?? 'LOCAL_GAAP',
+        logo_url: org.logo_url || null,
+        is_active: org.is_active !== false,
+        owner_id: userId,
+        created_date: org.created_at,
+        updated_date: org.updated_at,
+        // Keep original backend data
+        _backend: org
+      }));
 
-      if (stored) {
-        companiesList = JSON.parse(stored);
-      } else {
-        // Create default company for this user
-        const defaultCompany = {
-          id: `comp_${Date.now()}`,
-          company_code: 'MAIN',
-          company_name: 'Asosiy Kompaniya',
-          country: 'Uzbekistan',
-          currency: 'UZS',
-          accounting_standard: 'LOCAL_GAAP',
-          logo_url: null,
-          is_active: true,
-          owner_id: userId, // Track owner
-          created_date: new Date().toISOString()
-        };
-        companiesList = [defaultCompany];
-        localStorage.setItem(companiesKey, JSON.stringify(companiesList));
+      // If no companies exist, create a default one
+      if (companiesList.length === 0) {
+        try {
+          const createResponse = await apiClient.post('/organizations', {
+            code: 'MAIN',
+            name: 'Asosiy Kompaniya',
+            type: 'company',
+            country: 'Uzbekistan',
+            currency: 'UZS',
+            accounting_standard: 'LOCAL_GAAP'
+          });
+
+          // Backend returns { success: true, data: {...} }
+          const newOrg = createResponse.data?.data || createResponse.data;
+          companiesList = [{
+            id: newOrg.id,
+            company_code: newOrg.code || 'MAIN',
+            company_name: newOrg.name || 'Asosiy Kompaniya',
+            country: newOrg.country ?? 'Uzbekistan',
+            currency: newOrg.currency ?? 'UZS',
+            accounting_standard: newOrg.accounting_standard ?? 'LOCAL_GAAP',
+            logo_url: newOrg.logo_url || null,
+            is_active: newOrg.is_active !== false,
+            owner_id: userId,
+            created_date: newOrg.created_at,
+            _backend: newOrg
+          }];
+        } catch (createError) {
+          console.error('Error creating default company:', createError);
+        }
       }
 
       setCompanies(companiesList);
 
-      // Load active company (user-scoped)
+      // Load active company from localStorage (user preference)
+      const activeKey = getUserStorageKey(ACTIVE_COMPANY_KEY);
       const activeId = localStorage.getItem(activeKey);
+
       if (activeId && companiesList.find(c => c.id === activeId)) {
         setActiveCompanyState(companiesList.find(c => c.id === activeId));
       } else if (companiesList.length > 0) {
@@ -75,7 +113,10 @@ export function CompanyProvider({ children }) {
         localStorage.setItem(activeKey, companiesList[0].id);
       }
     } catch (error) {
-      console.error('Error loading companies:', error);
+      console.error('Error loading companies from API:', error);
+      // Fallback: If API fails and user is not authenticated, set empty state
+      setCompanies([]);
+      setActiveCompanyState(null);
     } finally {
       setIsLoading(false);
     }
@@ -90,15 +131,11 @@ export function CompanyProvider({ children }) {
     const checkUserChange = () => {
       const newUserId = getCurrentUserId();
       if (newUserId !== currentUserId && currentUserId !== null) {
-        // User changed, reload companies
         loadCompanies();
       }
     };
 
-    // Listen for storage changes (in case of login/logout in another tab)
     window.addEventListener('storage', checkUserChange);
-
-    // Also check periodically for user changes in same tab
     const interval = setInterval(checkUserChange, 1000);
 
     return () => {
@@ -121,9 +158,15 @@ export function CompanyProvider({ children }) {
   }, [companies]);
 
   // Add a new company
-  const addCompany = useCallback((companyData, maxCompanies = -1) => {
+  const addCompany = async (companyData, maxCompanies = -1) => {
+    // Use ref to get latest companies to avoid stale closure issues
+    const currentCompanies = companiesRef.current;
+    console.log('addCompany called with:', companyData, 'maxCompanies:', maxCompanies);
+    console.log('Current companies count:', currentCompanies.length);
+
     // Check limit
-    if (maxCompanies !== -1 && companies.length >= maxCompanies) {
+    if (maxCompanies !== -1 && currentCompanies.length >= maxCompanies) {
+      console.log('Limit reached - returning error');
       return {
         success: false,
         error: 'limit_reached',
@@ -131,8 +174,9 @@ export function CompanyProvider({ children }) {
       };
     }
 
-    // Check for duplicate code (within this user's companies)
-    if (companies.some(c => c.company_code === companyData.company_code)) {
+    // Check for duplicate code locally first
+    if (currentCompanies.some(c => c.company_code === companyData.company_code)) {
+      console.log('Duplicate code found locally');
       return {
         success: false,
         error: 'duplicate_code',
@@ -140,45 +184,122 @@ export function CompanyProvider({ children }) {
       };
     }
 
-    const userId = getCurrentUserId();
-    const newCompany = {
-      id: `comp_${Date.now()}`,
-      ...companyData,
-      owner_id: userId, // Track owner
-      is_active: true,
-      created_date: new Date().toISOString()
-    };
+    try {
+      // Create on backend
+      const response = await apiClient.post('/organizations', {
+        code: companyData.company_code,
+        name: companyData.company_name,
+        type: 'company',
+        country: companyData.country,
+        currency: companyData.currency,
+        accounting_standard: companyData.accounting_standard,
+        logo_url: companyData.logo_url
+      });
 
-    const updated = [...companies, newCompany];
-    localStorage.setItem(getUserStorageKey(COMPANIES_KEY), JSON.stringify(updated));
-    setCompanies(updated);
+      // Backend returns { success: true, data: {...} }
+      const newOrg = response.data?.data || response.data;
+      const userId = getCurrentUserId();
 
-    // If this is the first company, set it as active
-    if (updated.length === 1) {
-      setActiveCompany(newCompany.id);
+      const newCompany = {
+        id: newOrg.id,
+        company_code: newOrg.code || '',
+        company_name: newOrg.name || '',
+        country: newOrg.country ?? companyData.country ?? 'Uzbekistan',
+        currency: newOrg.currency ?? companyData.currency ?? 'UZS',
+        accounting_standard: newOrg.accounting_standard ?? companyData.accounting_standard ?? 'LOCAL_GAAP',
+        logo_url: newOrg.logo_url || null,
+        is_active: newOrg.is_active !== false,
+        owner_id: userId,
+        created_date: newOrg.created_at,
+        _backend: newOrg
+      };
+
+      // Use functional update to avoid stale state
+      setCompanies(prev => {
+        const updated = [...prev, newCompany];
+        // If this is the first company, set it as active
+        if (updated.length === 1) {
+          setActiveCompanyState(newCompany);
+          localStorage.setItem(getUserStorageKey(ACTIVE_COMPANY_KEY), newCompany.id);
+        }
+        return updated;
+      });
+
+      console.log('Company created successfully, returning success');
+      const result = { success: true, company: newCompany };
+      console.log('Returning result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error creating company (catch block):', error);
+      const errorData = error.response?.data?.error;
+      const errorMessage = typeof errorData === 'string'
+        ? errorData
+        : errorData?.message || error.message;
+
+      if (error.response?.status === 409) {
+        return {
+          success: false,
+          error: 'duplicate_code',
+          message: 'Bu kod bilan kompaniya mavjud'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'api_error',
+        message: errorMessage || 'Kompaniya yaratishda xatolik'
+      };
     }
-
-    return { success: true, company: newCompany };
-  }, [companies, setActiveCompany]);
+  };
 
   // Update a company
-  const updateCompany = useCallback((companyId, updates) => {
-    const updated = companies.map(c =>
-      c.id === companyId ? { ...c, ...updates, updated_date: new Date().toISOString() } : c
-    );
-    localStorage.setItem(getUserStorageKey(COMPANIES_KEY), JSON.stringify(updated));
-    setCompanies(updated);
+  const updateCompany = useCallback(async (companyId, updates) => {
+    try {
+      // Map frontend field names to backend field names
+      const backendUpdates = {};
+      if (updates.company_code !== undefined) backendUpdates.code = updates.company_code;
+      if (updates.company_name !== undefined) backendUpdates.name = updates.company_name;
+      if (updates.country !== undefined) backendUpdates.country = updates.country;
+      if (updates.currency !== undefined) backendUpdates.currency = updates.currency;
+      if (updates.accounting_standard !== undefined) backendUpdates.accounting_standard = updates.accounting_standard;
+      if (updates.logo_url !== undefined) backendUpdates.logo_url = updates.logo_url;
+      if (updates.is_active !== undefined) backendUpdates.is_active = updates.is_active;
 
-    // Update active company if it was updated
-    if (activeCompany?.id === companyId) {
-      setActiveCompanyState(updated.find(c => c.id === companyId));
+      await apiClient.put(`/organizations/${companyId}`, backendUpdates);
+
+      // Update local state
+      const updated = companies.map(c =>
+        c.id === companyId ? { ...c, ...updates, updated_date: new Date().toISOString() } : c
+      );
+      setCompanies(updated);
+
+      // Update active company if it was updated
+      if (activeCompany?.id === companyId) {
+        setActiveCompanyState(updated.find(c => c.id === companyId));
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating company:', error);
+
+      if (error.response?.status === 409) {
+        return {
+          success: false,
+          error: 'duplicate_code',
+          message: 'Bu kod bilan kompaniya mavjud'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'api_error',
+        message: error.response?.data?.error || 'Kompaniyani yangilashda xatolik'
+      };
     }
-
-    return { success: true };
   }, [companies, activeCompany]);
 
   // Delete a company
-  const deleteCompany = useCallback((companyId) => {
+  const deleteCompany = useCallback(async (companyId) => {
     // Prevent deleting last company
     if (companies.length <= 1) {
       return {
@@ -188,16 +309,35 @@ export function CompanyProvider({ children }) {
       };
     }
 
-    const updated = companies.filter(c => c.id !== companyId);
-    localStorage.setItem(getUserStorageKey(COMPANIES_KEY), JSON.stringify(updated));
-    setCompanies(updated);
+    try {
+      await apiClient.delete(`/organizations/${companyId}`);
 
-    // If deleted company was active, switch to first available
-    if (activeCompany?.id === companyId && updated.length > 0) {
-      setActiveCompany(updated[0].id);
+      const updated = companies.filter(c => c.id !== companyId);
+      setCompanies(updated);
+
+      // If deleted company was active, switch to first available
+      if (activeCompany?.id === companyId && updated.length > 0) {
+        setActiveCompany(updated[0].id);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting company:', error);
+
+      if (error.response?.status === 400) {
+        return {
+          success: false,
+          error: 'last_company',
+          message: 'Oxirgi kompaniyani o\'chirish mumkin emas'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'api_error',
+        message: error.response?.data?.error || 'Kompaniyani o\'chirishda xatolik'
+      };
     }
-
-    return { success: true };
   }, [companies, activeCompany, setActiveCompany]);
 
   // Get company by ID
@@ -211,7 +351,7 @@ export function CompanyProvider({ children }) {
   }, [companies]);
 
   // Toggle company active status
-  const toggleCompanyStatus = useCallback((companyId) => {
+  const toggleCompanyStatus = useCallback(async (companyId) => {
     const company = companies.find(c => c.id === companyId);
     if (!company) return { success: false, error: 'company_not_found' };
 
