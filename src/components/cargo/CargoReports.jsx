@@ -97,11 +97,11 @@ export default function CargoReports() {
 
   // Status configuration for display
   const statusConfig = {
-    [SHIPMENT_STATUS.ORDERED]: { label: 'Buyurtma berildi', color: 'bg-blue-500' },
-    [SHIPMENT_STATUS.IN_TRANSIT]: { label: "Yo'lda", color: 'bg-orange-500' },
-    [SHIPMENT_STATUS.IN_CUSTOMS]: { label: 'Bojxonada', color: 'bg-yellow-500' },
-    [SHIPMENT_STATUS.RECEIVED]: { label: 'Qabul qilindi', color: 'bg-green-500' },
-    [SHIPMENT_STATUS.DISTRIBUTED]: { label: 'Taqsimlandi', color: 'bg-purple-500' }
+    [SHIPMENT_STATUS.ORDERED]: { label: t('ordered'), color: 'bg-blue-500' },
+    [SHIPMENT_STATUS.IN_TRANSIT]: { label: t('in_transit'), color: 'bg-orange-500' },
+    [SHIPMENT_STATUS.IN_CUSTOMS]: { label: t('in_customs'), color: 'bg-yellow-500' },
+    [SHIPMENT_STATUS.RECEIVED]: { label: t('received'), color: 'bg-green-500' },
+    [SHIPMENT_STATUS.DISTRIBUTED]: { label: t('distributed'), color: 'bg-purple-500' }
   };
 
   return (
@@ -116,9 +116,9 @@ export default function CargoReports() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="overview">Umumiy ko'rinish</SelectItem>
-                  <SelectItem value="shipments">Yuklar ro'yxati</SelectItem>
-                  <SelectItem value="costs">Xarajatlar tahlili</SelectItem>
+                  <SelectItem value="overview">{t('overview')}</SelectItem>
+                  <SelectItem value="shipments">{t('shipments_list')}</SelectItem>
+                  <SelectItem value="costs">{t('costs_analysis')}</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -128,11 +128,11 @@ export default function CargoReports() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Barcha holatlar</SelectItem>
-                    <SelectItem value={SHIPMENT_STATUS.ORDERED}>Buyurtma berildi</SelectItem>
-                    <SelectItem value={SHIPMENT_STATUS.IN_TRANSIT}>Yo'lda</SelectItem>
-                    <SelectItem value={SHIPMENT_STATUS.IN_CUSTOMS}>Bojxonada</SelectItem>
-                    <SelectItem value={SHIPMENT_STATUS.RECEIVED}>Qabul qilindi</SelectItem>
+                    <SelectItem value="all">{t('all_statuses')}</SelectItem>
+                    <SelectItem value={SHIPMENT_STATUS.ORDERED}>{t('ordered')}</SelectItem>
+                    <SelectItem value={SHIPMENT_STATUS.IN_TRANSIT}>{t('in_transit')}</SelectItem>
+                    <SelectItem value={SHIPMENT_STATUS.IN_CUSTOMS}>{t('in_customs')}</SelectItem>
+                    <SelectItem value={SHIPMENT_STATUS.RECEIVED}>{t('received')}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -140,7 +140,7 @@ export default function CargoReports() {
 
             <Button variant="outline" size="sm">
               <Download className="w-4 h-4 mr-2" />
-              Eksport qilish
+              {t('export')}
             </Button>
           </div>
         </CardContent>
@@ -153,20 +153,20 @@ export default function CargoReports() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">Jami yuklar</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600">{t('total_shipments')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-slate-900">{stats.totalShipments}</div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
                   <Package className="w-3 h-3" />
-                  Barcha yuklar
+                  {t('all_shipments')}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">Tovarlar qiymati</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600">{t('goods_value')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-slate-900">
@@ -174,14 +174,14 @@ export default function CargoReports() {
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-green-600">
                   <TrendingUp className="w-3 h-3" />
-                  Jami tovarlar
+                  {t('total_goods')}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">Jami xarajatlar</CardTitle>
+                <CardTitle className="text-sm font-medium text-slate-600">{t('total_costs')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-slate-900">
@@ -189,7 +189,7 @@ export default function CargoReports() {
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-red-600">
                   <DollarSign className="w-3 h-3" />
-                  Barcha xarajatlar
+                  {t('all_costs')}
                 </div>
               </CardContent>
             </Card>
@@ -200,14 +200,14 @@ export default function CargoReports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Yuklar holati bo'yicha
+                {t('shipments_by_status')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600">Buyurtma</span>
+                    <span className="text-sm text-slate-600">{t('ordered')}</span>
                     <Badge className="bg-blue-500">{stats.ordered}</Badge>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
@@ -220,7 +220,7 @@ export default function CargoReports() {
 
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600">Yo'lda</span>
+                    <span className="text-sm text-slate-600">{t('in_transit')}</span>
                     <Badge className="bg-orange-500">{stats.inTransit}</Badge>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
@@ -233,7 +233,7 @@ export default function CargoReports() {
 
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600">Bojxonada</span>
+                    <span className="text-sm text-slate-600">{t('in_customs')}</span>
                     <Badge className="bg-yellow-500">{stats.inCustoms}</Badge>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
@@ -246,7 +246,7 @@ export default function CargoReports() {
 
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600">Qabul qilindi</span>
+                    <span className="text-sm text-slate-600">{t('received')}</span>
                     <Badge className="bg-green-500">{stats.received}</Badge>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
@@ -265,13 +265,13 @@ export default function CargoReports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5" />
-                Xarajatlar taqsimoti
+                {t('costs_breakdown')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-slate-600 mb-1">Transport</div>
+                  <div className="text-sm text-slate-600 mb-1">{t('transport')}</div>
                   <div className="text-2xl font-bold text-slate-900">
                     ${stats.transportCosts.toLocaleString()}
                   </div>
@@ -281,7 +281,7 @@ export default function CargoReports() {
                 </div>
 
                 <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-slate-600 mb-1">Bojxona</div>
+                  <div className="text-sm text-slate-600 mb-1">{t('customs')}</div>
                   <div className="text-2xl font-bold text-slate-900">
                     ${stats.customsCosts.toLocaleString()}
                   </div>
@@ -291,7 +291,7 @@ export default function CargoReports() {
                 </div>
 
                 <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-slate-600 mb-1">Boshqa</div>
+                  <div className="text-sm text-slate-600 mb-1">{t('other')}</div>
                   <div className="text-2xl font-bold text-slate-900">
                     ${stats.otherCosts.toLocaleString()}
                   </div>
@@ -311,24 +311,24 @@ export default function CargoReports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="w-5 h-5" />
-              Yuklar ro'yxati ({filteredShipments.length})
+              {t('shipments_list')} ({filteredShipments.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {filteredShipments.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
-                Yuklar topilmadi
+                {t('no_shipments')}
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tracking</TableHead>
-                    <TableHead>Yetkazib beruvchi</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead className="text-right">Tovarlar</TableHead>
-                    <TableHead className="text-right">Xarajatlar</TableHead>
-                    <TableHead className="text-right">Jami</TableHead>
+                    <TableHead>{t('tracking')}</TableHead>
+                    <TableHead>{t('supplier')}</TableHead>
+                    <TableHead>{t('status')}</TableHead>
+                    <TableHead className="text-right">{t('goods')}</TableHead>
+                    <TableHead className="text-right">{t('costs')}</TableHead>
+                    <TableHead className="text-right">{t('total')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -370,23 +370,23 @@ export default function CargoReports() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5" />
-              Xarajatlar tahlili
+              {t('costs_analysis')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {shipments.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
-                Ma'lumot yo'q
+                {t('no_data')}
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tracking</TableHead>
-                    <TableHead className="text-right">Transport</TableHead>
-                    <TableHead className="text-right">Bojxona</TableHead>
-                    <TableHead className="text-right">Boshqa</TableHead>
-                    <TableHead className="text-right">Jami xarajat</TableHead>
+                    <TableHead>{t('tracking')}</TableHead>
+                    <TableHead className="text-right">{t('transport')}</TableHead>
+                    <TableHead className="text-right">{t('customs')}</TableHead>
+                    <TableHead className="text-right">{t('other')}</TableHead>
+                    <TableHead className="text-right">{t('total_cost')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

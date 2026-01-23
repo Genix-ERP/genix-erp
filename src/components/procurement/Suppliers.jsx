@@ -6,6 +6,7 @@ import { LabelWithHelp } from "@/components/ui/field-help";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "@/components/utils/translations";
+import { useLanguage } from "@/components/contexts/LanguageContext";
 import {
   Select,
   SelectContent,
@@ -60,7 +61,8 @@ import {
   useAuditTrail,
 } from "@/components/shared";
 
-export default function Suppliers({ language = 'en' }) {
+export default function Suppliers() {
+  const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
     suppliers,
@@ -184,7 +186,7 @@ export default function Suppliers({ language = 'en' }) {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Haqiqatan ham bu ta'minotchini o'chirmoqchimisiz?")) {
+    if (window.confirm(t('confirm_delete_supplier') || "Haqiqatan ham bu ta'minotchini o'chirmoqchimisiz?")) {
       await deleteSupplier(id);
     }
   };
@@ -227,9 +229,9 @@ export default function Suppliers({ language = 'en' }) {
       blocked: "bg-red-100 text-red-800",
     };
     const labels = {
-      active: "Faol",
-      inactive: "Nofaol",
-      blocked: "Bloklangan",
+      active: t('active') || "Faol",
+      inactive: t('inactive') || "Nofaol",
+      blocked: t('blocked') || "Bloklangan",
     };
     return (
       <Badge className={styles[status] || styles.inactive}>
@@ -276,7 +278,7 @@ export default function Suppliers({ language = 'en' }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Jami ta'minotchilar</p>
+                <p className="text-xs text-slate-500">{t('total_suppliers') || "Jami ta'minotchilar"}</p>
                 <p className="text-2xl font-bold text-slate-900">{stats.totalSuppliers}</p>
               </div>
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -290,7 +292,7 @@ export default function Suppliers({ language = 'en' }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Faol ta'minotchilar</p>
+                <p className="text-xs text-slate-500">{t('active_suppliers') || "Faol ta'minotchilar"}</p>
                 <p className="text-2xl font-bold text-green-600">{stats.activeSuppliers}</p>
               </div>
               <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -304,7 +306,7 @@ export default function Suppliers({ language = 'en' }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">O'rtacha reyting</p>
+                <p className="text-xs text-slate-500">{t('average_rating') || "O'rtacha reyting"}</p>
                 <p className="text-2xl font-bold text-yellow-600">{stats.avgRating}</p>
               </div>
               <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -318,7 +320,7 @@ export default function Suppliers({ language = 'en' }) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Jami xaridlar</p>
+                <p className="text-xs text-slate-500">{t('total_purchases') || "Jami xaridlar"}</p>
                 <p className="text-lg font-bold text-purple-600">
                   {stats.totalSpent > 1000000
                     ? `${(stats.totalSpent / 1000000).toFixed(1)}M`
@@ -337,12 +339,12 @@ export default function Suppliers({ language = 'en' }) {
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle className="text-lg">Ta'minotchilar ro'yxati</CardTitle>
+            <CardTitle className="text-lg">{t('suppliers_list') || "Ta'minotchilar ro'yxati"}</CardTitle>
             <div className="flex gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Qidirish..."
+                  placeholder={t('search') || "Qidirish..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -353,10 +355,10 @@ export default function Suppliers({ language = 'en' }) {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Hammasi</SelectItem>
-                  <SelectItem value="active">Faol</SelectItem>
-                  <SelectItem value="inactive">Nofaol</SelectItem>
-                  <SelectItem value="blocked">Bloklangan</SelectItem>
+                  <SelectItem value="all">{t('all') || "Hammasi"}</SelectItem>
+                  <SelectItem value="active">{t('active') || "Faol"}</SelectItem>
+                  <SelectItem value="inactive">{t('inactive') || "Nofaol"}</SelectItem>
+                  <SelectItem value="blocked">{t('blocked') || "Bloklangan"}</SelectItem>
                 </SelectContent>
               </Select>
               <ImportExportButtons
@@ -365,7 +367,7 @@ export default function Suppliers({ language = 'en' }) {
               />
               <Button onClick={() => setShowForm(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Qo'shish
+                {t('add') || "Qo'shish"}
               </Button>
             </div>
           </div>
@@ -378,20 +380,20 @@ export default function Suppliers({ language = 'en' }) {
           ) : filteredSuppliers.length === 0 ? (
             <div className="text-center py-12">
               <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Ta'minotchilar topilmadi</p>
+              <p className="text-slate-500">{t('no_suppliers_found') || "Ta'minotchilar topilmadi"}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Kod</TableHead>
-                    <TableHead>Ta'minotchi</TableHead>
-                    <TableHead>Aloqa</TableHead>
-                    <TableHead>Reyting</TableHead>
-                    <TableHead className="text-right">Buyurtmalar</TableHead>
-                    <TableHead className="text-right">Jami xarid</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t('code') || "Kod"}</TableHead>
+                    <TableHead>{t('supplier') || "Ta'minotchi"}</TableHead>
+                    <TableHead>{t('contact') || "Aloqa"}</TableHead>
+                    <TableHead>{t('rating') || "Reyting"}</TableHead>
+                    <TableHead className="text-right">{t('orders') || "Buyurtmalar"}</TableHead>
+                    <TableHead className="text-right">{t('total_purchase') || "Jami xarid"}</TableHead>
+                    <TableHead>{t('status') || "Status"}</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -451,18 +453,18 @@ export default function Suppliers({ language = 'en' }) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleEdit(supplier)}>
                               <Edit2 className="w-4 h-4 mr-2" />
-                              Tahrirlash
+                              {t('edit') || "Tahrirlash"}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleRating(supplier)}>
                               <Star className="w-4 h-4 mr-2" />
-                              Baholash
+                              {t('rate') || "Baholash"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDelete(supplier.id)}
                               className="text-red-600"
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
-                              O'chirish
+                              {t('delete') || "O'chirish"}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -481,7 +483,7 @@ export default function Suppliers({ language = 'en' }) {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingSupplier ? "Ta'minotchini tahrirlash" : "Yangi ta'minotchi qo'shish"}
+              {editingSupplier ? (t('edit_supplier') || "Ta'minotchini tahrirlash") : (t('add_new_supplier') || "Yangi ta'minotchi qo'shish")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -598,10 +600,10 @@ export default function Suppliers({ language = 'en' }) {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel') || "Bekor qilish"}
               </Button>
               <Button onClick={handleSubmit} disabled={!formData.name}>
-                {editingSupplier ? "Saqlash" : "Qo'shish"}
+                {editingSupplier ? (t('save') || "Saqlash") : (t('add') || "Qo'shish")}
               </Button>
             </div>
           </div>
@@ -612,7 +614,7 @@ export default function Suppliers({ language = 'en' }) {
       <Dialog open={showRatingModal} onOpenChange={setShowRatingModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ta'minotchini baholash</DialogTitle>
+            <DialogTitle>{t('rate_supplier') || "Ta'minotchini baholash"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {ratingSupplier && (
@@ -640,7 +642,7 @@ export default function Suppliers({ language = 'en' }) {
                 <Textarea
                   value={ratingComment}
                   onChange={(e) => setRatingComment(e.target.value)}
-                  placeholder="Izoh (ixtiyoriy)"
+                  placeholder={t('comment_optional') || "Izoh (ixtiyoriy)"}
                   rows={3}
                 />
               </div>
@@ -648,10 +650,10 @@ export default function Suppliers({ language = 'en' }) {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowRatingModal(false)}>
-                Bekor qilish
+                {t('cancel') || "Bekor qilish"}
               </Button>
               <Button onClick={submitRating}>
-                Baholash
+                {t('rate') || "Baholash"}
               </Button>
             </div>
           </div>
@@ -664,7 +666,7 @@ export default function Suppliers({ language = 'en' }) {
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
         columns={importColumns}
-        entityName="Ta'minotchilar"
+        entityName={t('suppliers') || "Ta'minotchilar"}
       />
 
       {/* Export Modal */}
@@ -673,8 +675,8 @@ export default function Suppliers({ language = 'en' }) {
         onClose={() => setShowExportModal(false)}
         data={filteredSuppliers}
         columns={exportColumns}
-        entityName="Taminotchilar"
-        title="Ta'minotchilar ro'yxati"
+        entityName={t('suppliers') || "Taminotchilar"}
+        title={t('suppliers_list') || "Ta'minotchilar ro'yxati"}
       />
     </div>
   );

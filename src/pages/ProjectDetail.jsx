@@ -53,6 +53,7 @@ import GanttChart from '@/components/projects/GanttChart';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useModules } from '@/components/contexts/ModulesContext';
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ProjectDetail() {
   const { projectId } = useParams();
@@ -60,6 +61,7 @@ export default function ProjectDetail() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { projects, updateProject } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -418,10 +420,12 @@ export default function ProjectDetail() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{t('tasks') || 'Tasks'}</CardTitle>
-                  <Button onClick={() => { resetNewTask(); setEditingTask(null); setShowTaskDialog(true); }}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('new_task') || 'New Task'}
-                  </Button>
+                  {canCreate(MODULES.PROJECTS) && (
+                    <Button onClick={() => { resetNewTask(); setEditingTask(null); setShowTaskDialog(true); }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('new_task') || 'New Task'}
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -487,20 +491,24 @@ export default function ProjectDetail() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => { setEditingTask(task); setShowTaskDialog(true); }}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteTask(task.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {canUpdate(MODULES.PROJECTS) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => { setEditingTask(task); setShowTaskDialog(true); }}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canDelete(MODULES.PROJECTS) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteTask(task.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -518,10 +526,12 @@ export default function ProjectDetail() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{t('milestones') || 'Milestones'}</CardTitle>
-                  <Button onClick={() => { resetNewMilestone(); setEditingMilestone(null); setShowMilestoneDialog(true); }}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('new_milestone') || 'New Milestone'}
-                  </Button>
+                  {canCreate(MODULES.PROJECTS) && (
+                    <Button onClick={() => { resetNewMilestone(); setEditingMilestone(null); setShowMilestoneDialog(true); }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('new_milestone') || 'New Milestone'}
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -560,7 +570,7 @@ export default function ProjectDetail() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {milestone.status !== 'completed' && (
+                              {milestone.status !== 'completed' && canUpdate(MODULES.PROJECTS) && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -570,13 +580,15 @@ export default function ProjectDetail() {
                                   {t('complete') || 'Complete'}
                                 </Button>
                               )}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => { setEditingMilestone(milestone); setShowMilestoneDialog(true); }}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
+                              {canUpdate(MODULES.PROJECTS) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => { setEditingMilestone(milestone); setShowMilestoneDialog(true); }}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -594,10 +606,12 @@ export default function ProjectDetail() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{t('team_members') || 'Team Members'}</CardTitle>
-                  <Button onClick={() => { resetNewTeamMember(); setShowTeamDialog(true); }}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('add_member') || 'Add Member'}
-                  </Button>
+                  {canCreate(MODULES.PROJECTS) && (
+                    <Button onClick={() => { resetNewTeamMember(); setShowTeamDialog(true); }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('add_member') || 'Add Member'}
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -635,13 +649,15 @@ export default function ProjectDetail() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveTeamMember(member.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {canDelete(MODULES.PROJECTS) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveTeamMember(member.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

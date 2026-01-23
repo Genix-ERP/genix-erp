@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { analyzeProjects } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Default status IDs for Kanban
 const DEFAULT_STATUS_IDS = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
@@ -27,6 +28,7 @@ export default function Projects() {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { projects, createProject, updateProject, isLoading } = useModules();
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -285,9 +287,11 @@ export default function Projects() {
           </div>
           <div className="flex items-center gap-2">
             {!hideStatus && <Badge className={getStatusColor(project.status)}>{getStatusLabel(project.status)}</Badge>}
-            <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title={t('edit_project')}>
-              <Edit2 className="w-4 h-4" />
-            </Button>
+            {canUpdate(MODULES.PROJECTS) && (
+              <Button size="sm" variant="ghost" onClick={(e) => handleEditProject(project, e)} title={t('edit_project')}>
+                <Edit2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -528,9 +532,11 @@ export default function Projects() {
                   <Settings className="w-4 h-4 mr-1" /> {t('statuses')}
                 </Button>
 
+{canCreate(MODULES.PROJECTS) && (
                 <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600">
                   <Plus className="w-4 h-4 mr-2" /> {t('new_project')}
                 </Button>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-4">
@@ -567,7 +573,9 @@ export default function Projects() {
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500">{t('no_projects_yet')}</p>
-                <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_project')}</Button>
+                {canCreate(MODULES.PROJECTS) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_project')}</Button>
+                )}
               </div>
             ) : viewMode === 'kanban' ? (
               /* Kanban View */

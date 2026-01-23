@@ -45,8 +45,12 @@ import {
 import { format, differenceInDays, addDays } from "date-fns";
 
 import { useProcurement } from "@/components/contexts/ProcurementContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 export default function Contracts() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     contracts,
     suppliers,
@@ -172,10 +176,10 @@ export default function Contracts() {
       terminated: "bg-orange-100 text-orange-800",
     };
     const labels = {
-      draft: "Qoralama",
-      active: "Faol",
-      expired: "Muddati o'tgan",
-      terminated: "Bekor qilingan",
+      draft: t('draft') || "Qoralama",
+      active: t('active') || "Faol",
+      expired: t('expired') || "Muddati o'tgan",
+      terminated: t('terminated') || "Bekor qilingan",
     };
     return (
       <Badge className={styles[status] || styles.draft}>
@@ -192,10 +196,10 @@ export default function Contracts() {
       project: "bg-pink-100 text-pink-800",
     };
     const labels = {
-      fixed: "Belgilangan",
-      annual: "Yillik",
-      monthly: "Oylik",
-      project: "Loyiha",
+      fixed: t('fixed') || "Belgilangan",
+      annual: t('annual') || "Yillik",
+      monthly: t('monthly') || "Oylik",
+      project: t('project') || "Loyiha",
     };
     return (
       <Badge variant="outline" className={styles[type] || styles.fixed}>
@@ -212,19 +216,19 @@ export default function Contracts() {
 
     if (daysLeft < 0) {
       return {
-        text: `${Math.abs(daysLeft)} kun oldin tugagan`,
+        text: `${Math.abs(daysLeft)} ${t('days_ago_expired') || "kun oldin tugagan"}`,
         color: "text-red-600",
         icon: AlertTriangle,
       };
     } else if (daysLeft <= 30) {
       return {
-        text: `${daysLeft} kun qoldi`,
+        text: `${daysLeft} ${t('days_left') || "kun qoldi"}`,
         color: "text-orange-600",
         icon: Clock,
       };
     } else {
       return {
-        text: `${daysLeft} kun qoldi`,
+        text: `${daysLeft} ${t('days_left') || "kun qoldi"}`,
         color: "text-green-600",
         icon: CheckCircle2,
       };
@@ -246,7 +250,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Jami shartnomalar</p>
+                <p className="text-xs text-slate-500">{t('total_contracts') || "Jami shartnomalar"}</p>
                 <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
               </div>
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -260,7 +264,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Faol shartnomalar</p>
+                <p className="text-xs text-slate-500">{t('active_contracts') || "Faol shartnomalar"}</p>
                 <p className="text-2xl font-bold text-green-600">{stats.active}</p>
               </div>
               <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -274,7 +278,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Muddati tugayotgan</p>
+                <p className="text-xs text-slate-500">{t('expiring_soon') || "Muddati tugayotgan"}</p>
                 <p className="text-2xl font-bold text-orange-600">{stats.expiring}</p>
               </div>
               <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -288,7 +292,7 @@ export default function Contracts() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Jami qiymat</p>
+                <p className="text-xs text-slate-500">{t('total_value') || "Jami qiymat"}</p>
                 <p className="text-lg font-bold text-purple-600">
                   {stats.totalValue > 1000000000
                     ? `${(stats.totalValue / 1000000000).toFixed(1)} mlrd`
@@ -309,12 +313,12 @@ export default function Contracts() {
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle className="text-lg">Shartnomalar ro'yxati</CardTitle>
+            <CardTitle className="text-lg">{t('contracts_list') || "Shartnomalar ro'yxati"}</CardTitle>
             <div className="flex gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Qidirish..."
+                  placeholder={t('search') || "Qidirish..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -325,15 +329,15 @@ export default function Contracts() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Hammasi</SelectItem>
-                  <SelectItem value="draft">Qoralama</SelectItem>
-                  <SelectItem value="active">Faol</SelectItem>
-                  <SelectItem value="expired">Muddati o'tgan</SelectItem>
+                  <SelectItem value="all">{t('all') || "Hammasi"}</SelectItem>
+                  <SelectItem value="draft">{t('draft') || "Qoralama"}</SelectItem>
+                  <SelectItem value="active">{t('active') || "Faol"}</SelectItem>
+                  <SelectItem value="expired">{t('expired') || "Muddati o'tgan"}</SelectItem>
                 </SelectContent>
               </Select>
               <Button onClick={() => setShowForm(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Yangi shartnoma
+                {t('new_contract') || "Yangi shartnoma"}
               </Button>
             </div>
           </div>
@@ -346,20 +350,20 @@ export default function Contracts() {
           ) : filteredContracts.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Shartnomalar topilmadi</p>
+              <p className="text-slate-500">{t('no_contracts_found') || "Shartnomalar topilmadi"}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>Raqam</TableHead>
-                    <TableHead>Ta'minotchi</TableHead>
-                    <TableHead>Sarlavha</TableHead>
-                    <TableHead>Turi</TableHead>
-                    <TableHead>Muddat</TableHead>
-                    <TableHead className="text-right">Qiymat</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t('number') || "Raqam"}</TableHead>
+                    <TableHead>{t('supplier') || "Ta'minotchi"}</TableHead>
+                    <TableHead>{t('title') || "Sarlavha"}</TableHead>
+                    <TableHead>{t('type') || "Turi"}</TableHead>
+                    <TableHead>{t('period') || "Muddat"}</TableHead>
+                    <TableHead className="text-right">{t('value') || "Qiymat"}</TableHead>
+                    <TableHead>{t('status') || "Status"}</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -456,19 +460,19 @@ export default function Contracts() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingContract ? "Shartnomani tahrirlash" : "Yangi shartnoma"}
+              {editingContract ? (t('edit_contract') || "Shartnomani tahrirlash") : (t('new_contract') || "Yangi shartnoma")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Ta'minotchi *</Label>
+                <Label>{t('supplier') || "Ta'minotchi"} *</Label>
                 <Select
                   value={formData.supplier_id}
                   onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Ta'minotchini tanlang" />
+                    <SelectValue placeholder={t('select_supplier') || "Ta'minotchini tanlang"} />
                   </SelectTrigger>
                   <SelectContent>
                     {suppliers
@@ -482,7 +486,7 @@ export default function Contracts() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Shartnoma turi</Label>
+                <Label>{t('contract_type') || "Shartnoma turi"}</Label>
                 <Select
                   value={formData.type}
                   onValueChange={(value) => setFormData({ ...formData, type: value })}
@@ -491,27 +495,27 @@ export default function Contracts() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">Belgilangan muddatli</SelectItem>
-                    <SelectItem value="annual">Yillik</SelectItem>
-                    <SelectItem value="monthly">Oylik</SelectItem>
-                    <SelectItem value="project">Loyiha asosida</SelectItem>
+                    <SelectItem value="fixed">{t('fixed_term') || "Belgilangan muddatli"}</SelectItem>
+                    <SelectItem value="annual">{t('annual') || "Yillik"}</SelectItem>
+                    <SelectItem value="monthly">{t('monthly') || "Oylik"}</SelectItem>
+                    <SelectItem value="project">{t('project_based') || "Loyiha asosida"}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Shartnoma sarlavhasi *</Label>
+              <Label>{t('contract_title') || "Shartnoma sarlavhasi"} *</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Shartnoma nomi"
+                placeholder={t('contract_name') || "Shartnoma nomi"}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Boshlanish sanasi *</Label>
+                <Label>{t('start_date') || "Boshlanish sanasi"} *</Label>
                 <Input
                   type="date"
                   value={formData.start_date}
@@ -519,7 +523,7 @@ export default function Contracts() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tugash sanasi *</Label>
+                <Label>{t('end_date') || "Tugash sanasi"} *</Label>
                 <Input
                   type="date"
                   value={formData.end_date}
@@ -530,7 +534,7 @@ export default function Contracts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Shartnoma qiymati *</Label>
+                <Label>{t('contract_value') || "Shartnoma qiymati"} *</Label>
                 <Input
                   type="number"
                   value={formData.value}
@@ -539,7 +543,7 @@ export default function Contracts() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Valyuta</Label>
+                <Label>{t('currency') || "Valyuta"}</Label>
                 <Select
                   value={formData.currency}
                   onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -557,11 +561,11 @@ export default function Contracts() {
             </div>
 
             <div className="space-y-2">
-              <Label>Shartnoma shartlari</Label>
+              <Label>{t('contract_terms') || "Shartnoma shartlari"}</Label>
               <Textarea
                 value={formData.terms}
                 onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
-                placeholder="Asosiy shartlar va majburiyatlar..."
+                placeholder={t('terms_placeholder') || "Asosiy shartlar va majburiyatlar..."}
                 rows={3}
               />
             </div>
@@ -573,13 +577,13 @@ export default function Contracts() {
                 onCheckedChange={(checked) => setFormData({ ...formData, auto_renew: checked })}
               />
               <Label htmlFor="auto_renew" className="cursor-pointer">
-                Avtomatik uzaytirish
+                {t('auto_renew') || "Avtomatik uzaytirish"}
               </Label>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel') || "Bekor qilish"}
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -591,7 +595,7 @@ export default function Contracts() {
                   !formData.value
                 }
               >
-                {editingContract ? "Saqlash" : "Yaratish"}
+                {editingContract ? (t('save') || "Saqlash") : (t('create') || "Yaratish")}
               </Button>
             </div>
           </div>
@@ -602,7 +606,7 @@ export default function Contracts() {
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Shartnoma tafsilotlari</DialogTitle>
+            <DialogTitle>{t('contract_details') || "Shartnoma tafsilotlari"}</DialogTitle>
           </DialogHeader>
           {selectedContract && (
             <div className="space-y-6 py-4">

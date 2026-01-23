@@ -45,6 +45,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useHR } from '@/components/contexts/HRContext';
+import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeContract } from '@/api/entities';
 import { format, parseISO, differenceInDays, addMonths, isBefore, isAfter } from 'date-fns';
 
@@ -69,6 +70,7 @@ export default function EmployeeContracts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { employees } = useHR();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [contracts, setContracts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -313,13 +315,15 @@ export default function EmployeeContracts() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header with Action Button */}
         <div className="flex justify-end">
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_contract') || "Yangi shartnoma"}
-          </Button>
+          {canCreate(MODULES.HR) && (
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_contract') || "Yangi shartnoma"}
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -497,11 +501,13 @@ export default function EmployeeContracts() {
                                 <Eye className="w-4 h-4 mr-2" />
                                 {t('view') || "Ko'rish"}
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setSelectedContract(contract); setShowEditModal(true); }}>
-                                <Pencil className="w-4 h-4 mr-2" />
-                                {t('edit') || "Tahrirlash"}
-                              </DropdownMenuItem>
-                              {(status === 'expiring_soon' || status === 'expired') && (
+                              {canUpdate(MODULES.HR) && (
+                                <DropdownMenuItem onClick={() => { setSelectedContract(contract); setShowEditModal(true); }}>
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  {t('edit') || "Tahrirlash"}
+                                </DropdownMenuItem>
+                              )}
+                              {canCreate(MODULES.HR) && (status === 'expiring_soon' || status === 'expired') && (
                                 <DropdownMenuItem
                                   onClick={() => { setSelectedContract(contract); setShowRenewModal(true); }}
                                   className="text-green-600"
@@ -510,13 +516,15 @@ export default function EmployeeContracts() {
                                   {t('renew') || "Yangilash"}
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem
-                                onClick={() => { setSelectedContract(contract); setShowDeleteDialog(true); }}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {t('delete') || "O'chirish"}
-                              </DropdownMenuItem>
+                              {canDelete(MODULES.HR) && (
+                                <DropdownMenuItem
+                                  onClick={() => { setSelectedContract(contract); setShowDeleteDialog(true); }}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  {t('delete') || "O'chirish"}
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
