@@ -16,19 +16,19 @@ export default function NotificationSettings() {
 
   const fetchNotifications = async () => {
     setIsLoading(true);
-    // Demo notifications
+    // Demo notifications - use translation keys for title and message
     const demoNotifications = [
       {
         id: '1',
-        title: 'Welcome to Genix ERP',
-        message: 'Your account has been created successfully.',
+        titleKey: 'notification_welcome_title',
+        messageKey: 'notification_welcome_message',
         is_read: false,
         created_date: new Date().toISOString()
       },
       {
         id: '2',
-        title: 'System Update',
-        message: 'New features have been added to the dashboard.',
+        titleKey: 'notification_system_update_title',
+        messageKey: 'notification_system_update_message',
         is_read: true,
         created_date: new Date(Date.now() - 86400000).toISOString()
       }
@@ -85,8 +85,8 @@ export default function NotificationSettings() {
                   <BellRing className={`w-5 h-5 ${notification.is_read ? 'text-slate-400' : 'text-blue-500'}`} />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-semibold">{notification.title}</h4>
-                  <p className="text-sm text-slate-600">{notification.message}</p>
+                  <h4 className="font-semibold">{t(notification.titleKey) || notification.title}</h4>
+                  <p className="text-sm text-slate-600">{t(notification.messageKey) || notification.message}</p>
                   <p className="text-xs text-slate-400 mt-1">{new Date(notification.created_date).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2">

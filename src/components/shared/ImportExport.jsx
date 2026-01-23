@@ -646,6 +646,9 @@ export function ImportExportButtons({
   importDisabled = false,
   exportDisabled = false,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   return (
     <div className="flex items-center gap-2">
       {onImport && (
@@ -656,7 +659,7 @@ export function ImportExportButtons({
           disabled={importDisabled}
         >
           <Upload className="w-4 h-4 mr-1" />
-          Import
+          {t('import') || 'Import'}
         </Button>
       )}
       {onExport && (
@@ -667,7 +670,7 @@ export function ImportExportButtons({
           disabled={exportDisabled}
         >
           <Download className="w-4 h-4 mr-1" />
-          Export
+          {t('export') || 'Export'}
         </Button>
       )}
     </div>

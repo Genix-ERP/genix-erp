@@ -35,25 +35,25 @@ const TIME_FORMATS = [
   { value: '12h', label: '12-hour (2:30 PM)' }
 ];
 
-const MONTHS = [
-  { value: 1, label: 'January' },
-  { value: 2, label: 'February' },
-  { value: 3, label: 'March' },
-  { value: 4, label: 'April' },
-  { value: 5, label: 'May' },
-  { value: 6, label: 'June' },
-  { value: 7, label: 'July' },
-  { value: 8, label: 'August' },
-  { value: 9, label: 'September' },
-  { value: 10, label: 'October' },
-  { value: 11, label: 'November' },
-  { value: 12, label: 'December' }
-];
-
 export default function GeneralSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { settings, updateSetting, resetSection } = useAdminSettings();
+
+  const MONTHS = [
+    { value: 1, label: t('january') },
+    { value: 2, label: t('february') },
+    { value: 3, label: t('march') },
+    { value: 4, label: t('april') },
+    { value: 5, label: t('may') },
+    { value: 6, label: t('june') },
+    { value: 7, label: t('july') },
+    { value: 8, label: t('august') },
+    { value: 9, label: t('september') },
+    { value: 10, label: t('october') },
+    { value: 11, label: t('november') },
+    { value: 12, label: t('december') }
+  ];
 
   const general = settings.general || {};
 

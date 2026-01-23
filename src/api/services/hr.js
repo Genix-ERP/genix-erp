@@ -26,6 +26,26 @@ export const hrService = {
     await apiClient.delete(`/employees/${id}`);
   },
 
+  // Employee Permissions
+  async getEmployeePermissions(employeeId) {
+    const response = await apiClient.get(`/employees/${employeeId}/permissions`);
+    return response.data.data;
+  },
+
+  async updateEmployeePermissions(employeeId, permissions) {
+    const response = await apiClient.put(`/employees/${employeeId}/permissions`, { permissions });
+    return response.data.data;
+  },
+
+  async updateEmployeeModulePermission(employeeId, modulePermission) {
+    const response = await apiClient.put(`/employees/${employeeId}/permissions/module`, modulePermission);
+    return response.data.data;
+  },
+
+  async deleteEmployeePermissions(employeeId) {
+    await apiClient.delete(`/employees/${employeeId}/permissions`);
+  },
+
   // Payroll Periods
   async listPayrollPeriods(params = {}) {
     const response = await apiClient.get('/payroll-periods', { params });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ export default function Payroll() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -419,8 +421,8 @@ export default function Payroll() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" fontSize={12} />
                   <YAxis fontSize={12} />
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                  <Bar dataKey="amount" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, t('amount')]} />
+                  <Bar dataKey="amount" name={t('amount')} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -432,9 +434,11 @@ export default function Payroll() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                  <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
-                </Button>
+                {canCreate(MODULES.PAYROLL) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                    <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
+                  </Button>
+                )}
               </div>
               <div className="flex gap-3 mt-4">
                 <div className="relative flex-1">
@@ -481,7 +485,9 @@ export default function Payroll() {
                 <div className="text-center py-16">
                   <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_payroll_records_yet')}</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('process_first_payroll')}</Button>
+                  {canCreate(MODULES.PAYROLL) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('process_first_payroll')}</Button>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -514,17 +520,17 @@ export default function Payroll() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {payroll.status === 'calculated' && (
+                              {payroll.status === 'calculated' && canUpdate(MODULES.PAYROLL) && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
                                 </Button>
                               )}
-                              {payroll.status === 'approved' && (
+                              {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
                                   {t('pay')}
                                 </Button>
                               )}
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canUpdate(MODULES.PAYROLL) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleEditPayroll(payroll)} title={t('edit')}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
@@ -532,7 +538,7 @@ export default function Payroll() {
                               <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
                                 <Download className="w-4 h-4" />
                               </Button>
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canDelete(MODULES.PAYROLL) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(payroll)} title={t('delete')}>
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </Button>

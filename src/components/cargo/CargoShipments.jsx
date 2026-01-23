@@ -412,7 +412,7 @@ export default function CargoShipments() {
               onClick={() => document.getElementById('excel-import').click()}
             >
               <Upload className="w-4 h-4 mr-2" />
-              Excel yuklash
+              {t('import_excel')}
             </Button>
 
             {/* Download Template */}
@@ -421,7 +421,7 @@ export default function CargoShipments() {
               onClick={downloadExcelTemplate}
             >
               <Download className="w-4 h-4 mr-2" />
-              Shablon
+              {t('template')}
             </Button>
 
             {/* New Shipment Button */}
@@ -549,16 +549,16 @@ export default function CargoShipments() {
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{t('supplier_company') || 'Kompaniya nomi'}</Label>
+                <Label>{t('supplier_company')}</Label>
                 <Input
-                  placeholder="Kompaniya nomini kiriting"
+                  placeholder={t('enter_company_name_placeholder')}
                   value={formData.supplier_company}
                   onChange={(e) => setFormData({...formData, supplier_company: e.target.value})}
                 />
               </div>
 
               <div>
-                <Label>{t('tracking_number') || 'Tracking raqami'}</Label>
+                <Label>{t('tracking_number')}</Label>
                 <Input
                   value={formData.tracking_number}
                   onChange={(e) => setFormData({...formData, tracking_number: e.target.value})}
@@ -567,7 +567,7 @@ export default function CargoShipments() {
               </div>
 
               <div>
-                <Label>{t('expected_date') || 'Kutilayotgan sana'}</Label>
+                <Label>{t('expected_date')}</Label>
                 <Input
                   type="date"
                   value={formData.expected_date}
@@ -579,8 +579,8 @@ export default function CargoShipments() {
 
             {/* Items Section */}
             <div>
-              <Label className="text-lg font-semibold">{t('goods_list') || 'Tovarlar ro\'yxati'}</Label>
-              <p className="text-sm text-slate-500 mt-1 mb-3">Yukdagi har bir tovar turini qo'shing (masalan: iPhone 15, Samsung TV, va h.k.)</p>
+              <Label className="text-lg font-semibold">{t('goods_list')}</Label>
+              <p className="text-sm text-slate-500 mt-1 mb-3">{t('goods_list_description')}</p>
 
               {/* Add Item Form */}
               <Card className="mt-2 bg-slate-50">
@@ -588,7 +588,7 @@ export default function CargoShipments() {
                   {/* Main Fields */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-3">
                     <div>
-                      <Label className="text-xs text-slate-600 mb-1">Tovar nomi *</Label>
+                      <Label className="text-xs text-slate-600 mb-1">{t('item_name')} *</Label>
                       <Input
                         placeholder="iPhone 15 Pro Max"
                         value={currentItem.name}
@@ -596,7 +596,7 @@ export default function CargoShipments() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-slate-600 mb-1">Miqdori *</Label>
+                      <Label className="text-xs text-slate-600 mb-1">{t('quantity')} *</Label>
                       <Input
                         type="number"
                         placeholder="10"
@@ -605,7 +605,7 @@ export default function CargoShipments() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-slate-600 mb-1">Birlik narxi</Label>
+                      <Label className="text-xs text-slate-600 mb-1">{t('unit_price')}</Label>
                       <Input
                         type="number"
                         placeholder="1200"
@@ -614,7 +614,7 @@ export default function CargoShipments() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-slate-600 mb-1">Valyuta</Label>
+                      <Label className="text-xs text-slate-600 mb-1">{t('currency')}</Label>
                       <Select value={currentItem.currency} onValueChange={(v) => setCurrentItem({...currentItem, currency: v})}>
                         <SelectTrigger>
                           <SelectValue />
@@ -628,7 +628,7 @@ export default function CargoShipments() {
                     <div className="flex items-end">
                       <Button onClick={handleAddItem} size="sm" className="w-full">
                         <Plus className="w-4 h-4 mr-1" />
-                        Qo'shish
+                        {t('add')}
                       </Button>
                     </div>
                   </div>
@@ -636,17 +636,17 @@ export default function CargoShipments() {
                   {/* Custom Fields */}
                   {currentItem.customFields.length > 0 && (
                     <div className="space-y-2 mb-3 p-3 bg-white rounded-lg border border-slate-200">
-                      <Label className="text-xs font-semibold text-slate-700">Qo'shimcha ma'lumotlar</Label>
+                      <Label className="text-xs font-semibold text-slate-700">{t('additional_info')}</Label>
                       {currentItem.customFields.map((field, index) => (
                         <div key={index} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                           <Input
-                            placeholder="Maydon nomi (masalan: IMEI, Rang, Razmer)"
+                            placeholder={t('field_name_placeholder')}
                             value={field.key}
                             onChange={(e) => updateCustomField(index, 'key', e.target.value)}
                             className="text-xs"
                           />
                           <Input
-                            placeholder="Qiymat"
+                            placeholder={t('value')}
                             value={field.value}
                             onChange={(e) => updateCustomField(index, 'value', e.target.value)}
                             className="text-xs"
@@ -674,7 +674,7 @@ export default function CargoShipments() {
                     className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Qo'shimcha maydon qo'shish (IMEI, Rang, va h.k.)
+                    {t('add_custom_field')}
                   </Button>
 
                   {/* Items Table */}
@@ -682,11 +682,11 @@ export default function CargoShipments() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nomi</TableHead>
-                          <TableHead>Miqdor</TableHead>
-                          <TableHead>Narx</TableHead>
-                          <TableHead>Jami</TableHead>
-                          <TableHead className="text-right">Amallar</TableHead>
+                          <TableHead>{t('name')}</TableHead>
+                          <TableHead>{t('quantity')}</TableHead>
+                          <TableHead>{t('price')}</TableHead>
+                          <TableHead>{t('total')}</TableHead>
+                          <TableHead className="text-right">{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -740,13 +740,13 @@ export default function CargoShipments() {
 
             {/* Costs Section */}
             <div>
-              <Label className="text-lg font-semibold">{t('costs') || 'Xarajatlar'}</Label>
-              <p className="text-sm text-slate-500 mt-1 mb-3">Yuk tashish bilan bog'liq barcha xarajatlarni kiriting (USD hisobida)</p>
+              <Label className="text-lg font-semibold">{t('costs')}</Label>
+              <p className="text-sm text-slate-500 mt-1 mb-3">{t('costs_description')}</p>
               <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
                   <Label className="flex items-center gap-2">
-                    {t('transport_cost') || 'Transport xarajati'}
-                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                    {t('transport_cost')}
+                    <span className="text-xs text-slate-400">({t('optional')})</span>
                   </Label>
                   <Input
                     type="number"
@@ -760,8 +760,8 @@ export default function CargoShipments() {
                 </div>
                 <div>
                   <Label className="flex items-center gap-2">
-                    {t('customs_cost') || 'Bojxona to\'lovi'}
-                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                    {t('customs_cost')}
+                    <span className="text-xs text-slate-400">({t('optional')})</span>
                   </Label>
                   <Input
                     type="number"
@@ -775,8 +775,8 @@ export default function CargoShipments() {
                 </div>
                 <div>
                   <Label className="flex items-center gap-2">
-                    {t('other_cost') || 'Boshqa xarajatlar'}
-                    <span className="text-xs text-slate-400">(ixtiyoriy)</span>
+                    {t('other_cost')}
+                    <span className="text-xs text-slate-400">({t('optional')})</span>
                   </Label>
                   <Input
                     type="number"
@@ -795,15 +795,15 @@ export default function CargoShipments() {
             <Card className="bg-gradient-to-br from-blue-50 to-purple-50">
               <CardContent className="p-4">
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Tovarlar summasi:</span>
+                  <span>{t('items_total')}:</span>
                   <span className="font-semibold">${calculateTotal().itemsTotal.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Xarajatlar summasi:</span>
+                  <span>{t('costs_total')}:</span>
                   <span className="font-semibold">${calculateTotal().costsTotal.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Jami:</span>
+                  <span>{t('total')}:</span>
                   <span>${calculateTotal().total.toLocaleString()}</span>
                 </div>
               </CardContent>
@@ -812,13 +812,13 @@ export default function CargoShipments() {
             {/* Actions */}
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setShowAddModal(false)}>
-                {t('cancel') || 'Bekor qilish'}
+                {t('cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
-                {isEditMode ? (t('save') || 'Saqlash') : (t('create') || 'Yaratish')}
+                {isEditMode ? t('save') : t('create')}
               </Button>
             </div>
           </div>
@@ -829,7 +829,7 @@ export default function CargoShipments() {
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
         <DialogContent className="max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Yuk ma'lumotlari</DialogTitle>
+            <DialogTitle>{t('shipment_details')}</DialogTitle>
           </DialogHeader>
 
           {selectedShipment && (
@@ -837,7 +837,7 @@ export default function CargoShipments() {
               {/* Shipment Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Asosiy ma'lumotlar</CardTitle>
+                  <CardTitle className="text-lg">{t('basic_info')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">

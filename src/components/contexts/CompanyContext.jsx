@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '@/api/client';
+import { useEmployeePermissions } from './EmployeePermissionsContext';
 
 const ACTIVE_COMPANY_KEY = 'genix_active_company';
 
@@ -30,6 +31,9 @@ export function CompanyProvider({ children }) {
   const [activeCompany, setActiveCompanyState] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
+
+  // Get permission context for organization filtering
+  const { isAdmin, organizationIds, canAccessOrganization, isLoading: permissionsLoading } = useEmployeePermissions();
 
   // Use ref to always have access to latest companies without causing stale closures
   const companiesRef = useRef(companies);
@@ -66,6 +70,12 @@ export function CompanyProvider({ children }) {
         // Keep original backend data
         _backend: org
       }));
+
+      // Filter companies based on user's organization permissions
+      // Admins see all companies, regular employees see only assigned companies
+      if (!isAdmin && organizationIds && organizationIds.length > 0) {
+        companiesList = companiesList.filter(company => organizationIds.includes(company.id));
+      }
 
       // If no companies exist, create a default one
       if (companiesList.length === 0) {
@@ -120,11 +130,14 @@ export function CompanyProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAdmin, organizationIds]);
 
   useEffect(() => {
-    loadCompanies();
-  }, [loadCompanies]);
+    // Wait for permissions to be loaded before loading companies
+    if (!permissionsLoading) {
+      loadCompanies();
+    }
+  }, [loadCompanies, permissionsLoading]);
 
   // Reload companies when user changes (login/logout)
   useEffect(() => {

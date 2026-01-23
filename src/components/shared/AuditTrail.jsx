@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 import {
   Dialog,
   DialogContent,
@@ -112,19 +114,42 @@ export function useAuditTrail(entityType) {
 
 // Audit Log Badge
 export function AuditActionBadge({ action }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const config = AUDIT_ACTIONS[action] || AUDIT_ACTIONS.view;
   const Icon = config.icon;
+
+  // Get translated label
+  const getLabel = (actionType) => {
+    const labels = {
+      create: t('created') || 'Created',
+      update: t('updated') || 'Updated',
+      delete: t('deleted') || 'Deleted',
+      view: t('viewed') || 'Viewed',
+      status_change: t('status_changed') || 'Status Changed',
+      approve: t('approved') || 'Approved',
+      reject: t('rejected') || 'Rejected',
+      export: t('exported') || 'Exported',
+      import: t('imported') || 'Imported',
+      print: t('printed') || 'Printed',
+    };
+    return labels[actionType] || actionType;
+  };
 
   return (
     <Badge className={config.color}>
       <Icon className="w-3 h-3 mr-1" />
-      {config.label}
+      {getLabel(action)}
     </Badge>
   );
 }
 
 // Entity Audit History Component (for showing in entity detail views)
 export function EntityAuditHistory({ logs = [], maxItems = 5 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const [showAll, setShowAll] = useState(false);
   const displayLogs = showAll ? logs : logs.slice(0, maxItems);
 
@@ -132,7 +157,7 @@ export function EntityAuditHistory({ logs = [], maxItems = 5 }) {
     return (
       <div className="text-center py-4 text-slate-500">
         <History className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-        <p className="text-sm">Tarix mavjud emas</p>
+        <p className="text-sm">{t('no_history') || 'No history available'}</p>
       </div>
     );
   }
@@ -184,7 +209,7 @@ export function EntityAuditHistory({ logs = [], maxItems = 5 }) {
           className="w-full"
           onClick={() => setShowAll(!showAll)}
         >
-          {showAll ? "Kamroq ko'rsatish" : `Yana ${logs.length - maxItems} ta ko'rish`}
+          {showAll ? (t('show_less') || 'Show less') : `${t('view_more') || 'View'} ${logs.length - maxItems} ${t('more') || 'more'}`}
         </Button>
       )}
     </div>
@@ -197,11 +222,31 @@ export function AuditTrailPanel({
   logs = [],
   title = "Audit Trail",
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [selectedLog, setSelectedLog] = useState(null);
+
+  // Get translated audit action labels
+  const getAuditActionLabel = (action) => {
+    const labels = {
+      create: t('created') || 'Created',
+      update: t('updated') || 'Updated',
+      delete: t('deleted') || 'Deleted',
+      view: t('viewed') || 'Viewed',
+      status_change: t('status_changed') || 'Status Changed',
+      approve: t('approved') || 'Approved',
+      reject: t('rejected') || 'Rejected',
+      export: t('exported') || 'Exported',
+      import: t('imported') || 'Imported',
+      print: t('printed') || 'Printed',
+    };
+    return labels[action] || action;
+  };
 
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
@@ -224,7 +269,7 @@ export function AuditTrailPanel({
           <History className="w-5 h-5" />
           {title}
           <Badge variant="outline" className="ml-2">
-            {filteredLogs.length} yozuv
+            {filteredLogs.length} {t('records') || 'records'}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -234,7 +279,7 @@ export function AuditTrailPanel({
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Qidirish..."
+              placeholder={t('search') || 'Search...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -242,13 +287,13 @@ export function AuditTrailPanel({
           </div>
           <Select value={actionFilter} onValueChange={setActionFilter}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Amal turi" />
+              <SelectValue placeholder={t('action_type') || 'Action Type'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Barchasi</SelectItem>
-              {Object.entries(AUDIT_ACTIONS).map(([key, config]) => (
+              <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+              {Object.keys(AUDIT_ACTIONS).map((key) => (
                 <SelectItem key={key} value={key}>
-                  {config.label}
+                  {getAuditActionLabel(key)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -273,17 +318,17 @@ export function AuditTrailPanel({
         {filteredLogs.length === 0 ? (
           <div className="text-center py-12">
             <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500">Audit yozuvlari topilmadi</p>
+            <p className="text-slate-500">{t('no_audit_records') || 'No audit records found'}</p>
           </div>
         ) : (
           <div className="border rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead>Sana/Vaqt</TableHead>
-                  <TableHead>Amal</TableHead>
-                  <TableHead>Hujjat</TableHead>
-                  <TableHead>Foydalanuvchi</TableHead>
+                  <TableHead>{t('date_time') || 'Date/Time'}</TableHead>
+                  <TableHead>{t('action') || 'Action'}</TableHead>
+                  <TableHead>{t('document') || 'Document'}</TableHead>
+                  <TableHead>{t('user') || 'User'}</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -332,27 +377,27 @@ export function AuditTrailPanel({
         <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>O'zgarishlar tafsiloti</DialogTitle>
+              <DialogTitle>{t('change_details') || 'Change Details'}</DialogTitle>
             </DialogHeader>
             {selectedLog && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-slate-500">Sana/Vaqt</p>
+                    <p className="text-slate-500">{t('date_time') || 'Date/Time'}</p>
                     <p className="font-medium">
                       {format(new Date(selectedLog.timestamp), "dd.MM.yyyy HH:mm:ss")}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Foydalanuvchi</p>
+                    <p className="text-slate-500">{t('user') || 'User'}</p>
                     <p className="font-medium">{selectedLog.user}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Hujjat</p>
+                    <p className="text-slate-500">{t('document') || 'Document'}</p>
                     <p className="font-medium">{selectedLog.entityName}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Amal</p>
+                    <p className="text-slate-500">{t('action') || 'Action'}</p>
                     <AuditActionBadge action={selectedLog.action} />
                   </div>
                 </div>
@@ -362,9 +407,9 @@ export function AuditTrailPanel({
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
-                          <TableHead>Maydon</TableHead>
-                          <TableHead>Eski qiymat</TableHead>
-                          <TableHead>Yangi qiymat</TableHead>
+                          <TableHead>{t('field') || 'Field'}</TableHead>
+                          <TableHead>{t('old_value') || 'Old Value'}</TableHead>
+                          <TableHead>{t('new_value') || 'New Value'}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

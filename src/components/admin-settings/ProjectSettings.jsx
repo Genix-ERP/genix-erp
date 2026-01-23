@@ -7,11 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Receipt, Clock, ListTodo, GitBranch } from 'lucide-react';
 
-const BILLING_TYPES = [
-  { value: 'fixed_price', label: 'Fixed Price', desc: 'Single fixed amount for the project' },
-  { value: 'time_materials', label: 'Time & Materials', desc: 'Bill based on hours worked + expenses' },
-  { value: 'milestone', label: 'Milestone-Based', desc: 'Bill upon milestone completion' }
-];
+// Arrays are defined inside component to use translations
 
 export default function ProjectSettings() {
   const { language } = useLanguage();
@@ -19,6 +15,21 @@ export default function ProjectSettings() {
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const projects = settings.projects || {};
+
+  const BILLING_TYPES = [
+    { value: 'fixed_price', label: t('fixed_price'), desc: t('fixed_price_desc') },
+    { value: 'time_materials', label: t('time_and_materials'), desc: t('time_and_materials_desc') },
+    { value: 'milestone', label: t('milestone_based'), desc: t('milestone_based_desc') }
+  ];
+
+  const DEFAULT_PROJECT_STAGES = [
+    t('project_stage_planning'),
+    t('project_stage_in_progress'),
+    t('project_stage_review'),
+    t('project_stage_completed'),
+    t('project_stage_on_hold'),
+    t('project_stage_cancelled')
+  ];
 
   return (
     <div className="space-y-4">
@@ -143,7 +154,7 @@ export default function ProjectSettings() {
         <SettingsField label={t('default_project_stages')} description={t('default_project_stages_desc')}>
           <div className="p-4 bg-slate-50 rounded-lg mt-2">
             <div className="flex flex-wrap gap-2">
-              {(projects.stages || ['Planning', 'In Progress', 'Review', 'Completed', 'On Hold', 'Cancelled']).map((stage, index) => (
+              {(projects.stages || DEFAULT_PROJECT_STAGES).map((stage, index) => (
                 <div key={index} className="flex items-center gap-1 px-3 py-1 bg-white border rounded-full text-sm">
                   <span className="w-5 h-5 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full text-xs font-medium">
                     {index + 1}

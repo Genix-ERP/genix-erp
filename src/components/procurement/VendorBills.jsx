@@ -79,11 +79,11 @@ export default function VendorBills() {
   });
 
   // Sample vendors (in real app, fetch from API)
-  const [vendors, setVendors] = useState([
-    { id: '1', name: 'Tech Supplies Ltd' },
-    { id: '2', name: 'Office Equipment Co' },
-    { id: '3', name: 'Industrial Parts Inc' }
-  ]);
+  const vendors = [
+    { id: '1', name: t('tech_supplies_ltd') || 'Tech Supplies Ltd' },
+    { id: '2', name: t('office_equipment_co') || 'Office Equipment Co' },
+    { id: '3', name: t('industrial_parts_inc') || 'Industrial Parts Inc' }
+  ];
 
   // Sample purchase orders (for linking)
   const [purchaseOrders, setPurchaseOrders] = useState([

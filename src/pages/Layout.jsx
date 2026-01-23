@@ -72,8 +72,7 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
-import { usePermissions } from "@/hooks/usePermissions";
-import { MODULES } from "@/config/permissions";
+import { useEmployeePermissions } from "@/components/contexts/EmployeePermissionsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Navigation link that closes mobile sidebar on click
@@ -125,7 +124,7 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
-  const { canAccess } = usePermissions();
+  const { canAccessModule, isAdmin } = useEmployeePermissions();
 
   // Expose AI chatbox opener globally
   React.useEffect(() => {
@@ -164,97 +163,98 @@ function LayoutContent({ children, currentPageName }) {
   }, [inventory, financialTransactions, salesOrders]);
 
   // Map app IDs to navigation items with permission module keys
+  // moduleId should match the module IDs in EmployeePermissionsContext
   const appNavigationMap = {
     'inventory': {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
       icon: Package,
       badge: "3",
-      permissionModule: MODULES.INVENTORY
+      moduleId: 'inventory'
     },
     'crm': {
       title: t("crm"),
       url: createPageUrl("Customers"),
       icon: Users,
       badge: null,
-      permissionModule: MODULES.CUSTOMERS
+      moduleId: 'customers'
     },
     'finance': {
       title: t("financials"),
       url: createPageUrl("Financials"),
       icon: DollarSign,
       badge: null,
-      permissionModule: MODULES.FINANCIALS
+      moduleId: 'financials'
     },
     'hr': {
       title: t("hr"),
       url: createPageUrl("HR"),
       icon: Briefcase,
       badge: null,
-      permissionModule: MODULES.HR
+      moduleId: 'hr'
     },
     'manufacturing': {
       title: t("manufacturing"),
       url: createPageUrl("Manufacturing"),
       icon: Zap,
       badge: null,
-      permissionModule: MODULES.INVENTORY // Manufacturing uses inventory permission
+      moduleId: 'manufacturing'
     },
     'procurement': {
       title: t("procurement"),
       url: createPageUrl("Procurement"),
       icon: ShoppingCart,
       badge: null,
-      permissionModule: MODULES.PURCHASES
+      moduleId: 'procurement'
     },
     'projects': {
       title: t("projects"),
       url: createPageUrl("Projects"),
       icon: Briefcase,
       badge: null,
-      permissionModule: MODULES.PROJECTS
+      moduleId: 'projects'
     },
     'sales_orders': {
       title: t("sales_orders"),
       url: createPageUrl("SalesOrders"),
       icon: ShoppingBag,
       badge: null,
-      permissionModule: MODULES.SALES
+      moduleId: 'sales_orders'
     },
     'assets': {
       title: t("assets"),
       url: createPageUrl("Assets"),
       icon: Monitor,
       badge: null,
-      permissionModule: MODULES.INVENTORY // Assets uses inventory permission
+      moduleId: 'assets'
     },
     'expenses': {
       title: t("expenses"),
       url: createPageUrl("Expenses"),
       icon: Receipt,
       badge: null,
-      permissionModule: MODULES.FINANCIALS
+      moduleId: 'expenses'
     },
     'payroll': {
       title: t("payroll"),
       url: createPageUrl("Payroll"),
       icon: DollarSign,
       badge: null,
-      permissionModule: MODULES.HR
+      moduleId: 'payroll'
     },
     'contracts': {
       title: t("contracts"),
       url: createPageUrl("Contracts"),
       icon: FileText,
       badge: null,
-      permissionModule: MODULES.CONTRACTS
+      moduleId: 'contracts'
     },
     'cargo': {
       title: t("cargo") || 'Cargo',
       url: createPageUrl("Cargo"),
       icon: Ship,
       badge: null,
-      permissionModule: MODULES.INVENTORY // Cargo uses inventory permission
+      moduleId: 'cargo'
     }
   };
 
@@ -306,13 +306,19 @@ function LayoutContent({ children, currentPageName }) {
     Object.keys(appNavigationMap).forEach(appId => {
       const appConfig = appNavigationMap[appId];
       // Check if app is installed AND user has permission to access the module
-      if (isAppInstalled(appId) && canAccess(appConfig.permissionModule)) {
+      // Admins, site admins, and owners always have access
+      const hasAccess = isAdmin || isSiteAdmin() || isOwner() || canAccessModule(appConfig.moduleId);
+      if (isAppInstalled(appId) && hasAccess) {
         dynamicItems.push(appConfig);
       }
     });
 
-    // Add Workflows (always visible)
-    dynamicItems.push(coreNavigationItems[1]);
+    // Add Workflows (only for admins and system admins)
+    const hasWorkflowAccess = isSiteAdmin() || isOwner() ||
+      currentUser?.role === 'admin' || currentUser?.role === 'system_admin';
+    if (hasWorkflowAccess) {
+      dynamicItems.push(coreNavigationItems[1]);
+    }
 
     // Add Apps and Settings only for admins (site_admin or owner)
     if (isOwner()) {

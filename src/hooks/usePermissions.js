@@ -1,79 +1,92 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import {
-  hasPermission,
-  canAccessModule,
-  getAllowedOperations,
-  hasAnyPermission,
-  hasAllPermissions,
   OPERATIONS,
   MODULES
 } from '@/config/permissions';
 
 /**
  * Custom hook for permission checking
- * Provides convenient methods to check user permissions
+ * Uses the new employee module permissions system for CRUD checks
  */
 export const usePermissions = () => {
   const { user, isSiteAdmin, isOwner } = useAuth();
+  const {
+    isAdmin,
+    canAccessModule: empCanAccessModule,
+    canCreate: empCanCreate,
+    canUpdate: empCanUpdate,
+    canDelete: empCanDelete,
+    getModulePermissions
+  } = useEmployeePermissions();
 
-  // Get user's permission level
+  // Get user's permission level (for backward compatibility)
   const userPermission = useMemo(() => {
-    // Site admins and owners have 'grant' level permissions
-    if (isSiteAdmin?.() || isOwner?.()) {
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) {
       return 'grant';
     }
-    return user?.permission || 'learner'; // Default to learner if not set
-  }, [user, isSiteAdmin, isOwner]);
+    return user?.permission || 'learner';
+  }, [user, isSiteAdmin, isOwner, isAdmin]);
 
   // Check if user can perform an operation on a module
-  const can = useMemo(() => {
-    return (module, operation) => {
-      // Site admins and owners can do everything
-      if (isSiteAdmin?.() || isOwner?.()) return true;
-      return hasPermission(userPermission, module, operation);
-    };
-  }, [userPermission, isSiteAdmin, isOwner]);
+  const can = useCallback((module, operation) => {
+    // Site admins and owners can do everything
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) return true;
+
+    // Use the new employee permissions system
+    switch (operation) {
+      case OPERATIONS.READ:
+        return empCanAccessModule(module);
+      case OPERATIONS.CREATE:
+        return empCanCreate(module);
+      case OPERATIONS.UPDATE:
+        return empCanUpdate(module);
+      case OPERATIONS.DELETE:
+        return empCanDelete(module);
+      default:
+        return false;
+    }
+  }, [isSiteAdmin, isOwner, isAdmin, empCanAccessModule, empCanCreate, empCanUpdate, empCanDelete]);
 
   // Check if user can access a module (at least read)
-  const canAccess = useMemo(() => {
-    return (module) => {
-      if (isSiteAdmin?.() || isOwner?.()) return true;
-      return canAccessModule(userPermission, module);
-    };
-  }, [userPermission, isSiteAdmin, isOwner]);
+  const canAccess = useCallback((module) => {
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) return true;
+    return empCanAccessModule(module);
+  }, [isSiteAdmin, isOwner, isAdmin, empCanAccessModule]);
 
   // Get all operations user can perform on a module
-  const allowedOps = useMemo(() => {
-    return (module) => {
-      if (isSiteAdmin?.() || isOwner?.()) {
-        return [OPERATIONS.READ, OPERATIONS.CREATE, OPERATIONS.UPDATE, OPERATIONS.DELETE];
-      }
-      return getAllowedOperations(userPermission, module);
-    };
-  }, [userPermission, isSiteAdmin, isOwner]);
+  const allowedOps = useCallback((module) => {
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) {
+      return [OPERATIONS.READ, OPERATIONS.CREATE, OPERATIONS.UPDATE, OPERATIONS.DELETE];
+    }
+
+    const perms = getModulePermissions(module);
+    const ops = [];
+    if (perms.read) ops.push(OPERATIONS.READ);
+    if (perms.create) ops.push(OPERATIONS.CREATE);
+    if (perms.update) ops.push(OPERATIONS.UPDATE);
+    if (perms.delete) ops.push(OPERATIONS.DELETE);
+    return ops;
+  }, [isSiteAdmin, isOwner, isAdmin, getModulePermissions]);
 
   // Check if user has any of the specified permissions
-  const canAny = useMemo(() => {
-    return (module, operations) => {
-      if (isSiteAdmin?.() || isOwner?.()) return true;
-      return hasAnyPermission(userPermission, module, operations);
-    };
-  }, [userPermission, isSiteAdmin, isOwner]);
+  const canAny = useCallback((module, operations) => {
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) return true;
+    return operations.some(op => can(module, op));
+  }, [isSiteAdmin, isOwner, isAdmin, can]);
 
   // Check if user has all specified permissions
-  const canAll = useMemo(() => {
-    return (module, operations) => {
-      if (isSiteAdmin?.() || isOwner?.()) return true;
-      return hasAllPermissions(userPermission, module, operations);
-    };
-  }, [userPermission, isSiteAdmin, isOwner]);
+  const canAll = useCallback((module, operations) => {
+    if (isSiteAdmin?.() || isOwner?.() || isAdmin) return true;
+    return operations.every(op => can(module, op));
+  }, [isSiteAdmin, isOwner, isAdmin, can]);
 
   // Convenience methods for common operations
-  const canRead = useMemo(() => (module) => can(module, OPERATIONS.READ), [can]);
-  const canCreate = useMemo(() => (module) => can(module, OPERATIONS.CREATE), [can]);
-  const canUpdate = useMemo(() => (module) => can(module, OPERATIONS.UPDATE), [can]);
-  const canDelete = useMemo(() => (module) => can(module, OPERATIONS.DELETE), [can]);
+  const canRead = useCallback((module) => can(module, OPERATIONS.READ), [can]);
+  const canCreate = useCallback((module) => can(module, OPERATIONS.CREATE), [can]);
+  const canUpdate = useCallback((module) => can(module, OPERATIONS.UPDATE), [can]);
+  const canDelete = useCallback((module) => can(module, OPERATIONS.DELETE), [can]);
 
   return {
     userPermission,

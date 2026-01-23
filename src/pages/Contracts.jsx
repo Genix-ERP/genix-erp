@@ -11,11 +11,13 @@ import { format, differenceInDays } from 'date-fns';
 import { analyzeContracts } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Contracts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // AI Analysis
   const contractAnalysis = useMemo(() => analyzeContracts(contracts, language), [contracts, language]);
@@ -451,9 +453,11 @@ Provide only analysis results based on the numbers and specific contract data, n
           <CardHeader className="border-b">
             <div className="flex items-center justify-between">
               <CardTitle>{t('contracts')}</CardTitle>
-              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-rose-600 to-pink-600">
-                <Plus className="w-4 h-4 mr-2" /> {t('new_contract')}
-              </Button>
+              {canCreate(MODULES.CONTRACTS) && (
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-rose-600 to-pink-600">
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_contract')}
+                </Button>
+              )}
             </div>
             <div className="flex gap-3 mt-4">
               <div className="relative flex-1">
@@ -488,7 +492,9 @@ Provide only analysis results based on the numbers and specific contract data, n
               <div className="text-center py-16">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500">{t('no_contracts_yet')}</p>
-                <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_contract')}</Button>
+                {canCreate(MODULES.CONTRACTS) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_contract')}</Button>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -555,18 +561,22 @@ Provide only analysis results based on the numbers and specific contract data, n
                           <Button size="sm" variant="ghost" onClick={() => handleViewContract(contract)} title={t('view_contract')}>
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                          {contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
+                          {canUpdate(MODULES.CONTRACTS) && (
+                            <Button size="sm" variant="ghost" onClick={() => handleEditContract(contract)} title={t('edit_contract')}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canDelete(MODULES.CONTRACTS) && (
+                            <Button size="sm" variant="ghost" onClick={() => handleDeleteContract(contract)} title={t('delete_contract')} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canUpdate(MODULES.CONTRACTS) && contract.status === 'active' && contract.daysUntilExpiry <= 30 && (
                             <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'renewed')}>
                               {t('renew')}
                             </Button>
                           )}
-                          {contract.status === 'active' && (
+                          {canUpdate(MODULES.CONTRACTS) && contract.status === 'active' && (
                             <Button size="sm" variant="outline" onClick={() => updateContractStatus(contract.id, 'terminated')}>
                               {t('terminate')}
                             </Button>
@@ -779,12 +789,14 @@ Provide only analysis results based on the numbers and specific contract data, n
                   <Button variant="outline" onClick={() => setShowViewModal(false)} className="flex-1">
                     {t('close')}
                   </Button>
-                  <Button
-                    onClick={() => { setShowViewModal(false); handleEditContract(selectedContract); }}
-                    className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                  >
-                    {t('edit_contract')}
-                  </Button>
+                  {canUpdate(MODULES.CONTRACTS) && (
+                    <Button
+                      onClick={() => { setShowViewModal(false); handleEditContract(selectedContract); }}
+                      className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
+                    >
+                      {t('edit_contract')}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -942,14 +954,12 @@ Provide only analysis results based on the numbers and specific contract data, n
             {contractToDelete && (
               <div className="space-y-4 py-4">
                 <p className="text-slate-600">
-                  {language === 'uz'
-                    ? `"${contractToDelete.contract_name}" shartnomani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`
-                    : `Are you sure you want to delete "${contractToDelete.contract_name}"? This action cannot be undone.`}
+                  {t('delete_contract_confirm_message')?.replace('{name}', contractToDelete.contract_name) || `Are you sure you want to delete "${contractToDelete.contract_name}"? This action cannot be undone.`}
                 </p>
                 <div className="bg-slate-50 p-3 rounded-lg text-sm space-y-1">
-                  <p><strong>{language === 'uz' ? 'Shartnoma №' : 'Contract Number'}:</strong> {contractToDelete.contract_number}</p>
-                  <p><strong>{language === 'uz' ? 'Tomon' : 'Party'}:</strong> {contractToDelete.party_name}</p>
-                  <p><strong>{language === 'uz' ? 'Qiymat' : 'Value'}:</strong> ${(contractToDelete.contract_value || 0).toLocaleString()}</p>
+                  <p><strong>{t('contract_number_label')}:</strong> {contractToDelete.contract_number}</p>
+                  <p><strong>{t('party_name')}:</strong> {contractToDelete.party_name}</p>
+                  <p><strong>{t('value')}:</strong> ${(contractToDelete.contract_value || 0).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <Button

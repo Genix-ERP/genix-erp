@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { analyzeInventory } from "@/api/services/aiAnalytics";
 
 export default function Inventory() {
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
@@ -455,17 +457,14 @@ export default function Inventory() {
 
           {/* Analytics Tab */}
           <TabsContent value="analytics" className="mt-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardHeader>
-                  <CardTitle>{t('stock_movements')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <StockMovementTracker movements={stockMovements} items={items} />
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Stock Movements - takes 2 columns on xl screens */}
+              <div className="xl:col-span-2">
+                <StockMovementTracker movements={stockMovements} items={items} />
+              </div>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+              {/* ABC Analysis - takes 1 column on xl screens */}
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg h-fit">
                 <CardHeader>
                   <CardTitle>{t('abc_analysis')}</CardTitle>
                 </CardHeader>

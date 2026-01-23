@@ -67,14 +67,16 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/components/contexts/ModulesContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
+import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 
 export default function HR() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { coreModules, appModules, getEmployeePermissions, setEmployeePermissions } = useModules();
+  const { coreModules, appModules } = useModules();
   const { isAppInstalled } = useInstalledApps();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { getEmployeePermissions, updateEmployeePermissions } = useEmployeePermissions();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -501,20 +503,23 @@ Only return the JSON, no other text.`;
     return modules;
   }, [coreModules, appModules, isAppInstalled]);
 
-  const handleManagePermissions = (employee) => {
+  const handleManagePermissions = async (employee) => {
     try {
       setSelectedEmployee(employee);
-      // Load current permissions into editing state
-      let currentPerms = getEmployeePermissions(employee.id);
+      setEditingPermissions({});
+      setPermissionsSaved(false);
+      setShowPermissionsModal(true);
+
+      // Load current permissions from backend
+      const currentPerms = await getEmployeePermissions(employee.id);
 
       // If no permissions set yet, initialize based on employee's permission level
       if (Object.keys(currentPerms).length === 0 && employee.permission) {
-        currentPerms = getDefaultPermissionsForLevel(employee.permission);
+        const defaultPerms = getDefaultPermissionsForLevel(employee.permission);
+        setEditingPermissions(defaultPerms);
+      } else {
+        setEditingPermissions(currentPerms);
       }
-
-      setEditingPermissions(currentPerms);
-      setPermissionsSaved(false);
-      setShowPermissionsModal(true);
     } catch (error) {
       console.error('Error opening permissions modal:', error);
       // Still open the modal even if there's an error initializing permissions
@@ -527,30 +532,23 @@ Only return the JSON, no other text.`;
 
   // Get available modules (only modules visible in sidebar)
   const getAvailableModules = useCallback(() => {
-    const modules = [];
-
-    // Add core modules (always visible)
-    coreModules.forEach(m => {
-      if (!m.adminOnly) {
-        modules.push(m);
-      }
-    });
-
-    // Add installed app modules only
-    appModules.forEach(m => {
-      if (isAppInstalled(m.appId)) {
-        modules.push(m);
-      }
-    });
-
-    // Add admin panel at the end
-    const adminModule = coreModules.find(m => m.adminOnly);
-    if (adminModule) {
-      modules.push(adminModule);
-    }
+    // Use AVAILABLE_MODULES from EmployeePermissionsContext as the source of truth
+    // Filter to show only installed app modules - exclude core modules (dashboard, ai_assistant, settings)
+    // as they are always accessible and shouldn't have permissions managed
+    const modules = AVAILABLE_MODULES.filter(m => {
+      // Skip core modules - they are always accessible without permissions
+      if (m.isCore) return false;
+      // App modules should be installed
+      return isAppInstalled(m.id);
+    }).map(m => ({
+      id: m.id,
+      nameKey: m.nameKey,
+      isCore: false,
+      adminOnly: false
+    }));
 
     return modules;
-  }, [coreModules, appModules, isAppInstalled]);
+  }, [isAppInstalled]);
 
   // Handle toggle for individual CRUD permission (local state only)
   const handlePermissionToggle = (moduleId, permType) => {
@@ -586,11 +584,35 @@ Only return the JSON, no other text.`;
   };
 
   // Save permissions
-  const handleSavePermissions = () => {
+  const handleSavePermissions = async () => {
     if (!selectedEmployee) return;
-    setEmployeePermissions(selectedEmployee.id, editingPermissions);
-    setPermissionsSaved(true);
-    setTimeout(() => setPermissionsSaved(false), 2000);
+    setIsSubmitting(true);
+    try {
+      const success = await updateEmployeePermissions(selectedEmployee.id, editingPermissions);
+      if (success) {
+        setPermissionsSaved(true);
+        setTimeout(() => setPermissionsSaved(false), 2000);
+        toast({
+          title: t('success') || 'Success',
+          description: t('permissions_saved') || 'Permissions saved successfully',
+        });
+      } else {
+        toast({
+          title: t('error') || 'Error',
+          description: t('error_saving_permissions') || 'Failed to save permissions',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error saving permissions:', error);
+      toast({
+        title: t('error') || 'Error',
+        description: error.message || t('error_saving_permissions') || 'Failed to save permissions',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Grant all permissions
@@ -1072,16 +1094,18 @@ Only return the JSON, no other text.`;
                   <Button variant="outline" onClick={() => setShowViewModal(false)}>
                     {t('close') || 'Close'}
                   </Button>
-                  <Button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      handleEditEmployee(selectedEmployee);
-                    }}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    {t('edit') || 'Edit'}
-                  </Button>
+                  {canUpdate(MODULES.HR) && (
+                    <Button
+                      onClick={() => {
+                        setShowViewModal(false);
+                        handleEditEmployee(selectedEmployee);
+                      }}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      {t('edit') || 'Edit'}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
