@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function CurrencyManagement() {
   const { language } = useLanguage();
@@ -30,6 +31,7 @@ export default function CurrencyManagement() {
     convertCurrency,
     isLoading
   } = useFinancials();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState("currencies");
   const [showCreateCurrencyModal, setShowCreateCurrencyModal] = useState(false);
@@ -258,7 +260,7 @@ export default function CurrencyManagement() {
           </TabsList>
 
           <div className="flex gap-2">
-            {activeTab === 'currencies' && (
+            {activeTab === 'currencies' && canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={() => setShowCreateCurrencyModal(true)}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -267,7 +269,7 @@ export default function CurrencyManagement() {
                 {t('new_currency') || 'New Currency'}
               </Button>
             )}
-            {activeTab === 'rates' && (
+            {activeTab === 'rates' && canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={() => setShowSetRateModal(true)}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -331,7 +333,7 @@ export default function CurrencyManagement() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          {!currency.is_base && (
+                          {!currency.is_base && canUpdate(MODULES.FINANCIALS) && (
                             <div className="flex justify-end gap-1">
                               <Button
                                 variant="ghost"

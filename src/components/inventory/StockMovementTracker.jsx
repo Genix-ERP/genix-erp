@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // SAP-style document types
 const documentTypes = [
@@ -37,6 +38,7 @@ export default function StockMovementTracker({ movements, items }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { adjustInventory, warehouses, products, lots = [] } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
 
@@ -265,13 +267,15 @@ export default function StockMovementTracker({ movements, items }) {
                   className="pl-9 w-full sm:w-64"
                 />
               </div>
-              <Button
-                onClick={handleNewMovementClick}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_movement')}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={handleNewMovementClick}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_movement')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

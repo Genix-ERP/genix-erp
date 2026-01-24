@@ -5,26 +5,30 @@ import { hrService } from '@/api/services';
 
 const EmployeePermissionsContext = createContext(null);
 
-// All available modules for permissions (matching sidebar structure)
+// All available modules for permissions
+// IMPORTANT:
+// - 'id' must match the values in MODULES from @/config/permissions.js (used for permission checks)
+// - 'appId' is used to check if the app is installed (matches InstalledAppsContext)
+// - 'nameKey' is the translation key for display
 export const AVAILABLE_MODULES = [
   // Core modules
   { id: 'dashboard', nameKey: 'dashboard', isCore: true },
   { id: 'ai_assistant', nameKey: 'ai_assistant', isCore: true },
   { id: 'settings', nameKey: 'settings', isCore: true },
-  // App modules
-  { id: 'inventory', nameKey: 'inventory' },
-  { id: 'customers', nameKey: 'customers' },
-  { id: 'financials', nameKey: 'financials' },
-  { id: 'hr', nameKey: 'hr' },
-  { id: 'manufacturing', nameKey: 'manufacturing' },
-  { id: 'procurement', nameKey: 'procurement' },
-  { id: 'projects', nameKey: 'projects' },
-  { id: 'sales_orders', nameKey: 'sales_orders' },
-  { id: 'assets', nameKey: 'assets' },
-  { id: 'expenses', nameKey: 'expenses' },
-  { id: 'payroll', nameKey: 'payroll' },
-  { id: 'contracts', nameKey: 'contracts' },
-  { id: 'cargo', nameKey: 'cargo' },
+  // App modules - 'id' matches MODULES constant, 'appId' matches installed apps
+  { id: 'inventory', nameKey: 'inventory', appId: 'inventory' },
+  { id: 'customers', nameKey: 'customers', appId: 'crm' },
+  { id: 'financials', nameKey: 'financials', appId: 'finance' },
+  { id: 'hr', nameKey: 'hr', appId: 'hr' },
+  { id: 'manufacturing', nameKey: 'manufacturing', appId: 'manufacturing' },
+  { id: 'purchases', nameKey: 'procurement', appId: 'procurement' },  // id matches MODULES.PURCHASES
+  { id: 'projects', nameKey: 'projects', appId: 'projects' },
+  { id: 'sales', nameKey: 'sales_orders', appId: 'sales_orders' },   // id matches MODULES.SALES
+  { id: 'assets', nameKey: 'assets', appId: 'assets' },
+  { id: 'expenses', nameKey: 'expenses', appId: 'expenses' },
+  { id: 'payroll', nameKey: 'payroll', appId: 'payroll' },
+  { id: 'contracts', nameKey: 'contracts', appId: 'contracts' },
+  { id: 'cargo', nameKey: 'cargo', appId: 'cargo' },
 ];
 
 export function EmployeePermissionsProvider({ children }) {

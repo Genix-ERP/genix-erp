@@ -17,6 +17,8 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { format } from 'date-fns';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function CargoCashRegister() {
   const { language } = useLanguage();
@@ -29,6 +31,7 @@ export default function CargoCashRegister() {
     loadCashSummary
   } = useCargoContext();
   const { companies, activeCompany } = useCompany();
+  const { canCreate } = usePermissions();
 
   // Helper function to extract string from sql.NullString objects
   const extractString = (value) => {
@@ -361,17 +364,19 @@ export default function CargoCashRegister() {
                   <SelectItem value="USD">USD</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setTransactionType('income');
-                  setShowTransactionModal(true);
-                }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                {t('add')}
-              </Button>
+              {canCreate(MODULES.CARGO) && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setTransactionType('income');
+                    setShowTransactionModal(true);
+                  }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {t('add')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

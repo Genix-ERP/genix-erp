@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component
 const FieldHelp = ({ text }) => (
@@ -50,6 +51,7 @@ const LabelWithHelp = ({ label, helpText, required }) => (
 export default function StockTransfers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     products,
     warehouses,
@@ -213,13 +215,15 @@ export default function StockTransfers() {
             {t('stock_transfers_desc') || "Omborlar o'rtasida mahsulotlarni ko'chirish va tarixini ko'rish"}
           </p>
         </div>
-        <Button
-          onClick={() => setShowTransferModal(true)}
-          className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-lg"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_transfer') || "Yangi ko'chirish"}
-        </Button>
+        {canCreate(MODULES.INVENTORY) && (
+          <Button
+            onClick={() => setShowTransferModal(true)}
+            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-lg"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_transfer') || "Yangi ko'chirish"}
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -349,13 +353,15 @@ export default function StockTransfers() {
               <p className="text-sm text-slate-500 mb-4">
                 {t('no_transfers_desc') || "Omborlar o'rtasida mahsulot ko'chirish uchun yuqoridagi tugmani bosing"}
               </p>
-              <Button
-                onClick={() => setShowTransferModal(true)}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_transfer') || "Yangi ko'chirish"}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={() => setShowTransferModal(true)}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_transfer') || "Yangi ko'chirish"}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

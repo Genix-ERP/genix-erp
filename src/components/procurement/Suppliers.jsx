@@ -60,6 +60,8 @@ import {
   ImportExportButtons,
   useAuditTrail,
 } from "@/components/shared";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function Suppliers() {
   const { language } = useLanguage();
@@ -73,6 +75,7 @@ export default function Suppliers() {
     getSupplierStats,
     isLoading,
   } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -365,10 +368,12 @@ export default function Suppliers() {
                 onImport={() => setShowImportModal(true)}
                 onExport={() => setShowExportModal(true)}
               />
-              <Button onClick={() => setShowForm(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('add') || "Qo'shish"}
-              </Button>
+              {canCreate(MODULES.PURCHASES) && (
+                <Button onClick={() => setShowForm(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('add') || "Qo'shish"}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

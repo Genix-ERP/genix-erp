@@ -52,6 +52,8 @@ import {
 import { useProcurement } from "@/components/contexts/ProcurementContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function PriceHistory() {
   const { language } = useLanguage();
@@ -62,6 +64,7 @@ export default function PriceHistory() {
     addPriceRecord,
     isLoading,
   } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
@@ -220,10 +223,12 @@ export default function PriceHistory() {
             {t('track_supplier_prices') || "Ta'minotchilar narxlarini kuzatib boring"}
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t('add_price') || "Narx qo'shish"}
-        </Button>
+        {canCreate(MODULES.PURCHASES) && (
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('add_price') || "Narx qo'shish"}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

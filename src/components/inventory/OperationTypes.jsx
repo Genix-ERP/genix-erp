@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Icon mapping for operation types
 const getOperationIcon = (type) => {
@@ -60,6 +61,7 @@ const colorPresets = [
 export default function OperationTypes() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [operationTypes, setOperationTypes] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -248,11 +250,13 @@ export default function OperationTypes() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => openEditModal(opType)}>
-                  <Settings2 className="w-4 h-4 mr-2" />
-                  {t('settings') || 'Settings'}
-                </DropdownMenuItem>
-                {opType.type === 'custom' && (
+                {canUpdate(MODULES.INVENTORY) && (
+                  <DropdownMenuItem onClick={() => openEditModal(opType)}>
+                    <Settings2 className="w-4 h-4 mr-2" />
+                    {t('settings') || 'Settings'}
+                  </DropdownMenuItem>
+                )}
+                {opType.type === 'custom' && canDelete(MODULES.INVENTORY) && (
                   <DropdownMenuItem onClick={() => handleDelete(opType.id)} className="text-red-600">
                     <Trash2 className="w-4 h-4 mr-2" />
                     {t('delete') || 'Delete'}
@@ -373,10 +377,12 @@ export default function OperationTypes() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={openCreateModal} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_operation_type') || "Yangi tur"}
-          </Button>
+          {canCreate(MODULES.INVENTORY) && (
+            <Button onClick={openCreateModal} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_operation_type') || "Yangi tur"}
+            </Button>
+          )}
         </div>
       </div>
 

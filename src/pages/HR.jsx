@@ -538,10 +538,10 @@ Only return the JSON, no other text.`;
     const modules = AVAILABLE_MODULES.filter(m => {
       // Skip core modules - they are always accessible without permissions
       if (m.isCore) return false;
-      // App modules should be installed
-      return isAppInstalled(m.id);
+      // App modules should be installed - use appId for installation check
+      return isAppInstalled(m.appId || m.id);
     }).map(m => ({
-      id: m.id,
+      id: m.id,        // This is the permission module ID (matches MODULES constant)
       nameKey: m.nameKey,
       isCore: false,
       adminOnly: false

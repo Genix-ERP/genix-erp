@@ -23,6 +23,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -51,6 +52,7 @@ const LabelWithHelp = ({ label, helpText, required }) => (
 export default function InventoryManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     products,
     warehouses,
@@ -301,24 +303,28 @@ export default function InventoryManagement() {
                   </CardTitle>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      resetAdjustForm();
-                      setShowAdjustModal(true);
-                    }}
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" /> {t('adjust_stock')}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      resetTransferForm();
-                      setShowTransferModal(true);
-                    }}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 mr-2" /> {t('transfer')}
-                  </Button>
+                  {canUpdate(MODULES.INVENTORY) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        resetAdjustForm();
+                        setShowAdjustModal(true);
+                      }}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" /> {t('adjust_stock')}
+                    </Button>
+                  )}
+                  {canCreate(MODULES.INVENTORY) && (
+                    <Button
+                      onClick={() => {
+                        resetTransferForm();
+                        setShowTransferModal(true);
+                      }}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 mr-2" /> {t('transfer')}
+                    </Button>
+                  )}
                 </div>
               </div>
               <TabsList className="w-fit bg-slate-100/80 p-1">

@@ -361,9 +361,11 @@ export default function AccountsPayable() {
             <div className="text-center py-16">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">{t('no_data')}</p>
-              <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
-              </Button>
+              {canCreate('financials') && (
+                <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

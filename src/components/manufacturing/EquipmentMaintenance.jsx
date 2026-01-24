@@ -44,6 +44,8 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { format, parseISO, differenceInDays, addDays, addMonths, isBefore } from 'date-fns';
 import { ru, enUS } from 'date-fns/locale';
 
@@ -66,6 +68,7 @@ export default function EquipmentMaintenance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
+  const { canCreate, canDelete } = usePermissions();
 
   // Get date-fns locale based on language
   const getDateLocale = () => {
@@ -389,22 +392,24 @@ export default function EquipmentMaintenance() {
           <h2 className="text-2xl font-bold text-slate-800">{t('equipment_maintenance') || "Jihozlar ta'mirlash"}</h2>
           <p className="text-slate-600 mt-1">{t('equipment_maintenance_desc') || "Jihozlarni va ta'mirlashni boshqaring"}</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setShowCreateEquipmentModal(true)}
-            variant="outline"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_equipment') || "Yangi jihoz"}
-          </Button>
-          <Button
-            onClick={() => setShowCreateTaskModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_task') || "Yangi vazifa"}
-          </Button>
-        </div>
+        {canCreate(MODULES.MANUFACTURING) && (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowCreateEquipmentModal(true)}
+              variant="outline"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_equipment') || "Yangi jihoz"}
+            </Button>
+            <Button
+              onClick={() => setShowCreateTaskModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_task') || "Yangi vazifa"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}

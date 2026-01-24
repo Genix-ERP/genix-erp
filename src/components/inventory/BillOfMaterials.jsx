@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -99,6 +100,7 @@ export default function BillOfMaterials() {
     calculateBOMCost,
     isLoading
   } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -432,13 +434,15 @@ export default function BillOfMaterials() {
               <Layers className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('bill_of_materials') || 'Bill of Materials'}
             </CardTitle>
-            <Button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {t('create_bom') || 'Create BOM'}
-            </Button>
+            {canCreate(MODULES.INVENTORY) && (
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t('create_bom') || 'Create BOM'}
+              </Button>
+            )}
           </div>
 
           {/* Filters */}
@@ -564,21 +568,25 @@ export default function BillOfMaterials() {
                               >
                                 <Calculator className="w-4 h-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditModal(bom)}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDelete(bom.id)}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {canUpdate(MODULES.INVENTORY) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditModal(bom)}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canDelete(MODULES.INVENTORY) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(bom.id)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -953,16 +961,18 @@ export default function BillOfMaterials() {
                     onChange={(e) => setOperationForm({ ...operationForm, run_time: parseInt(e.target.value) || 0 })}
                   />
                 </div>
-                <div>
-                  <Button
-                    onClick={handleAddOperation}
-                    disabled={!operationForm.name}
-                    className="w-full mt-5 h-9"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    {t('add') || 'Add'}
-                  </Button>
-                </div>
+                {canCreate(MODULES.INVENTORY) && (
+                  <div>
+                    <Button
+                      onClick={handleAddOperation}
+                      disabled={!operationForm.name}
+                      className="w-full mt-5 h-9"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      {t('add') || 'Add'}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -994,14 +1004,16 @@ export default function BillOfMaterials() {
                       <TableCell className="text-right">{op.run_time} min</TableCell>
                       <TableCell className="text-right font-medium">{op.setup_time + op.run_time} min</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveOperation(op.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canDelete(MODULES.INVENTORY) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveOperation(op.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1177,16 +1189,18 @@ export default function BillOfMaterials() {
                     onChange={(e) => setLineFormData({ ...lineFormData, quantity: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Button
-                    onClick={handleAddLine}
-                    disabled={!lineFormData.component_id || isSaving}
-                    className="w-full"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    {t('add') || 'Add'}
-                  </Button>
-                </div>
+                {canCreate(MODULES.INVENTORY) && (
+                  <div>
+                    <Button
+                      onClick={handleAddLine}
+                      disabled={!lineFormData.component_id || isSaving}
+                      className="w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      {t('add') || 'Add'}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1224,14 +1238,16 @@ export default function BillOfMaterials() {
                           <TableCell className="text-right">{formatCurrency(comp?.cost_price || 0)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(lineCost)}</TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteLine(line.id)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {canDelete(MODULES.INVENTORY) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteLine(line.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
