@@ -133,6 +133,14 @@ export default function PriceLabelPrinting() {
   const [showPreview, setShowPreview] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Cleanup on unmount to prevent blocking navigation
+  useEffect(() => {
+    return () => {
+      setShowPreview(false);
+      setShowSettings(false);
+    };
+  }, []);
+
   // Load label settings from localStorage
   const getInitialSettings = () => {
     const defaultSettings = {

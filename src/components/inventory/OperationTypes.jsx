@@ -73,6 +73,14 @@ export default function OperationTypes() {
   const [selectedType, setSelectedType] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowCreateModal(false);
+      setShowEditModal(false);
+    };
+  }, []);
+
   const [formData, setFormData] = useState({
     warehouse_id: '',
     code: '',
@@ -283,41 +291,35 @@ export default function OperationTypes() {
 
           {/* Counters - Odoo style */}
           <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="text-center p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer">
-                    <div className="text-lg font-bold text-green-600">{opType.count_picking_ready || 0}</div>
-                    <div className="text-[10px] text-green-700 uppercase tracking-wide">{t('ready') || 'Ready'}</div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>{t('ready_operations') || 'Operations ready to process'}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-center p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer">
+                  <div className="text-lg font-bold text-green-600">{opType.count_picking_ready || 0}</div>
+                  <div className="text-[10px] text-green-700 uppercase tracking-wide">{t('ready') || 'Ready'}</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{t('ready_operations') || 'Operations ready to process'}</TooltipContent>
+            </Tooltip>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="text-center p-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer">
-                    <div className="text-lg font-bold text-amber-600">{opType.count_picking_waiting || 0}</div>
-                    <div className="text-[10px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Waiting'}</div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>{t('waiting_operations') || 'Operations waiting for stock'}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-center p-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer">
+                  <div className="text-lg font-bold text-amber-600">{opType.count_picking_waiting || 0}</div>
+                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Waiting'}</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{t('waiting_operations') || 'Operations waiting for stock'}</TooltipContent>
+            </Tooltip>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="text-center p-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer">
-                    <div className="text-lg font-bold text-red-600">{opType.count_picking_late || 0}</div>
-                    <div className="text-[10px] text-red-700 uppercase tracking-wide">{t('late') || 'Late'}</div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>{t('late_operations') || 'Overdue operations'}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-center p-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer">
+                  <div className="text-lg font-bold text-red-600">{opType.count_picking_late || 0}</div>
+                  <div className="text-[10px] text-red-700 uppercase tracking-wide">{t('late') || 'Late'}</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{t('late_operations') || 'Overdue operations'}</TooltipContent>
+            </Tooltip>
           </div>
 
           {/* Open button */}
@@ -345,6 +347,7 @@ export default function OperationTypes() {
   }
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -616,5 +619,6 @@ export default function OperationTypes() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }

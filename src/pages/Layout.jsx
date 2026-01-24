@@ -464,7 +464,7 @@ function LayoutContent({ children, currentPageName }) {
           </header>
 
           <div className="flex-1 overflow-auto">
-            <ErrorBoundary>
+            <ErrorBoundary location={location}>
               {children}
             </ErrorBoundary>
           </div>

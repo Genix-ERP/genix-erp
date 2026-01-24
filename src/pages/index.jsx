@@ -31,7 +31,7 @@ import Attendance from "./Attendance";
 import EmployeeContracts from "./EmployeeContracts";
 import Cargo from "./Cargo";
 
-import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
 import { EmployeePermissionsProvider, useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 
@@ -143,56 +143,63 @@ function ModuleRoute({ children, moduleId }) {
     return children;
 }
 
-// Create a wrapper component that uses useLocation inside the Router context
-function PagesContent() {
+// Layout wrapper that uses Outlet for child routes
+function LayoutWrapper() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
 
+    return (
+        <Layout currentPageName={currentPage}>
+            <Outlet />
+        </Layout>
+    );
+}
+
+// Create a wrapper component that uses useLocation inside the Router context
+function PagesContent() {
     return (
         <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route
-                path="/*"
+                path="/"
                 element={
                     <ProtectedRoute>
-                        <Layout currentPageName={currentPage}>
-                            <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="dashboard" element={<Dashboard />} />
-                                <Route path="aiassistant" element={<AIAssistant />} />
-                                <Route path="inventory" element={<ModuleRoute moduleId="inventory"><Inventory /></ModuleRoute>} />
-                                <Route path="workflows" element={<Workflows />} />
-                                <Route path="hr" element={<ModuleRoute moduleId="hr"><HR /></ModuleRoute>} />
-                                <Route path="leave-management" element={<ModuleRoute moduleId="hr"><LeaveManagement /></ModuleRoute>} />
-                                <Route path="attendance" element={<ModuleRoute moduleId="hr"><Attendance /></ModuleRoute>} />
-                                <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
-                                <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
-                                <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
-                                <Route path="customers" element={<ModuleRoute moduleId="customers"><Customers /></ModuleRoute>} />
-                                <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
-                                <Route path="my-settings" element={<MySettings />} />
-                                <Route path="financials" element={<ModuleRoute moduleId="financials"><Financials /></ModuleRoute>} />
-                                <Route path="notifications" element={<Notifications />} />
-                                <Route path="adminpanel" element={<AdminPanel />} />
-                                <Route path="adminsettings" element={<AdminSettings />} />
-                                <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
-                                <Route path="procurement" element={<ModuleRoute moduleId="procurement"><Procurement /></ModuleRoute>} />
-                                <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
-                                <Route path="projects/:projectId" element={<ModuleRoute moduleId="projects"><ProjectDetail /></ModuleRoute>} />
-                                <Route path="salesorders" element={<ModuleRoute moduleId="sales_orders"><SalesOrders /></ModuleRoute>} />
-                                <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
-                                <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
-                                <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
-                                <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
-                                <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
-                                <Route path="addcompany" element={<AdminRoute><AddCompany /></AdminRoute>} />
-                            </Routes>
-                        </Layout>
+                        <LayoutWrapper />
                     </ProtectedRoute>
                 }
-            />
+            >
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="aiassistant" element={<AIAssistant />} />
+                <Route path="inventory" element={<ModuleRoute moduleId="inventory"><Inventory /></ModuleRoute>} />
+                <Route path="workflows" element={<Workflows />} />
+                <Route path="hr" element={<ModuleRoute moduleId="hr"><HR /></ModuleRoute>} />
+                <Route path="leave-management" element={<ModuleRoute moduleId="hr"><LeaveManagement /></ModuleRoute>} />
+                <Route path="attendance" element={<ModuleRoute moduleId="hr"><Attendance /></ModuleRoute>} />
+                <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
+                <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
+                <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
+                <Route path="customers" element={<ModuleRoute moduleId="customers"><Customers /></ModuleRoute>} />
+                <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+                <Route path="my-settings" element={<MySettings />} />
+                <Route path="financials" element={<ModuleRoute moduleId="financials"><Financials /></ModuleRoute>} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="adminpanel" element={<AdminPanel />} />
+                <Route path="adminsettings" element={<AdminSettings />} />
+                <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
+                <Route path="procurement" element={<ModuleRoute moduleId="procurement"><Procurement /></ModuleRoute>} />
+                <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
+                <Route path="projects/:projectId" element={<ModuleRoute moduleId="projects"><ProjectDetail /></ModuleRoute>} />
+                <Route path="salesorders" element={<ModuleRoute moduleId="sales_orders"><SalesOrders /></ModuleRoute>} />
+                <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
+                <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
+                <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />
+                <Route path="contracts" element={<ModuleRoute moduleId="contracts"><Contracts /></ModuleRoute>} />
+                <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
+                <Route path="addcompany" element={<AdminRoute><AddCompany /></AdminRoute>} />
+            </Route>
         </Routes>
     );
 }
