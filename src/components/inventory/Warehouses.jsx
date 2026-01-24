@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -51,6 +52,7 @@ const LabelWithHelp = ({ label, helpText, required }) => (
 export default function Warehouses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     warehouses,
     inventory,
@@ -426,15 +428,17 @@ export default function Warehouses() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setShowCreateModal(true);
-                }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_warehouse')}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_warehouse')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -532,22 +536,26 @@ export default function Warehouses() {
                             >
                               <Eye className="w-4 h-4 text-slate-500" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(warehouse)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Pencil className="w-4 h-4 text-slate-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteClick(warehouse)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(warehouse)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Pencil className="w-4 h-4 text-slate-500" />
+                              </Button>
+                            )}
+                            {canDelete(MODULES.INVENTORY) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteClick(warehouse)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -559,13 +567,15 @@ export default function Warehouses() {
                         <div className="ml-12 mt-2">
                           <div className="flex items-center justify-between mb-3">
                             <h4 className="font-medium text-slate-700">{t('locations')}</h4>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAddLocation(warehouse)}
-                            >
-                              <Plus className="w-3 h-3 mr-1" /> {t('add_location')}
-                            </Button>
+                            {canCreate(MODULES.INVENTORY) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddLocation(warehouse)}
+                              >
+                                <Plus className="w-3 h-3 mr-1" /> {t('add_location')}
+                              </Button>
+                            )}
                           </div>
                           {warehouse.locations?.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -588,22 +598,26 @@ export default function Warehouses() {
                                       {location.is_active ? t('active') : t('inactive')}
                                     </Badge>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleEditLocation(warehouse, location)}
-                                        className="h-7 w-7 p-0"
-                                      >
-                                        <Pencil className="w-3 h-3 text-slate-500" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDeleteLocationClick(warehouse, location)}
-                                        className="h-7 w-7 p-0"
-                                      >
-                                        <Trash2 className="w-3 h-3 text-red-500" />
-                                      </Button>
+                                      {canUpdate(MODULES.INVENTORY) && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleEditLocation(warehouse, location)}
+                                          className="h-7 w-7 p-0"
+                                        >
+                                          <Pencil className="w-3 h-3 text-slate-500" />
+                                        </Button>
+                                      )}
+                                      {canDelete(MODULES.INVENTORY) && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleDeleteLocationClick(warehouse, location)}
+                                          className="h-7 w-7 p-0"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-red-500" />
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>

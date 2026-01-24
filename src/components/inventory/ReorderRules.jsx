@@ -64,6 +64,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -132,6 +133,7 @@ export default function ReorderRules() {
     inventory = [],
     isLoading
   } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
@@ -323,13 +325,15 @@ export default function ReorderRules() {
             {t('reorder_rules_description') || 'Configure automatic reorder points and purchase suggestions'}
           </p>
         </div>
-        <Button
-          onClick={() => handleOpenForm()}
-          className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('add_rule') || 'Add Rule'}
-        </Button>
+        {canCreate(MODULES.INVENTORY) && (
+          <Button
+            onClick={() => handleOpenForm()}
+            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {t('add_rule') || 'Add Rule'}
+          </Button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -491,21 +495,25 @@ export default function ReorderRules() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleOpenForm(rule)}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-red-600 hover:text-red-700"
-                                onClick={() => handleDelete(rule.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {canUpdate(MODULES.INVENTORY) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleOpenForm(rule)}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canDelete(MODULES.INVENTORY) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleDelete(rule.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

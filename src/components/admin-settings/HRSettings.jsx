@@ -13,11 +13,26 @@ import apiClient from '@/api/client';
 import { hrService } from "@/api/services/hr";
 import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search } from 'lucide-react';
 
-const PAY_PERIODS = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'bi-weekly', label: 'Bi-weekly' },
-  { value: 'monthly', label: 'Monthly' }
-];
+// PAY_PERIODS is defined inside component to use translations
+
+// Map leave type IDs to translation keys
+const LEAVE_TYPE_TRANSLATION_KEYS = {
+  annual: 'annual_leave',
+  sick: 'sick_leave',
+  personal: 'personal_leave',
+  unpaid: 'unpaid_leave',
+  maternity: 'maternity_leave',
+  paternity: 'paternity_leave',
+};
+
+// Map expense category IDs to translation keys
+const EXPENSE_CATEGORY_TRANSLATION_KEYS = {
+  travel: 'travel',
+  meals: 'meals',
+  supplies: 'office_supplies',
+  equipment: 'equipment',
+  other: 'other',
+};
 
 export default function HRSettings() {
   const { language } = useLanguage();
@@ -26,6 +41,12 @@ export default function HRSettings() {
   const { toast } = useToast();
 
   const hr = settings.hr || {};
+
+  const PAY_PERIODS = [
+    { value: 'weekly', label: t('weekly') },
+    { value: 'bi-weekly', label: t('bi_weekly') },
+    { value: 'monthly', label: t('monthly') }
+  ];
 
   // Employee company assignment state
   const [employees, setEmployees] = useState([]);
@@ -203,7 +224,9 @@ export default function HRSettings() {
           {(hr.leave?.types || []).map((leaveType, index) => (
             <div key={leaveType.id} className="p-4 bg-slate-50 rounded-lg">
               <div className="flex items-center justify-between mb-3">
-                <span className="font-medium text-slate-800">{leaveType.name}</span>
+                <span className="font-medium text-slate-800">
+                  {t(LEAVE_TYPE_TRANSLATION_KEYS[leaveType.id]) || leaveType.name}
+                </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
@@ -277,7 +300,9 @@ export default function HRSettings() {
         <div className="space-y-2">
           {(hr.expense?.categories || []).map((category, index) => (
             <div key={category.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-              <span className="text-sm font-medium">{category.name}</span>
+              <span className="text-sm font-medium">
+                {t(EXPENSE_CATEGORY_TRANSLATION_KEYS[category.id]) || category.name}
+              </span>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"

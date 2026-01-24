@@ -7,24 +7,33 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Target, GitBranch, Users, Copy } from 'lucide-react';
 
-const ASSIGNMENT_METHODS = [
-  { value: 'manual', label: 'Manual Assignment', desc: 'Leads assigned manually by managers' },
-  { value: 'round_robin', label: 'Round Robin', desc: 'Distribute leads evenly among team' },
-  { value: 'load_balanced', label: 'Load Balanced', desc: 'Based on current workload' }
-];
-
-const DUPLICATE_CHECK_FIELDS = [
-  { value: 'email', label: 'Email Address' },
-  { value: 'phone', label: 'Phone Number' },
-  { value: 'company_name', label: 'Company Name' }
-];
-
 export default function CRMSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const crm = settings.crm || {};
+
+  const ASSIGNMENT_METHODS = [
+    { value: 'manual', label: t('manual_assignment'), desc: t('manual_assignment_desc') },
+    { value: 'round_robin', label: t('round_robin'), desc: t('round_robin_desc') },
+    { value: 'load_balanced', label: t('load_balanced'), desc: t('load_balanced_desc') }
+  ];
+
+  const DUPLICATE_CHECK_FIELDS = [
+    { value: 'email', label: t('email_address') },
+    { value: 'phone', label: t('phone_number') },
+    { value: 'company_name', label: t('company_name') }
+  ];
+
+  const DEFAULT_STAGES = [
+    t('stage_new'),
+    t('stage_qualified'),
+    t('stage_proposal'),
+    t('stage_negotiation'),
+    t('stage_won'),
+    t('stage_lost')
+  ];
 
   return (
     <div className="space-y-4">
@@ -67,7 +76,7 @@ export default function CRMSettings() {
           <SettingsField label={t('default_pipeline_stages')} description={t('default_pipeline_stages_desc')}>
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="flex flex-wrap gap-2">
-                {(crm.pipeline?.default_stages || ['New', 'Qualified', 'Proposition', 'Negotiation', 'Won', 'Lost']).map((stage, index) => (
+                {(crm.pipeline?.default_stages || DEFAULT_STAGES).map((stage, index) => (
                   <div key={index} className="flex items-center gap-1 px-3 py-1 bg-white border rounded-full text-sm">
                     <span className="w-5 h-5 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full text-xs font-medium">
                       {index + 1}

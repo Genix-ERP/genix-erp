@@ -7,36 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, FileText, Percent, Coins, Landmark, BookOpen } from 'lucide-react';
 
-const CHART_TEMPLATES = [
-  { value: 'standard', label: 'Standard Chart of Accounts' },
-  { value: 'IFRS', label: 'IFRS (International Financial Reporting Standards)' },
-  { value: 'local_GAAP', label: 'Local GAAP (Uzbekistan)' }
-];
-
-const TAX_ROUNDING = [
-  { value: 'line', label: 'Round per Line Item' },
-  { value: 'document', label: 'Round per Document' }
-];
-
-const EXCHANGE_SOURCES = [
-  { value: 'manual', label: 'Manual Entry' },
-  { value: 'api', label: 'Automatic (API)' }
-];
-
-const MONTHS = [
-  { value: 1, label: 'January' },
-  { value: 2, label: 'February' },
-  { value: 3, label: 'March' },
-  { value: 4, label: 'April' },
-  { value: 5, label: 'May' },
-  { value: 6, label: 'June' },
-  { value: 7, label: 'July' },
-  { value: 8, label: 'August' },
-  { value: 9, label: 'September' },
-  { value: 10, label: 'October' },
-  { value: 11, label: 'November' },
-  { value: 12, label: 'December' }
-];
+// Arrays are defined inside component to use translations
 
 export default function FinanceSettings() {
   const { language } = useLanguage();
@@ -44,6 +15,37 @@ export default function FinanceSettings() {
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const finance = settings.finance || {};
+
+  const CHART_TEMPLATES = [
+    { value: 'standard', label: t('standard_chart_of_accounts') },
+    { value: 'IFRS', label: t('ifrs_standard') },
+    { value: 'local_GAAP', label: t('local_gaap_uzbekistan') }
+  ];
+
+  const TAX_ROUNDING = [
+    { value: 'line', label: t('round_per_line_item') },
+    { value: 'document', label: t('round_per_document') }
+  ];
+
+  const EXCHANGE_SOURCES = [
+    { value: 'manual', label: t('manual_entry') },
+    { value: 'api', label: t('automatic_api') }
+  ];
+
+  const MONTHS = [
+    { value: 1, label: t('january') },
+    { value: 2, label: t('february') },
+    { value: 3, label: t('march') },
+    { value: 4, label: t('april') },
+    { value: 5, label: t('may') },
+    { value: 6, label: t('june') },
+    { value: 7, label: t('july') },
+    { value: 8, label: t('august') },
+    { value: 9, label: t('september') },
+    { value: 10, label: t('october') },
+    { value: 11, label: t('november') },
+    { value: 12, label: t('december') }
+  ];
 
   return (
     <div className="space-y-4">

@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 // Portal component for dragging items
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -86,6 +88,7 @@ const stageConfig = [
 
 export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, onEditOpportunity, onDeleteOpportunity, language = 'en' }) {
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   
   const [kanbanState, setKanbanState] = useState({
     opportunities: [],
@@ -237,7 +240,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                {onEditOpportunity && (
+                {canUpdate(MODULES.CUSTOMERS) && onEditOpportunity && (
                   <DropdownMenuItem onClick={(e) => {
                     e.stopPropagation();
                     onEditOpportunity(opportunity);
@@ -246,7 +249,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                     {t('edit')}
                   </DropdownMenuItem>
                 )}
-                {onDeleteOpportunity && (
+                {canDelete(MODULES.CUSTOMERS) && onDeleteOpportunity && (
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
@@ -298,7 +301,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
         </div>
       </CardContent>
     </Card>
-  ), [onEditOpportunity, onDeleteOpportunity, t]);
+  ), [onEditOpportunity, onDeleteOpportunity, t, canUpdate, canDelete]);
 
   if (!kanbanState.opportunities || kanbanState.opportunities.length === 0) {
     return (

@@ -47,10 +47,13 @@ import {
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function VendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate } = usePermissions();
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -79,11 +82,11 @@ export default function VendorBills() {
   });
 
   // Sample vendors (in real app, fetch from API)
-  const [vendors, setVendors] = useState([
-    { id: '1', name: 'Tech Supplies Ltd' },
-    { id: '2', name: 'Office Equipment Co' },
-    { id: '3', name: 'Industrial Parts Inc' }
-  ]);
+  const vendors = [
+    { id: '1', name: t('tech_supplies_ltd') || 'Tech Supplies Ltd' },
+    { id: '2', name: t('office_equipment_co') || 'Office Equipment Co' },
+    { id: '3', name: t('industrial_parts_inc') || 'Industrial Parts Inc' }
+  ];
 
   // Sample purchase orders (for linking)
   const [purchaseOrders, setPurchaseOrders] = useState([
@@ -340,10 +343,12 @@ export default function VendorBills() {
             {t('vendor_bills_desc') || 'Manage vendor invoices and accounts payable'}
           </p>
         </div>
-        <Button onClick={() => { resetNewBill(); setEditingBill(null); setShowBillDialog(true); }}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_bill') || 'New Bill'}
-        </Button>
+        {canCreate(MODULES.PURCHASES) && (
+          <Button onClick={() => { resetNewBill(); setEditingBill(null); setShowBillDialog(true); }}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_bill') || 'New Bill'}
+          </Button>
+        )}
       </div>
 
       {/* Statistics Cards */}
@@ -443,10 +448,12 @@ export default function VendorBills() {
               <p className="text-muted-foreground mb-4">
                 {t('no_bills_desc') || 'Create your first vendor bill to track accounts payable'}
               </p>
-              <Button onClick={() => { resetNewBill(); setShowBillDialog(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_bill') || 'New Bill'}
-              </Button>
+              {canCreate(MODULES.PURCHASES) && (
+                <Button onClick={() => { resetNewBill(); setShowBillDialog(true); }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_bill') || 'New Bill'}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

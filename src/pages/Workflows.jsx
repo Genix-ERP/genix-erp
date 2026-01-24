@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Workflow } from "@/api/entities";
 import { InvokeLLM } from "@/api/integrations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,13 +17,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { 
-  Zap, 
-  Search, 
-  Plus, 
+import {
+  Zap,
+  Search,
+  Plus,
   DollarSign,
   TrendingUp,
-  Bot
+  Bot,
+  ShieldAlert
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -33,6 +35,7 @@ import WorkflowAIChat from "@/components/workflows/WorkflowAIChat";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useAuth } from "@/components/contexts/AuthContext";
 
 export default function Workflows() {
   const [workflows, setWorkflows] = useState([]);
@@ -49,11 +52,24 @@ export default function Workflows() {
 
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user, isSiteAdmin, isOwner } = useAuth();
+  const navigate = useNavigate();
+
+  // Check if user has admin access (site_admin, owner, admin, or system_admin role)
+  const hasAdminAccess = () => {
+    if (!user) return false;
+    return isSiteAdmin() || isOwner() || user.role === 'admin' || user.role === 'system_admin';
+  };
 
   useEffect(() => {
+    // Redirect non-admin users to dashboard
+    if (!hasAdminAccess()) {
+      navigate('/');
+      return;
+    }
     loadWorkflows();
     generateInsights();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     filterWorkflows();
@@ -192,6 +208,26 @@ export default function Workflows() {
   };
 
   const metrics = calculateMetrics();
+
+  // Show access denied if user doesn't have admin access
+  if (!hasAdminAccess()) {
+    return (
+      <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+        <div className="max-w-md mx-auto mt-20">
+          <Card className="border-red-200">
+            <CardContent className="p-8 text-center">
+              <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-slate-900 mb-2">{t('access_denied')}</h2>
+              <p className="text-slate-600 mb-6">{t('workflows_admin_only')}</p>
+              <Button onClick={() => navigate('/')} variant="outline">
+                {t('go_to_dashboard')}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">

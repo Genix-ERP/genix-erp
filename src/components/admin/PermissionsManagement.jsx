@@ -8,55 +8,71 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Shield, Check, X, Eye, Edit3, Trash2, Plus, FileCheck, Download, 
+import {
+  Shield, Check, X, Eye, Edit3, Trash2, Plus, FileCheck, Download,
   Sparkles, Copy, RefreshCw, Search, AlertTriangle, Users, Lock
 } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
-const ENTITIES = [
-  'Customer', 'Lead', 'Opportunity', 'InventoryItem', 'StockMovement', 
+const ENTITY_KEYS = [
+  'Customer', 'Lead', 'Opportunity', 'InventoryItem', 'StockMovement',
   'FinancialTransaction', 'Invoice', 'JournalEntry', 'Employee', 'Payroll',
   'PurchaseOrder', 'SalesOrder', 'ProductionOrder', 'Project', 'Contract',
   'BillOfMaterials', 'WorkCenter', 'QualityCheck', 'FixedAsset', 'ExpenseClaim'
 ];
 
-const ROLES = [
-  { value: 'system_admin', label: 'System Admin', color: 'red' },
-  { value: 'admin', label: 'Administrator', color: 'purple' },
-  { value: 'manager', label: 'Manager', color: 'indigo' },
-  { value: 'finance_manager', label: 'Finance Manager', color: 'emerald' },
-  { value: 'sales_manager', label: 'Sales Manager', color: 'blue' },
-  { value: 'inventory_manager', label: 'Inventory Manager', color: 'orange' },
-  { value: 'hr_manager', label: 'HR Manager', color: 'pink' },
-  { value: 'user', label: 'User', color: 'slate' },
-  { value: 'limited_user', label: 'Limited User', color: 'gray' }
-];
-
-const PERMISSION_TEMPLATES = {
-  odoo_style: {
-    name: 'Odoo Style',
-    description: 'Role-based with access levels (Own, Department, All)',
-    icon: '🟢'
-  },
-  sap_style: {
-    name: 'SAP Style',
-    description: 'Transaction codes with field-level security',
-    icon: '🔵'
-  },
-  oracle_style: {
-    name: 'Oracle Style',
-    description: 'Profile-based with responsibility hierarchy',
-    icon: '🔴'
-  },
-  microsoft_style: {
-    name: 'Microsoft Dynamics',
-    description: 'Security roles with privilege depth levels',
-    icon: '🟡'
-  }
+const ENTITY_TRANSLATION_MAP = {
+  'Customer': 'entity_customer',
+  'Lead': 'entity_lead',
+  'Opportunity': 'entity_opportunity',
+  'InventoryItem': 'entity_inventory_item',
+  'StockMovement': 'entity_stock_movement',
+  'FinancialTransaction': 'entity_financial_transaction',
+  'Invoice': 'entity_invoice',
+  'JournalEntry': 'entity_journal_entry',
+  'Employee': 'entity_employee',
+  'Payroll': 'entity_payroll',
+  'PurchaseOrder': 'entity_purchase_order',
+  'SalesOrder': 'entity_sales_order',
+  'ProductionOrder': 'entity_production_order',
+  'Project': 'entity_project',
+  'Contract': 'entity_contract',
+  'BillOfMaterials': 'entity_bill_of_materials',
+  'WorkCenter': 'entity_work_center',
+  'QualityCheck': 'entity_quality_check',
+  'FixedAsset': 'entity_fixed_asset',
+  'ExpenseClaim': 'entity_expense_claim'
 };
 
 export default function PermissionsManagement() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
+  const getEntityLabel = (entityKey) => {
+    const translationKey = ENTITY_TRANSLATION_MAP[entityKey];
+    return translationKey ? t(translationKey) : entityKey;
+  };
+
+  const ROLES = [
+    { value: 'system_admin', label: t('role_system_admin_short'), color: 'red' },
+    { value: 'admin', label: t('role_administrator'), color: 'purple' },
+    { value: 'manager', label: t('role_manager'), color: 'indigo' },
+    { value: 'finance_manager', label: t('role_finance_manager'), color: 'emerald' },
+    { value: 'sales_manager', label: t('role_sales_manager'), color: 'blue' },
+    { value: 'inventory_manager', label: t('role_inventory_manager'), color: 'orange' },
+    { value: 'hr_manager', label: t('role_hr_manager'), color: 'pink' },
+    { value: 'user', label: t('role_user'), color: 'slate' },
+    { value: 'limited_user', label: t('role_limited_user'), color: 'gray' }
+  ];
+
+  const ACCESS_LEVELS = [
+    { value: 'none', label: t('access_level_none') },
+    { value: 'own_only', label: t('access_level_own_only') },
+    { value: 'department', label: t('access_level_department') },
+    { value: 'all', label: t('access_level_all') }
+  ];
   const [permissions, setPermissions] = useState([]);
   const [selectedRole, setSelectedRole] = useState('user');
   const [searchQuery, setSearchQuery] = useState('');
@@ -258,7 +274,8 @@ export default function PermissionsManagement() {
     setIsSaving(false);
   };
 
-  const filteredEntities = ENTITIES.filter(entity =>
+  const filteredEntities = ENTITY_KEYS.filter(entity =>
+    getEntityLabel(entity).toLowerCase().includes(searchQuery.toLowerCase()) ||
     entity.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -271,17 +288,17 @@ export default function PermissionsManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Permissions Matrix</h3>
+          <h3 className="text-xl font-bold text-slate-900">{t('permissions_matrix')}</h3>
           <p className="text-sm text-slate-600 mt-1">
-            AI-powered enterprise-grade access control
+            {t('permissions_matrix_desc')}
           </p>
         </div>
-        <Button 
+        <Button
           onClick={generateAIRecommendations}
           className="bg-gradient-to-r from-purple-600 to-indigo-600"
         >
           <Sparkles className="w-4 h-4 mr-2" />
-          AI Recommendations
+          {t('ai_recommendations')}
         </Button>
       </div>
 
@@ -310,7 +327,7 @@ export default function PermissionsManagement() {
             <Select onValueChange={copyRolePermissions}>
               <SelectTrigger className="w-[200px]">
                 <Copy className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Copy from role..." />
+                <SelectValue placeholder={t('copy_from_role')} />
               </SelectTrigger>
               <SelectContent>
                 {ROLES.filter(r => r.value !== selectedRole).map(role => (
@@ -324,7 +341,7 @@ export default function PermissionsManagement() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search entities..."
+                placeholder={t('search_entities')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -340,7 +357,7 @@ export default function PermissionsManagement() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              AI Security Recommendations
+              {t('ai_security_recommendations')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -372,7 +389,7 @@ export default function PermissionsManagement() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Entity Permissions for {ROLES.find(r => r.value === selectedRole)?.label}
+            {t('entity_permissions_for')} {ROLES.find(r => r.value === selectedRole)?.label}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -385,32 +402,32 @@ export default function PermissionsManagement() {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Entity</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">{t('entity')}</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <Plus className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Create</div>
+                      <div className="text-[10px] mt-1">{t('create')}</div>
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <Eye className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Read</div>
+                      <div className="text-[10px] mt-1">{t('read')}</div>
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <Edit3 className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Update</div>
+                      <div className="text-[10px] mt-1">{t('update')}</div>
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <Trash2 className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Delete</div>
+                      <div className="text-[10px] mt-1">{t('delete')}</div>
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <FileCheck className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Approve</div>
+                      <div className="text-[10px] mt-1">{t('approve')}</div>
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700">
                       <Download className="w-4 h-4 mx-auto" />
-                      <div className="text-[10px] mt-1">Export</div>
+                      <div className="text-[10px] mt-1">{t('export')}</div>
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Access Level</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">{t('access_level')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -419,7 +436,7 @@ export default function PermissionsManagement() {
                     return (
                       <tr key={entity} className="border-b hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                          {entity}
+                          {getEntityLabel(entity)}
                           {perm.ai_recommended && (
                             <Badge className="ml-2 bg-purple-100 text-purple-700 text-[10px]">
                               <Sparkles className="w-3 h-3 mr-1" />
@@ -472,10 +489,9 @@ export default function PermissionsManagement() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">None</SelectItem>
-                              <SelectItem value="own_only">Own Only</SelectItem>
-                              <SelectItem value="department">Department</SelectItem>
-                              <SelectItem value="all">All Records</SelectItem>
+                              {ACCESS_LEVELS.map(level => (
+                                <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </td>
@@ -495,10 +511,9 @@ export default function PermissionsManagement() {
           <div className="flex items-center gap-4">
             <Lock className="w-8 h-8 text-indigo-600" />
             <div>
-              <p className="font-semibold text-slate-900">Enterprise-Grade Security</p>
+              <p className="font-semibold text-slate-900">{t('enterprise_grade_security')}</p>
               <p className="text-sm text-slate-600">
-                Permissions are enforced at API level with real-time validation. 
-                Changes apply immediately across all modules.
+                {t('enterprise_grade_security_desc')}
               </p>
             </div>
           </div>

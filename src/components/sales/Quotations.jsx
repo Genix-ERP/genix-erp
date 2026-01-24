@@ -54,6 +54,8 @@ import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function Quotations() {
   const { language } = useLanguage();
@@ -68,6 +70,7 @@ export default function Quotations() {
   } = useSales();
 
   const { customers } = useCustomers();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -259,10 +262,12 @@ export default function Quotations() {
             {t('manage_quotations_desc')}
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_quotation')}
-        </Button>
+        {canCreate(MODULES.SALES) && (
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_quotation')}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

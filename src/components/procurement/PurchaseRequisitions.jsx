@@ -24,6 +24,8 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 const priorityColors = {
   low: 'bg-gray-100 text-gray-800',
@@ -45,6 +47,7 @@ export default function PurchaseRequisitions() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { suppliers } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [requisitions, setRequisitions] = useState([]);
   const [filteredRequisitions, setFilteredRequisitions] = useState([]);
@@ -245,9 +248,11 @@ export default function PurchaseRequisitions() {
             <FileText className="w-5 h-5" />
             {t('purchase_requisitions') || 'Purchase Requisitions'}
           </CardTitle>
-          <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-            <Plus className="w-4 h-4 mr-2" /> {t('new_requisition') || 'New Requisition'}
-          </Button>
+          {canCreate(MODULES.PURCHASES) && (
+            <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
+              <Plus className="w-4 h-4 mr-2" /> {t('new_requisition') || 'New Requisition'}
+            </Button>
+          )}
         </div>
         <div className="flex gap-3 mt-4">
           <div className="relative flex-1">
@@ -279,9 +284,11 @@ export default function PurchaseRequisitions() {
           <div className="text-center py-16">
             <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_requisitions_yet') || 'No requisitions yet'}</p>
-            <Button onClick={() => setShowCreateModal(true)} className="mt-4">
-              {t('create_first_requisition') || 'Create First Requisition'}
-            </Button>
+            {canCreate(MODULES.PURCHASES) && (
+              <Button onClick={() => setShowCreateModal(true)} className="mt-4">
+                {t('create_first_requisition') || 'Create First Requisition'}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -309,17 +309,30 @@ export default function AdminPanel() {
 
   const getRoleDisplayName = (role) => {
     const names = {
-      system_admin: 'System Admin',
-      admin: 'Administrator',
-      manager: 'Manager',
-      finance_manager: 'Finance Manager',
-      sales_manager: 'Sales Manager',
-      inventory_manager: 'Inventory Manager',
-      hr_manager: 'HR Manager',
-      user: 'User',
-      limited_user: 'Limited User'
+      system_admin: t('system_admin'),
+      admin: t('administrator'),
+      manager: t('manager'),
+      finance_manager: t('finance_manager'),
+      sales_manager: t('sales_manager'),
+      inventory_manager: t('inventory_manager'),
+      hr_manager: t('hr_manager'),
+      user: t('user'),
+      limited_user: t('limited_user'),
+      owner: t('owner')
     };
     return names[role] || role;
+  };
+
+  const getPlanDisplayName = (plan) => {
+    const names = {
+      free: t('free'),
+      free_trial: t('free_trial'),
+      basic: t('plan_basic'),
+      starter: t('plan_starter'),
+      professional: t('plan_professional'),
+      enterprise: t('plan_enterprise')
+    };
+    return names[plan] || plan;
   };
 
   const getStatusBadgeColor = (status) => {
@@ -398,7 +411,7 @@ export default function AdminPanel() {
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.totalUsers}</p>
-              <p className="text-xs text-slate-600">Total Users</p>
+              <p className="text-xs text-slate-600">{t('total_users')}</p>
             </CardContent>
           </Card>
 
@@ -408,7 +421,7 @@ export default function AdminPanel() {
                 <CheckCircle className="w-5 h-5 text-green-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.activeUsers}</p>
-              <p className="text-xs text-slate-600">Active</p>
+              <p className="text-xs text-slate-600">{t('active_users')}</p>
             </CardContent>
           </Card>
 
@@ -418,7 +431,7 @@ export default function AdminPanel() {
                 <Clock className="w-5 h-5 text-yellow-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.trialUsers}</p>
-              <p className="text-xs text-slate-600">On Trial</p>
+              <p className="text-xs text-slate-600">{t('on_trial')}</p>
             </CardContent>
           </Card>
 
@@ -428,7 +441,7 @@ export default function AdminPanel() {
                 <CreditCard className="w-5 h-5 text-purple-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.enterpriseUsers}</p>
-              <p className="text-xs text-slate-600">Enterprise</p>
+              <p className="text-xs text-slate-600">{t('enterprise')}</p>
             </CardContent>
           </Card>
 
@@ -438,7 +451,7 @@ export default function AdminPanel() {
                 <AlertCircle className="w-5 h-5 text-orange-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.expiringTrials}</p>
-              <p className="text-xs text-slate-600">Expiring Soon</p>
+              <p className="text-xs text-slate-600">{t('expiring_soon')}</p>
             </CardContent>
           </Card>
 
@@ -448,7 +461,7 @@ export default function AdminPanel() {
                 <Ban className="w-5 h-5 text-red-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.blockedUsers}</p>
-              <p className="text-xs text-slate-600">Blocked</p>
+              <p className="text-xs text-slate-600">{t('blocked')}</p>
             </CardContent>
           </Card>
 
@@ -458,7 +471,7 @@ export default function AdminPanel() {
                 <Shield className="w-5 h-5 text-purple-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.adminUsers}</p>
-              <p className="text-xs text-slate-600">Admins</p>
+              <p className="text-xs text-slate-600">{t('admins')}</p>
             </CardContent>
           </Card>
         </div>
@@ -467,20 +480,20 @@ export default function AdminPanel() {
         <Tabs defaultValue="users" className="w-full">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
             <TabsTrigger value="users" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <span>Users</span>
+              <span>{t('users_tab')}</span>
             </TabsTrigger>
             <TabsTrigger value="subscriptions" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <span>Subscriptions</span>
+              <span>{t('subscriptions')}</span>
             </TabsTrigger>
             <TabsTrigger value="roles" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <span>Roles</span>
+              <span>{t('roles')}</span>
             </TabsTrigger>
             <TabsTrigger value="permissions" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Shield className="w-4 h-4" />
-              <span className="hidden sm:inline">Permissions</span>
+              <span className="hidden sm:inline">{t('permissions')}</span>
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <span>Settings</span>
+              <span>{t('settings')}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -489,16 +502,16 @@ export default function AdminPanel() {
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle>User Management</CardTitle>
+                  <CardTitle>{t('user_management')}</CardTitle>
                   <Button onClick={() => setShowInviteModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                    <Plus className="w-4 h-4 mr-2" /> Invite User
+                    <Plus className="w-4 h-4 mr-2" /> {t('invite_user')}
                   </Button>
                 </div>
                 <div className="flex gap-3 mt-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input 
-                      placeholder="Search users..."
+                    <Input
+                      placeholder={t('search_users')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9"
@@ -509,16 +522,16 @@ export default function AdminPanel() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Roles</SelectItem>
-                      <SelectItem value="system_admin">System Admin</SelectItem>
-                      <SelectItem value="admin">Administrator</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                      <SelectItem value="sales_manager">Sales Manager</SelectItem>
-                      <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
-                      <SelectItem value="hr_manager">HR Manager</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="limited_user">Limited User</SelectItem>
+                      <SelectItem value="all">{t('all_roles')}</SelectItem>
+                      <SelectItem value="system_admin">{t('system_admin')}</SelectItem>
+                      <SelectItem value="admin">{t('administrator')}</SelectItem>
+                      <SelectItem value="manager">{t('manager')}</SelectItem>
+                      <SelectItem value="finance_manager">{t('finance_manager')}</SelectItem>
+                      <SelectItem value="sales_manager">{t('sales_manager')}</SelectItem>
+                      <SelectItem value="inventory_manager">{t('inventory_manager')}</SelectItem>
+                      <SelectItem value="hr_manager">{t('hr_manager')}</SelectItem>
+                      <SelectItem value="user">{t('user')}</SelectItem>
+                      <SelectItem value="limited_user">{t('limited_user')}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -526,11 +539,11 @@ export default function AdminPanel() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="trial">Trial</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="expired">Expired</SelectItem>
-                      <SelectItem value="blocked">Blocked</SelectItem>
+                      <SelectItem value="all">{t('all_status')}</SelectItem>
+                      <SelectItem value="trial">{t('trial')}</SelectItem>
+                      <SelectItem value="active">{t('active')}</SelectItem>
+                      <SelectItem value="expired">{t('expired')}</SelectItem>
+                      <SelectItem value="blocked">{t('blocked')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -545,10 +558,10 @@ export default function AdminPanel() {
                     <div className="text-red-500 mb-4">
                       <AlertTriangle className="w-12 h-12" />
                     </div>
-                    <p className="text-lg font-medium text-slate-900 mb-2">Failed to load users</p>
+                    <p className="text-lg font-medium text-slate-900 mb-2">{t('failed_to_load_users')}</p>
                     <p className="text-sm text-red-600 mb-4">{loadError}</p>
                     <Button onClick={loadData} variant="outline">
-                      Retry
+                      {t('retry')}
                     </Button>
                   </div>
                 ) : (
@@ -556,12 +569,12 @@ export default function AdminPanel() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
-                          <TableHead>User</TableHead>
-                          <TableHead>Contact</TableHead>
-                          <TableHead>Role/Plan</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Subscription</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('user_column')}</TableHead>
+                          <TableHead>{t('contact')}</TableHead>
+                          <TableHead>{t('role_plan')}</TableHead>
+                          <TableHead>{t('status')}</TableHead>
+                          <TableHead>{t('subscription')}</TableHead>
+                          <TableHead>{t('actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -605,33 +618,33 @@ export default function AdminPanel() {
                                   {/* Only show plan badge if not on free trial (to avoid duplication with status) */}
                                   {userPlan !== 'free_trial' && (
                                     <Badge className={getPlanBadgeColor(userPlan)}>
-                                      {userPlan}
+                                      {getPlanDisplayName(userPlan)}
                                     </Badge>
                                   )}
                                 </div>
                               </TableCell>
                               <TableCell>
                                 <Badge className={getStatusBadgeColor(userStatus)}>
-                                  {userStatus === 'trial' ? 'Free Trial' : userStatus}
+                                  {userStatus === 'trial' ? t('free_trial') : t(userStatus)}
                                 </Badge>
                                 {user.is_blocked && (
-                                  <Badge className="ml-1 bg-red-100 text-red-800">Blocked</Badge>
+                                  <Badge className="ml-1 bg-red-100 text-red-800">{t('blocked')}</Badge>
                                 )}
                               </TableCell>
                               <TableCell>
                                 {subInfo.daysRemaining !== null ? (
                                   <div className="text-sm">
                                     <p className={subInfo.isExpiring ? 'text-orange-600 font-semibold' : 'text-slate-600'}>
-                                      {subInfo.daysRemaining > 0 ? `${subInfo.daysRemaining} days left` : 'Expired'}
+                                      {subInfo.daysRemaining > 0 ? `${subInfo.daysRemaining} ${t('days_left')}` : t('expired')}
                                     </p>
                                     {(user.trial_end_date || user.subscription_end_date) && (
                                       <p className="text-xs text-slate-500">
-                                        Ends: {format(parseISO(user.trial_end_date || user.subscription_end_date), 'MMM dd, yyyy')}
+                                        {t('ends')}: {format(parseISO(user.trial_end_date || user.subscription_end_date), 'MMM dd, yyyy')}
                                       </p>
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-slate-500">No expiry</span>
+                                  <span className="text-xs text-slate-500">{t('no_expiry')}</span>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -645,15 +658,15 @@ export default function AdminPanel() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="system_admin">System Admin</SelectItem>
-                                        <SelectItem value="admin">Administrator</SelectItem>
-                                        <SelectItem value="manager">Manager</SelectItem>
-                                        <SelectItem value="finance_manager">Finance Mgr</SelectItem>
-                                        <SelectItem value="sales_manager">Sales Mgr</SelectItem>
-                                        <SelectItem value="inventory_manager">Inventory Mgr</SelectItem>
-                                        <SelectItem value="hr_manager">HR Manager</SelectItem>
-                                        <SelectItem value="user">User</SelectItem>
-                                        <SelectItem value="limited_user">Limited User</SelectItem>
+                                        <SelectItem value="system_admin">{t('system_admin')}</SelectItem>
+                                        <SelectItem value="admin">{t('administrator')}</SelectItem>
+                                        <SelectItem value="manager">{t('manager')}</SelectItem>
+                                        <SelectItem value="finance_manager">{t('finance_manager')}</SelectItem>
+                                        <SelectItem value="sales_manager">{t('sales_manager')}</SelectItem>
+                                        <SelectItem value="inventory_manager">{t('inventory_manager')}</SelectItem>
+                                        <SelectItem value="hr_manager">{t('hr_manager')}</SelectItem>
+                                        <SelectItem value="user">{t('user')}</SelectItem>
+                                        <SelectItem value="limited_user">{t('limited_user')}</SelectItem>
                                       </SelectContent>
                                     </Select>
 
@@ -665,47 +678,47 @@ export default function AdminPanel() {
                                         setShowUpgradeModal(true);
                                       }}
                                       className="text-purple-600 hover:text-purple-700"
-                                      title="Upgrade Plan"
+                                      title={t('upgrade_plan')}
                                     >
                                       <CreditCard className="w-3 h-3" />
                                     </Button>
-                                    
+
                                     {userStatus === 'trial' && (
-                                      <Button 
-                                        size="sm" 
+                                      <Button
+                                        size="sm"
                                         variant="outline"
                                         onClick={() => {
                                           setSelectedUser(user);
                                           setShowExtendTrialModal(true);
                                         }}
-                                        title="Extend Trial"
+                                        title={t('extend_trial')}
                                       >
                                         <Gift className="w-3 h-3" />
                                       </Button>
                                     )}
 
-                                    <Button 
-                                      size="sm" 
+                                    <Button
+                                      size="sm"
                                       variant="outline"
                                       onClick={() => {
                                         setSelectedUser(user);
                                         setShowBlockModal(true);
                                       }}
                                       className={user.is_blocked ? 'text-green-600 hover:text-green-700' : 'text-orange-600 hover:text-orange-700'}
-                                      title={user.is_blocked ? 'Unblock User' : 'Block User'}
+                                      title={user.is_blocked ? t('unblock_user') : t('block_user')}
                                     >
                                       {user.is_blocked ? <UserCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
                                     </Button>
 
-                                    <Button 
-                                      size="sm" 
+                                    <Button
+                                      size="sm"
                                       variant="outline"
                                       onClick={() => {
                                         setSelectedUser(user);
                                         setShowDeleteModal(true);
                                       }}
                                       className="text-red-600 hover:text-red-700"
-                                      title="Delete User"
+                                      title={t('delete_user')}
                                     >
                                       <Trash2 className="w-3 h-3" />
                                     </Button>
@@ -713,19 +726,19 @@ export default function AdminPanel() {
                                 )}
                                 {user.id === currentUser?.id && (
                                   <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs">You</Badge>
-                                    <Button 
-                                      size="sm" 
+                                    <Badge variant="outline" className="text-xs">{t('you')}</Badge>
+                                    <Button
+                                      size="sm"
                                       variant="outline"
                                       onClick={() => {
                                         setSelectedUser(user);
                                         setShowUpgradeModal(true);
                                       }}
                                       className="text-purple-600 hover:text-purple-700"
-                                      title="Upgrade Your Plan"
+                                      title={t('upgrade_plan')}
                                     >
                                       <CreditCard className="w-3 h-3 mr-1" />
-                                      <span className="text-xs">Upgrade</span>
+                                      <span className="text-xs">{t('upgrade')}</span>
                                     </Button>
                                   </div>
                                 )}
@@ -805,43 +818,43 @@ export default function AdminPanel() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Free Trial Users</CardTitle>
+                    <CardTitle className="text-base">{t('free_trial_users')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-3xl font-bold text-yellow-600">{metrics.trialUsers}</p>
-                    <p className="text-sm text-slate-600 mt-1">14-day trial period</p>
+                    <p className="text-sm text-slate-600 mt-1">{t('14_day_trial_period')}</p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Active Subscriptions</CardTitle>
+                    <CardTitle className="text-base">{t('active_subscriptions')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-3xl font-bold text-green-600">{metrics.activeUsers}</p>
-                    <p className="text-sm text-slate-600 mt-1">Paid users</p>
+                    <p className="text-sm text-slate-600 mt-1">{t('paid_users')}</p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Expired/Cancelled</CardTitle>
+                    <CardTitle className="text-base">{t('expired_cancelled')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-3xl font-bold text-red-600">
                       {users.filter(u => ['expired', 'cancelled'].includes(u.subscription_status || 'trial')).length}
                     </p>
-                    <p className="text-sm text-slate-600 mt-1">Inactive users</p>
+                    <p className="text-sm text-slate-600 mt-1">{t('inactive_users')}</p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Blocked Users</CardTitle>
+                    <CardTitle className="text-base">{t('blocked_users')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-3xl font-bold text-gray-600">{metrics.blockedUsers}</p>
-                    <p className="text-sm text-slate-600 mt-1">Access suspended</p>
+                    <p className="text-sm text-slate-600 mt-1">{t('access_suspended')}</p>
                   </CardContent>
                 </Card>
               </div>
@@ -856,30 +869,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Shield className="w-5 h-5 text-red-600" />
-                    System Administrator
+                    {t('role_system_administrator')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Full system control & configuration</p>
+                  <p className="text-xs text-slate-500">{t('role_sysadmin_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Complete system access</span>
+                    <span className="text-xs">{t('perm_complete_system_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Server & infrastructure management</span>
+                    <span className="text-xs">{t('perm_server_infrastructure')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Database administration</span>
+                    <span className="text-xs">{t('perm_database_admin')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">User & role management</span>
+                    <span className="text-xs">{t('perm_user_role_management')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Security & audit controls</span>
+                    <span className="text-xs">{t('perm_security_audit')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -889,30 +902,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Shield className="w-5 h-5 text-purple-600" />
-                    Administrator
+                    {t('role_administrator')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Business administration & oversight</p>
+                  <p className="text-xs text-slate-500">{t('role_admin_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">User management & invitations</span>
+                    <span className="text-xs">{t('perm_user_management_invitations')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Subscription & billing control</span>
+                    <span className="text-xs">{t('perm_subscription_billing')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">All module access</span>
+                    <span className="text-xs">{t('perm_all_module_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Report generation</span>
+                    <span className="text-xs">{t('perm_report_generation')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Workflow configuration</span>
+                    <span className="text-xs">{t('perm_workflow_configuration')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -922,30 +935,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="w-5 h-5 text-indigo-600" />
-                    Manager
+                    {t('role_manager')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Cross-functional management</p>
+                  <p className="text-xs text-slate-500">{t('role_manager_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Multi-module access</span>
+                    <span className="text-xs">{t('perm_multi_module_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Team oversight</span>
+                    <span className="text-xs">{t('perm_team_oversight')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Approval workflows</span>
+                    <span className="text-xs">{t('perm_approval_workflows')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Analytics & reports</span>
+                    <span className="text-xs">{t('perm_analytics_reports')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No user management</span>
+                    <span className="text-xs">{t('perm_no_user_management')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -955,30 +968,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <DollarSign className="w-5 h-5 text-emerald-600" />
-                    Finance Manager
+                    {t('role_finance_manager')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Financial operations & reporting</p>
+                  <p className="text-xs text-slate-500">{t('role_finance_manager_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Full finance module access</span>
+                    <span className="text-xs">{t('perm_full_finance_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">GL, AP, AR management</span>
+                    <span className="text-xs">{t('perm_gl_ap_ar_management')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Financial reporting</span>
+                    <span className="text-xs">{t('perm_financial_reporting')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Budget & forecast control</span>
+                    <span className="text-xs">{t('perm_budget_forecast')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No inventory/sales access</span>
+                    <span className="text-xs">{t('perm_no_inventory_sales')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -988,30 +1001,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="w-5 h-5 text-blue-600" />
-                    Sales Manager
+                    {t('role_sales_manager')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Sales operations & CRM</p>
+                  <p className="text-xs text-slate-500">{t('role_sales_manager_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Full CRM access</span>
+                    <span className="text-xs">{t('perm_full_crm_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Sales orders & quotes</span>
+                    <span className="text-xs">{t('perm_sales_orders_quotes')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Customer management</span>
+                    <span className="text-xs">{t('perm_customer_management')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Sales analytics</span>
+                    <span className="text-xs">{t('perm_sales_analytics')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No finance/HR access</span>
+                    <span className="text-xs">{t('perm_no_finance_hr')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1021,30 +1034,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Package className="w-5 h-5 text-orange-600" />
-                    Inventory Manager
+                    {t('role_inventory_manager')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Warehouse & inventory control</p>
+                  <p className="text-xs text-slate-500">{t('role_inventory_manager_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Full inventory access</span>
+                    <span className="text-xs">{t('perm_full_inventory_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Stock movements & adjustments</span>
+                    <span className="text-xs">{t('perm_stock_movements')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Procurement management</span>
+                    <span className="text-xs">{t('perm_procurement_management')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Supplier coordination</span>
+                    <span className="text-xs">{t('perm_supplier_coordination')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No finance/HR access</span>
+                    <span className="text-xs">{t('perm_no_finance_hr')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1054,30 +1067,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Briefcase className="w-5 h-5 text-pink-600" />
-                    HR Manager
+                    {t('role_hr_manager')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Human resources management</p>
+                  <p className="text-xs text-slate-500">{t('role_hr_manager_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Full HR module access</span>
+                    <span className="text-xs">{t('perm_full_hr_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Employee management</span>
+                    <span className="text-xs">{t('perm_employee_management')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Payroll processing</span>
+                    <span className="text-xs">{t('perm_payroll_processing')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Recruitment & onboarding</span>
+                    <span className="text-xs">{t('perm_recruitment_onboarding')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No sales/inventory access</span>
+                    <span className="text-xs">{t('perm_no_sales_inventory')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1087,30 +1100,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="w-5 h-5 text-slate-600" />
-                    User
+                    {t('role_user')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Standard operational access</p>
+                  <p className="text-xs text-slate-500">{t('role_user_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Assigned module access</span>
+                    <span className="text-xs">{t('perm_assigned_module_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Create & edit records</span>
+                    <span className="text-xs">{t('perm_create_edit_records')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">View own data</span>
+                    <span className="text-xs">{t('perm_view_own_data')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No admin functions</span>
+                    <span className="text-xs">{t('perm_no_admin_functions')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No user management</span>
+                    <span className="text-xs">{t('perm_no_user_management')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1120,30 +1133,30 @@ export default function AdminPanel() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Users className="w-5 h-5 text-gray-600" />
-                    Limited User
+                    {t('role_limited_user')}
                   </CardTitle>
-                  <p className="text-xs text-slate-500">Read-only access</p>
+                  <p className="text-xs text-slate-500">{t('role_limited_user_desc')}</p>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">View-only access</span>
+                    <span className="text-xs">{t('perm_view_only_access')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs">Basic reports viewing</span>
+                    <span className="text-xs">{t('perm_basic_reports_viewing')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">Cannot create records</span>
+                    <span className="text-xs">{t('perm_cannot_create_records')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">Cannot edit data</span>
+                    <span className="text-xs">{t('perm_cannot_edit_data')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <XCircle className="w-3 h-3 text-red-600" />
-                    <span className="text-xs">No administrative access</span>
+                    <span className="text-xs">{t('perm_no_admin_access')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1159,45 +1172,45 @@ export default function AdminPanel() {
           <TabsContent value="settings" className="mt-6">
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>System Settings</CardTitle>
+                <CardTitle>{t('system_settings')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <h3 className="font-semibold mb-3">Trial Configuration</h3>
+                  <h3 className="font-semibold mb-3">{t('trial_configuration')}</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <div>
-                        <p className="font-medium">Default Trial Period</p>
-                        <p className="text-sm text-slate-500">For new user invitations</p>
+                        <p className="font-medium">{t('default_trial_period')}</p>
+                        <p className="text-sm text-slate-500">{t('for_new_user_invitations')}</p>
                       </div>
-                      <Badge>14 days</Badge>
+                      <Badge>{t('14_days')}</Badge>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <div>
-                        <p className="font-medium">Trial Extension Available</p>
-                        <p className="text-sm text-slate-500">Admin can extend trials</p>
+                        <p className="font-medium">{t('trial_extension_available')}</p>
+                        <p className="text-sm text-slate-500">{t('admin_can_extend_trials')}</p>
                       </div>
-                      <Badge className="bg-green-100 text-green-800">Yes</Badge>
+                      <Badge className="bg-green-100 text-green-800">{t('yes')}</Badge>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-3">Security</h3>
+                  <h3 className="font-semibold mb-3">{t('security')}</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <div>
-                        <p className="font-medium">User Blocking</p>
-                        <p className="text-sm text-slate-500">Suspend user access temporarily</p>
+                        <p className="font-medium">{t('user_blocking')}</p>
+                        <p className="text-sm text-slate-500">{t('suspend_user_access_temporarily')}</p>
                       </div>
-                      <Badge className="bg-green-100 text-green-800">Enabled</Badge>
+                      <Badge className="bg-green-100 text-green-800">{t('enabled')}</Badge>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <div>
-                        <p className="font-medium">User Deletion</p>
-                        <p className="text-sm text-slate-500">Permanently remove users</p>
+                        <p className="font-medium">{t('user_deletion')}</p>
+                        <p className="text-sm text-slate-500">{t('permanently_remove_users')}</p>
                       </div>
-                      <Badge className="bg-green-100 text-green-800">Enabled</Badge>
+                      <Badge className="bg-green-100 text-green-800">{t('enabled')}</Badge>
                     </div>
                   </div>
                 </div>
@@ -1214,20 +1227,20 @@ export default function AdminPanel() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Mail className="w-5 h-5" />
-                Invite New User
+                {t('invite_new_user')}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <strong>📧 14-Day Free Trial:</strong> New users automatically get a 14-day trial period to explore all features.
+                  <strong>📧 {t('14_day_free_trial')}:</strong> {t('new_users_trial_info')}
                 </p>
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Full Name *</label>
+                <label className="text-sm font-medium mb-1 block">{t('full_name')} *</label>
                 <Input
-                  placeholder="John Doe"
+                  placeholder={t('full_name_placeholder')}
                   value={inviteData.full_name}
                   onChange={(e) => setInviteData({...inviteData, full_name: e.target.value})}
                   disabled={isSendingInvite}
@@ -1235,10 +1248,10 @@ export default function AdminPanel() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Email Address *</label>
+                <label className="text-sm font-medium mb-1 block">{t('email_address')} *</label>
                 <Input
                   type="email"
-                  placeholder="john@company.com"
+                  placeholder={t('email_placeholder')}
                   value={inviteData.email}
                   onChange={(e) => setInviteData({...inviteData, email: e.target.value})}
                   disabled={isSendingInvite}
@@ -1246,9 +1259,9 @@ export default function AdminPanel() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Role *</label>
-                <Select 
-                  value={inviteData.role} 
+                <label className="text-sm font-medium mb-1 block">{t('role')} *</label>
+                <Select
+                  value={inviteData.role}
                   onValueChange={(value) => setInviteData({...inviteData, role: value})}
                   disabled={isSendingInvite}
                 >
@@ -1256,42 +1269,42 @@ export default function AdminPanel() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system_admin">System Administrator</SelectItem>
-                    <SelectItem value="admin">Administrator</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                    <SelectItem value="sales_manager">Sales Manager</SelectItem>
-                    <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
-                    <SelectItem value="hr_manager">HR Manager</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="limited_user">Limited User</SelectItem>
+                    <SelectItem value="system_admin">{t('role_system_administrator')}</SelectItem>
+                    <SelectItem value="admin">{t('role_administrator')}</SelectItem>
+                    <SelectItem value="manager">{t('role_manager')}</SelectItem>
+                    <SelectItem value="finance_manager">{t('role_finance_manager')}</SelectItem>
+                    <SelectItem value="sales_manager">{t('role_sales_manager')}</SelectItem>
+                    <SelectItem value="inventory_manager">{t('role_inventory_manager')}</SelectItem>
+                    <SelectItem value="hr_manager">{t('role_hr_manager')}</SelectItem>
+                    <SelectItem value="user">{t('role_user')}</SelectItem>
+                    <SelectItem value="limited_user">{t('role_limited_user')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowInviteModal(false)} 
+                <Button
+                  variant="outline"
+                  onClick={() => setShowInviteModal(false)}
                   className="flex-1"
                   disabled={isSendingInvite}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
-                <Button 
-                  onClick={handleInviteUser} 
+                <Button
+                  onClick={handleInviteUser}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
                   disabled={!inviteData.email || !inviteData.full_name || isSendingInvite}
                 >
                   {isSendingInvite ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Sending...
+                      {t('sending')}...
                     </>
                   ) : (
                     <>
                       <Mail className="w-4 h-4 mr-2" />
-                      Send Invitation
+                      {t('send_invitation')}
                     </>
                   )}
                 </Button>
@@ -1306,7 +1319,7 @@ export default function AdminPanel() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <Trash2 className="w-5 h-5" />
-                Delete User
+                {t('delete_user')}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -1314,14 +1327,14 @@ export default function AdminPanel() {
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-red-900 mb-1">Warning: This action cannot be undone!</p>
+                    <p className="font-semibold text-red-900 mb-1">{t('warning_cannot_be_undone')}</p>
                     <p className="text-sm text-red-800">
-                      Deleting this user will permanently remove:
+                      {t('deleting_user_will_remove')}:
                     </p>
                     <ul className="text-sm text-red-800 mt-2 ml-4 list-disc">
-                      <li>User account and login access</li>
-                      <li>All associated data and records</li>
-                      <li>Subscription and billing history</li>
+                      <li>{t('user_account_login_access')}</li>
+                      <li>{t('all_associated_data_records')}</li>
+                      <li>{t('subscription_billing_history')}</li>
                     </ul>
                   </div>
                 </div>
@@ -1329,29 +1342,29 @@ export default function AdminPanel() {
 
               {selectedUser && (
                 <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-sm font-medium mb-2">User to be deleted:</p>
+                  <p className="text-sm font-medium mb-2">{t('user_to_be_deleted')}:</p>
                   <p className="font-semibold">{selectedUser.full_name}</p>
                   <p className="text-sm text-slate-600">{selectedUser.email}</p>
                 </div>
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setShowDeleteModal(false);
                     setSelectedUser(null);
-                  }} 
+                  }}
                   className="flex-1"
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
-                <Button 
+                <Button
                   onClick={handleDeleteUser}
                   className="flex-1 bg-red-600 hover:bg-red-700"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Delete User
+                  {t('delete_user')}
                 </Button>
               </div>
             </div>
@@ -1366,12 +1379,12 @@ export default function AdminPanel() {
                 {selectedUser?.is_blocked ? (
                   <>
                     <UserCheck className="w-5 h-5 text-green-600" />
-                    Unblock User
+                    {t('unblock_user')}
                   </>
                 ) : (
                   <>
                     <Ban className="w-5 h-5 text-orange-600" />
-                    Block User
+                    {t('block_user')}
                   </>
                 )}
               </DialogTitle>
@@ -1384,7 +1397,7 @@ export default function AdminPanel() {
                     <p className="text-sm text-slate-600">{selectedUser.email}</p>
                     {selectedUser.is_blocked && selectedUser.blocked_reason && (
                       <div className="mt-2 pt-2 border-t">
-                        <p className="text-xs text-slate-500">Currently blocked:</p>
+                        <p className="text-xs text-slate-500">{t('currently_blocked')}:</p>
                         <p className="text-sm text-slate-700">{selectedUser.blocked_reason}</p>
                       </div>
                     )}
@@ -1393,9 +1406,9 @@ export default function AdminPanel() {
                   {!selectedUser.is_blocked && (
                     <>
                       <div>
-                        <label className="text-sm font-medium mb-1 block">Reason for Blocking *</label>
+                        <label className="text-sm font-medium mb-1 block">{t('reason_for_blocking')} *</label>
                         <Textarea
-                          placeholder="e.g., Policy violation, Payment issues, Security concerns..."
+                          placeholder={t('blocking_reason_placeholder')}
                           value={blockData.reason}
                           onChange={(e) => setBlockData({...blockData, reason: e.target.value})}
                           rows={3}
@@ -1411,13 +1424,13 @@ export default function AdminPanel() {
                           className="w-4 h-4"
                         />
                         <label htmlFor="notify_user" className="text-sm">
-                          Send notification email to user
+                          {t('send_notification_email')}
                         </label>
                       </div>
 
                       <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
                         <p className="text-sm text-orange-800">
-                          <strong>Note:</strong> Blocked users cannot log in or access the system. You can unblock them anytime.
+                          <strong>{t('note')}:</strong> {t('blocked_users_note')}
                         </p>
                       </div>
                     </>
@@ -1426,7 +1439,7 @@ export default function AdminPanel() {
                   {selectedUser.is_blocked && (
                     <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                       <p className="text-sm text-green-800">
-                        <strong>Unblocking:</strong> This user will regain full access to their account immediately.
+                        <strong>{t('unblocking')}:</strong> {t('unblocking_note')}
                       </p>
                     </div>
                   )}
@@ -1434,18 +1447,18 @@ export default function AdminPanel() {
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setShowBlockModal(false);
                     setSelectedUser(null);
                     setBlockData({ reason: '', notify_user: true });
-                  }} 
+                  }}
                   className="flex-1"
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
-                <Button 
+                <Button
                   onClick={handleBlockUser}
                   className={`flex-1 ${selectedUser?.is_blocked ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}`}
                   disabled={!selectedUser?.is_blocked && !blockData.reason}
@@ -1453,12 +1466,12 @@ export default function AdminPanel() {
                   {selectedUser?.is_blocked ? (
                     <>
                       <UserCheck className="w-4 h-4 mr-2" />
-                      Unblock User
+                      {t('unblock_user')}
                     </>
                   ) : (
                     <>
                       <Ban className="w-4 h-4 mr-2" />
-                      Block User
+                      {t('block_user')}
                     </>
                   )}
                 </Button>
@@ -1473,7 +1486,7 @@ export default function AdminPanel() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-purple-600" />
-                Activate Subscription
+                {t('activate_subscription')}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4 overflow-y-auto flex-1">
@@ -1483,9 +1496,9 @@ export default function AdminPanel() {
                     <div className="flex items-start gap-3">
                       <Shield className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-purple-900 mb-1">Admin Privilege</p>
+                        <p className="font-semibold text-purple-900 mb-1">{t('admin_privilege')}</p>
                         <p className="text-sm text-purple-800">
-                          As an administrator, you can activate any subscription plan instantly without payment.
+                          {t('admin_privilege_desc')}
                         </p>
                       </div>
                     </div>
@@ -1495,17 +1508,17 @@ export default function AdminPanel() {
                     <p className="font-semibold">{selectedUser.full_name}</p>
                     <p className="text-sm text-slate-600">{selectedUser.email}</p>
                     <div className="mt-2 pt-2 border-t">
-                      <p className="text-xs text-slate-500">Current Plan:</p>
+                      <p className="text-xs text-slate-500">{t('current_plan')}:</p>
                       <Badge className={getPlanBadgeColor(selectedUser.subscription_plan || 'free_trial')}>
-                        {selectedUser.subscription_plan || 'Free Trial'}
+                        {selectedUser.subscription_plan || t('free_trial')}
                       </Badge>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Subscription Plan *</label>
-                    <Select 
-                      value={upgradeData.plan} 
+                    <label className="text-sm font-medium mb-1 block">{t('subscription_plan')} *</label>
+                    <Select
+                      value={upgradeData.plan}
                       onValueChange={(value) => setUpgradeData({...upgradeData, plan: value})}
                     >
                       <SelectTrigger>
@@ -1515,19 +1528,19 @@ export default function AdminPanel() {
                         <SelectItem value="basic">
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            Basic - $29/month
+                            {t('plan_basic')} - $29/{t('month')}
                           </div>
                         </SelectItem>
                         <SelectItem value="professional">
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                            Professional - $99/month
+                            {t('plan_professional')} - $99/{t('month')}
                           </div>
                         </SelectItem>
                         <SelectItem value="enterprise">
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            Enterprise - $299/month
+                            {t('plan_enterprise')} - $299/{t('month')}
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -1535,22 +1548,22 @@ export default function AdminPanel() {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Subscription Duration *</label>
-                    <Select 
-                      value={upgradeData.duration.toString()} 
+                    <label className="text-sm font-medium mb-1 block">{t('subscription_duration')} *</label>
+                    <Select
+                      value={upgradeData.duration.toString()}
                       onValueChange={(value) => setUpgradeData({...upgradeData, duration: parseInt(value)})}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">1 month</SelectItem>
-                        <SelectItem value="3">3 months</SelectItem>
-                        <SelectItem value="6">6 months</SelectItem>
-                        <SelectItem value="12">12 months (1 year)</SelectItem>
-                        <SelectItem value="24">24 months (2 years)</SelectItem>
-                        <SelectItem value="36">36 months (3 years)</SelectItem>
-                        <SelectItem value="120">Lifetime (10 years)</SelectItem>
+                        <SelectItem value="1">1 {t('month')}</SelectItem>
+                        <SelectItem value="3">3 {t('months')}</SelectItem>
+                        <SelectItem value="6">6 {t('months')}</SelectItem>
+                        <SelectItem value="12">12 {t('months')} (1 {t('year')})</SelectItem>
+                        <SelectItem value="24">24 {t('months')} (2 {t('years')})</SelectItem>
+                        <SelectItem value="36">36 {t('months')} (3 {t('years')})</SelectItem>
+                        <SelectItem value="120">{t('lifetime')} (10 {t('years')})</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1558,43 +1571,43 @@ export default function AdminPanel() {
                   {/* Plan Features */}
                   <div className="p-4 bg-slate-50 rounded-lg space-y-2">
                     <p className="text-sm font-semibold text-slate-900">
-                      {upgradeData.plan.charAt(0).toUpperCase() + upgradeData.plan.slice(1)} Features:
+                      {t(`plan_${upgradeData.plan}`)} {t('features')}:
                     </p>
                     {upgradeData.plan === 'basic' && (
                       <ul className="text-sm text-slate-600 space-y-1 ml-4 list-disc">
-                        <li>Up to 10 users</li>
-                        <li>Core ERP modules</li>
-                        <li>Email support</li>
-                        <li>5GB storage</li>
+                        <li>{t('up_to_10_users')}</li>
+                        <li>{t('core_erp_modules')}</li>
+                        <li>{t('email_support')}</li>
+                        <li>5GB {t('storage')}</li>
                       </ul>
                     )}
                     {upgradeData.plan === 'professional' && (
                       <ul className="text-sm text-slate-600 space-y-1 ml-4 list-disc">
-                        <li>Up to 50 users</li>
-                        <li>All ERP modules</li>
-                        <li>AI features enabled</li>
-                        <li>Priority support</li>
-                        <li>50GB storage</li>
-                        <li>Custom reports</li>
+                        <li>{t('up_to_50_users')}</li>
+                        <li>{t('all_erp_modules')}</li>
+                        <li>{t('ai_features_enabled')}</li>
+                        <li>{t('priority_support')}</li>
+                        <li>50GB {t('storage')}</li>
+                        <li>{t('custom_reports')}</li>
                       </ul>
                     )}
                     {upgradeData.plan === 'enterprise' && (
                       <ul className="text-sm text-slate-600 space-y-1 ml-4 list-disc">
-                        <li>✨ Unlimited users</li>
-                        <li>✨ All features unlocked</li>
-                        <li>✨ Advanced AI & analytics</li>
-                        <li>✨ 24/7 premium support</li>
-                        <li>✨ Unlimited storage</li>
-                        <li>✨ Custom integrations</li>
-                        <li>✨ Dedicated account manager</li>
-                        <li>✨ SLA guarantees</li>
+                        <li>{t('unlimited_users')}</li>
+                        <li>{t('all_features_unlocked')}</li>
+                        <li>{t('advanced_ai_analytics')}</li>
+                        <li>{t('24_7_premium_support')}</li>
+                        <li>{t('unlimited_storage')}</li>
+                        <li>{t('custom_integrations')}</li>
+                        <li>{t('dedicated_account_manager')}</li>
+                        <li>{t('sla_guarantees')}</li>
                       </ul>
                     )}
                   </div>
 
                   <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-sm text-green-800">
-                      <strong>Subscription valid until:</strong> {format(
+                      <strong>{t('subscription_valid_until')}:</strong> {format(
                         addDays(new Date(), upgradeData.duration * 30),
                         'MMMM dd, yyyy'
                       )}
@@ -1605,23 +1618,23 @@ export default function AdminPanel() {
             </div>
 
             <div className="flex gap-3 pt-4 border-t">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowUpgradeModal(false);
                   setSelectedUser(null);
                   setUpgradeData({ plan: 'professional', duration: 12 });
-                }} 
+                }}
                 className="flex-1"
               >
-                Cancel
+                {t('cancel')}
               </Button>
-              <Button 
+              <Button
                 onClick={handleUpgradeSubscription}
                 className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
               >
                 <CreditCard className="w-4 h-4 mr-2" />
-                Activate Now (FREE)
+                {t('activate_now_free')}
               </Button>
             </div>
           </DialogContent>
@@ -1633,7 +1646,7 @@ export default function AdminPanel() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Gift className="w-5 h-5 text-yellow-600" />
-                Extend Free Trial
+                {t('extend_free_trial')}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4 overflow-y-auto flex-1">
@@ -1644,38 +1657,38 @@ export default function AdminPanel() {
                     <p className="text-sm text-slate-600">{selectedUser.email}</p>
                     {selectedUser.trial_end_date && (
                       <div className="mt-2 pt-2 border-t">
-                        <p className="text-xs text-slate-500">Current trial ends:</p>
+                        <p className="text-xs text-slate-500">{t('current_trial_ends')}:</p>
                         <p className="text-sm font-medium">{format(parseISO(selectedUser.trial_end_date), 'MMMM dd, yyyy')}</p>
                         <p className="text-xs text-orange-600">
-                          {differenceInDays(parseISO(selectedUser.trial_end_date), new Date())} days remaining
+                          {differenceInDays(parseISO(selectedUser.trial_end_date), new Date())} {t('days_remaining')}
                         </p>
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Extension Period *</label>
-                    <Select 
-                      value={extendTrialData.days.toString()} 
+                    <label className="text-sm font-medium mb-1 block">{t('extension_period')} *</label>
+                    <Select
+                      value={extendTrialData.days.toString()}
                       onValueChange={(value) => setExtendTrialData({...extendTrialData, days: parseInt(value)})}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="7">7 days</SelectItem>
-                        <SelectItem value="14">14 days (recommended)</SelectItem>
-                        <SelectItem value="30">30 days</SelectItem>
-                        <SelectItem value="60">60 days</SelectItem>
-                        <SelectItem value="90">90 days</SelectItem>
+                        <SelectItem value="7">7 {t('days')}</SelectItem>
+                        <SelectItem value="14">14 {t('days')} ({t('recommended')})</SelectItem>
+                        <SelectItem value="30">30 {t('days')}</SelectItem>
+                        <SelectItem value="60">60 {t('days')}</SelectItem>
+                        <SelectItem value="90">90 {t('days')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium mb-1 block">Reason (Optional)</label>
+                    <label className="text-sm font-medium mb-1 block">{t('reason')} ({t('optional')})</label>
                     <Textarea
-                      placeholder="e.g., Interested in enterprise features, needs more evaluation time..."
+                      placeholder={t('extend_trial_reason_placeholder')}
                       value={extendTrialData.reason}
                       onChange={(e) => setExtendTrialData({...extendTrialData, reason: e.target.value})}
                       rows={2}
@@ -1684,7 +1697,7 @@ export default function AdminPanel() {
 
                   <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                     <p className="text-sm text-yellow-800">
-                      <strong>New trial end date:</strong> {format(
+                      <strong>{t('new_trial_end_date')}:</strong> {format(
                         addDays(
                           selectedUser.trial_end_date ? parseISO(selectedUser.trial_end_date) : new Date(),
                           extendTrialData.days
@@ -1698,23 +1711,23 @@ export default function AdminPanel() {
             </div>
 
             <div className="flex gap-3 pt-4 border-t">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowExtendTrialModal(false);
                   setSelectedUser(null);
                   setExtendTrialData({ days: 14, reason: '' });
-                }} 
+                }}
                 className="flex-1"
               >
-                Cancel
+                {t('cancel')}
               </Button>
-              <Button 
+              <Button
                 onClick={handleExtendTrial}
                 className="flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
               >
                 <Gift className="w-4 h-4 mr-2" />
-                Extend Trial
+                {t('extend_trial')}
               </Button>
             </div>
           </DialogContent>

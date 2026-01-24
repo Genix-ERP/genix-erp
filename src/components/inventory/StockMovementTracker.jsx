@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // SAP-style document types
 const documentTypes = [
@@ -37,6 +38,7 @@ export default function StockMovementTracker({ movements, items }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { adjustInventory, warehouses, products, lots = [] } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
 
@@ -250,28 +252,30 @@ export default function StockMovementTracker({ movements, items }) {
       {/* Stock Movements Table */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-[var(--genix-blue)]" />
               <CardTitle>{t('stock_movement_history')}</CardTitle>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   placeholder={t('search_movements')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-64"
+                  className="pl-9 w-full sm:w-64"
                 />
               </div>
-              <Button
-                onClick={handleNewMovementClick}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_movement')}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={handleNewMovementClick}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_movement')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

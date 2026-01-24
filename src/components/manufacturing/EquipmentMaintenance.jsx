@@ -44,7 +44,10 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { format, parseISO, differenceInDays, addDays, addMonths, isBefore } from 'date-fns';
+import { ru, enUS } from 'date-fns/locale';
 
 const MAINTENANCE_TYPE = {
   preventive: { label: 'preventive', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -65,6 +68,16 @@ export default function EquipmentMaintenance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
+  const { canCreate, canDelete } = usePermissions();
+
+  // Get date-fns locale based on language
+  const getDateLocale = () => {
+    switch (language) {
+      case 'ru': return ru;
+      case 'uz': return enUS; // Uzbek uses similar format to English
+      default: return enUS;
+    }
+  };
 
   const [activeTab, setActiveTab] = useState('equipment');
   const [equipment, setEquipment] = useState([]);
@@ -191,10 +204,10 @@ export default function EquipmentMaintenance() {
         id: `MT-${Date.now()}-1`,
         equipment_id: `EQ-${Date.now()}-1`,
         type: 'preventive',
-        description: 'Monthly preventive maintenance - lubrication and inspection',
+        description: t('sample_task_description') || 'Monthly preventive maintenance - lubrication and inspection',
         scheduled_date: addDays(new Date(), 5).toISOString().split('T')[0],
         estimated_duration: 120,
-        assigned_to: 'Maintenance Team',
+        assigned_to: t('maintenance_team') || 'Maintenance Team',
         priority: 'high',
         status: 'scheduled',
         created_at: new Date().toISOString(),
@@ -379,22 +392,24 @@ export default function EquipmentMaintenance() {
           <h2 className="text-2xl font-bold text-slate-800">{t('equipment_maintenance') || "Jihozlar ta'mirlash"}</h2>
           <p className="text-slate-600 mt-1">{t('equipment_maintenance_desc') || "Jihozlarni va ta'mirlashni boshqaring"}</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setShowCreateEquipmentModal(true)}
-            variant="outline"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_equipment') || "Yangi jihoz"}
-          </Button>
-          <Button
-            onClick={() => setShowCreateTaskModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_task') || "Yangi vazifa"}
-          </Button>
-        </div>
+        {canCreate(MODULES.MANUFACTURING) && (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowCreateEquipmentModal(true)}
+              variant="outline"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_equipment') || "Yangi jihoz"}
+            </Button>
+            <Button
+              onClick={() => setShowCreateTaskModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_task') || "Yangi vazifa"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -520,12 +535,12 @@ export default function EquipmentMaintenance() {
                             {workCenters.find(wc => wc.id === eq.work_center_id)?.name || '-'}
                           </TableCell>
                           <TableCell>
-                            {eq.last_maintenance ? format(parseISO(eq.last_maintenance), 'dd MMM yyyy') : '-'}
+                            {eq.last_maintenance ? format(parseISO(eq.last_maintenance), 'dd MMM yyyy', { locale: getDateLocale() }) : '-'}
                           </TableCell>
                           <TableCell>
                             {nextDue && (
                               <span className={isDue ? 'text-red-600 font-medium' : ''}>
-                                {format(nextDue, 'dd MMM yyyy')}
+                                {format(nextDue, 'dd MMM yyyy', { locale: getDateLocale() })}
                               </span>
                             )}
                           </TableCell>
@@ -635,7 +650,7 @@ export default function EquipmentMaintenance() {
                               {t(MAINTENANCE_TYPE[task.type]?.label) || task.type}
                             </Badge>
                           </TableCell>
-                          <TableCell>{format(parseISO(task.scheduled_date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell>{format(parseISO(task.scheduled_date), 'dd MMM yyyy', { locale: getDateLocale() })}</TableCell>
                           <TableCell>{task.assigned_to || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={MAINTENANCE_STATUS[status]?.color}>

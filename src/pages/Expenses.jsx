@@ -15,6 +15,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { analyzeExpenses } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
@@ -24,6 +25,7 @@ export default function Expenses() {
   const { t } = useTranslation(language);
   const { user } = useAuth();
   const { expenses, createExpense, updateExpense, isLoading } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // AI Analysis
   const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
@@ -412,9 +414,11 @@ export default function Expenses() {
                   >
                     <Download className="w-4 h-4 mr-2" /> {t('export')}
                   </Button>
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
-                  </Button>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_claim')}
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex gap-3 mt-4">
@@ -452,7 +456,9 @@ export default function Expenses() {
                 <div className="text-center py-16">
                   <Receipt className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_expense_claims_yet')}</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('submit_first_claim')}</Button>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('submit_first_claim')}</Button>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -485,15 +491,17 @@ export default function Expenses() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              {claim.status === 'draft' && (
+                              {canUpdate(MODULES.FINANCIALS) && (
+                                <Button size="sm" variant="ghost" onClick={() => handleEditClaim(claim)} title={t('edit_claim')}>
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'draft' && (
                                 <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'submitted')}>
                                   {t('submit')}
                                 </Button>
                               )}
-                              {claim.status === 'submitted' && (
+                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'submitted' && (
                                 <>
                                   <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'approved')}>
                                     <CheckCircle className="w-4 h-4" />
@@ -503,12 +511,12 @@ export default function Expenses() {
                                   </Button>
                                 </>
                               )}
-                              {claim.status === 'approved' && (
+                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'approved' && (
                                 <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'paid')}>
                                   {t('pay')}
                                 </Button>
                               )}
-                              {(claim.status === 'draft' || claim.status === 'rejected') && (
+                              {canDelete(MODULES.FINANCIALS) && (claim.status === 'draft' || claim.status === 'rejected') && (
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(claim)} title={t('delete_claim')}>
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </Button>

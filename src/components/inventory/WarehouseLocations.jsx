@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Location type options (matching Odoo)
 const LOCATION_TYPES = [
@@ -36,6 +37,7 @@ const LOCATION_TYPES = [
 export default function WarehouseLocations() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [locations, setLocations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -226,10 +228,12 @@ export default function WarehouseLocations() {
             {t('locations_desc') || "Ombor lokatsiyalarini boshqarish"}
           </p>
         </div>
-        <Button onClick={openCreateModal} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new') || "Yangi"}
-        </Button>
+        {canCreate(MODULES.INVENTORY) && (
+          <Button onClick={openCreateModal} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new') || "Yangi"}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -353,20 +357,24 @@ export default function WarehouseLocations() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEditModal(loc)}>
-                              <Pencil className="w-4 h-4 mr-2" />
-                              {t('edit') || 'Tahrirlash'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setLocationToDelete(loc);
-                                setShowDeleteConfirm(true);
-                              }}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              {t('delete') || "O'chirish"}
-                            </DropdownMenuItem>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <DropdownMenuItem onClick={() => openEditModal(loc)}>
+                                <Pencil className="w-4 h-4 mr-2" />
+                                {t('edit') || 'Tahrirlash'}
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete(MODULES.INVENTORY) && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setLocationToDelete(loc);
+                                  setShowDeleteConfirm(true);
+                                }}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete') || "O'chirish"}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

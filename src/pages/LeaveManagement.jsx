@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 import { LeaveRequest, LeaveBalance } from '@/api/entities';
 import { useHR } from '@/components/contexts/HRContext';
 import { format, differenceInDays, parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
@@ -83,6 +84,7 @@ export default function LeaveManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { employees } = useHR();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState('requests');
   const [leaveRequests, setLeaveRequests] = useState([]);
@@ -338,13 +340,15 @@ export default function LeaveManagement() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header with Action Button */}
         <div className="flex justify-end">
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_leave_request') || "Yangi so'rov"}
-          </Button>
+          {canCreate(MODULES.HR) && (
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {t('new_leave_request') || "Yangi so'rov"}
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -516,7 +520,7 @@ export default function LeaveManagement() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   {t('view') || "Ko'rish"}
                                 </DropdownMenuItem>
-                                {request.status === 'pending' && (
+                                {request.status === 'pending' && canUpdate(MODULES.HR) && (
                                   <>
                                     <DropdownMenuItem
                                       onClick={() => { setSelectedRequest(request); setShowApproveDialog(true); }}

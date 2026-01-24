@@ -28,6 +28,7 @@ import { format, differenceInDays } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -73,6 +74,7 @@ const lotGrades = [
 export default function LotTracking() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     lots,
     products,
@@ -403,13 +405,15 @@ export default function LotTracking() {
           </Select>
         </div>
 
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_lot')}
-        </Button>
+        {canCreate(MODULES.INVENTORY) && (
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_lot')}
+          </Button>
+        )}
       </div>
 
       {/* Lots Table */}
@@ -490,20 +494,24 @@ export default function LotTracking() {
                               <Eye className="w-4 h-4 mr-2" />
                               {t('view')}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditLot(lot)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              {t('edit')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => {
-                                setSelectedLot(lot);
-                                setShowDeleteModal(true);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              {t('delete')}
-                            </DropdownMenuItem>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <DropdownMenuItem onClick={() => handleEditLot(lot)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                {t('edit')}
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete(MODULES.INVENTORY) && (
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => {
+                                  setSelectedLot(lot);
+                                  setShowDeleteModal(true);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete')}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -974,10 +982,12 @@ export default function LotTracking() {
                 <Button variant="outline" onClick={() => setShowViewModal(false)}>
                   {t('close')}
                 </Button>
-                <Button onClick={() => { setShowViewModal(false); handleEditLot(selectedLot); }}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  {t('edit')}
-                </Button>
+                {canUpdate(MODULES.INVENTORY) && (
+                  <Button onClick={() => { setShowViewModal(false); handleEditLot(selectedLot); }}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    {t('edit')}
+                  </Button>
+                )}
               </div>
             </div>
           )}

@@ -104,8 +104,18 @@ export default function ProductionSchedule() {
     setCurrentDate(new Date());
   };
 
+  // Get locale based on language
+  const getLocale = () => {
+    switch (language) {
+      case 'ru': return 'ru-RU';
+      case 'uz': return 'uz-UZ';
+      default: return 'en-US';
+    }
+  };
+
   const formatDateHeader = (date) => {
-    const day = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const locale = getLocale();
+    const day = date.toLocaleDateString(locale, { weekday: 'short' });
     const num = date.getDate();
     return { day, num };
   };
@@ -168,7 +178,7 @@ export default function ProductionSchedule() {
               </div>
 
               <span className="text-sm font-medium text-slate-600">
-                {dateRange.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {dateRange.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {dateRange.start.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' })} - {dateRange.end.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
           </div>

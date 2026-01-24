@@ -17,6 +17,8 @@ import { Progress } from "@/components/ui/progress";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { format } from "date-fns";
 
 export default function BudgetManagement() {
@@ -35,6 +37,7 @@ export default function BudgetManagement() {
     deleteBudgetLine,
     isLoading
   } = useFinancials();
+  const { canCreate, canDelete } = usePermissions();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -338,12 +341,14 @@ export default function BudgetManagement() {
                   <SelectItem value="both">{t('both') || 'Both'}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => { resetForm(); setShowCreateModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_budget') || 'New Budget'}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_budget') || 'New Budget'}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -359,12 +364,14 @@ export default function BudgetManagement() {
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {t('budget_empty_description') || 'Create budgets to plan and control your income and expenses.'}
               </p>
-              <Button
-                onClick={() => { resetForm(); setShowCreateModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_budget') || 'Create First Budget'}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_budget') || 'Create First Budget'}
+                </Button>
+              )}
             </div>
           ) : (
             <Table>
@@ -428,9 +435,11 @@ export default function BudgetManagement() {
                           <Button variant="ghost" size="sm" onClick={() => openEditModal(budget)} title={t('edit') || 'Edit'}>
                             <Edit2 className="w-4 h-4 text-slate-500" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteBudget(budget)} title={t('delete') || 'Delete'}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          {canDelete(MODULES.FINANCIALS) && (
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteBudget(budget)} title={t('delete') || 'Delete'}>
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

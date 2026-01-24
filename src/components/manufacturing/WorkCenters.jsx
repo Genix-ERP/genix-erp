@@ -11,6 +11,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
@@ -18,6 +20,7 @@ export default function WorkCenters() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters, loading, createWorkCenter } = useManufacturing();
+  const { canCreate } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [newWorkCenter, setNewWorkCenter] = useState({
@@ -96,9 +99,11 @@ export default function WorkCenters() {
               <Cog className="w-6 h-6 text-slate-700" />
               {t('work_centers')}
             </CardTitle>
-            <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-              <Plus className="w-4 h-4 mr-2" /> {t('add_work_center')}
-            </Button>
+            {canCreate(MODULES.MANUFACTURING) && (
+              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                <Plus className="w-4 h-4 mr-2" /> {t('add_work_center')}
+              </Button>
+            )}
           </div>
         </CardHeader>
       </Card>
@@ -118,9 +123,11 @@ export default function WorkCenters() {
             </div>
             <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_work_centers_configured')}</h3>
             <p className="text-sm text-slate-500 mb-6">{t('add_work_centers_description')}</p>
-            <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-              <Plus className="w-4 h-4 mr-2" /> {t('add_first_work_center')}
-            </Button>
+            {canCreate(MODULES.MANUFACTURING) && (
+              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                <Plus className="w-4 h-4 mr-2" /> {t('add_first_work_center')}
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

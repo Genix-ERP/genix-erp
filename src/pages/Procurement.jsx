@@ -39,6 +39,7 @@ import { analyzeProcurement } from '@/api/services/aiAnalytics';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 
 import Suppliers from '@/components/procurement/Suppliers';
 import RFQManagement from '@/components/procurement/RFQManagement';
@@ -53,6 +54,7 @@ import SupplierPerformance from '@/components/procurement/SupplierPerformance';
 export default function Procurement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     suppliers,
     purchaseOrders,
@@ -517,9 +519,11 @@ export default function Procurement() {
               <CardHeader className="border-b">
                 <div className="flex items-center justify-between">
                   <CardTitle>{t('purchase_orders') || 'Purchase Orders'}</CardTitle>
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_po') || 'New PO'}
-                  </Button>
+                  {canCreate(MODULES.PURCHASES) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_po') || 'New PO'}
+                    </Button>
+                  )}
                 </div>
                 <div className="flex gap-3 mt-4">
                   <div className="relative flex-1">
@@ -554,7 +558,9 @@ export default function Procurement() {
                   <div className="text-center py-16">
                     <ShoppingCart className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                     <p className="text-slate-500">{t('orders_not_found') || 'Orders not found'}</p>
-                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_po') || 'Create First PO'}</Button>
+                    {canCreate(MODULES.PURCHASES) && (
+                      <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_po') || 'Create First PO'}</Button>
+                    )}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -587,20 +593,22 @@ export default function Procurement() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
-                                <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                                {po.status === 'draft' && (
+                                {canUpdate(MODULES.PURCHASES) && (
+                                  <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
+                                    <Edit2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {canUpdate(MODULES.PURCHASES) && po.status === 'draft' && (
                                   <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'sent')}>
                                     {t('send') || 'Send'}
                                   </Button>
                                 )}
-                                {po.status === 'sent' && (
+                                {canUpdate(MODULES.PURCHASES) && po.status === 'sent' && (
                                   <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
                                     {t('confirm') || 'Confirm'}
                                   </Button>
                                 )}
-                                {po.status === 'confirmed' && (
+                                {canUpdate(MODULES.PURCHASES) && po.status === 'confirmed' && (
                                   <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
                                     <Truck className="w-4 h-4" />
                                   </Button>

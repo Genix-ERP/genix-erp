@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 
 // Import universal ERP components
 import {
@@ -40,6 +41,7 @@ export default function AccountsPayable() {
     updateVendorBill,
     isLoading
   } = useFinancials();
+  const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
 
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,20 +67,20 @@ export default function AccountsPayable() {
 
   // Export columns configuration
   const exportColumns = [
-    { key: 'invoice_number', label: 'Hisob-faktura raqami' },
-    { key: 'partner_id', label: 'Yetkazib beruvchi' },
-    { key: 'invoice_date', label: 'Sana', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'due_date', label: "To'lov muddati", render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'total_amount', label: 'Summa', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'status', label: 'Holat' },
+    { key: 'invoice_number', label: t('invoice_number') || 'Invoice Number' },
+    { key: 'partner_id', label: t('vendor') || 'Vendor' },
+    { key: 'invoice_date', label: t('date') || 'Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
+    { key: 'due_date', label: t('due_date') || 'Due Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
+    { key: 'total_amount', label: t('amount') || 'Amount', render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'status', label: t('status') || 'Status' },
   ];
 
   // Import columns configuration
   const importColumns = [
-    { key: 'partner_id', label: 'Yetkazib beruvchi', required: true },
-    { key: 'invoice_date', label: 'Sana', required: true },
-    { key: 'due_date', label: "To'lov muddati", required: true },
-    { key: 'subtotal', label: 'Summa', required: true },
+    { key: 'partner_id', label: t('vendor') || 'Vendor', required: true },
+    { key: 'invoice_date', label: t('date') || 'Date', required: true },
+    { key: 'due_date', label: t('due_date') || 'Due Date', required: true },
+    { key: 'subtotal', label: t('amount') || 'Amount', required: true },
   ];
 
   useEffect(() => {
@@ -172,24 +174,24 @@ export default function AccountsPayable() {
 
   const generatePrintConfig = (bill) => ({
     template: 'invoice',
-    title: 'Yetkazib beruvchi hisob-fakturasi',
+    title: t('vendor_bill') || 'Vendor Bill',
     documentNumber: bill.invoice_number || `VB-${bill.id}`,
     documentDate: bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy') : '',
     headerFields: [
-      { label: 'Yetkazib beruvchi', value: bill.partner_id },
-      { label: "To'lov muddati", value: bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-' },
-      { label: 'Holat', value: bill.status },
+      { label: t('vendor') || 'Vendor', value: bill.partner_id },
+      { label: t('due_date') || 'Due Date', value: bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-' },
+      { label: t('status') || 'Status', value: bill.status },
     ],
     tableColumns: [
-      { key: 'description', label: 'Tavsif' },
-      { key: 'amount', label: 'Summa', align: 'right' },
+      { key: 'description', label: t('description') || 'Description' },
+      { key: 'amount', label: t('amount') || 'Amount', align: 'right' },
     ],
     tableData: [
-      { description: 'Asosiy summa', amount: `${(bill.subtotal || 0).toLocaleString()} UZS` },
-      { description: 'Soliq (12%)', amount: `${(bill.tax_amount || 0).toLocaleString()} UZS` },
+      { description: t('subtotal') || 'Subtotal', amount: `${(bill.subtotal || 0).toLocaleString()} UZS` },
+      { description: t('tax') + ' (12%)' || 'Tax (12%)', amount: `${(bill.tax_amount || 0).toLocaleString()} UZS` },
     ],
     totals: [
-      { label: 'Jami', value: `${(bill.total_amount || 0).toLocaleString()} UZS`, bold: true },
+      { label: t('total') || 'Total', value: `${(bill.total_amount || 0).toLocaleString()} UZS`, bold: true },
     ],
   });
 
@@ -284,15 +286,15 @@ export default function AccountsPayable() {
         <TabsList className="bg-white/80 backdrop-blur-sm border border-slate-200/60">
           <TabsTrigger value="list" className="data-[state=active]:bg-blue-50">
             <FileText className="w-4 h-4 mr-2" />
-            Hisob-fakturalar
+            {t('invoices') || 'Invoices'}
           </TabsTrigger>
           <TabsTrigger value="recurring" className="data-[state=active]:bg-blue-50">
             <Repeat className="w-4 h-4 mr-2" />
-            Qaytariladigan
+            {t('recurring') || 'Recurring'}
           </TabsTrigger>
           <TabsTrigger value="audit" className="data-[state=active]:bg-blue-50">
             <History className="w-4 h-4 mr-2" />
-            Tarix
+            {t('history') || 'History'}
           </TabsTrigger>
         </TabsList>
 
@@ -309,14 +311,18 @@ export default function AccountsPayable() {
                     />
                     <Button variant="outline" size="sm" onClick={() => setShowBatchPrint(true)} disabled={filteredBills.length === 0}>
                       <Printer className="w-4 h-4 mr-1" />
-                      Chop etish
+                      {t('print') || 'Print'}
                     </Button>
-                    <Button variant="outline" onClick={() => setShowUploadModal(true)}>
-                      <Upload className="w-4 h-4 mr-2" /> {t('upload_invoice')}
-                    </Button>
-                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                      <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
-                    </Button>
+                    {canCreate('financials') && (
+                      <>
+                        <Button variant="outline" onClick={() => setShowUploadModal(true)}>
+                          <Upload className="w-4 h-4 mr-2" /> {t('upload_invoice')}
+                        </Button>
+                        <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                          <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -355,9 +361,11 @@ export default function AccountsPayable() {
             <div className="text-center py-16">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">{t('no_data')}</p>
-              <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
-              </Button>
+              {canCreate('financials') && (
+                <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_bill')}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -413,7 +421,7 @@ export default function AccountsPayable() {
                               setSelectedBill(bill);
                               setShowPrintPreview(true);
                             }}
-                            title="Ko'rish va chop etish"
+                            title={t('view_and_print') || 'View and Print'}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -443,11 +451,11 @@ export default function AccountsPayable() {
         <TabsContent value="recurring">
           <RecurringPanel
             entityType="vendor_bills"
-            entityName="To'lov"
+            entityName={t('payment') || 'Payment'}
             fields={[
-              { key: 'partner_id', label: 'Yetkazib beruvchi', required: true },
-              { key: 'amount', label: 'Summa', type: 'number', required: true },
-              { key: 'description', label: 'Tavsif' },
+              { key: 'partner_id', label: t('vendor') || 'Vendor', required: true },
+              { key: 'amount', label: t('amount') || 'Amount', type: 'number', required: true },
+              { key: 'description', label: t('description') || 'Description' },
             ]}
             onCreateTransaction={(data) => {
               const billData = {
@@ -469,7 +477,7 @@ export default function AccountsPayable() {
 
         {/* Audit Trail Tab */}
         <TabsContent value="audit">
-          <AuditTrailPanel entityType="vendor_bills" title="Yetkazib beruvchi hisob-fakturalari tarixi" />
+          <AuditTrailPanel entityType="vendor_bills" title={t('vendor_bills_history') || 'Vendor Bills History'} />
         </TabsContent>
       </Tabs>
 
@@ -612,7 +620,7 @@ export default function AccountsPayable() {
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
         columns={importColumns}
-        entityName="Yetkazib beruvchi hisob-fakturasi"
+        entityName={t('vendor_bill') || 'Vendor Bill'}
       />
 
       {/* Export Modal */}
@@ -621,8 +629,8 @@ export default function AccountsPayable() {
         onClose={() => setShowExportModal(false)}
         data={filteredBills}
         columns={exportColumns}
-        entityName="Yetkazib_beruvchi_hisob_fakturalari"
-        title="Yetkazib beruvchi hisob-fakturalari"
+        entityName="vendor_bills"
+        title={t('vendor_bills') || 'Vendor Bills'}
       />
 
       {/* Print Preview Modal */}
@@ -649,7 +657,7 @@ export default function AccountsPayable() {
           date: b.invoice_date ? format(new Date(b.invoice_date), 'dd.MM.yyyy') : '',
         }))}
         generateConfig={generatePrintConfig}
-        entityName="Hisob_faktura"
+        entityName={t('invoice') || 'Invoice'}
       />
 
     </div>

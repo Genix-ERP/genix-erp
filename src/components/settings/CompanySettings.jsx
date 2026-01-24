@@ -276,10 +276,10 @@ export default function CompanySettings() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="w-5 h-5" />
-                Kompaniyalar
+                {t('companies')}
               </CardTitle>
               <CardDescription className="mt-1">
-                Barcha kompaniyalarni boshqaring va yangilarini qo'shing
+                {t('companies_description')}
               </CardDescription>
             </div>
             <Badge variant="secondary" className="text-sm">
@@ -293,7 +293,7 @@ export default function CompanySettings() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Kompaniya nomini qidiring..."
+                placeholder={t('search_company_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -308,7 +308,7 @@ export default function CompanySettings() {
               }
             >
               <Plus className="w-4 h-4 mr-2" />
-              Yangi kompaniya
+              {t('new_company')}
             </Button>
           </div>
 
@@ -317,18 +317,18 @@ export default function CompanySettings() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead>Kompaniya</TableHead>
-                  <TableHead>Kod</TableHead>
-                  <TableHead>Valyuta</TableHead>
-                  <TableHead>Holat</TableHead>
-                  <TableHead className="text-right">Amallar</TableHead>
+                  <TableHead>{t('company')}</TableHead>
+                  <TableHead>{t('code')}</TableHead>
+                  <TableHead>{t('currency')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                  <TableHead className="text-right">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCompanies.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                      {searchQuery ? "Kompaniya topilmadi" : "Hali kompaniya qo'shilmagan"}
+                      {searchQuery ? t('company_not_found') : t('no_companies_yet')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -344,7 +344,7 @@ export default function CompanySettings() {
                             {activeCompany?.id === company.id && (
                               <Badge className="bg-green-100 text-green-800 text-xs mt-1">
                                 <Star className="w-3 h-3 mr-1" />
-                                Faol
+                                {t('current')}
                               </Badge>
                             )}
                           </div>
@@ -360,12 +360,12 @@ export default function CompanySettings() {
                         {company.is_active !== false ? (
                           <Badge className="bg-green-100 text-green-800">
                             <CheckCircle className="w-3 h-3 mr-1" />
-                            Aktiv
+                            {t('active')}
                           </Badge>
                         ) : (
                           <Badge className="bg-red-100 text-red-800">
                             <XCircle className="w-3 h-3 mr-1" />
-                            Noaktiv
+                            {t('inactive')}
                           </Badge>
                         )}
                       </TableCell>
@@ -417,7 +417,7 @@ export default function CompanySettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5" />
-              Kompaniyani tahrirlash
+              {t('edit_company')}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-6 py-4">
@@ -430,10 +430,10 @@ export default function CompanySettings() {
 
             {/* Basic Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Asosiy ma'lumotlar</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Kompaniya kodi *</Label>
+                  <Label>{t('company_code')} *</Label>
                   <Input
                     value={formData.company_code}
                     onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
@@ -441,30 +441,30 @@ export default function CompanySettings() {
                     required
                     disabled
                   />
-                  <p className="text-xs text-slate-500">Kompaniya kodi o'zgartirilmaydi</p>
+                  <p className="text-xs text-slate-500">{t('company_code_not_editable')}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Kompaniya nomi *</Label>
+                  <Label>{t('company_name')} *</Label>
                   <Input
                     value={formData.company_name}
                     onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                    placeholder="Mening kompaniyam"
+                    placeholder={t('my_company_placeholder')}
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Huquqiy nom</Label>
+                  <Label>{t('legal_name')}</Label>
                   <Input
                     value={formData.legal_name}
                     onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
-                    placeholder="Kompaniyaning to'liq huquqiy nomi"
+                    placeholder={t('legal_name_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN (Soliq ID)</Label>
+                  <Label>{t('tax_id_inn')}</Label>
                   <Input
                     value={formData.tax_id}
                     onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
@@ -473,7 +473,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Ro'yxatdan o'tish raqami</Label>
+                  <Label>{t('registration_number')}</Label>
                   <Input
                     value={formData.registration_number}
                     onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
@@ -485,10 +485,10 @@ export default function CompanySettings() {
 
             {/* Contact Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Aloqa ma'lumotlari</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Elektron pochta</Label>
+                  <Label>{t('email')}</Label>
                   <Input
                     type="email"
                     value={formData.email}
@@ -498,7 +498,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Telefon</Label>
+                  <Label>{t('phone')}</Label>
                   <Input
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -507,7 +507,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Veb-sayt</Label>
+                  <Label>{t('website')}</Label>
                   <Input
                     value={formData.website}
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
@@ -519,37 +519,37 @@ export default function CompanySettings() {
 
             {/* Address */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Manzil</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('address')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Ko'cha</Label>
+                  <Label>{t('street')}</Label>
                   <Input
                     value={formData.street}
                     onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                    placeholder="Ko'cha nomi, uy raqami"
+                    placeholder={t('street_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Shahar</Label>
+                  <Label>{t('city')}</Label>
                   <Input
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    placeholder="Toshkent"
+                    placeholder={t('city_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Viloyat/Region</Label>
+                  <Label>{t('state_region')}</Label>
                   <Input
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    placeholder="Toshkent viloyati"
+                    placeholder={t('state_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Pochta indeksi</Label>
+                  <Label>{t('postal_code')}</Label>
                   <Input
                     value={formData.postal_code}
                     onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
@@ -558,7 +558,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Mamlakat</Label>
+                  <Label>{t('country')}</Label>
                   <Select
                     value={formData.country}
                     onValueChange={(value) => setFormData({ ...formData, country: value })}
@@ -580,10 +580,10 @@ export default function CompanySettings() {
 
             {/* Settings */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Sozlamalar</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('settings')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Valyuta</Label>
+                  <Label>{t('currency')}</Label>
                   <Select
                     value={formData.currency}
                     onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -601,7 +601,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Buxgalteriya standarti</Label>
+                  <Label>{t('accounting_standard')}</Label>
                   <Select
                     value={formData.accounting_standard}
                     onValueChange={(value) => setFormData({ ...formData, accounting_standard: value })}
@@ -610,7 +610,7 @@ export default function CompanySettings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOCAL_GAAP">Mahalliy standart</SelectItem>
+                      <SelectItem value="LOCAL_GAAP">{t('local_standard')}</SelectItem>
                       <SelectItem value="IFRS">IFRS</SelectItem>
                       <SelectItem value="US_GAAP">US GAAP</SelectItem>
                     </SelectContent>
@@ -626,7 +626,7 @@ export default function CompanySettings() {
                     className="w-4 h-4"
                   />
                   <Label htmlFor="is_active" className="cursor-pointer">
-                    Kompaniya aktiv
+                    {t('company_active')}
                   </Label>
                 </div>
               </div>
@@ -658,7 +658,7 @@ export default function CompanySettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="w-5 h-5" />
-              Yangi kompaniya qo'shish
+              {t('add_new_company')}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddSubmit} className="space-y-6 py-4">
@@ -671,40 +671,40 @@ export default function CompanySettings() {
 
             {/* Basic Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Asosiy ma'lumotlar</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Kompaniya kodi *</Label>
+                  <Label>{t('company_code')} *</Label>
                   <Input
                     value={addFormData.company_code}
                     onChange={(e) => setAddFormData({ ...addFormData, company_code: e.target.value })}
                     placeholder="COMP001"
                     required
                   />
-                  <p className="text-xs text-slate-500">Noyob identifikator (masalan: ACME01)</p>
+                  <p className="text-xs text-slate-500">{t('unique_identifier_hint')}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Kompaniya nomi *</Label>
+                  <Label>{t('company_name')} *</Label>
                   <Input
                     value={addFormData.company_name}
                     onChange={(e) => setAddFormData({ ...addFormData, company_name: e.target.value })}
-                    placeholder="Mening kompaniyam"
+                    placeholder={t('my_company_placeholder')}
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Huquqiy nom</Label>
+                  <Label>{t('legal_name')}</Label>
                   <Input
                     value={addFormData.legal_name}
                     onChange={(e) => setAddFormData({ ...addFormData, legal_name: e.target.value })}
-                    placeholder="Kompaniyaning to'liq huquqiy nomi"
+                    placeholder={t('legal_name_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN (Soliq ID)</Label>
+                  <Label>{t('tax_id_inn')}</Label>
                   <Input
                     value={addFormData.tax_id}
                     onChange={(e) => setAddFormData({ ...addFormData, tax_id: e.target.value })}
@@ -713,7 +713,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Ro'yxatdan o'tish raqami</Label>
+                  <Label>{t('registration_number')}</Label>
                   <Input
                     value={addFormData.registration_number}
                     onChange={(e) => setAddFormData({ ...addFormData, registration_number: e.target.value })}
@@ -725,10 +725,10 @@ export default function CompanySettings() {
 
             {/* Contact Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Aloqa ma'lumotlari</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Elektron pochta</Label>
+                  <Label>{t('email')}</Label>
                   <Input
                     type="email"
                     value={addFormData.email}
@@ -738,7 +738,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Telefon</Label>
+                  <Label>{t('phone')}</Label>
                   <Input
                     value={addFormData.phone}
                     onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
@@ -747,7 +747,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Veb-sayt</Label>
+                  <Label>{t('website')}</Label>
                   <Input
                     value={addFormData.website}
                     onChange={(e) => setAddFormData({ ...addFormData, website: e.target.value })}
@@ -759,37 +759,37 @@ export default function CompanySettings() {
 
             {/* Address */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Manzil</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('address')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Ko'cha</Label>
+                  <Label>{t('street')}</Label>
                   <Input
                     value={addFormData.street}
                     onChange={(e) => setAddFormData({ ...addFormData, street: e.target.value })}
-                    placeholder="Ko'cha nomi, uy raqami"
+                    placeholder={t('street_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Shahar</Label>
+                  <Label>{t('city')}</Label>
                   <Input
                     value={addFormData.city}
                     onChange={(e) => setAddFormData({ ...addFormData, city: e.target.value })}
-                    placeholder="Toshkent"
+                    placeholder={t('city_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Viloyat/Region</Label>
+                  <Label>{t('state_region')}</Label>
                   <Input
                     value={addFormData.state}
                     onChange={(e) => setAddFormData({ ...addFormData, state: e.target.value })}
-                    placeholder="Toshkent viloyati"
+                    placeholder={t('state_placeholder')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Pochta indeksi</Label>
+                  <Label>{t('postal_code')}</Label>
                   <Input
                     value={addFormData.postal_code}
                     onChange={(e) => setAddFormData({ ...addFormData, postal_code: e.target.value })}
@@ -798,7 +798,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Mamlakat</Label>
+                  <Label>{t('country')}</Label>
                   <Select
                     value={addFormData.country}
                     onValueChange={(value) => setAddFormData({ ...addFormData, country: value })}
@@ -820,10 +820,10 @@ export default function CompanySettings() {
 
             {/* Settings */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">Sozlamalar</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('settings')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Valyuta</Label>
+                  <Label>{t('currency')}</Label>
                   <Select
                     value={addFormData.currency}
                     onValueChange={(value) => setAddFormData({ ...addFormData, currency: value })}
@@ -841,7 +841,7 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Buxgalteriya standarti</Label>
+                  <Label>{t('accounting_standard')}</Label>
                   <Select
                     value={addFormData.accounting_standard}
                     onValueChange={(value) => setAddFormData({ ...addFormData, accounting_standard: value })}
@@ -850,7 +850,7 @@ export default function CompanySettings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOCAL_GAAP">Mahalliy standart</SelectItem>
+                      <SelectItem value="LOCAL_GAAP">{t('local_standard')}</SelectItem>
                       <SelectItem value="IFRS">IFRS</SelectItem>
                       <SelectItem value="US_GAAP">US GAAP</SelectItem>
                     </SelectContent>
@@ -866,7 +866,7 @@ export default function CompanySettings() {
                     className="w-4 h-4"
                   />
                   <Label htmlFor="add_is_active" className="cursor-pointer">
-                    Kompaniya aktiv
+                    {t('company_active')}
                   </Label>
                 </div>
               </div>
