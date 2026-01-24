@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,18 +60,16 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
-  <TooltipProvider delayDuration={200}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
-        <p>{text}</p>
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+      <p>{text}</p>
+    </TooltipContent>
+  </Tooltip>
 );
 
 // Label with help tooltip
@@ -104,6 +102,14 @@ export default function ScrapManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTab, setSelectedTab] = useState("orders");
+
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowForm(false);
+      setViewingScrap(null);
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     product_id: "",
@@ -257,6 +263,7 @@ export default function ScrapManagement() {
   }
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -761,5 +768,6 @@ export default function ScrapManagement() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }

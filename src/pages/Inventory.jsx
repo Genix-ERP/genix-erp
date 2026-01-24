@@ -82,10 +82,19 @@ export default function Inventory() {
   const [compliance, setCompliance] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
 
+  // Cleanup on unmount to prevent blocking navigation
+  useEffect(() => {
+    return () => {
+      setShowForm(false);
+      setEditingItem(null);
+    };
+  }, []);
+
   // Get summary from context
   const summary = getInventorySummary();
 
   // Generate AI-powered insights based on current data
+  // Note: t is not in deps to avoid infinite loop (it's a new function each render)
   const generateInsights = useCallback(() => {
     const analysis = analyzeInventory(items, stockMovements, language);
 
@@ -110,9 +119,11 @@ export default function Inventory() {
     }));
 
     setInsights([...aiInsights, ...recInsights].slice(0, 6));
-  }, [items, stockMovements, language, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, stockMovements, language]);
 
   // Generate static compliance check
+  // Note: t is not in deps to avoid infinite loop (it's a new function each render)
   const checkCompliance = useCallback(() => {
     const fifoCount = items.filter(i => i.costing_method === 'fifo').length;
     const wacCount = items.filter(i => i.costing_method === 'weighted_average').length;
@@ -136,7 +147,8 @@ export default function Inventory() {
         t('review_costing_methods_annually')
       ]
     });
-  }, [items, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, language]);
 
   const filterItems = useCallback(() => {
     let filtered = items;

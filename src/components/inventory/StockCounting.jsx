@@ -31,18 +31,16 @@ import { Label } from "@/components/ui/label";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
-  <TooltipProvider delayDuration={200}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
-        <p>{text}</p>
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+      <p>{text}</p>
+    </TooltipContent>
+  </Tooltip>
 );
 
 // Label with help tooltip
@@ -103,6 +101,14 @@ export default function StockCounting() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
   const [employees, setEmployees] = useState([]);
+
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowCreateModal(false);
+      setShowCompleteModal(false);
+    };
+  }, []);
 
   const [newCount, setNewCount] = useState({
     warehouse_id: '',
@@ -243,6 +249,7 @@ export default function StockCounting() {
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1011,5 +1018,6 @@ export default function StockCounting() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }
