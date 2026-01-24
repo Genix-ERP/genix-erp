@@ -11,10 +11,13 @@ import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw } from '
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate } = usePermissions();
 
   const {
     productionOrders,
@@ -144,9 +147,11 @@ export default function ProductionOrders() {
                 <Button variant="outline" size="sm" onClick={refreshData}>
                   <RefreshCw className="w-4 h-4 mr-2" /> {t('refresh') || 'Refresh'}
                 </Button>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_production_order') || 'New Production Order'}
-                </Button>
+                {canCreate(MODULES.MANUFACTURING) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_production_order') || 'New Production Order'}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -193,9 +198,11 @@ export default function ProductionOrders() {
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_production_orders_yet') || 'No production orders yet'}</h3>
               <p className="text-sm text-slate-500 mb-6">{t('create_first_production_order') || 'Create your first production order to get started'}</p>
-              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_order') || 'Create First Order'}
-              </Button>
+              {canCreate(MODULES.MANUFACTURING) && (
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_order') || 'Create First Order'}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

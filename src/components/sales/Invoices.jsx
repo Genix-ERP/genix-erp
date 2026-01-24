@@ -55,6 +55,8 @@ import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function Invoices() {
   const { language } = useLanguage();
@@ -70,6 +72,7 @@ export default function Invoices() {
   } = useSales();
 
   const { customers } = useCustomers();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -382,10 +385,12 @@ export default function Invoices() {
             {t("customer_invoices")}
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t("new_invoice")}
-        </Button>
+        {canCreate(MODULES.SALES) && (
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t("new_invoice")}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

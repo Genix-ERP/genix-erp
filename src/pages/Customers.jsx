@@ -42,13 +42,14 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
 
 export default function Customers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const {
     customers,
     leads,

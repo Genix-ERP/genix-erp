@@ -33,7 +33,10 @@ export const MODULES = {
   COMPANY: 'company',
   ADMIN: 'admin',
   ASSETS: 'assets',
-  PAYROLL: 'payroll'
+  PAYROLL: 'payroll',
+  EXPENSES: 'expenses',
+  MANUFACTURING: 'manufacturing',
+  CARGO: 'cargo'
 };
 
 // Permission matrix: defines what each permission level can do in each module

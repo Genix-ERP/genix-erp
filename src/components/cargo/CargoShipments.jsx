@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { format } from 'date-fns';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function CargoShipments() {
   const { language } = useLanguage();
@@ -27,6 +29,7 @@ export default function CargoShipments() {
     SHIPMENT_STATUS,
     calculateShipmentCosts
   } = useCargoContext();
+  const { canCreate } = usePermissions();
 
   // Helper function to extract string from sql.NullString objects
   const extractString = (value) => {
@@ -425,13 +428,15 @@ export default function CargoShipments() {
             </Button>
 
             {/* New Shipment Button */}
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {t('new_shipment') || 'Yangi yuk'}
-            </Button>
+            {canCreate(MODULES.CARGO) && (
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {t('new_shipment') || 'Yangi yuk'}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

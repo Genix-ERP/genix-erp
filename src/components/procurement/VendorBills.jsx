@@ -47,10 +47,13 @@ import {
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function VendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate } = usePermissions();
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -340,10 +343,12 @@ export default function VendorBills() {
             {t('vendor_bills_desc') || 'Manage vendor invoices and accounts payable'}
           </p>
         </div>
-        <Button onClick={() => { resetNewBill(); setEditingBill(null); setShowBillDialog(true); }}>
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_bill') || 'New Bill'}
-        </Button>
+        {canCreate(MODULES.PURCHASES) && (
+          <Button onClick={() => { resetNewBill(); setEditingBill(null); setShowBillDialog(true); }}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_bill') || 'New Bill'}
+          </Button>
+        )}
       </div>
 
       {/* Statistics Cards */}
@@ -443,10 +448,12 @@ export default function VendorBills() {
               <p className="text-muted-foreground mb-4">
                 {t('no_bills_desc') || 'Create your first vendor bill to track accounts payable'}
               </p>
-              <Button onClick={() => { resetNewBill(); setShowBillDialog(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_bill') || 'New Bill'}
-              </Button>
+              {canCreate(MODULES.PURCHASES) && (
+                <Button onClick={() => { resetNewBill(); setShowBillDialog(true); }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_bill') || 'New Bill'}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

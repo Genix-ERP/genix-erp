@@ -30,6 +30,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 // Portal component for dragging items
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -109,6 +111,7 @@ export default function LeadsKanban({
   language = 'en'
 }) {
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete } = usePermissions();
 
   const [kanbanState, setKanbanState] = useState({
     leads: [],
@@ -250,7 +253,7 @@ export default function LeadsKanban({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-              {onCallLead && lead.phone && (
+              {canUpdate(MODULES.CUSTOMERS) && onCallLead && lead.phone && (
                 <DropdownMenuItem onClick={(e) => {
                   e.stopPropagation();
                   onCallLead(lead);
@@ -259,7 +262,7 @@ export default function LeadsKanban({
                   {t('call')}
                 </DropdownMenuItem>
               )}
-              {onEditLead && (
+              {canUpdate(MODULES.CUSTOMERS) && onEditLead && (
                 <DropdownMenuItem onClick={(e) => {
                   e.stopPropagation();
                   onEditLead(lead);
@@ -268,7 +271,7 @@ export default function LeadsKanban({
                   {t('edit')}
                 </DropdownMenuItem>
               )}
-              {onDeleteLead && (
+              {canDelete(MODULES.CUSTOMERS) && onDeleteLead && (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
@@ -313,7 +316,7 @@ export default function LeadsKanban({
         </div>
       </CardContent>
     </Card>
-  ), [onCallLead, onEditLead, onDeleteLead, t]);
+  ), [onCallLead, onEditLead, onDeleteLead, t, canUpdate, canDelete]);
 
   return (
     <div className="space-y-6">
@@ -373,7 +376,7 @@ export default function LeadsKanban({
               </div>
             </CardTitle>
             <div className="flex items-center gap-4">
-              {onAddLead && (
+              {canCreate(MODULES.CUSTOMERS) && onAddLead && (
                 <Button
                   onClick={onAddLead}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"

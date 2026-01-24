@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function TaxRates() {
   const { language } = useLanguage();
@@ -25,6 +26,7 @@ export default function TaxRates() {
     deleteTaxRate,
     isLoading
   } = useFinancials();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [filteredTaxRates, setFilteredTaxRates] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -270,15 +272,17 @@ export default function TaxRates() {
                   <SelectItem value="purchase">{t('purchase_tax')}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setShowCreateModal(true);
-                }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_tax_rate')}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_tax_rate')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -303,7 +307,7 @@ export default function TaxRates() {
                   ? t('try_adjusting_search') || 'Try adjusting your search or filters'
                   : t('setup_tax_rates')}
               </p>
-              {!searchQuery && (
+              {!searchQuery && canCreate(MODULES.FINANCIALS) && (
                 <Button
                   onClick={() => {
                     resetForm();
@@ -379,22 +383,26 @@ export default function TaxRates() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(taxRate)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Pencil className="w-4 h-4 text-slate-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteClick(taxRate)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {canUpdate(MODULES.FINANCIALS) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(taxRate)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Pencil className="w-4 h-4 text-slate-500" />
+                              </Button>
+                            )}
+                            {canDelete(MODULES.FINANCIALS) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteClick(taxRate)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

@@ -25,6 +25,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { hrService } from "@/api/services/hr";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -81,6 +82,7 @@ const varianceReasons = [
 export default function StockCounting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const {
     stockCounts,
     products,
@@ -316,7 +318,7 @@ export default function StockCounting() {
             </TabsTrigger>
           </TabsList>
 
-          {activeTab === 'list' && (
+          {activeTab === 'list' && canCreate(MODULES.INVENTORY) && (
             <Button
               onClick={() => setShowCreateModal(true)}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -406,7 +408,7 @@ export default function StockCounting() {
                         </TableCell>
                         <TableCell>{getStatusBadge(count.status)}</TableCell>
                         <TableCell className="text-right">
-                          {(count.status === 'draft' || count.status === 'in_progress') && (
+                          {(count.status === 'draft' || count.status === 'in_progress') && canUpdate(MODULES.INVENTORY) && (
                             <Button
                               variant="outline"
                               size="sm"

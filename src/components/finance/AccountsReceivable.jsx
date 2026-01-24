@@ -12,6 +12,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 const AGING_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
@@ -24,6 +26,7 @@ export default function AccountsReceivable() {
     updateCustomerInvoice,
     isLoading
   } = useFinancials();
+  const { canCreate } = usePermissions();
 
   const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,9 +265,11 @@ export default function AccountsReceivable() {
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xl font-bold">{t('customer_invoices')}</CardTitle>
-                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_invoice')}
-                </Button>
+                {canCreate(MODULES.FINANCIALS) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_invoice')}
+                  </Button>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
@@ -300,9 +305,11 @@ export default function AccountsReceivable() {
             ) : filteredInvoices.length === 0 ? (
               <div className="text-center py-16">
                 <p className="text-slate-500">{t('no_data')}</p>
-                <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
-                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_invoice')}
-                </Button>
+                {canCreate(MODULES.FINANCIALS) && (
+                  <Button onClick={() => setShowCreateModal(true)} className="mt-4" variant="outline">
+                    <Plus className="w-4 h-4 mr-2" /> {t('create_first_invoice')}
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">

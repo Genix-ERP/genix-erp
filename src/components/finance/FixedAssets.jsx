@@ -17,17 +17,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { format, differenceInMonths, addMonths } from "date-fns";
 
 // Asset categories with icons
 const assetCategories = [
-  { value: 'buildings', label: 'Buildings & Structures', icon: Building2, depreciationYears: 40 },
-  { value: 'vehicles', label: 'Vehicles', icon: Car, depreciationYears: 5 },
-  { value: 'equipment', label: 'Equipment & Machinery', icon: Wrench, depreciationYears: 10 },
-  { value: 'computers', label: 'Computers & IT', icon: Monitor, depreciationYears: 3 },
-  { value: 'furniture', label: 'Furniture & Fixtures', icon: Package, depreciationYears: 7 },
-  { value: 'intangible', label: 'Intangible Assets', icon: Cpu, depreciationYears: 5 },
-  { value: 'other', label: 'Other Assets', icon: Package, depreciationYears: 5 },
+  { value: 'buildings', labelKey: 'category_buildings', icon: Building2, depreciationYears: 40 },
+  { value: 'vehicles', labelKey: 'category_vehicles', icon: Car, depreciationYears: 5 },
+  { value: 'equipment', labelKey: 'category_equipment', icon: Wrench, depreciationYears: 10 },
+  { value: 'computers', labelKey: 'category_computers', icon: Monitor, depreciationYears: 3 },
+  { value: 'furniture', labelKey: 'category_furniture', icon: Package, depreciationYears: 7 },
+  { value: 'intangible', labelKey: 'category_intangible', icon: Cpu, depreciationYears: 5 },
+  { value: 'other', labelKey: 'category_other_assets', icon: Package, depreciationYears: 5 },
 ];
 
 // Depreciation methods
@@ -54,6 +56,7 @@ export default function FixedAssets() {
     disposeAsset,
     isLoading
   } = useFinancials();
+  const { canCreate, canDelete } = usePermissions();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -458,7 +461,7 @@ export default function FixedAssets() {
                 <SelectContent>
                   <SelectItem value="all">{t('all_categories') || 'All Categories'}</SelectItem>
                   {assetCategories.map(cat => (
-                    <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                    <SelectItem key={cat.value} value={cat.value}>{t(cat.labelKey) || cat.value}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -478,12 +481,14 @@ export default function FixedAssets() {
               >
                 <Calculator className="w-4 h-4 mr-2" /> {t('run_depreciation') || 'Run Depreciation'}
               </Button>
-              <Button
-                onClick={() => { resetForm(); setShowCreateModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_asset') || 'New Asset'}
-              </Button>
+              {canCreate(MODULES.ASSETS) && (
+                <Button
+                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_asset') || 'New Asset'}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -499,12 +504,14 @@ export default function FixedAssets() {
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {t('assets_empty_description') || 'Register your fixed assets to track depreciation and manage your capital investments.'}
               </p>
-              <Button
-                onClick={() => { resetForm(); setShowCreateModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('add_first_asset') || 'Add First Asset'}
-              </Button>
+              {canCreate(MODULES.ASSETS) && (
+                <Button
+                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('add_first_asset') || 'Add First Asset'}
+                </Button>
+              )}
             </div>
           ) : (
             <Table>
@@ -541,7 +548,7 @@ export default function FixedAssets() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{categoryInfo.label}</Badge>
+                        <Badge variant="outline">{t(categoryInfo.labelKey) || categoryInfo.value}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(asset.acquisition_cost || 0)}
@@ -566,7 +573,7 @@ export default function FixedAssets() {
                           <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
                             <Edit2 className="w-4 h-4 text-slate-500" />
                           </Button>
-                          {asset.status === 'active' && (
+                          {asset.status === 'active' && canDelete(MODULES.ASSETS) && (
                             <Button variant="ghost" size="sm" onClick={() => openDisposeModal(asset)} title={t('dispose') || 'Dispose'}>
                               <Trash2 className="w-4 h-4 text-red-500" />
                             </Button>
@@ -627,7 +634,7 @@ export default function FixedAssets() {
                   </SelectTrigger>
                   <SelectContent>
                     {assetCategories.map(cat => (
-                      <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      <SelectItem key={cat.value} value={cat.value}>{t(cat.labelKey) || cat.value}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

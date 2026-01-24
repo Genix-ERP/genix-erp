@@ -16,6 +16,8 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function CashRegister() {
   const { language } = useLanguage();
@@ -28,6 +30,7 @@ export default function CashRegister() {
     getCashBalance,
     isLoading
   } = useFinancials();
+  const { canCreate } = usePermissions();
 
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -242,39 +245,41 @@ export default function CashRegister() {
 
       {/* Actions & Filters */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => {
-              setNewTransaction({ ...newTransaction, type: 'income', category: 'sales' });
-              setShowCreateModal(true);
-            }}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            <ArrowDownLeft className="w-4 h-4 mr-2" />
-            {t('income') || 'Income'}
-          </Button>
-          <Button
-            onClick={() => {
-              setNewTransaction({ ...newTransaction, type: 'expense', category: 'purchase' });
-              setShowCreateModal(true);
-            }}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            <ArrowUpRight className="w-4 h-4 mr-2" />
-            {t('expense') || 'Expense'}
-          </Button>
-          <Button
-            onClick={() => {
-              setNewTransaction({ ...newTransaction, type: 'transfer', category: 'bank_deposit' });
-              setShowCreateModal(true);
-            }}
-            variant="outline"
-            className="border-blue-300 text-blue-600 hover:bg-blue-50"
-          >
-            <ArrowRightLeft className="w-4 h-4 mr-2" />
-            {t('transfer') || 'Transfer'}
-          </Button>
-        </div>
+        {canCreate(MODULES.FINANCIALS) && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                setNewTransaction({ ...newTransaction, type: 'income', category: 'sales' });
+                setShowCreateModal(true);
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <ArrowDownLeft className="w-4 h-4 mr-2" />
+              {t('income') || 'Income'}
+            </Button>
+            <Button
+              onClick={() => {
+                setNewTransaction({ ...newTransaction, type: 'expense', category: 'purchase' });
+                setShowCreateModal(true);
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <ArrowUpRight className="w-4 h-4 mr-2" />
+              {t('expense') || 'Expense'}
+            </Button>
+            <Button
+              onClick={() => {
+                setNewTransaction({ ...newTransaction, type: 'transfer', category: 'bank_deposit' });
+                setShowCreateModal(true);
+              }}
+              variant="outline"
+              className="border-blue-300 text-blue-600 hover:bg-blue-50"
+            >
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              {t('transfer') || 'Transfer'}
+            </Button>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button variant="outline" size="sm">

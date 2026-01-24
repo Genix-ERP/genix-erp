@@ -11,6 +11,8 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -21,6 +23,7 @@ export default function GeneralLedger() {
     getJournalLines,
     isLoading
   } = useFinancials();
+  const { canCreate } = usePermissions();
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -143,12 +146,14 @@ export default function GeneralLedger() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <Button 
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
-                </Button>
+                {canCreate(MODULES.FINANCIALS) && (
+                  <Button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -173,8 +178,8 @@ export default function GeneralLedger() {
                     ? 'Try adjusting your search terms' 
                     : 'Start by creating your first journal entry to track financial transactions'}
                 </p>
-                {!searchQuery && (
-                  <Button 
+                {!searchQuery && canCreate(MODULES.FINANCIALS) && (
+                  <Button
                     onClick={() => setShowCreateModal(true)}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   >

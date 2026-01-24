@@ -46,6 +46,8 @@ import { format } from "date-fns";
 import { useProcurement } from "@/components/contexts/ProcurementContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function RFQManagement() {
   const { language } = useLanguage();
@@ -59,6 +61,7 @@ export default function RFQManagement() {
     selectRFQWinner,
     isLoading,
   } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -274,10 +277,12 @@ export default function RFQManagement() {
                   <SelectItem value="closed">{t('closed') || "Yopilgan"}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => setShowForm(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_rfq') || "Yangi RFQ"}
-              </Button>
+              {canCreate(MODULES.PURCHASES) && (
+                <Button onClick={() => setShowForm(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_rfq') || "Yangi RFQ"}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
