@@ -14,6 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { format, addMonths, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 
 export default function FiscalPeriods() {
@@ -30,6 +32,7 @@ export default function FiscalPeriods() {
     reopenFiscalPeriod,
     isLoading
   } = useFinancials();
+  const { canCreate } = usePermissions();
 
   const [showCreateYearModal, setShowCreateYearModal] = useState(false);
   const [showCloseYearModal, setShowCloseYearModal] = useState(false);
@@ -272,12 +275,14 @@ export default function FiscalPeriods() {
                 <p className="text-sm text-slate-500">{t('manage_fiscal_years_periods') || 'Manage fiscal years and accounting periods'}</p>
               </div>
             </div>
-            <Button
-              onClick={() => { resetYearForm(); setShowCreateYearModal(true); }}
-              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-            >
-              <Plus className="w-4 h-4 mr-2" /> {t('new_fiscal_year') || 'New Fiscal Year'}
-            </Button>
+            {canCreate(MODULES.FINANCIALS) && (
+              <Button
+                onClick={() => { resetYearForm(); setShowCreateYearModal(true); }}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                <Plus className="w-4 h-4 mr-2" /> {t('new_fiscal_year') || 'New Fiscal Year'}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -292,12 +297,14 @@ export default function FiscalPeriods() {
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
                 {t('fiscal_year_description') || 'Create fiscal years to manage your accounting periods and control when transactions can be posted.'}
               </p>
-              <Button
-                onClick={() => { resetYearForm(); setShowCreateYearModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_fiscal_year') || 'Create First Fiscal Year'}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => { resetYearForm(); setShowCreateYearModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_fiscal_year') || 'Create First Fiscal Year'}
+                </Button>
+              )}
             </div>
           ) : (
             <Table>

@@ -336,7 +336,7 @@ export default function Notifications() {
                           
                           <div className="flex items-center gap-3 text-xs text-slate-400">
                             <Badge variant="outline" className={getTypeColor(notification.type)}>
-                              {notification.type}
+                              {t(notification.type) || notification.type}
                             </Badge>
                             <span>{new Date(notification.created_date).toLocaleString()}</span>
                           </div>

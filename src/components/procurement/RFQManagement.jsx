@@ -44,8 +44,14 @@ import {
 import { format } from "date-fns";
 
 import { useProcurement } from "@/components/contexts/ProcurementContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function RFQManagement() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     rfqs,
     suppliers,
@@ -55,6 +61,7 @@ export default function RFQManagement() {
     selectRFQWinner,
     isLoading,
   } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -166,10 +173,10 @@ export default function RFQManagement() {
       cancelled: "bg-red-100 text-red-800",
     };
     const labels = {
-      draft: "Qoralama",
-      open: "Ochiq",
-      closed: "Yopilgan",
-      cancelled: "Bekor qilingan",
+      draft: t('draft') || "Qoralama",
+      open: t('open') || "Ochiq",
+      closed: t('closed') || "Yopilgan",
+      cancelled: t('cancelled') || "Bekor qilingan",
     };
     return (
       <Badge className={styles[status] || styles.draft}>
@@ -180,7 +187,7 @@ export default function RFQManagement() {
 
   const getSupplierName = (id) => {
     const supplier = suppliers.find((s) => s.id === id);
-    return supplier?.name || "Noma'lum";
+    return supplier?.name || (t('unknown') || "Noma'lum");
   };
 
   return (
@@ -191,7 +198,7 @@ export default function RFQManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Jami takliflar</p>
+                <p className="text-xs text-slate-500">{t('total_rfqs') || "Jami takliflar"}</p>
                 <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
               </div>
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -205,7 +212,7 @@ export default function RFQManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Ochiq takliflar</p>
+                <p className="text-xs text-slate-500">{t('open_rfqs') || "Ochiq takliflar"}</p>
                 <p className="text-2xl font-bold text-green-600">{stats.open}</p>
               </div>
               <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -219,7 +226,7 @@ export default function RFQManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Yopilgan</p>
+                <p className="text-xs text-slate-500">{t('closed') || "Yopilgan"}</p>
                 <p className="text-2xl font-bold text-purple-600">{stats.closed}</p>
               </div>
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -233,7 +240,7 @@ export default function RFQManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500">Javoblar</p>
+                <p className="text-xs text-slate-500">{t('responses') || "Javoblar"}</p>
                 <p className="text-2xl font-bold text-orange-600">{stats.responses}</p>
               </div>
               <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -248,12 +255,12 @@ export default function RFQManagement() {
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle className="text-lg">Taklif so'rovlari (RFQ)</CardTitle>
+            <CardTitle className="text-lg">{t('rfq_requests') || "Taklif so'rovlari (RFQ)"}</CardTitle>
             <div className="flex gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="Qidirish..."
+                  placeholder={t('search') || "Qidirish..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -264,16 +271,18 @@ export default function RFQManagement() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Hammasi</SelectItem>
-                  <SelectItem value="draft">Qoralama</SelectItem>
-                  <SelectItem value="open">Ochiq</SelectItem>
-                  <SelectItem value="closed">Yopilgan</SelectItem>
+                  <SelectItem value="all">{t('all') || "Hammasi"}</SelectItem>
+                  <SelectItem value="draft">{t('draft') || "Qoralama"}</SelectItem>
+                  <SelectItem value="open">{t('open') || "Ochiq"}</SelectItem>
+                  <SelectItem value="closed">{t('closed') || "Yopilgan"}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => setShowForm(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Yangi RFQ
-              </Button>
+              {canCreate(MODULES.PURCHASES) && (
+                <Button onClick={() => setShowForm(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_rfq') || "Yangi RFQ"}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -285,20 +294,20 @@ export default function RFQManagement() {
           ) : filteredRFQs.length === 0 ? (
             <div className="text-center py-12">
               <FileQuestion className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Takliflar topilmadi</p>
+              <p className="text-slate-500">{t('no_rfqs_found') || "Takliflar topilmadi"}</p>
             </div>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>RFQ raqami</TableHead>
-                    <TableHead>Sarlavha</TableHead>
-                    <TableHead>Muddat</TableHead>
-                    <TableHead>Ta'minotchilar</TableHead>
-                    <TableHead>Javoblar</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-32">Amallar</TableHead>
+                    <TableHead>{t('rfq_number') || "RFQ raqami"}</TableHead>
+                    <TableHead>{t('title') || "Sarlavha"}</TableHead>
+                    <TableHead>{t('deadline') || "Muddat"}</TableHead>
+                    <TableHead>{t('suppliers') || "Ta'minotchilar"}</TableHead>
+                    <TableHead>{t('responses') || "Javoblar"}</TableHead>
+                    <TableHead>{t('status') || "Status"}</TableHead>
+                    <TableHead className="w-32">{t('actions') || "Amallar"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -353,7 +362,7 @@ export default function RFQManagement() {
                               size="icon"
                               variant="ghost"
                               onClick={() => handleSendRFQ(rfq)}
-                              title="Yuborish"
+                              title={t('send') || "Yuborish"}
                             >
                               <Send className="w-4 h-4" />
                             </Button>
@@ -383,20 +392,20 @@ export default function RFQManagement() {
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Yangi taklif so'rovi (RFQ)</DialogTitle>
+            <DialogTitle>{t('new_rfq_request') || "Yangi taklif so'rovi (RFQ)"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Sarlavha *</Label>
+                <Label>{t('title') || "Sarlavha"} *</Label>
                 <Input
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="RFQ sarlavhasi"
+                  placeholder={t('rfq_title_placeholder') || "RFQ sarlavhasi"}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Muddat *</Label>
+                <Label>{t('deadline') || "Muddat"} *</Label>
                 <Input
                   type="date"
                   value={formData.deadline}
@@ -406,11 +415,11 @@ export default function RFQManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label>Tavsif</Label>
+              <Label>{t('description') || "Tavsif"}</Label>
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Taklif haqida qisqacha ma'lumot"
+                placeholder={t('rfq_description_placeholder') || "Taklif haqida qisqacha ma'lumot"}
                 rows={3}
               />
             </div>
@@ -418,10 +427,10 @@ export default function RFQManagement() {
             {/* Items */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <Label>Mahsulotlar ro'yxati</Label>
+                <Label>{t('items_list') || "Mahsulotlar ro'yxati"}</Label>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Qo'shish
+                  {t('add') || "Qo'shish"}
                 </Button>
               </div>
               <div className="space-y-2">
@@ -430,7 +439,7 @@ export default function RFQManagement() {
                     <Input
                       value={item.name}
                       onChange={(e) => updateItem(index, "name", e.target.value)}
-                      placeholder="Mahsulot nomi"
+                      placeholder={t('product_name') || "Mahsulot nomi"}
                       className="flex-1"
                     />
                     <Input
@@ -448,11 +457,11 @@ export default function RFQManagement() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="dona">dona</SelectItem>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="litr">litr</SelectItem>
-                        <SelectItem value="metr">metr</SelectItem>
-                        <SelectItem value="komplekt">komplekt</SelectItem>
+                        <SelectItem value="dona">{t('unit_pcs') || "dona"}</SelectItem>
+                        <SelectItem value="kg">{t('unit_kg') || "kg"}</SelectItem>
+                        <SelectItem value="litr">{t('unit_liter') || "litr"}</SelectItem>
+                        <SelectItem value="metr">{t('unit_meter') || "metr"}</SelectItem>
+                        <SelectItem value="komplekt">{t('unit_set') || "komplekt"}</SelectItem>
                       </SelectContent>
                     </Select>
                     {formData.items.length > 1 && (
@@ -473,7 +482,7 @@ export default function RFQManagement() {
 
             {/* Suppliers Selection */}
             <div className="space-y-3">
-              <Label>Ta'minotchilarni tanlang</Label>
+              <Label>{t('select_suppliers') || "Ta'minotchilarni tanlang"}</Label>
               <div className="border rounded-lg max-h-48 overflow-y-auto">
                 {suppliers.filter((s) => s.status === "active").map((supplier) => (
                   <div
@@ -497,19 +506,19 @@ export default function RFQManagement() {
                 ))}
               </div>
               <p className="text-xs text-slate-500">
-                Tanlangan: {formData.suppliers_invited.length} ta
+                {t('selected') || "Tanlangan"}: {formData.suppliers_invited.length}
               </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel') || "Bekor qilish"}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!formData.title || !formData.deadline || formData.suppliers_invited.length === 0}
               >
-                Yaratish
+                {t('create') || "Yaratish"}
               </Button>
             </div>
           </div>
@@ -520,7 +529,7 @@ export default function RFQManagement() {
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>RFQ tafsilotlari</DialogTitle>
+            <DialogTitle>{t('rfq_details') || "RFQ tafsilotlari"}</DialogTitle>
           </DialogHeader>
           {selectedRFQ && (
             <div className="space-y-6 py-4">
@@ -537,13 +546,13 @@ export default function RFQManagement() {
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500">Yaratilgan:</span>{" "}
+                  <span className="text-slate-500">{t('created') || "Yaratilgan"}:</span>{" "}
                   {selectedRFQ.created_at
                     ? format(new Date(selectedRFQ.created_at), "dd.MM.yyyy")
                     : "-"}
                 </div>
                 <div>
-                  <span className="text-slate-500">Muddat:</span>{" "}
+                  <span className="text-slate-500">{t('deadline') || "Muddat"}:</span>{" "}
                   {selectedRFQ.deadline
                     ? format(new Date(selectedRFQ.deadline), "dd.MM.yyyy")
                     : "-"}
@@ -552,14 +561,14 @@ export default function RFQManagement() {
 
               {/* Items */}
               <div>
-                <h4 className="font-medium mb-2">Mahsulotlar</h4>
+                <h4 className="font-medium mb-2">{t('products') || "Mahsulotlar"}</h4>
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Mahsulot</TableHead>
-                        <TableHead className="text-right">Miqdori</TableHead>
-                        <TableHead>O'lchov</TableHead>
+                        <TableHead>{t('product') || "Mahsulot"}</TableHead>
+                        <TableHead className="text-right">{t('quantity') || "Miqdori"}</TableHead>
+                        <TableHead>{t('unit') || "O'lchov"}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -577,20 +586,20 @@ export default function RFQManagement() {
 
               {/* Responses */}
               <div>
-                <h4 className="font-medium mb-2">Javoblar</h4>
+                <h4 className="font-medium mb-2">{t('responses') || "Javoblar"}</h4>
                 {selectedRFQ.responses?.length === 0 ? (
                   <p className="text-sm text-slate-500 py-4 text-center">
-                    Hali javoblar yo'q
+                    {t('no_responses_yet') || "Hali javoblar yo'q"}
                   </p>
                 ) : (
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
-                          <TableHead>Ta'minotchi</TableHead>
-                          <TableHead className="text-right">Narx</TableHead>
-                          <TableHead>Yuborilgan</TableHead>
-                          <TableHead>Status</TableHead>
+                          <TableHead>{t('supplier') || "Ta'minotchi"}</TableHead>
+                          <TableHead className="text-right">{t('price') || "Narx"}</TableHead>
+                          <TableHead>{t('submitted') || "Yuborilgan"}</TableHead>
+                          <TableHead>{t('status') || "Status"}</TableHead>
                           <TableHead className="w-24"></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -612,15 +621,15 @@ export default function RFQManagement() {
                               {response.status === "accepted" ? (
                                 <Badge className="bg-green-100 text-green-800">
                                   <Award className="w-3 h-3 mr-1" />
-                                  Tanlangan
+                                  {t('selected') || "Tanlangan"}
                                 </Badge>
                               ) : response.status === "rejected" ? (
                                 <Badge className="bg-red-100 text-red-800">
-                                  Rad etilgan
+                                  {t('rejected') || "Rad etilgan"}
                                 </Badge>
                               ) : (
                                 <Badge className="bg-blue-100 text-blue-800">
-                                  Ko'rib chiqilmoqda
+                                  {t('under_review') || "Ko'rib chiqilmoqda"}
                                 </Badge>
                               )}
                             </TableCell>
@@ -633,7 +642,7 @@ export default function RFQManagement() {
                                   }
                                 >
                                   <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  Tanlash
+                                  {t('select') || "Tanlash"}
                                 </Button>
                               )}
                             </TableCell>
@@ -651,7 +660,7 @@ export default function RFQManagement() {
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-green-600" />
                     <span className="font-medium text-green-800">
-                      G'olib: {getSupplierName(selectedRFQ.winner_supplier_id)}
+                      {t('winner') || "G'olib"}: {getSupplierName(selectedRFQ.winner_supplier_id)}
                     </span>
                   </div>
                 </div>

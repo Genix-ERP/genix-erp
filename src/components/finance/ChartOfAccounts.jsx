@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const getAccountTypes = (t) => [
   { value: 'asset', label: t('asset') || 'Asset', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
@@ -63,6 +64,7 @@ export default function ChartOfAccounts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { accounts, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const accountTypes = getAccountTypes(t);
   const internalTypes = getInternalTypes(t);
@@ -308,12 +310,16 @@ export default function ChartOfAccounts() {
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => openEditModal(account)}>
-                <Edit2 className="w-4 h-4 text-slate-500" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => handleDelete(account)}>
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </Button>
+              {canUpdate(MODULES.FINANCIALS) && (
+                <Button variant="ghost" size="sm" onClick={() => openEditModal(account)}>
+                  <Edit2 className="w-4 h-4 text-slate-500" />
+                </Button>
+              )}
+              {canDelete(MODULES.FINANCIALS) && (
+                <Button variant="ghost" size="sm" onClick={() => handleDelete(account)}>
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              )}
             </div>
           </TableCell>
         </TableRow>
@@ -386,12 +392,14 @@ export default function ChartOfAccounts() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => { resetForm(); setShowCreateModal(true); }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_account') || 'New Account'}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_account') || 'New Account'}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -416,7 +424,7 @@ export default function ChartOfAccounts() {
                   ? t('try_adjusting_search') || 'Try adjusting your search or filter'
                   : t('start_creating_account') || 'Start by creating your first account to organize your finances'}
               </p>
-              {!searchQuery && typeFilter === 'all' && (
+              {!searchQuery && typeFilter === 'all' && canCreate(MODULES.FINANCIALS) && (
                 <Button
                   onClick={() => { resetForm(); setShowCreateModal(true); }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"

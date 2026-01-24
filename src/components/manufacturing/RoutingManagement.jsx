@@ -43,11 +43,14 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function RoutingManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
+  const { canCreate, canDelete } = usePermissions();
 
   const [routings, setRoutings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,17 +103,17 @@ export default function RoutingManagement() {
     return [
       {
         id: `RT-${Date.now()}-1`,
-        name: 'Standard Widget Assembly',
+        name: t('sample_routing_name') || 'Standard Widget Assembly',
         code: 'RT-WIDGET-001',
         product_id: 'prod_1',
-        description: 'Standard routing for widget production',
+        description: t('sample_routing_description') || 'Standard routing for widget production',
         operations: [
           {
             id: 'op_1',
             sequence: 10,
-            name: 'Material Preparation',
+            name: t('material_preparation') || 'Material Preparation',
             work_center_id: workCenters[0]?.id || 'wc_1',
-            description: 'Prepare and check raw materials',
+            description: t('prepare_raw_materials') || 'Prepare and check raw materials',
             duration_minutes: 30,
             setup_time_minutes: 10,
             cost_per_hour: 50,
@@ -118,9 +121,9 @@ export default function RoutingManagement() {
           {
             id: 'op_2',
             sequence: 20,
-            name: 'CNC Machining',
+            name: t('cnc_machining') || 'CNC Machining',
             work_center_id: workCenters[1]?.id || 'wc_2',
-            description: 'CNC cutting and shaping',
+            description: t('cnc_cutting_shaping') || 'CNC cutting and shaping',
             duration_minutes: 60,
             setup_time_minutes: 20,
             cost_per_hour: 100,
@@ -128,9 +131,9 @@ export default function RoutingManagement() {
           {
             id: 'op_3',
             sequence: 30,
-            name: 'Assembly',
+            name: t('assembly') || 'Assembly',
             work_center_id: workCenters[0]?.id || 'wc_1',
-            description: 'Assemble components',
+            description: t('assemble_components') || 'Assemble components',
             duration_minutes: 45,
             setup_time_minutes: 5,
             cost_per_hour: 60,
@@ -138,9 +141,9 @@ export default function RoutingManagement() {
           {
             id: 'op_4',
             sequence: 40,
-            name: 'Quality Check',
+            name: t('quality_check') || 'Quality Check',
             work_center_id: workCenters[2]?.id || 'wc_3',
-            description: 'Final quality inspection',
+            description: t('final_quality_inspection') || 'Final quality inspection',
             duration_minutes: 15,
             setup_time_minutes: 0,
             cost_per_hour: 40,
@@ -286,13 +289,15 @@ export default function RoutingManagement() {
           <h2 className="text-2xl font-bold text-slate-800">{t('routing_management') || "Texnologik jarayon"}</h2>
           <p className="text-slate-600 mt-1">{t('routing_desc') || "Ishlab chiqarish operatsiyalarini boshqaring"}</p>
         </div>
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-gradient-to-r from-blue-600 to-purple-600"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_routing') || "Yangi texjarayon"}
-        </Button>
+        {canCreate(MODULES.MANUFACTURING) && (
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-gradient-to-r from-blue-600 to-purple-600"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_routing') || "Yangi texjarayon"}
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -358,13 +363,15 @@ export default function RoutingManagement() {
                             <Pencil className="w-4 h-4 mr-2" />
                             {t('edit') || "Tahrirlash"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => { setSelectedRouting(routing); setShowDeleteDialog(true); }}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            {t('delete') || "O'chirish"}
-                          </DropdownMenuItem>
+                          {canDelete(MODULES.MANUFACTURING) && (
+                            <DropdownMenuItem
+                              onClick={() => { setSelectedRouting(routing); setShowDeleteDialog(true); }}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {t('delete') || "O'chirish"}
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

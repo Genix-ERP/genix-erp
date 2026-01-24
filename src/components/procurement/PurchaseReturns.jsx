@@ -25,6 +25,8 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -51,6 +53,7 @@ export default function PurchaseReturns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { orders, suppliers } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [returns, setReturns] = useState([]);
   const [filteredReturns, setFilteredReturns] = useState([]);
@@ -297,9 +300,11 @@ export default function PurchaseReturns() {
             <RotateCcw className="w-5 h-5" />
             {t('purchase_returns') || 'Purchase Returns'}
           </CardTitle>
-          <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-            <Plus className="w-4 h-4 mr-2" /> {t('new_return') || 'New Return'}
-          </Button>
+          {canCreate(MODULES.PURCHASES) && (
+            <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
+              <Plus className="w-4 h-4 mr-2" /> {t('new_return') || 'New Return'}
+            </Button>
+          )}
         </div>
         <div className="flex gap-3 mt-4">
           <div className="relative flex-1">
@@ -332,9 +337,11 @@ export default function PurchaseReturns() {
           <div className="text-center py-16">
             <RotateCcw className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_returns_yet') || 'No returns yet'}</p>
-            <Button onClick={() => setShowCreateModal(true)} className="mt-4">
-              {t('create_first_return') || 'Create First Return'}
-            </Button>
+            {canCreate(MODULES.PURCHASES) && (
+              <Button onClick={() => setShowCreateModal(true)} className="mt-4">
+                {t('create_first_return') || 'Create First Return'}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

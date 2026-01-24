@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { useSubscription } from '@/components/contexts/SubscriptionContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +24,9 @@ import {
 import { Link } from 'react-router-dom';
 
 export default function CompanySwitcher({ compact = false }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const {
     companies,
     activeCompany,
@@ -68,7 +73,7 @@ export default function CompanySwitcher({ compact = false }) {
             {!compact && (
               <div className="flex flex-col items-start min-w-0">
                 <span className="text-sm font-medium text-slate-900 truncate max-w-[140px]">
-                  {activeCompany?.company_name || 'Kompaniya tanlang'}
+                  {activeCompany?.company_name || t('select_company')}
                 </span>
                 <span className="text-xs text-slate-500">
                   {activeCompany?.company_code}
@@ -77,7 +82,7 @@ export default function CompanySwitcher({ compact = false }) {
             )}
             {compact && (
               <span className="text-xs font-medium text-slate-900 truncate max-w-[100px]">
-                {activeCompany?.company_name || 'Kompaniya'}
+                {activeCompany?.company_name || t('company')}
               </span>
             )}
           </div>
@@ -90,7 +95,7 @@ export default function CompanySwitcher({ compact = false }) {
       <DropdownMenuContent align="start" className="w-64">
         {/* Header with usage */}
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Kompaniyalar</span>
+          <span>{t('companies')}</span>
           <Badge variant="secondary" className="text-xs">
             {companyCount}/{maxCompanies === -1 ? '∞' : maxCompanies}
           </Badge>
@@ -130,7 +135,7 @@ export default function CompanySwitcher({ compact = false }) {
         <Link to="/settings?tab=companies">
           <DropdownMenuItem className="cursor-pointer">
             <Settings className="w-4 h-4 mr-2 text-slate-500" />
-            <span>Kompaniyalarni boshqarish</span>
+            <span>{t('manage_companies')}</span>
           </DropdownMenuItem>
         </Link>
       </DropdownMenuContent>

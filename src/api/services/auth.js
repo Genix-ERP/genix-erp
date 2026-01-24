@@ -87,6 +87,12 @@ export const authService = {
     return response.data.data;
   },
 
+  // Get current user's module permissions
+  async getCurrentUserPermissions() {
+    const response = await apiClient.get('/auth/me/permissions');
+    return response.data.data;
+  },
+
   // Update current user
   async updateCurrentUser(data) {
     const response = await apiClient.put('/auth/me', data);

@@ -30,6 +30,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { salesService } from '@/api/services/sales';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Import sales components
 import Quotations from '@/components/sales/Quotations';
@@ -50,6 +51,7 @@ import {
 export default function SalesOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading } = useModules();
   const { customers = [] } = useCustomers();
   const {
@@ -335,7 +337,8 @@ export default function SalesOrders() {
   salesOrders?.forEach(o => {
     if (o.order_date) {
       try {
-        const month = new Date(o.order_date).toLocaleDateString('en-US', { month: 'short' });
+        const locale = language === 'ru' ? 'ru-RU' : language === 'uz' ? 'uz-UZ' : 'en-US';
+        const month = new Date(o.order_date).toLocaleDateString(locale, { month: 'short' });
         salesData[month] = (salesData[month] || 0) + (o.total_amount || 0);
       } catch (e) {
         // Skip invalid dates
@@ -540,9 +543,11 @@ export default function SalesOrders() {
                         <Printer className="w-4 h-4 mr-1" />
                         {t('print')}
                       </Button>
-                      <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                        <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
-                      </Button>
+                      {canCreate(MODULES.SALES) && (
+                        <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                          <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-3 mt-4">
@@ -579,7 +584,9 @@ export default function SalesOrders() {
                     <div className="text-center py-16">
                       <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                       <p className="text-slate-500">{t('no_orders_found')}</p>
-                      <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_order')}</Button>
+                      {canCreate(MODULES.SALES) && (
+                        <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_order')}</Button>
+                      )}
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -608,17 +615,17 @@ export default function SalesOrders() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-1 flex-wrap">
-                                  {(order.status === 'draft' || order.status === 'quotation') && (
+                                  {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')} title={t('confirm')}>
                                       <CheckCircle className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  {order.status === 'confirmed' && (
+                                  {canUpdate(MODULES.SALES) && order.status === 'confirmed' && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')} title={t('to_processing')}>
                                       <Package className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  {order.status === 'processing' && (
+                                  {canUpdate(MODULES.SALES) && order.status === 'processing' && (
                                     <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'shipped')} title={t('ship')}>
                                       <Truck className="w-4 h-4" />
                                     </Button>
@@ -626,7 +633,7 @@ export default function SalesOrders() {
                                   <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)} title={t('view')}>
                                     <Eye className="w-4 h-4" />
                                   </Button>
-                                  {(order.status === 'draft' || order.status === 'quotation') && (
+                                  {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && (
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -639,7 +646,7 @@ export default function SalesOrders() {
                                       <FileText className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  {order.status !== 'cancelled' && (
+                                  {canDelete(MODULES.SALES) && order.status !== 'cancelled' && (
                                     <Button
                                       size="sm"
                                       variant="ghost"

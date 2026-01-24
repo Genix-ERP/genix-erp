@@ -56,6 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -96,6 +97,7 @@ export default function ScrapManagement() {
     getScrapSummary,
     isLoading
   } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [showForm, setShowForm] = useState(false);
   const [viewingScrap, setViewingScrap] = useState(null);
@@ -266,13 +268,15 @@ export default function ScrapManagement() {
             {t('scrap_management_description') || 'Record and track scrapped inventory items'}
           </p>
         </div>
-        <Button
-          onClick={handleOpenForm}
-          className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          {t('create_scrap_order') || 'Create Scrap Order'}
-        </Button>
+        {canCreate(MODULES.INVENTORY) && (
+          <Button
+            onClick={handleOpenForm}
+            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {t('create_scrap_order') || 'Create Scrap Order'}
+          </Button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -418,22 +422,26 @@ export default function ScrapManagement() {
                             </Button>
                             {order.status === 'draft' && (
                               <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-green-600 hover:text-green-700"
-                                  onClick={() => handleConfirm(order.id)}
-                                >
-                                  <Check className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-red-600 hover:text-red-700"
-                                  onClick={() => handleCancel(order.id)}
-                                >
-                                  <Ban className="w-4 h-4" />
-                                </Button>
+                                {canUpdate(MODULES.INVENTORY) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-green-600 hover:text-green-700"
+                                    onClick={() => handleConfirm(order.id)}
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {canDelete(MODULES.INVENTORY) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-red-600 hover:text-red-700"
+                                    onClick={() => handleCancel(order.id)}
+                                  >
+                                    <Ban className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>

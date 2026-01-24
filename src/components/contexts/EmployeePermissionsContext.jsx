@@ -1,0 +1,331 @@
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthContext';
+import authService from '@/api/services/auth';
+import { hrService } from '@/api/services';
+
+const EmployeePermissionsContext = createContext(null);
+
+// All available modules for permissions
+// IMPORTANT:
+// - 'id' must match the values in MODULES from @/config/permissions.js (used for permission checks)
+// - 'appId' is used to check if the app is installed (matches InstalledAppsContext)
+// - 'nameKey' is the translation key for display
+export const AVAILABLE_MODULES = [
+  // Core modules
+  { id: 'dashboard', nameKey: 'dashboard', isCore: true },
+  { id: 'ai_assistant', nameKey: 'ai_assistant', isCore: true },
+  { id: 'settings', nameKey: 'settings', isCore: true },
+  // App modules - 'id' matches MODULES constant, 'appId' matches installed apps
+  { id: 'inventory', nameKey: 'inventory', appId: 'inventory' },
+  { id: 'customers', nameKey: 'customers', appId: 'crm' },
+  { id: 'financials', nameKey: 'financials', appId: 'finance' },
+  { id: 'hr', nameKey: 'hr', appId: 'hr' },
+  { id: 'manufacturing', nameKey: 'manufacturing', appId: 'manufacturing' },
+  { id: 'purchases', nameKey: 'procurement', appId: 'procurement' },  // id matches MODULES.PURCHASES
+  { id: 'projects', nameKey: 'projects', appId: 'projects' },
+  { id: 'sales', nameKey: 'sales_orders', appId: 'sales_orders' },   // id matches MODULES.SALES
+  { id: 'assets', nameKey: 'assets', appId: 'assets' },
+  { id: 'expenses', nameKey: 'expenses', appId: 'expenses' },
+  { id: 'payroll', nameKey: 'payroll', appId: 'payroll' },
+  { id: 'contracts', nameKey: 'contracts', appId: 'contracts' },
+  { id: 'cargo', nameKey: 'cargo', appId: 'cargo' },
+];
+
+export function EmployeePermissionsProvider({ children }) {
+  const { user, isAuthenticated, isSiteAdmin, isOwner, backendAvailable } = useAuth();
+  const [permissions, setPermissions] = useState({});
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [employeeId, setEmployeeId] = useState(null);
+  const [organizationIds, setOrganizationIds] = useState([]); // Organizations this employee can access
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Load current user's permissions from backend
+  const loadPermissions = useCallback(async () => {
+    if (!isAuthenticated || !backendAvailable) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await authService.getCurrentUserPermissions();
+
+      if (result.is_admin) {
+        setIsAdmin(true);
+        setPermissions({});
+        setEmployeeId(null);
+        setOrganizationIds([]); // Admins have access to all organizations
+      } else {
+        setIsAdmin(false);
+        setEmployeeId(result.employee_id || null);
+        setOrganizationIds(result.organization_ids || []);
+
+        // Convert permissions from backend format to our format
+        const perms = {};
+        if (result.permissions) {
+          Object.entries(result.permissions).forEach(([moduleId, perm]) => {
+            perms[moduleId] = {
+              create: perm.can_create,
+              read: perm.can_read,
+              update: perm.can_update,
+              delete: perm.can_delete,
+            };
+          });
+        }
+        setPermissions(perms);
+      }
+    } catch (err) {
+      console.error('Failed to load user permissions:', err);
+      setError(err.message);
+      // If permissions API fails, fall back to checking if user is admin
+      if (isSiteAdmin() || isOwner()) {
+        setIsAdmin(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, backendAvailable, isSiteAdmin, isOwner]);
+
+  // Reload permissions when user changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadPermissions();
+    } else {
+      setPermissions({});
+      setIsAdmin(false);
+      setEmployeeId(null);
+      setOrganizationIds([]);
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, user?.id, loadPermissions]);
+
+  // Check if user has permission for a specific action on a module
+  const hasPermission = useCallback((moduleId, action) => {
+    // Admins have all permissions
+    if (isAdmin || isSiteAdmin() || isOwner()) {
+      return true;
+    }
+
+    // Check specific permission
+    const modulePerm = permissions[moduleId];
+    if (!modulePerm) {
+      // If no permissions set for this module, deny access
+      return false;
+    }
+
+    return modulePerm[action] === true;
+  }, [permissions, isAdmin, isSiteAdmin, isOwner]);
+
+  // Check if user can access a module (has at least read permission)
+  const canAccessModule = useCallback((moduleId) => {
+    return hasPermission(moduleId, 'read');
+  }, [hasPermission]);
+
+  // Check if user can create in a module
+  const canCreate = useCallback((moduleId) => {
+    return hasPermission(moduleId, 'create');
+  }, [hasPermission]);
+
+  // Check if user can update in a module
+  const canUpdate = useCallback((moduleId) => {
+    return hasPermission(moduleId, 'update');
+  }, [hasPermission]);
+
+  // Check if user can delete in a module
+  const canDelete = useCallback((moduleId) => {
+    return hasPermission(moduleId, 'delete');
+  }, [hasPermission]);
+
+  // Get all permissions for a module
+  const getModulePermissions = useCallback((moduleId) => {
+    if (isAdmin || isSiteAdmin() || isOwner()) {
+      return { create: true, read: true, update: true, delete: true };
+    }
+    return permissions[moduleId] || { create: false, read: false, update: false, delete: false };
+  }, [permissions, isAdmin, isSiteAdmin, isOwner]);
+
+  // Check if user can access a specific organization
+  const canAccessOrganization = useCallback((orgId) => {
+    // Admins have access to all organizations
+    if (isAdmin || isSiteAdmin() || isOwner()) {
+      return true;
+    }
+    // If no organization restrictions set, allow access (for backwards compatibility)
+    if (organizationIds.length === 0) {
+      return true;
+    }
+    // Check if organization is in the allowed list
+    return organizationIds.includes(orgId);
+  }, [isAdmin, isSiteAdmin, isOwner, organizationIds]);
+
+  // Admin functions: Get permissions for a specific employee
+  const getEmployeePermissions = useCallback(async (empId) => {
+    if (!backendAvailable) return {};
+
+    try {
+      const result = await hrService.getEmployeePermissions(empId);
+      const perms = {};
+      if (result.permissions) {
+        Object.entries(result.permissions).forEach(([moduleId, perm]) => {
+          perms[moduleId] = {
+            create: perm.can_create,
+            read: perm.can_read,
+            update: perm.can_update,
+            delete: perm.can_delete,
+          };
+        });
+      }
+      return perms;
+    } catch (err) {
+      console.error('Failed to get employee permissions:', err);
+      return {};
+    }
+  }, [backendAvailable]);
+
+  // Admin functions: Update permissions for a specific employee
+  const updateEmployeePermissions = useCallback(async (empId, newPermissions) => {
+    if (!backendAvailable) return false;
+
+    try {
+      // Convert to backend format
+      const permissionsArray = Object.entries(newPermissions).map(([moduleId, perm]) => ({
+        module_id: moduleId,
+        can_create: perm.create || false,
+        can_read: perm.read || false,
+        can_update: perm.update || false,
+        can_delete: perm.delete || false,
+      }));
+
+      await hrService.updateEmployeePermissions(empId, permissionsArray);
+
+      // If this is the current user, reload permissions
+      if (empId === employeeId) {
+        await loadPermissions();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Failed to update employee permissions:', err);
+      return false;
+    }
+  }, [backendAvailable, employeeId, loadPermissions]);
+
+  // Admin functions: Update a single module permission for an employee
+  const updateEmployeeModulePermission = useCallback(async (empId, moduleId, permissionType, value) => {
+    if (!backendAvailable) return false;
+
+    try {
+      // First get current permissions for this employee
+      const currentPerms = await getEmployeePermissions(empId);
+      const modulePerm = currentPerms[moduleId] || { create: false, read: false, update: false, delete: false };
+
+      // Update the specific permission
+      const updatedPerm = { ...modulePerm, [permissionType]: value };
+
+      await hrService.updateEmployeeModulePermission(empId, {
+        module_id: moduleId,
+        can_create: updatedPerm.create,
+        can_read: updatedPerm.read,
+        can_update: updatedPerm.update,
+        can_delete: updatedPerm.delete,
+      });
+
+      // If this is the current user, reload permissions
+      if (empId === employeeId) {
+        await loadPermissions();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Failed to update module permission:', err);
+      return false;
+    }
+  }, [backendAvailable, employeeId, loadPermissions, getEmployeePermissions]);
+
+  // Admin functions: Set full access for an employee on a module
+  const setEmployeeModuleFullAccess = useCallback(async (empId, moduleId, hasAccess) => {
+    if (!backendAvailable) return false;
+
+    try {
+      await hrService.updateEmployeeModulePermission(empId, {
+        module_id: moduleId,
+        can_create: hasAccess,
+        can_read: hasAccess,
+        can_update: hasAccess,
+        can_delete: hasAccess,
+      });
+
+      // If this is the current user, reload permissions
+      if (empId === employeeId) {
+        await loadPermissions();
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Failed to set module full access:', err);
+      return false;
+    }
+  }, [backendAvailable, employeeId, loadPermissions]);
+
+  // Admin functions: Delete all permissions for an employee
+  const deleteEmployeePermissions = useCallback(async (empId) => {
+    if (!backendAvailable) return false;
+
+    try {
+      await hrService.deleteEmployeePermissions(empId);
+      return true;
+    } catch (err) {
+      console.error('Failed to delete employee permissions:', err);
+      return false;
+    }
+  }, [backendAvailable]);
+
+  const value = {
+    // State
+    permissions,
+    isAdmin,
+    employeeId,
+    organizationIds,
+    isLoading,
+    error,
+
+    // Permission check functions
+    hasPermission,
+    canAccessModule,
+    canCreate,
+    canUpdate,
+    canDelete,
+    getModulePermissions,
+    canAccessOrganization,
+
+    // Admin functions for managing employee permissions
+    getEmployeePermissions,
+    updateEmployeePermissions,
+    updateEmployeeModulePermission,
+    setEmployeeModuleFullAccess,
+    deleteEmployeePermissions,
+
+    // Utility
+    refreshPermissions: loadPermissions,
+    availableModules: AVAILABLE_MODULES,
+  };
+
+  return (
+    <EmployeePermissionsContext.Provider value={value}>
+      {children}
+    </EmployeePermissionsContext.Provider>
+  );
+}
+
+export function useEmployeePermissions() {
+  const context = useContext(EmployeePermissionsContext);
+  if (!context) {
+    throw new Error('useEmployeePermissions must be used within an EmployeePermissionsProvider');
+  }
+  return context;
+}
+
+export default EmployeePermissionsContext;

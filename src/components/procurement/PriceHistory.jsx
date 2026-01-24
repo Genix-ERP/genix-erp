@@ -50,14 +50,21 @@ import {
 } from "recharts";
 
 import { useProcurement } from "@/components/contexts/ProcurementContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function PriceHistory() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     priceHistory,
     suppliers,
     addPriceRecord,
     isLoading,
   } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
@@ -211,15 +218,17 @@ export default function PriceHistory() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[var(--genix-navy)]">Narxlar tarixi</h2>
+          <h2 className="text-xl font-bold text-[var(--genix-navy)]">{t('price_history') || "Narxlar tarixi"}</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Ta'minotchilar narxlarini kuzatib boring
+            {t('track_supplier_prices') || "Ta'minotchilar narxlarini kuzatib boring"}
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Narx qo'shish
-        </Button>
+        {canCreate(MODULES.PURCHASES) && (
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('add_price') || "Narx qo'shish"}
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -227,7 +236,7 @@ export default function PriceHistory() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Mahsulot qidirish..."
+            placeholder={t('search_product') || "Mahsulot qidirish..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -238,7 +247,7 @@ export default function PriceHistory() {
             <SelectValue placeholder="Ta'minotchi" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Barcha ta'minotchilar</SelectItem>
+            <SelectItem value="all">{t('all_suppliers') || "Barcha ta'minotchilar"}</SelectItem>
             {suppliers.map((supplier) => (
               <SelectItem key={supplier.id} value={supplier.id}>
                 {supplier.name}
@@ -255,7 +264,7 @@ export default function PriceHistory() {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
                 <History className="w-5 h-5" />
-                Mahsulot narxlari
+                {t('product_prices') || "Mahsulot narxlari"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -266,17 +275,17 @@ export default function PriceHistory() {
               ) : filteredHistory.length === 0 ? (
                 <div className="text-center py-12">
                   <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">Narxlar tarixi topilmadi</p>
+                  <p className="text-slate-500">{t('no_price_history') || "Narxlar tarixi topilmadi"}</p>
                 </div>
               ) : (
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
-                        <TableHead>Mahsulot</TableHead>
-                        <TableHead>Ta'minotchi</TableHead>
-                        <TableHead className="text-right">Joriy narx</TableHead>
-                        <TableHead>O'zgarish</TableHead>
+                        <TableHead>{t('product') || "Mahsulot"}</TableHead>
+                        <TableHead>{t('supplier') || "Ta'minotchi"}</TableHead>
+                        <TableHead className="text-right">{t('current_price') || "Joriy narx"}</TableHead>
+                        <TableHead>{t('change') || "O'zgarish"}</TableHead>
                         <TableHead className="w-24"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -343,7 +352,7 @@ export default function PriceHistory() {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Narx grafigi
+                {t('price_chart') || "Narx grafigi"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -381,7 +390,7 @@ export default function PriceHistory() {
                     </div>
                   ) : (
                     <p className="text-center text-sm text-slate-500 py-8">
-                      Ma'lumotlar yetarli emas
+                      {t('insufficient_data') || "Ma'lumotlar yetarli emas"}
                     </p>
                   )}
                   <Button
@@ -390,17 +399,17 @@ export default function PriceHistory() {
                     className="w-full"
                     onClick={() => setSelectedProduct(null)}
                   >
-                    Tozalash
+                    {t('clear') || "Tozalash"}
                   </Button>
                 </div>
               ) : (
                 <div className="text-center py-12">
                   <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-500">
-                    Mahsulot tanlang
+                    {t('select_product') || "Mahsulot tanlang"}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Grafikni ko'rish uchun "Grafik" tugmasini bosing
+                    {t('click_chart_to_view') || "Grafikni ko'rish uchun \"Grafik\" tugmasini bosing"}
                   </p>
                 </div>
               )}
@@ -413,15 +422,15 @@ export default function PriceHistory() {
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Yangi narx qo'shish</DialogTitle>
+            <DialogTitle>{t('add_new_price') || "Yangi narx qo'shish"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Mahsulot nomi *</Label>
+              <Label>{t('product_name') || "Mahsulot nomi"} *</Label>
               <Input
                 value={formData.product_name}
                 onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                placeholder="Mahsulot nomini kiriting"
+                placeholder={t('enter_product_name') || "Mahsulot nomini kiriting"}
                 list="products-list"
               />
               <datalist id="products-list">
@@ -432,13 +441,13 @@ export default function PriceHistory() {
             </div>
 
             <div className="space-y-2">
-              <Label>Ta'minotchi *</Label>
+              <Label>{t('supplier') || "Ta'minotchi"} *</Label>
               <Select
                 value={formData.supplier_id}
                 onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Ta'minotchini tanlang" />
+                  <SelectValue placeholder={t('select_supplier') || "Ta'minotchini tanlang"} />
                 </SelectTrigger>
                 <SelectContent>
                   {suppliers
@@ -454,7 +463,7 @@ export default function PriceHistory() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Narx *</Label>
+                <Label>{t('price') || "Narx"} *</Label>
                 <Input
                   type="number"
                   value={formData.price}
@@ -463,7 +472,7 @@ export default function PriceHistory() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Valyuta</Label>
+                <Label>{t('currency') || "Valyuta"}</Label>
                 <Select
                   value={formData.currency}
                   onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -481,13 +490,13 @@ export default function PriceHistory() {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={resetForm}>
-                Bekor qilish
+                {t('cancel') || "Bekor qilish"}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!formData.product_name || !formData.supplier_id || !formData.price}
               >
-                Saqlash
+                {t('save') || "Saqlash"}
               </Button>
             </div>
           </div>

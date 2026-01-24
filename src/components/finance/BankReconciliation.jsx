@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -31,6 +32,7 @@ export default function BankReconciliation() {
     reconcileBankTransaction,
     isLoading
   } = useFinancials();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [selectedBankAccount, setSelectedBankAccount] = useState(null);
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
@@ -237,7 +239,7 @@ export default function BankReconciliation() {
           </TabsList>
 
           <div className="flex gap-2">
-            {activeTab === 'accounts' && (
+            {activeTab === 'accounts' && canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={() => setShowCreateAccountModal(true)}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -246,7 +248,7 @@ export default function BankReconciliation() {
                 {t('new_account') || 'New Account'}
               </Button>
             )}
-            {activeTab === 'transactions' && selectedBankAccount && (
+            {activeTab === 'transactions' && selectedBankAccount && canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={() => setShowCreateTransactionModal(true)}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
@@ -429,7 +431,7 @@ export default function BankReconciliation() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            {!transaction.is_reconciled && (
+                            {!transaction.is_reconciled && canUpdate(MODULES.FINANCIALS) && (
                               <Button
                                 variant="outline"
                                 size="sm"

@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import LotTracking from "./LotTracking";
 import PriceLabelPrinting from "./PriceLabelPrinting";
 
@@ -74,6 +75,7 @@ export default function Products() {
     deleteCategory,
     isLoading
   } = useInventory();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -853,15 +855,17 @@ export default function Products() {
                 onImport={() => setShowImportModal(true)}
                 onExport={() => setShowExportModal(true)}
               />
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setShowCreateModal(true);
-                }}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_product')}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setShowCreateModal(true);
+                  }}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_product')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -991,22 +995,26 @@ export default function Products() {
                             >
                               <Eye className="w-4 h-4 text-slate-500" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(product)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Pencil className="w-4 h-4 text-slate-500" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteClick(product)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(product)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Pencil className="w-4 h-4 text-slate-500" />
+                              </Button>
+                            )}
+                            {canDelete(MODULES.INVENTORY) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteClick(product)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1038,13 +1046,15 @@ export default function Products() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  onClick={() => setShowCategoryModal(true)}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  {t('add_category')}
-                </Button>
+                {canCreate(MODULES.INVENTORY) && (
+                  <Button
+                    onClick={() => setShowCategoryModal(true)}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('add_category')}
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -1100,23 +1110,27 @@ export default function Products() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditCategoryClick(category)}
-                                  className="h-8 w-8 p-0 hover:bg-blue-50"
-                                >
-                                  <Pencil className="w-4 h-4 text-slate-500 hover:text-blue-600" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteCategoryClick(category)}
-                                  className="h-8 w-8 p-0 hover:bg-red-50"
-                                  disabled={productCount > 0}
-                                >
-                                  <Trash2 className="w-4 h-4 text-slate-500 hover:text-red-600" />
-                                </Button>
+                                {canUpdate(MODULES.INVENTORY) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditCategoryClick(category)}
+                                    className="h-8 w-8 p-0 hover:bg-blue-50"
+                                  >
+                                    <Pencil className="w-4 h-4 text-slate-500 hover:text-blue-600" />
+                                  </Button>
+                                )}
+                                {canDelete(MODULES.INVENTORY) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteCategoryClick(category)}
+                                    className="h-8 w-8 p-0 hover:bg-red-50"
+                                    disabled={productCount > 0}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-slate-500 hover:text-red-600" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1236,15 +1250,17 @@ export default function Products() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowCategoryModal(true)}
-                      title={t('add_category')}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    {canCreate(MODULES.INVENTORY) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setShowCategoryModal(true)}
+                        title={t('add_category')}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2408,16 +2424,18 @@ export default function Products() {
               )}
 
               <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowDetailModal(false);
-                    handleEdit(selectedProduct);
-                  }}
-                  className="flex-1"
-                >
-                  <Pencil className="w-4 h-4 mr-2" /> {t('edit') || 'Edit'}
-                </Button>
+                {canUpdate(MODULES.INVENTORY) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      handleEdit(selectedProduct);
+                    }}
+                    className="flex-1"
+                  >
+                    <Pencil className="w-4 h-4 mr-2" /> {t('edit') || 'Edit'}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={() => setShowDetailModal(false)}
@@ -2528,14 +2546,16 @@ export default function Products() {
               >
                 {t('cancel')}
               </Button>
-              <Button
-                onClick={handleCreateCategory}
-                className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={!newCategoryName.trim()}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('create')}
-              </Button>
+              {canCreate(MODULES.INVENTORY) && (
+                <Button
+                  onClick={handleCreateCategory}
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  disabled={!newCategoryName.trim()}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('create')}
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -2555,23 +2575,25 @@ export default function Products() {
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Add new category inline */}
-            <div className="flex gap-2">
-              <Input
-                placeholder={t('category_name_placeholder')}
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleCreateCategory}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={!newCategoryName.trim()}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('add')}
-              </Button>
-            </div>
+            {canCreate(MODULES.INVENTORY) && (
+              <div className="flex gap-2">
+                <Input
+                  placeholder={t('category_name_placeholder')}
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={handleCreateCategory}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  disabled={!newCategoryName.trim()}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('add')}
+                </Button>
+              </div>
+            )}
 
             {/* Categories list */}
             <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
@@ -2590,22 +2612,26 @@ export default function Products() {
                       <p className="text-xs text-slate-500">{t('code')}: {category.code}</p>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditCategoryClick(category)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Pencil className="w-4 h-4 text-slate-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCategoryClick(category)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
+                      {canUpdate(MODULES.INVENTORY) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditCategoryClick(category)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Pencil className="w-4 h-4 text-slate-500" />
+                        </Button>
+                      )}
+                      {canDelete(MODULES.INVENTORY) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteCategoryClick(category)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))

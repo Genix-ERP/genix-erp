@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Payments() {
   const { language } = useLanguage();
@@ -26,6 +27,7 @@ export default function Payments() {
     confirmPayment,
     isLoading
   } = useFinancials();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [filteredPayments, setFilteredPayments] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -286,12 +288,14 @@ export default function Payments() {
                   <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-              >
-                <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
-              </Button>
+              {canCreate(MODULES.FINANCIALS) && (
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -316,7 +320,7 @@ export default function Payments() {
                   ? t('try_adjusting_search') || 'Try adjusting your search or filters'
                   : t('record_first_payment')}
               </p>
-              {!searchQuery && (
+              {!searchQuery && canCreate(MODULES.FINANCIALS) && (
                 <Button
                   onClick={() => setShowCreateModal(true)}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
@@ -411,7 +415,7 @@ export default function Payments() {
                             >
                               <Eye className="w-4 h-4 text-slate-500" />
                             </Button>
-                            {(payment.status === 'draft' || payment.status === 'pending') && (
+                            {(payment.status === 'draft' || payment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -713,7 +717,7 @@ export default function Payments() {
               )}
 
               <div className="flex gap-2 pt-4">
-                {(selectedPayment.status === 'draft' || selectedPayment.status === 'pending') && (
+                {(selectedPayment.status === 'draft' || selectedPayment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
                   <Button
                     onClick={() => {
                       handleConfirmPayment(selectedPayment.id);

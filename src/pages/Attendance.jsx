@@ -38,6 +38,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useHR } from '@/components/contexts/HRContext';
+import { usePermissions } from "@/hooks/usePermissions";
 import { AttendanceRecord } from '@/api/entities';
 import { format, differenceInMinutes, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isToday, isSameDay } from 'date-fns';
 
@@ -53,6 +54,7 @@ export default function Attendance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { employees } = useHR();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState('today');
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -286,13 +288,15 @@ export default function Attendance() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header with Action Button */}
         <div className="flex justify-end">
-          <Button
-            onClick={() => setShowClockInModal(true)}
-            className="bg-gradient-to-r from-green-600 to-emerald-600"
-          >
-            <LogIn className="w-4 h-4 mr-2" />
-            {t('clock_in') || "Kirish"}
-          </Button>
+          {canCreate(MODULES.HR) && (
+            <Button
+              onClick={() => setShowClockInModal(true)}
+              className="bg-gradient-to-r from-green-600 to-emerald-600"
+            >
+              <LogIn className="w-4 h-4 mr-2" />
+              {t('clock_in') || "Kirish"}
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -496,7 +500,7 @@ export default function Attendance() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              {record.clock_in && !record.clock_out && (
+                              {record.clock_in && !record.clock_out && canUpdate(MODULES.HR) && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -529,14 +533,24 @@ export default function Attendance() {
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
                     {employeesNotClockedIn.map(emp => (
-                      <Badge
-                        key={emp.id}
-                        variant="outline"
-                        className="bg-white border-amber-300 cursor-pointer hover:bg-amber-100"
-                        onClick={() => { setClockingEmployee(emp); setShowClockInModal(true); }}
-                      >
-                        {emp.full_name}
-                      </Badge>
+                      canCreate(MODULES.HR) ? (
+                        <Badge
+                          key={emp.id}
+                          variant="outline"
+                          className="bg-white border-amber-300 cursor-pointer hover:bg-amber-100"
+                          onClick={() => { setClockingEmployee(emp); setShowClockInModal(true); }}
+                        >
+                          {emp.full_name}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          key={emp.id}
+                          variant="outline"
+                          className="bg-white border-amber-300"
+                        >
+                          {emp.full_name}
+                        </Badge>
+                      )
                     ))}
                   </div>
                 </CardContent>

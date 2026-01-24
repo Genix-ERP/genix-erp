@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export default function Assets() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   // AI Analysis
   const assetAnalysis = useMemo(() => {
@@ -458,9 +460,11 @@ export default function Assets() {
                   >
                     <Download className="w-4 h-4 mr-2" /> {t('export')}
                   </Button>
-                  <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
-                  </Button>
+                  {canCreate(MODULES.ASSETS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_asset')}
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex gap-3 mt-4">
@@ -497,7 +501,9 @@ export default function Assets() {
                 <div className="text-center py-16">
                   <Monitor className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_assets_yet')}</p>
-                  <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('add_first_asset')}</Button>
+                  {canCreate(MODULES.ASSETS) && (
+                    <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('add_first_asset')}</Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -540,16 +546,22 @@ export default function Assets() {
                             )}
                           </div>
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setAssetToTransfer(asset); setShowTransferModal(true); }} title={t('transfer')}>
-                              <ArrowRightLeft className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setAssetForMaintenance(asset); setShowMaintenanceModal(true); }} title={t('add_maintenance')}>
-                              <Wrench className="w-4 h-4" />
-                            </Button>
-                            {asset.status !== 'disposed' && (
+                            {canUpdate(MODULES.ASSETS) && (
+                              <Button size="sm" variant="ghost" onClick={() => handleEditAsset(asset)} title={t('edit_asset')}>
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {canUpdate(MODULES.ASSETS) && (
+                              <Button size="sm" variant="ghost" onClick={() => { setAssetToTransfer(asset); setShowTransferModal(true); }} title={t('transfer')}>
+                                <ArrowRightLeft className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {canUpdate(MODULES.ASSETS) && (
+                              <Button size="sm" variant="ghost" onClick={() => { setAssetForMaintenance(asset); setShowMaintenanceModal(true); }} title={t('add_maintenance')}>
+                                <Wrench className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {asset.status !== 'disposed' && canDelete(MODULES.ASSETS) && (
                               <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => { setAssetToDelete(asset); setShowDeleteDialog(true); }} title={t('dispose')}>
                                 <Trash2 className="w-4 h-4" />
                               </Button>

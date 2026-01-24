@@ -24,6 +24,8 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -44,6 +46,7 @@ export default function GoodsReceipt() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { purchaseOrders = [] } = useProcurement();
+  const { canCreate } = usePermissions();
 
   const [receipts, setReceipts] = useState([]);
   const [filteredReceipts, setFilteredReceipts] = useState([]);
@@ -268,9 +271,11 @@ export default function GoodsReceipt() {
             <Package className="w-5 h-5" />
             {t('goods_receipt') || 'Goods Receipt'}
           </CardTitle>
-          <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-            <Plus className="w-4 h-4 mr-2" /> {t('new_receipt') || 'New Receipt'}
-          </Button>
+          {canCreate(MODULES.PURCHASES) && (
+            <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
+              <Plus className="w-4 h-4 mr-2" /> {t('new_receipt') || 'New Receipt'}
+            </Button>
+          )}
         </div>
         <div className="flex gap-3 mt-4">
           <div className="relative flex-1">
@@ -301,9 +306,11 @@ export default function GoodsReceipt() {
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_receipts_yet') || 'No receipts yet'}</p>
-            <Button onClick={() => setShowCreateModal(true)} className="mt-4">
-              {t('create_first_receipt') || 'Create First Receipt'}
-            </Button>
+            {canCreate(MODULES.PURCHASES) && (
+              <Button onClick={() => setShowCreateModal(true)} className="mt-4">
+                {t('create_first_receipt') || 'Create First Receipt'}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

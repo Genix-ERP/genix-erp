@@ -9,11 +9,14 @@ import { Plus, Search, FileText, Trash2, Edit } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 
 export default function BOMManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { boms, loading, createBOM, updateBOM } = useManufacturing();
+  const { canCreate } = usePermissions();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -173,9 +176,11 @@ export default function BOMManagement() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-bold">{t('bill_of_materials')}</CardTitle>
-              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-                <Plus className="w-4 h-4 mr-2" /> {t('new_bom')}
-              </Button>
+              {canCreate(MODULES.MANUFACTURING) && (
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                  <Plus className="w-4 h-4 mr-2" /> {t('new_bom')}
+                </Button>
+              )}
             </div>
 
             <div className="relative">
@@ -205,9 +210,11 @@ export default function BOMManagement() {
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_boms_created_yet')}</h3>
               <p className="text-sm text-slate-500 mb-6">{t('create_bom_description')}</p>
-              <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
-                <Plus className="w-4 h-4 mr-2" /> {t('create_first_bom')}
-              </Button>
+              {canCreate(MODULES.MANUFACTURING) && (
+                <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-slate-700 to-slate-800">
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_bom')}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

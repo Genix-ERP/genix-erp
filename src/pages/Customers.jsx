@@ -41,12 +41,15 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
 
 export default function Customers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const {
     customers,
     leads,
@@ -381,24 +384,28 @@ export default function Customers() {
                                   <PhoneCall className="w-4 h-4" />
                                 </Button>
                               )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingCustomer(customer);
-                                  setShowForm(true);
-                                }}
-                              >
-                                {t('edit')}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200"
-                                onClick={() => setCustomerToDelete(customer)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {canUpdate(MODULES.CUSTOMERS) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingCustomer(customer);
+                                    setShowForm(true);
+                                  }}
+                                >
+                                  {t('edit')}
+                                </Button>
+                              )}
+                              {canDelete(MODULES.CUSTOMERS) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 hover:border-red-200"
+                                  onClick={() => setCustomerToDelete(customer)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -412,16 +419,18 @@ export default function Customers() {
                     <Users className="w-12 h-12 mx-auto mb-4 text-slate-300" />
                     <h3 className="text-lg font-medium text-slate-600 mb-2">{t('no_customers_found')}</h3>
                     <p className="text-slate-500 mb-4">{t('get_started_message')}</p>
-                    <Button
-                      onClick={() => {
-                        setEditingCustomer(null);
-                        setShowForm(true);
-                      }}
-                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                    >
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      {t('add_first_customer')}
-                    </Button>
+                    {canCreate(MODULES.CUSTOMERS) && (
+                      <Button
+                        onClick={() => {
+                          setEditingCustomer(null);
+                          setShowForm(true);
+                        }}
+                        className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                      >
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        {t('add_first_customer')}
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -431,14 +440,14 @@ export default function Customers() {
           <TabsContent value="leads">
             <LeadsKanban
               leads={leads}
-              onUpdateLead={handleLeadUpdate}
-              onEditLead={handleLeadEdit}
-              onDeleteLead={(lead) => setLeadToDelete(lead)}
+              onUpdateLead={canUpdate(MODULES.CUSTOMERS) ? handleLeadUpdate : undefined}
+              onEditLead={canUpdate(MODULES.CUSTOMERS) ? handleLeadEdit : undefined}
+              onDeleteLead={canDelete(MODULES.CUSTOMERS) ? (lead) => setLeadToDelete(lead) : undefined}
               onCallLead={handleCallLead}
-              onAddLead={() => {
+              onAddLead={canCreate(MODULES.CUSTOMERS) ? () => {
                 setEditingLead(null);
                 setShowLeadForm(true);
-              }}
+              } : undefined}
               language={language}
             />
           </TabsContent>

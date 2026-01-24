@@ -42,6 +42,8 @@ import {
   Settings,
 } from "lucide-react";
 import { format, addDays, addWeeks, addMonths, addYears, isPast, isFuture } from "date-fns";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 // Recurrence patterns
 export const RECURRENCE_PATTERNS = {
@@ -218,8 +220,11 @@ export function RecurringTemplateForm({
   onSave,
   template = null,
   fields = [],
-  entityName = "Tranzaksiya",
+  entityName = "Transaction",
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -244,13 +249,34 @@ export function RecurringTemplateForm({
     onClose();
   };
 
+  // Get translated recurrence patterns
+  const getRecurrencePatterns = () => ({
+    daily: { label: t('daily') || 'Daily', icon: Calendar, interval: "day" },
+    weekly: { label: t('weekly') || 'Weekly', icon: Calendar, interval: "week" },
+    biweekly: { label: t('biweekly') || 'Bi-weekly', icon: Calendar, interval: "biweek" },
+    monthly: { label: t('monthly') || 'Monthly', icon: Calendar, interval: "month" },
+    quarterly: { label: t('quarterly') || 'Quarterly', icon: Calendar, interval: "quarter" },
+    yearly: { label: t('yearly') || 'Yearly', icon: Calendar, interval: "year" },
+  });
+
+  // Get translated days of week
+  const getDaysOfWeek = () => [
+    { value: 0, label: t('sunday') || 'Sunday' },
+    { value: 1, label: t('monday') || 'Monday' },
+    { value: 2, label: t('tuesday') || 'Tuesday' },
+    { value: 3, label: t('wednesday') || 'Wednesday' },
+    { value: 4, label: t('thursday') || 'Thursday' },
+    { value: 5, label: t('friday') || 'Friday' },
+    { value: 6, label: t('saturday') || 'Saturday' },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Repeat className="w-5 h-5" />
-            {template ? "Qaytariladigan shablon tahrirlash" : "Yangi qaytariladigan shablon"}
+            {template ? t('edit_recurring_template') || 'Edit Recurring Template' : t('new_recurring_template') || 'New Recurring Template'}
           </DialogTitle>
         </DialogHeader>
 
@@ -258,20 +284,20 @@ export function RecurringTemplateForm({
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label>Nomi *</Label>
+              <Label>{t('name')} *</Label>
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={`Qaytariladigan ${entityName.toLowerCase()} nomi`}
+                placeholder={t('recurring_template_name_placeholder') || 'Recurring template name'}
               />
             </div>
 
             <div className="col-span-2 space-y-2">
-              <Label>Tavsifi</Label>
+              <Label>{t('description')}</Label>
               <Input
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Ixtiyoriy tavsif"
+                placeholder={t('optional_description') || 'Optional description'}
               />
             </div>
           </div>
@@ -280,21 +306,21 @@ export function RecurringTemplateForm({
           <div className="p-4 bg-slate-50 rounded-lg space-y-4">
             <h4 className="font-medium flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              Jadval sozlamalari
+              {t('schedule_settings') || 'Schedule Settings'}
             </h4>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Qaytarilish davri</Label>
+                <Label>{t('recurrence_pattern') || 'Recurrence Pattern'}</Label>
                 <Select
                   value={formData.pattern}
                   onValueChange={(value) => setFormData({ ...formData, pattern: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Davrni tanlang" />
+                    <SelectValue placeholder={t('select_pattern') || 'Select pattern'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(RECURRENCE_PATTERNS).map(([key, config]) => (
+                    {Object.entries(getRecurrencePatterns()).map(([key, config]) => (
                       <SelectItem key={key} value={key}>
                         {config.label}
                       </SelectItem>
@@ -305,16 +331,16 @@ export function RecurringTemplateForm({
 
               {formData.pattern === "weekly" && (
                 <div className="space-y-2">
-                  <Label>Hafta kuni</Label>
+                  <Label>{t('day_of_week') || 'Day of Week'}</Label>
                   <Select
                     value={formData.dayOfWeek?.toString()}
                     onValueChange={(value) => setFormData({ ...formData, dayOfWeek: parseInt(value) })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Kunni tanlang" />
+                      <SelectValue placeholder={t('select_day') || 'Select day'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {DAYS_OF_WEEK.map((day) => (
+                      {getDaysOfWeek().map((day) => (
                         <SelectItem key={day.value} value={day.value.toString()}>
                           {day.label}
                         </SelectItem>
@@ -326,7 +352,7 @@ export function RecurringTemplateForm({
 
               {["monthly", "quarterly", "yearly"].includes(formData.pattern) && (
                 <div className="space-y-2">
-                  <Label>Oy kuni</Label>
+                  <Label>{t('day_of_month') || 'Day of Month'}</Label>
                   <Input
                     type="number"
                     min={1}
@@ -338,7 +364,7 @@ export function RecurringTemplateForm({
               )}
 
               <div className="space-y-2">
-                <Label>Boshlanish sanasi</Label>
+                <Label>{t('start_date') || 'Start Date'}</Label>
                 <Input
                   type="date"
                   value={formData.startDate}
@@ -347,7 +373,7 @@ export function RecurringTemplateForm({
               </div>
 
               <div className="space-y-2">
-                <Label>Tugash sanasi (ixtiyoriy)</Label>
+                <Label>{t('end_date_optional') || 'End Date (Optional)'}</Label>
                 <Input
                   type="date"
                   value={formData.endDate}
@@ -356,13 +382,13 @@ export function RecurringTemplateForm({
               </div>
 
               <div className="space-y-2">
-                <Label>Max. bajarilish soni (ixtiyoriy)</Label>
+                <Label>{t('max_executions_optional') || 'Max Executions (Optional)'}</Label>
                 <Input
                   type="number"
                   min={1}
                   value={formData.maxExecutions || ""}
                   onChange={(e) => setFormData({ ...formData, maxExecutions: parseInt(e.target.value) || null })}
-                  placeholder="Cheksiz"
+                  placeholder={t('unlimited') || 'Unlimited'}
                 />
               </div>
             </div>
@@ -371,7 +397,7 @@ export function RecurringTemplateForm({
           {/* Entity-specific fields */}
           {fields.length > 0 && (
             <div className="space-y-4">
-              <h4 className="font-medium">{entityName} ma'lumotlari</h4>
+              <h4 className="font-medium">{entityName} {t('details') || 'Details'}</h4>
               <div className="grid grid-cols-2 gap-4">
                 {fields.map((field) => (
                   <div key={field.key} className="space-y-2">
@@ -390,7 +416,7 @@ export function RecurringTemplateForm({
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder={`${field.label} tanlang`} />
+                          <SelectValue placeholder={`${t('select')} ${field.label}`} />
                         </SelectTrigger>
                         <SelectContent>
                           {field.options?.map((opt) => (
@@ -421,10 +447,10 @@ export function RecurringTemplateForm({
 
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={onClose}>
-              Bekor qilish
+              {t('cancel') || 'Cancel'}
             </Button>
             <Button onClick={handleSubmit} disabled={!formData.name}>
-              {template ? "Saqlash" : "Yaratish"}
+              {template ? t('save') || 'Save' : t('create') || 'Create'}
             </Button>
           </div>
         </div>
@@ -440,13 +466,29 @@ export function RecurringTemplatesList({
   onDelete,
   onToggle,
   onExecute,
-  entityName = "Tranzaksiya",
+  entityName = "Transaction",
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
+  // Get translated recurrence patterns
+  const getPatternLabel = (pattern) => {
+    const labels = {
+      daily: t('daily') || 'Daily',
+      weekly: t('weekly') || 'Weekly',
+      biweekly: t('biweekly') || 'Bi-weekly',
+      monthly: t('monthly') || 'Monthly',
+      quarterly: t('quarterly') || 'Quarterly',
+      yearly: t('yearly') || 'Yearly',
+    };
+    return labels[pattern] || pattern;
+  };
+
   if (templates.length === 0) {
     return (
       <div className="text-center py-8 text-slate-500">
         <Repeat className="w-12 h-12 mx-auto mb-3 opacity-50" />
-        <p>Hozircha qaytariladigan {entityName.toLowerCase()}lar yo'q</p>
+        <p>{t('no_recurring_templates') || `No recurring ${entityName.toLowerCase()}s yet`}</p>
       </div>
     );
   }
@@ -456,17 +498,16 @@ export function RecurringTemplatesList({
       <Table>
         <TableHeader>
           <TableRow className="bg-slate-50">
-            <TableHead>Nomi</TableHead>
-            <TableHead>Davr</TableHead>
-            <TableHead>Keyingi bajarilish</TableHead>
-            <TableHead>Bajarilishlar</TableHead>
-            <TableHead>Holat</TableHead>
-            <TableHead className="w-32">Amallar</TableHead>
+            <TableHead>{t('name') || 'Name'}</TableHead>
+            <TableHead>{t('period') || 'Period'}</TableHead>
+            <TableHead>{t('next_execution') || 'Next Execution'}</TableHead>
+            <TableHead>{t('executions') || 'Executions'}</TableHead>
+            <TableHead>{t('status') || 'Status'}</TableHead>
+            <TableHead className="w-32">{t('actions') || 'Actions'}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {templates.map((template) => {
-            const patternConfig = RECURRENCE_PATTERNS[template.pattern];
             const isDue = template.nextExecution && isPast(new Date(template.nextExecution));
 
             return (
@@ -480,7 +521,7 @@ export function RecurringTemplatesList({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{patternConfig?.label || template.pattern}</Badge>
+                  <Badge variant="outline">{getPatternLabel(template.pattern)}</Badge>
                 </TableCell>
                 <TableCell>
                   {template.nextExecution ? (
@@ -505,7 +546,7 @@ export function RecurringTemplatesList({
                       onCheckedChange={() => onToggle(template.id)}
                     />
                     <span className="text-sm">
-                      {template.isActive ? "Faol" : "Nofaol"}
+                      {template.isActive ? t('active') || 'Active' : t('inactive') || 'Inactive'}
                     </span>
                   </div>
                 </TableCell>
@@ -549,13 +590,16 @@ export function RecurringTemplatesList({
 
 // Execution History
 export function ExecutionHistory({ executions = [], onClose }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <History className="w-5 h-5" />
-            Bajarilish tarixi
+            {t('execution_history') || 'Execution History'}
           </DialogTitle>
         </DialogHeader>
 
@@ -563,7 +607,7 @@ export function ExecutionHistory({ executions = [], onClose }) {
           {executions.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
               <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Bajarilish tarixi bo'sh</p>
+              <p>{t('no_execution_history') || 'No execution history'}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -585,7 +629,7 @@ export function ExecutionHistory({ executions = [], onClose }) {
                           <AlertCircle className="w-4 h-4 text-red-600" />
                         )}
                         <span className="font-medium">
-                          {exec.success ? "Muvaffaqiyatli" : "Xatolik"}
+                          {exec.success ? (t('successful') || 'Successful') : (t('error') || 'Error')}
                         </span>
                       </div>
                       <span className="text-sm text-slate-500">
@@ -612,6 +656,9 @@ export function RecurringPanel({
   fields = [],
   onCreateTransaction,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const {
     templates,
     addTemplate,
@@ -645,7 +692,7 @@ export function RecurringPanel({
     if (onCreateTransaction) {
       try {
         await onCreateTransaction(template.data);
-        recordExecution(template.id, { success: true, message: "Tranzaksiya yaratildi" });
+        recordExecution(template.id, { success: true, message: t('transaction_created') || "Transaction created" });
       } catch (error) {
         recordExecution(template.id, { success: false, message: error.message });
       }
@@ -658,16 +705,16 @@ export function RecurringPanel({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Repeat className="w-5 h-5" />
-            Qaytariladigan {entityName}lar
+            {t('recurring')} {entityName}
             {dueTemplates.length > 0 && (
               <Badge className="bg-orange-100 text-orange-700 border-orange-200">
-                {dueTemplates.length} kutmoqda
+                {dueTemplates.length} {t('pending') || 'pending'}
               </Badge>
             )}
           </CardTitle>
           <Button size="sm" onClick={() => setShowForm(true)}>
             <Plus className="w-4 h-4 mr-1" />
-            Yangi shablon
+            {t('new_template') || 'New Template'}
           </Button>
         </div>
       </CardHeader>
