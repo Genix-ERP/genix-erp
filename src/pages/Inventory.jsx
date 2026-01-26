@@ -96,6 +96,37 @@ export default function Inventory() {
   // Generate AI-powered insights based on current data
   // Note: t is not in deps to avoid infinite loop (it's a new function each render)
   const generateInsights = useCallback(() => {
+    // For empty inventory, show getting started tips
+    if (items.length === 0) {
+      setInsights([
+        {
+          title: t('welcome_to_inventory') || 'Welcome to Inventory',
+          description: t('start_by_adding_products') || 'Start by adding your first products to the inventory system.',
+          recommendation: t('go_to_products_tab') || 'Go to Products tab and click "Add Product"',
+          financial_impact: t('track_inventory_value') || 'Track your inventory value',
+          priority: 'info',
+          action_required: t('get_started') || 'Get Started'
+        },
+        {
+          title: t('setup_warehouses') || 'Set Up Warehouses',
+          description: t('configure_storage_locations') || 'Configure your storage locations and warehouse structure.',
+          recommendation: t('create_warehouse') || 'Create your first warehouse',
+          financial_impact: t('organize_inventory') || 'Organize inventory efficiently',
+          priority: 'info',
+          action_required: t('configure') || 'Configure'
+        },
+        {
+          title: t('best_practices') || 'Inventory Best Practices',
+          description: t('fifo_recommended') || 'FIFO (First In, First Out) is recommended for most businesses.',
+          recommendation: t('learn_costing_methods') || 'Learn about costing methods',
+          financial_impact: t('compliance_ready') || 'Stay IFRS compliant',
+          priority: 'info',
+          action_required: t('learn_more') || 'Learn More'
+        }
+      ]);
+      return;
+    }
+
     const analysis = analyzeInventory(items, stockMovements, language);
 
     // Convert AI analytics insights to the expected format
@@ -125,6 +156,27 @@ export default function Inventory() {
   // Generate static compliance check
   // Note: t is not in deps to avoid infinite loop (it's a new function each render)
   const checkCompliance = useCallback(() => {
+    // For empty inventory, show default compliant status with helpful info
+    if (items.length === 0) {
+      setCompliance({
+        compliance_status: "compliant",
+        standard_detected: "IFRS",
+        issues: [],
+        recommendations: [
+          t('regular_inventory_audits_recommended') || 'Regular inventory audits recommended',
+          t('maintain_proper_documentation') || 'Maintain proper documentation for all stock movements',
+          t('review_costing_methods_annually') || 'Review costing methods annually'
+        ],
+        best_practices: [
+          t('fifo_provides_better_matching') || 'FIFO provides better matching in inflationary periods',
+          t('maintains_clear_audit_trail') || 'Maintains clear audit trail for all movements',
+          t('supports_real_time_cogs') || 'Supports real-time COGS calculation',
+          t('enables_accurate_valuation') || 'Enables accurate inventory valuation'
+        ]
+      });
+      return;
+    }
+
     const fifoCount = items.filter(i => i.costing_method === 'fifo').length;
     const wacCount = items.filter(i => i.costing_method === 'weighted_average').length;
     const lifoCount = items.filter(i => i.costing_method === 'lifo').length;
@@ -145,6 +197,12 @@ export default function Inventory() {
         t('regular_inventory_audits_recommended'),
         t('maintain_proper_documentation'),
         t('review_costing_methods_annually')
+      ],
+      best_practices: [
+        t('fifo_provides_better_matching') || 'FIFO provides better matching in inflationary periods',
+        t('maintains_clear_audit_trail') || 'Maintains clear audit trail for all movements',
+        t('supports_real_time_cogs') || 'Supports real-time COGS calculation',
+        t('enables_accurate_valuation') || 'Enables accurate inventory valuation'
       ]
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,10 +235,10 @@ export default function Inventory() {
   }, [items, searchQuery, categoryFilter, statusFilter, costingFilter]);
 
   useEffect(() => {
-    if (items.length > 0) {
-      generateInsights();
-      checkCompliance();
-    }
+    // Always generate compliance and insights - even for empty inventory
+    // This ensures new tenants see helpful information
+    generateInsights();
+    checkCompliance();
   }, [items, generateInsights, checkCompliance]);
 
   useEffect(() => {
