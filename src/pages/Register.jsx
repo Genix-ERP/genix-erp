@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import LanguageSelector from '@/components/ui/language-selector';
 import { Loader2, Mail, Lock, User, Building2, ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
 import { authService } from '@/api/services/auth';
 
@@ -25,9 +28,19 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSendingOTP, setIsSendingOTP] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const { registerWithOTP, backendAvailable } = useAuth();
+  const [shouldNavigate, setShouldNavigate] = useState(false);
+  const { registerWithOTP, backendAvailable, isAuthenticated, user } = useAuth();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const navigate = useNavigate();
   const otpInputRefs = useRef([]);
+
+  // Navigate only after auth state is confirmed
+  useEffect(() => {
+    if (shouldNavigate && isAuthenticated && user) {
+      navigate('/');
+    }
+  }, [shouldNavigate, isAuthenticated, user, navigate]);
 
   // Countdown timer for resend OTP
   useEffect(() => {
@@ -80,8 +93,8 @@ export default function Register() {
     setIsSendingOTP(true);
 
     try {
-      await authService.sendOTP(formData.email, 'registration');
-      setSuccess('OTP code sent to your email');
+      await authService.sendOTP(formData.email, 'registration', language);
+      setSuccess(t('otp_sent_success'));
       setCountdown(60); // 60 seconds countdown for resend
     } catch (err) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to send OTP';
@@ -98,22 +111,22 @@ export default function Register() {
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('passwords_dont_match'));
       return;
     }
 
     if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long');
+      setError(t('password_min_length'));
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Send OTP to email
-      await authService.sendOTP(formData.email, 'registration');
+      // Send OTP to email with selected language
+      await authService.sendOTP(formData.email, 'registration', language);
       setStep(2);
-      setSuccess('OTP code sent to your email');
+      setSuccess(t('otp_sent_success'));
       setCountdown(60);
     } catch (err) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to send OTP';
@@ -130,7 +143,7 @@ export default function Register() {
 
     const otp = otpCode.join('');
     if (otp.length !== 6) {
-      setError('Please enter the complete 6-digit OTP code');
+      setError(t('enter_complete_otp'));
       return;
     }
 
@@ -146,7 +159,8 @@ export default function Register() {
     });
 
     if (result.success) {
-      navigate('/');
+      // Set flag to navigate - useEffect will handle navigation after state updates
+      setShouldNavigate(true);
     } else {
       setError(result.error);
       // If OTP is invalid, allow retry
@@ -154,13 +168,12 @@ export default function Register() {
         setOtpCode(['', '', '', '', '', '']);
         otpInputRefs.current[0]?.focus();
       }
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
       <style>
         {`
           :root {
@@ -173,6 +186,11 @@ export default function Register() {
         `}
       </style>
 
+      {/* Language Selector - Top Right */}
+      <div className="absolute top-4 right-4">
+        <LanguageSelector />
+      </div>
+
       <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
         <CardHeader className="text-center pb-2">
           <img
@@ -181,15 +199,15 @@ export default function Register() {
             className="h-20 w-auto object-contain mx-auto mb-4"
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-            {step === 1 ? 'Create Account' : 'Verify Email'}
+            {step === 1 ? t('create_account') : t('verify_email')}
           </CardTitle>
           <CardDescription className="text-slate-500">
             {step === 1 ? (
               backendAvailable
-                ? 'Sign up to get started with GenixERP'
-                : 'Demo mode - registration will be local only'
+                ? t('sign_up_to_start')
+                : t('demo_mode_register')
             ) : (
-              <>Enter the 6-digit code sent to <span className="font-medium text-slate-700">{formData.email}</span></>
+              <>{t('enter_otp_code')} <span className="font-medium text-slate-700">{formData.email}</span></>
             )}
           </CardDescription>
         </CardHeader>
@@ -207,7 +225,7 @@ export default function Register() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-slate-700">First Name</Label>
+                  <Label htmlFor="firstName" className="text-slate-700">{t('first_name')}</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
@@ -223,7 +241,7 @@ export default function Register() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-slate-700">Last Name</Label>
+                  <Label htmlFor="lastName" className="text-slate-700">{t('last_name')}</Label>
                   <Input
                     id="lastName"
                     name="lastName"
@@ -238,7 +256,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">Email</Label>
+                <Label htmlFor="email" className="text-slate-700">{t('email')}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
@@ -255,7 +273,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="companyName" className="text-slate-700">Company Name</Label>
+                <Label htmlFor="companyName" className="text-slate-700">{t('company_name_field')}</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
@@ -272,14 +290,14 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-700">Password</Label>
+                <Label htmlFor="password" className="text-slate-700">{t('password')}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     id="password"
                     name="password"
                     type="password"
-                    placeholder="At least 8 characters"
+                    placeholder={t('at_least_8_chars')}
                     value={formData.password}
                     onChange={handleChange}
                     className="pl-10 h-10 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
@@ -290,14 +308,14 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-slate-700">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-slate-700">{t('confirm_password')}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     id="confirmPassword"
                     name="confirmPassword"
                     type="password"
-                    placeholder="Confirm your password"
+                    placeholder={t('confirm_your_password')}
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     className="pl-10 h-10 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
@@ -314,10 +332,10 @@ export default function Register() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending verification code...
+                    {t('sending_verification')}
                   </>
                 ) : (
-                  'Continue'
+                  t('continue_btn')
                 )}
               </Button>
             </form>
@@ -342,7 +360,7 @@ export default function Register() {
 
               {/* OTP Input */}
               <div className="space-y-4">
-                <Label className="text-slate-700 text-center block">Enter verification code</Label>
+                <Label className="text-slate-700 text-center block">{t('enter_verification_code')}</Label>
                 <div className="flex justify-center gap-2">
                   {otpCode.map((digit, index) => (
                     <Input
@@ -360,13 +378,14 @@ export default function Register() {
                     />
                   ))}
                 </div>
+                <p className="text-xs text-slate-400 text-center">{t('otp_expires_info')}</p>
               </div>
 
               {/* Resend OTP */}
               <div className="text-center">
                 {countdown > 0 ? (
                   <p className="text-sm text-slate-500">
-                    Resend code in <span className="font-medium text-slate-700">{countdown}s</span>
+                    {t('resend_code_in')} <span className="font-medium text-slate-700">{countdown}s</span>
                   </p>
                 ) : (
                   <Button
@@ -381,7 +400,7 @@ export default function Register() {
                     ) : (
                       <RefreshCw className="mr-2 h-4 w-4" />
                     )}
-                    Resend code
+                    {t('resend_code')}
                   </Button>
                 )}
               </div>
@@ -394,10 +413,10 @@ export default function Register() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
+                    {t('creating_account')}
                   </>
                 ) : (
-                  'Create Account'
+                  t('create_account')
                 )}
               </Button>
 
@@ -414,7 +433,7 @@ export default function Register() {
                 className="w-full text-slate-600 hover:text-slate-800"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to form
+                {t('back_to_form')}
               </Button>
             </form>
           )}
@@ -426,7 +445,7 @@ export default function Register() {
                 className="inline-flex items-center text-sm text-slate-600 hover:text-[var(--genix-blue)] transition-colors"
               >
                 <ArrowLeft className="w-4 h-4 mr-1" />
-                Back to Sign In
+                {t('back_to_sign_in')}
               </Link>
             </div>
           )}

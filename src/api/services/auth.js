@@ -18,14 +18,11 @@ export const authService = {
       tenant_code: tenantCode,
     });
 
-    const { access_token, refresh_token, user, tenant } = response.data.data;
+    const { access_token, refresh_token, user } = response.data.data;
     setTokens(access_token, refresh_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    // Store tenant ID for API requests (needed for multi-tenant)
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
-    }
-    if (tenant) {
-      localStorage.setItem('tenant', JSON.stringify(tenant));
     }
 
     // Create the initial organization with the user's company name
@@ -57,14 +54,11 @@ export const authService = {
 
     const response = await apiClient.post('/auth/login', payload);
 
-    const { access_token, refresh_token, user, tenant } = response.data.data;
+    const { access_token, refresh_token, user } = response.data.data;
     setTokens(access_token, refresh_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    // Store tenant ID for API requests (needed for multi-tenant)
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
-    }
-    if (tenant) {
-      localStorage.setItem('tenant', JSON.stringify(tenant));
     }
 
     return response.data.data;
@@ -81,7 +75,7 @@ export const authService = {
     }
   },
 
-  // Get current user
+  // Get current user from backend - this is the source of truth
   async getCurrentUser() {
     const response = await apiClient.get('/auth/me');
     return response.data.data;
@@ -96,9 +90,7 @@ export const authService = {
   // Update current user
   async updateCurrentUser(data) {
     const response = await apiClient.put('/auth/me', data);
-    const user = response.data.data;
-    localStorage.setItem('user', JSON.stringify(user));
-    return user;
+    return response.data.data;
   },
 
   // Change password
@@ -144,14 +136,11 @@ export const authService = {
       password,
     });
 
-    const { access_token, refresh_token, user, tenant } = response.data.data;
+    const { access_token, refresh_token, user } = response.data.data;
     setTokens(access_token, refresh_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    // Store tenant ID for API requests (needed for multi-tenant)
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
-    }
-    if (tenant) {
-      localStorage.setItem('tenant', JSON.stringify(tenant));
     }
 
     return response.data.data;
@@ -166,10 +155,11 @@ export const authService = {
   },
 
   // Send OTP to email for verification
-  async sendOTP(email, purpose = 'registration') {
+  async sendOTP(email, purpose = 'registration', language = 'uz') {
     const response = await apiClient.post('/auth/send-otp', {
       email,
       purpose,
+      language,
     });
     return response.data.data;
   },
@@ -201,14 +191,11 @@ export const authService = {
       otp_code: data.otpCode,
     });
 
-    const { access_token, refresh_token, user, tenant } = response.data.data;
+    const { access_token, refresh_token, user } = response.data.data;
     setTokens(access_token, refresh_token);
-    localStorage.setItem('user', JSON.stringify(user));
+    // Store tenant ID for API requests (needed for multi-tenant)
     if (user.tenant_id) {
       localStorage.setItem('tenantId', user.tenant_id);
-    }
-    if (tenant) {
-      localStorage.setItem('tenant', JSON.stringify(tenant));
     }
 
     // Create the initial organization with the user's company name
@@ -231,15 +218,9 @@ export const authService = {
     return response.data.data;
   },
 
-  // Check if user is authenticated
-  isAuthenticated() {
+  // Check if user has a valid access token
+  hasToken() {
     return !!localStorage.getItem('accessToken');
-  },
-
-  // Get stored user
-  getStoredUser() {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
   },
 };
 

@@ -33,6 +33,7 @@ import Cargo from "./Cargo";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
+import { LanguageProvider } from '@/components/contexts/LanguageContext';
 import { EmployeePermissionsProvider, useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 
 const PAGES = {
@@ -207,11 +208,13 @@ function PagesContent() {
 export default function Pages() {
     return (
         <Router>
-            <AuthProvider>
-                <EmployeePermissionsProvider>
-                    <PagesContent />
-                </EmployeePermissionsProvider>
-            </AuthProvider>
+            <LanguageProvider>
+                <AuthProvider>
+                    <EmployeePermissionsProvider>
+                        <PagesContent />
+                    </EmployeePermissionsProvider>
+                </AuthProvider>
+            </LanguageProvider>
         </Router>
     );
 }
