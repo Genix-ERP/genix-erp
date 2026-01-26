@@ -165,6 +165,72 @@ export const authService = {
     return response.data.data;
   },
 
+  // Send OTP to email for verification
+  async sendOTP(email, purpose = 'registration') {
+    const response = await apiClient.post('/auth/send-otp', {
+      email,
+      purpose,
+    });
+    return response.data.data;
+  },
+
+  // Verify OTP code
+  async verifyOTP(email, otpCode, purpose = 'registration') {
+    const response = await apiClient.post('/auth/verify-otp', {
+      email,
+      otp_code: otpCode,
+      purpose,
+    });
+    return response.data.data;
+  },
+
+  // Register with OTP verification
+  async registerWithOTP(data) {
+    // Generate tenant_code from company name if not provided
+    const baseCode = data.companyName?.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40) || 'tenant';
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    const tenantCode = data.tenantCode || `${baseCode}_${randomSuffix}`;
+
+    const response = await apiClient.post('/auth/register-with-otp', {
+      email: data.email,
+      password: data.password,
+      first_name: data.firstName,
+      last_name: data.lastName,
+      tenant_name: data.companyName,
+      tenant_code: tenantCode,
+      otp_code: data.otpCode,
+    });
+
+    const { access_token, refresh_token, user, tenant } = response.data.data;
+    setTokens(access_token, refresh_token);
+    localStorage.setItem('user', JSON.stringify(user));
+    if (user.tenant_id) {
+      localStorage.setItem('tenantId', user.tenant_id);
+    }
+    if (tenant) {
+      localStorage.setItem('tenant', JSON.stringify(tenant));
+    }
+
+    // Create the initial organization with the user's company name
+    try {
+      const companyName = data.companyName || `${data.firstName}'s Company`;
+      const companyCode = companyName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'MAIN';
+      await apiClient.post('/organizations', {
+        code: companyCode,
+        name: companyName,
+        type: 'company',
+        country: 'Uzbekistan',
+        currency: 'UZS',
+        accounting_standard: 'LOCAL_GAAP'
+      });
+    } catch (orgError) {
+      console.error('Error creating initial organization:', orgError);
+      // Don't fail registration if org creation fails
+    }
+
+    return response.data.data;
+  },
+
   // Check if user is authenticated
   isAuthenticated() {
     return !!localStorage.getItem('accessToken');

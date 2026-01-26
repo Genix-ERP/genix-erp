@@ -269,6 +269,49 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const registerWithOTP = useCallback(async (data) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const isAvailable = await checkBackendAvailable();
+      setBackendAvailable(isAvailable);
+
+      if (isAvailable) {
+        const result = await authService.registerWithOTP(data);
+        // Derive role from user data (including roles array from backend)
+        const userData = { ...result.user, role: deriveRole(result.user) };
+        setUser(userData);
+        setIsAuthenticated(true);
+        localStorage.setItem('genixerp_user', JSON.stringify(userData));
+        if (result.tenant) {
+          localStorage.setItem('tenant', JSON.stringify(result.tenant));
+        }
+        return { success: true, data: result };
+      } else {
+        // Demo mode - create local user (skip OTP verification)
+        const newUser = {
+          id: Date.now().toString(),
+          email: data.email,
+          full_name: `${data.firstName} ${data.lastName}`,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          role: 'owner'
+        };
+        setUser(newUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('genixerp_user', JSON.stringify(newUser));
+        return { success: true, demo: true };
+      }
+    } catch (err) {
+      const message = err.response?.data?.error?.message || err.message || 'Registration failed';
+      setError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -417,6 +460,7 @@ export function AuthProvider({ children }) {
     backendAvailable,
     login,
     register,
+    registerWithOTP,
     logout,
     updateUser,
     changePassword,
