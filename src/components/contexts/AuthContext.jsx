@@ -240,7 +240,9 @@ export function AuthProvider({ children }) {
 
       if (isAvailable) {
         const result = await authService.register(data);
-        setUser(result.user);
+        // Derive role from user data (including roles array from backend)
+        const userData = { ...result.user, role: deriveRole(result.user) };
+        setUser(userData);
         setIsAuthenticated(true);
         return { success: true, data: result };
       } else {
