@@ -124,7 +124,12 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
-  const { canAccessModule, isAdmin } = useEmployeePermissions();
+  const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
+
+  // Force re-render when user role changes by including user in dependency tracking
+  const userRole = currentUser?.role;
+  const isUserOwner = isOwner();
+  const isUserSiteAdmin = isSiteAdmin();
 
   // Expose AI chatbox opener globally
   React.useEffect(() => {
@@ -164,7 +169,7 @@ function LayoutContent({ children, currentPageName }) {
 
   // Map app IDs to navigation items with permission module keys
   // moduleId should match the module IDs in EmployeePermissionsContext
-  const appNavigationMap = {
+  const appNavigationMap = React.useMemo(() => ({
     'inventory': {
       title: t("inventory"),
       url: createPageUrl("Inventory"),
@@ -256,10 +261,10 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'cargo'
     }
-  };
+  }), [t]);
 
   // Always visible core items
-  const coreNavigationItems = [
+  const coreNavigationItems = React.useMemo(() => [
     {
       title: t("dashboard"),
       url: createPageUrl("Dashboard"),
@@ -277,10 +282,10 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("AIAssistant"),
       icon: Bot
     }
-  ];
+  ], [t]);
 
   // Admin-only items (visible to site_admin and owner)
-  const adminNavigationItems = [
+  const adminNavigationItems = React.useMemo(() => [
     {
       title: t("apps"),
       url: createPageUrl("Apps"),
@@ -293,10 +298,11 @@ function LayoutContent({ children, currentPageName }) {
       icon: Settings,
       badge: null
     }
-  ];
+  ], [t]);
 
   // Build dynamic navigation based on installed apps AND user permissions
-  const getNavigationItems = () => {
+  // Use useMemo to properly track dependencies and re-render when user role changes
+  const navigationItems = React.useMemo(() => {
     const dynamicItems = [];
 
     // Add Dashboard first (always visible)
@@ -307,26 +313,26 @@ function LayoutContent({ children, currentPageName }) {
       const appConfig = appNavigationMap[appId];
       // Check if app is installed AND user has permission to access the module
       // Admins, site admins, and owners always have access
-      const hasAccess = isAdmin || isSiteAdmin() || isOwner() || canAccessModule(appConfig.moduleId);
+      const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
       if (isAppInstalled(appId) && hasAccess) {
         dynamicItems.push(appConfig);
       }
     });
 
     // Add Workflows (only for admins and system admins)
-    const hasWorkflowAccess = isSiteAdmin() || isOwner() ||
-      currentUser?.role === 'admin' || currentUser?.role === 'system_admin';
+    const hasWorkflowAccess = isUserSiteAdmin || isUserOwner ||
+      userRole === 'admin' || userRole === 'system_admin';
     if (hasWorkflowAccess) {
       dynamicItems.push(coreNavigationItems[1]);
     }
 
     // Add Apps and Settings only for admins (site_admin or owner)
-    if (isOwner()) {
+    if (isUserOwner) {
       dynamicItems.push(...adminNavigationItems);
     }
 
     // Add Admin Panel if user is site admin
-    if (isSiteAdmin()) {
+    if (isUserSiteAdmin) {
       dynamicItems.push({
         title: t("admin_panel"),
         url: createPageUrl("AdminPanel"),
@@ -338,9 +344,7 @@ function LayoutContent({ children, currentPageName }) {
     dynamicItems.push(coreNavigationItems[2]);
 
     return dynamicItems;
-  };
-
-  const navigationItems = getNavigationItems();
+  }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, t]);
 
   return (
     <SidebarProvider>

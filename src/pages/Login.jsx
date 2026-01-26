@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import LanguageSelector from '@/components/ui/language-selector';
 import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
@@ -15,8 +18,18 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
   const [selectedTenantId, setSelectedTenantId] = useState(null);
-  const { login, backendAvailable } = useAuth();
+  const [shouldNavigate, setShouldNavigate] = useState(false);
+  const { login, backendAvailable, isAuthenticated, user } = useAuth();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const navigate = useNavigate();
+
+  // Navigate only after auth state is confirmed
+  useEffect(() => {
+    if (shouldNavigate && isAuthenticated && user) {
+      navigate('/');
+    }
+  }, [shouldNavigate, isAuthenticated, user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,16 +39,17 @@ export default function Login() {
     const result = await login(email, password, selectedTenantId);
 
     if (result.success) {
-      navigate('/');
+      // Set flag to navigate - useEffect will handle navigation after state updates
+      setShouldNavigate(true);
     } else if (result.tenantSelectionRequired) {
       // Show tenant selection UI
       setTenants(result.tenants);
       setError('');
+      setIsLoading(false);
     } else {
       setError(result.error);
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleTenantSelect = async (tenantId) => {
@@ -46,12 +60,12 @@ export default function Login() {
     const result = await login(email, password, tenantId);
 
     if (result.success) {
-      navigate('/');
+      // Set flag to navigate - useEffect will handle navigation after state updates
+      setShouldNavigate(true);
     } else {
       setError(result.error);
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   const handleBackToLogin = () => {
@@ -63,7 +77,7 @@ export default function Login() {
   // Tenant selection screen
   if (tenants && tenants.length > 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
         <style>
           {`
             :root {
@@ -76,6 +90,11 @@ export default function Login() {
           `}
         </style>
 
+        {/* Language Selector - Top Right */}
+        <div className="absolute top-4 right-4">
+          <LanguageSelector />
+        </div>
+
         <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
           <CardHeader className="text-center pb-2">
             <img
@@ -84,10 +103,10 @@ export default function Login() {
               className="h-20 w-auto object-contain mx-auto mb-4"
             />
             <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-              Select Company
+              {t('select_company')}
             </CardTitle>
             <CardDescription className="text-slate-500">
-              Your email is associated with multiple companies. Please select one to continue.
+              {t('email_multiple_companies')}
             </CardDescription>
           </CardHeader>
 
@@ -112,7 +131,7 @@ export default function Login() {
                   <Building2 className="w-5 h-5 mr-3 text-[var(--genix-blue)]" />
                   <div className="text-left">
                     <div className="font-medium text-slate-800">{tenant.name}</div>
-                    <div className="text-xs text-slate-500">Code: {tenant.code}</div>
+                    <div className="text-xs text-slate-500">{t('code_label')}: {tenant.code}</div>
                   </div>
                 </Button>
               ))}
@@ -126,7 +145,7 @@ export default function Login() {
                 disabled={isLoading}
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Login
+                {t('back_to_login')}
               </Button>
             </div>
           </CardContent>
@@ -137,7 +156,7 @@ export default function Login() {
 
   // Normal login screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
       <style>
         {`
           :root {
@@ -150,6 +169,11 @@ export default function Login() {
         `}
       </style>
 
+      {/* Language Selector - Top Right */}
+      <div className="absolute top-4 right-4">
+        <LanguageSelector />
+      </div>
+
       <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
         <CardHeader className="text-center pb-2">
           <img
@@ -158,10 +182,10 @@ export default function Login() {
             className="h-24 w-auto object-contain mx-auto mb-4"
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-            Welcome Back
+            {t('welcome_back')}
           </CardTitle>
           <CardDescription className="text-slate-500">
-            Sign in to your account to continue
+            {t('sign_in_to_continue')}
           </CardDescription>
         </CardHeader>
 
@@ -176,13 +200,13 @@ export default function Login() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-700">Email</Label>
+              <Label htmlFor="email" className="text-slate-700">{t('email')}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t('enter_email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 h-11 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
@@ -192,13 +216,13 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-700">Password</Label>
+              <Label htmlFor="password" className="text-slate-700">{t('password')}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 h-11 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
@@ -215,10 +239,10 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
+                  {t('signing_in')}
                 </>
               ) : (
-                'Sign In'
+                t('sign_in')
               )}
             </Button>
           </form>
@@ -227,12 +251,12 @@ export default function Login() {
           {backendAvailable && (
             <div className="mt-4 text-center">
               <p className="text-sm text-slate-600">
-                Don't have an account?{' '}
+                {t('dont_have_account')}{' '}
                 <Link
                   to="/register"
                   className="font-medium text-[var(--genix-blue)] hover:text-[var(--genix-purple)] transition-colors"
                 >
-                  Sign up
+                  {t('sign_up')}
                 </Link>
               </p>
             </div>

@@ -3,7 +3,7 @@ import authService from '@/api/services/auth';
 
 const AuthContext = createContext(null);
 
-// Demo users for local/offline authentication (fallback)
+// Demo users for local/offline authentication (fallback when backend unavailable)
 const DEMO_USERS = [
   {
     id: '1',
@@ -61,7 +61,7 @@ const ROLE_TYPES = {
 const deriveRole = (userData) => {
   if (!userData) return ROLE_TYPES.USER;
 
-  // Check if already has role field (from localStorage or demo)
+  // Check if already has role field
   if (userData.role) return userData.role;
 
   // Check is_system_admin flag - this is the site administrator
@@ -93,6 +93,22 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const [backendAvailable, setBackendAvailable] = useState(false);
 
+  // Fetch user from backend - this is the source of truth
+  const fetchUserFromBackend = useCallback(async () => {
+    try {
+      const apiUser = await authService.getCurrentUser();
+      const userData = { ...apiUser, role: deriveRole(apiUser) };
+      setUser(userData);
+      setIsAuthenticated(true);
+      return userData;
+    } catch (err) {
+      // Token invalid or expired - clear auth state
+      setUser(null);
+      setIsAuthenticated(false);
+      throw err;
+    }
+  }, []);
+
   // Initialize auth state on mount
   useEffect(() => {
     const initAuth = async () => {
@@ -101,58 +117,33 @@ export function AuthProvider({ children }) {
         const isAvailable = await checkBackendAvailable();
         setBackendAvailable(isAvailable);
 
-        if (isAvailable && authService.isAuthenticated()) {
-          // Try to get current user from API
+        if (isAvailable && authService.hasToken()) {
+          // Backend available and we have a token - fetch user from backend
           try {
-            const apiUser = await authService.getCurrentUser();
-            // Add derived role to user data
-            const userData = { ...apiUser, role: deriveRole(apiUser) };
-            setUser(userData);
-            setIsAuthenticated(true);
-            // Update localStorage with role
-            localStorage.setItem('genixerp_user', JSON.stringify(userData));
+            await fetchUserFromBackend();
           } catch (err) {
-            // If API call fails, try stored user
-            const storedUser = authService.getStoredUser();
-            if (storedUser) {
-              const userData = { ...storedUser, role: deriveRole(storedUser) };
-              setUser(userData);
-              setIsAuthenticated(true);
-            } else {
-              setIsAuthenticated(false);
-            }
+            // Token invalid - user needs to login again
+            console.log('Token invalid, user needs to re-login');
+            setIsAuthenticated(false);
           }
-        } else {
-          // Check for demo/local user session (check both storage keys)
-          const savedUser = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
-          if (savedUser) {
+        } else if (!isAvailable) {
+          // Backend not available - check for demo mode session
+          const demoSession = localStorage.getItem('demo_session');
+          if (demoSession) {
             try {
-              let userData = JSON.parse(savedUser);
-
-              // Derive role if not set
-              if (!userData.role) {
-                userData = { ...userData, role: deriveRole(userData) };
-              }
-
-              // Auto-sync role for demo users (fixes stale localStorage)
-              const demoUser = DEMO_USERS.find(u => u.email === userData.email);
-              if (demoUser && userData.role !== demoUser.role) {
-                userData = { ...userData, role: demoUser.role };
-              }
-
-              // Ensure genixerp_user is set for consistency
-              localStorage.setItem('genixerp_user', JSON.stringify(userData));
-
+              const userData = JSON.parse(demoSession);
               setUser(userData);
               setIsAuthenticated(true);
             } catch (e) {
-              localStorage.removeItem('genixerp_user');
-              localStorage.removeItem('user');
+              localStorage.removeItem('demo_session');
               setIsAuthenticated(false);
             }
           } else {
             setIsAuthenticated(false);
           }
+        } else {
+          // No token
+          setIsAuthenticated(false);
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
@@ -163,7 +154,7 @@ export function AuthProvider({ children }) {
     };
 
     initAuth();
-  }, []);
+  }, [fetchUserFromBackend]);
 
   const login = useCallback(async (email, password, tenantId = null) => {
     setIsLoading(true);
@@ -177,19 +168,13 @@ export function AuthProvider({ children }) {
       if (isAvailable) {
         // Use real backend authentication
         const data = await authService.login(email, password, tenantId);
-        // Add derived role to user data
+        // Derive role from user data returned by login
         const userData = { ...data.user, role: deriveRole(data.user) };
         setUser(userData);
         setIsAuthenticated(true);
-        // Also save to genixerp_user for consistency
-        localStorage.setItem('genixerp_user', JSON.stringify(userData));
-        // Save tenant info
-        if (data.tenant) {
-          localStorage.setItem('tenant', JSON.stringify(data.tenant));
-        }
         return { success: true, data };
       } else {
-        // Fallback to demo users
+        // Fallback to demo users when backend unavailable
         const foundUser = DEMO_USERS.find(
           u => u.email === email && u.password === password
         );
@@ -205,7 +190,8 @@ export function AuthProvider({ children }) {
           };
           setUser(userData);
           setIsAuthenticated(true);
-          localStorage.setItem('genixerp_user', JSON.stringify(userData));
+          // Store demo session for persistence
+          localStorage.setItem('demo_session', JSON.stringify(userData));
           return { success: true, demo: true };
         }
 
@@ -240,7 +226,7 @@ export function AuthProvider({ children }) {
 
       if (isAvailable) {
         const result = await authService.register(data);
-        // Derive role from user data (including roles array from backend)
+        // Derive role from user data
         const userData = { ...result.user, role: deriveRole(result.user) };
         setUser(userData);
         setIsAuthenticated(true);
@@ -257,7 +243,7 @@ export function AuthProvider({ children }) {
         };
         setUser(newUser);
         setIsAuthenticated(true);
-        localStorage.setItem('genixerp_user', JSON.stringify(newUser));
+        localStorage.setItem('demo_session', JSON.stringify(newUser));
         return { success: true, demo: true };
       }
     } catch (err) {
@@ -279,14 +265,10 @@ export function AuthProvider({ children }) {
 
       if (isAvailable) {
         const result = await authService.registerWithOTP(data);
-        // Derive role from user data (including roles array from backend)
+        // Derive role from user data
         const userData = { ...result.user, role: deriveRole(result.user) };
         setUser(userData);
         setIsAuthenticated(true);
-        localStorage.setItem('genixerp_user', JSON.stringify(userData));
-        if (result.tenant) {
-          localStorage.setItem('tenant', JSON.stringify(result.tenant));
-        }
         return { success: true, data: result };
       } else {
         // Demo mode - create local user (skip OTP verification)
@@ -300,7 +282,7 @@ export function AuthProvider({ children }) {
         };
         setUser(newUser);
         setIsAuthenticated(true);
-        localStorage.setItem('genixerp_user', JSON.stringify(newUser));
+        localStorage.setItem('demo_session', JSON.stringify(newUser));
         return { success: true, demo: true };
       }
     } catch (err) {
@@ -321,25 +303,26 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setIsAuthenticated(false);
-      localStorage.removeItem('genixerp_user');
-      localStorage.removeItem('tenant');
+      // Clear demo session and tenant info
+      localStorage.removeItem('demo_session');
       localStorage.removeItem('tenantId');
       setIsLoading(false);
     }
   }, [backendAvailable]);
 
-  // Force sync role from DEMO_USERS (for fixing stale localStorage)
-  const syncDemoUserRole = useCallback(() => {
-    if (!user?.email) return;
-    const demoUser = DEMO_USERS.find(u => u.email === user.email);
-    if (demoUser && user.role !== demoUser.role) {
-      const updatedUser = { ...user, role: demoUser.role };
-      setUser(updatedUser);
-      localStorage.setItem('genixerp_user', JSON.stringify(updatedUser));
-      return true;
+  // Refresh user data from backend
+  const refreshUser = useCallback(async () => {
+    if (!backendAvailable || !authService.hasToken()) {
+      return { success: false, error: 'Not authenticated' };
     }
-    return false;
-  }, [user]);
+
+    try {
+      const userData = await fetchUserFromBackend();
+      return { success: true, user: userData };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }, [backendAvailable, fetchUserFromBackend]);
 
   const updateUser = useCallback(async (data) => {
     setIsLoading(true);
@@ -347,13 +330,14 @@ export function AuthProvider({ children }) {
     try {
       if (backendAvailable) {
         const updatedUser = await authService.updateCurrentUser(data);
-        setUser(updatedUser);
-        return { success: true, user: updatedUser };
+        const userData = { ...updatedUser, role: deriveRole(updatedUser) };
+        setUser(userData);
+        return { success: true, user: userData };
       } else {
         // Demo mode - update local user
         const updatedUser = { ...user, ...data };
         setUser(updatedUser);
-        localStorage.setItem('genixerp_user', JSON.stringify(updatedUser));
+        localStorage.setItem('demo_session', JSON.stringify(updatedUser));
         return { success: true, user: updatedUser };
       }
     } catch (err) {
@@ -467,7 +451,7 @@ export function AuthProvider({ children }) {
     forgotPassword,
     resetPassword,
     clearError,
-    syncDemoUserRole,
+    refreshUser,
     // Role helpers
     isSiteAdmin,
     isOwner,
