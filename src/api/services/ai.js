@@ -66,6 +66,21 @@ export const aiService = {
   async deletePrompt(id) {
     await apiClient.delete(`/ai/prompts/${id}`);
   },
+
+  // Invoice Extraction
+  async extractInvoice(imageBase64, mimeType) {
+    const response = await apiClient.post('/ai/extract-invoice', {
+      image_base64: imageBase64,
+      mime_type: mimeType,
+    });
+    return response.data.data;
+  },
+
+  // Usage Statistics
+  async getUsageStats() {
+    const response = await apiClient.get('/ai/usage');
+    return response.data.data;
+  },
 };
 
 export default aiService;

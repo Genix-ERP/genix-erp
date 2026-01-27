@@ -627,11 +627,29 @@ export function InventoryProvider({ children }) {
             movements: movementsData?.length || 0
           });
 
+          // Debug: Log raw warehouse data with locations
+          console.log('[InventoryContext] Raw warehousesData:', JSON.stringify(warehousesData, null, 2));
+
+          // Transform warehouse data from backend format to frontend format
+          const transformedWarehouses = (warehousesData || []).map(w => ({
+            ...w,
+            // Flatten address from backend nested format
+            address: w.address?.street1 || '',
+            city: w.address?.city || '',
+            state: w.address?.state || '',
+            country: w.address?.country || '',
+            postal_code: w.address?.postal_code || '',
+            // Keep locations as-is (they come from backend now)
+            locations: w.locations || []
+          }));
+
+          console.log('[InventoryContext] Transformed warehouses:', transformedWarehouses);
+
           // When backend is available, use backend data directly (even if empty)
           // This ensures data is consistent across all devices
           setProducts(productsData || []);
           setCategories(categoriesData || []);
-          setWarehouses(warehousesData || []);
+          setWarehouses(transformedWarehouses);
           setInventory(inventoryData || []);
           setStockMovements(movementsData || []);
 
@@ -828,17 +846,39 @@ export function InventoryProvider({ children }) {
   }, [backendAvailable, categories, activeCompany]);
 
   // ================== WAREHOUSES ==================
+  // Transform frontend warehouse data to backend format
+  const transformWarehouseData = (warehouseData) => {
+    const { address, city, state, country, postal_code, phone, email, manager_name, ...rest } = warehouseData;
+    return {
+      ...rest,
+      address: {
+        street1: address || '',
+        city: city || '',
+        state: state || '',
+        country: country || '',
+        postal_code: postal_code || ''
+      },
+      // Backend doesn't have phone/email/manager_name on warehouse, they're in the address or separate
+      // Keep these for localStorage compatibility
+      phone,
+      email,
+      manager_name
+    };
+  };
+
   const createWarehouse = useCallback(async (warehouseData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        const newWarehouse = await inventoryService.createWarehouse(warehouseData);
+        const transformedData = transformWarehouseData(warehouseData);
+        const newWarehouse = await inventoryService.createWarehouse(transformedData);
         setWarehouses(prev => [...prev, newWarehouse]);
         return newWarehouse;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error creating warehouse:', err);
+        throw err; // Re-throw so the caller knows it failed
       }
     }
 
@@ -860,9 +900,13 @@ export function InventoryProvider({ children }) {
 
     if (backendAvailable) {
       try {
-        await inventoryService.updateWarehouse(id, warehouseData);
+        const transformedData = transformWarehouseData(warehouseData);
+        const updatedWarehouse = await inventoryService.updateWarehouse(id, transformedData);
+        setWarehouses(prev => prev.map(w => w.id === id ? updatedWarehouse : w));
+        return updatedWarehouse;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error updating warehouse:', err);
+        throw err;
       }
     }
 
@@ -878,8 +922,11 @@ export function InventoryProvider({ children }) {
     if (backendAvailable) {
       try {
         await inventoryService.deleteWarehouse(id);
+        setWarehouses(prev => prev.filter(w => w.id !== id));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error deleting warehouse:', err);
+        throw err;
       }
     }
 
@@ -888,13 +935,36 @@ export function InventoryProvider({ children }) {
     setWarehouses(updated);
   }, [backendAvailable, warehouses, activeCompany]);
 
+  // Transform frontend location data to backend format
+  const transformLocationData = (locationData) => {
+    const { code, name, type, parent_id, aisle, rack, shelf, bin, capacity } = locationData;
+    const transformed = {
+      code,
+      name,
+      type: type || 'storage',
+    };
+    // Only include optional fields if they have values
+    if (parent_id && parent_id !== '__none__' && parent_id !== '') {
+      transformed.parent_id = parent_id;
+    }
+    if (aisle) transformed.aisle = aisle;
+    if (rack) transformed.rack = rack;
+    if (shelf) transformed.shelf = shelf;
+    if (bin) transformed.bin = bin;
+    if (capacity && capacity !== '' && !isNaN(parseFloat(capacity))) {
+      transformed.capacity = parseFloat(capacity);
+    }
+    return transformed;
+  };
+
   const createWarehouseLocation = useCallback(async (warehouseId, locationData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(WAREHOUSES_STORAGE_KEY, companyId);
 
     if (backendAvailable) {
       try {
-        const newLocation = await inventoryService.createWarehouseLocation(warehouseId, locationData);
+        const transformedData = transformLocationData(locationData);
+        const newLocation = await inventoryService.createWarehouseLocation(warehouseId, transformedData);
         setWarehouses(prev => prev.map(w =>
           w.id === warehouseId
             ? { ...w, locations: [...(w.locations || []), newLocation] }
@@ -902,7 +972,8 @@ export function InventoryProvider({ children }) {
         ));
         return newLocation;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error creating location:', err);
+        throw err;
       }
     }
 
@@ -927,9 +998,23 @@ export function InventoryProvider({ children }) {
 
     if (backendAvailable) {
       try {
-        await inventoryService.updateWarehouseLocation(warehouseId, locationId, locationData);
+        const transformedData = transformLocationData(locationData);
+        const updatedLocation = await inventoryService.updateWarehouseLocation(warehouseId, locationId, transformedData);
+        setWarehouses(prev => prev.map(w => {
+          if (w.id === warehouseId) {
+            return {
+              ...w,
+              locations: (w.locations || []).map(loc =>
+                loc.id === locationId ? updatedLocation : loc
+              )
+            };
+          }
+          return w;
+        }));
+        return updatedLocation;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error updating location:', err);
+        throw err;
       }
     }
 
@@ -955,8 +1040,19 @@ export function InventoryProvider({ children }) {
     if (backendAvailable) {
       try {
         await inventoryService.deleteWarehouseLocation(warehouseId, locationId);
+        setWarehouses(prev => prev.map(w => {
+          if (w.id === warehouseId) {
+            return {
+              ...w,
+              locations: (w.locations || []).filter(loc => loc.id !== locationId)
+            };
+          }
+          return w;
+        }));
+        return;
       } catch (err) {
-        console.error('API error:', err);
+        console.error('API error deleting location:', err);
+        throw err;
       }
     }
 
@@ -998,13 +1094,20 @@ export function InventoryProvider({ children }) {
 
     if (backendAvailable) {
       try {
-        await inventoryService.adjustInventory(adjustmentData);
+        const result = await inventoryService.adjustInventory(adjustmentData);
+        // Refresh inventory data from backend after successful adjustment
+        const inventoryData = await inventoryService.listInventory();
+        setInventory(inventoryData || []);
+        const movementsData = await inventoryService.listInventoryMovements();
+        setStockMovements(movementsData || []);
+        return result;
       } catch (err) {
         console.error('API error:', err);
+        throw err; // Re-throw to let caller handle it
       }
     }
 
-    // Update inventory
+    // Update inventory (localStorage fallback when backend not available)
     const existingIndex = inventory.findIndex(
       i => i.product_id === adjustmentData.product_id && i.warehouse_id === adjustmentData.warehouse_id
     );
@@ -1059,9 +1162,17 @@ export function InventoryProvider({ children }) {
 
     if (backendAvailable) {
       try {
-        await inventoryService.transferInventory(transferData);
+        const result = await inventoryService.transferInventory(transferData);
+        // Refresh inventory data from backend after successful transfer
+        const inventoryData = await inventoryService.listInventory();
+        setInventory(inventoryData || []);
+        const movementsData = await inventoryService.listInventoryMovements();
+        setStockMovements(movementsData || []);
+        return result;
       } catch (err) {
         console.error('API error:', err);
+        console.error('API error response:', err.response?.data);
+        throw err; // Re-throw to let caller handle it
       }
     }
 
@@ -1137,15 +1248,19 @@ export function InventoryProvider({ children }) {
   const getInventorySummary = useCallback(() => {
     const totalValue = inventory.reduce((total, item) => {
       const product = products.find(p => p.id === item.product_id);
-      return total + (item.quantity * (product?.cost_price || 0));
+      const qty = item.quantity_on_hand ?? item.quantity ?? 0;
+      const unitCost = item.unit_cost ?? product?.cost_price ?? 0;
+      return total + (qty * unitCost);
     }, 0);
 
-    const totalItems = inventory.reduce((total, item) => total + item.quantity, 0);
+    const totalItems = inventory.reduce((total, item) => {
+      return total + (item.quantity_on_hand ?? item.quantity ?? 0);
+    }, 0);
 
     const lowStockProducts = products.filter(p => {
       const stockItems = inventory.filter(i => i.product_id === p.id);
-      const totalStock = stockItems.reduce((sum, i) => sum + i.quantity, 0);
-      return p.is_stockable && totalStock <= p.min_stock_level;
+      const totalStock = stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
+      return p.is_stockable !== false && totalStock <= (p.min_stock_level || 0) && totalStock > 0;
     });
 
     return {
@@ -1263,7 +1378,7 @@ export function InventoryProvider({ children }) {
 
     const lines = warehouseInventory.map(inv => ({
       product_id: inv.product_id,
-      system_qty: inv.quantity,
+      system_qty: inv.quantity_on_hand ?? inv.quantity ?? 0,
       counted_qty: null,
       variance: null,
       variance_reason: null

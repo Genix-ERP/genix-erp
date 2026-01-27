@@ -7,12 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, History, Repeat, Eye } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, History, Repeat, Eye, Building2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
+import { contactsService, aiService } from '@/api/services';
 
 // Import universal ERP components
 import {
@@ -32,9 +34,19 @@ import {
   RecurringPanel,
 } from '@/components/shared';
 
+// Helper to get date-fns locale
+const getDateLocale = (lang) => {
+  switch (lang) {
+    case 'ru': return ru;
+    case 'uz': return uz;
+    default: return undefined;
+  }
+};
+
 export default function AccountsPayable() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const dateLocale = getDateLocale(language);
   const {
     vendorBills,
     createVendorBill,
@@ -52,6 +64,7 @@ export default function AccountsPayable() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showBatchPrint, setShowBatchPrint] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
   const [activeTab, setActiveTab] = useState('list');
   const { addAuditLog } = useAuditTrail('vendor_bills');
@@ -64,6 +77,98 @@ export default function AccountsPayable() {
     tax_amount: 0,
     subtotal: 0
   });
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // AI Extraction state
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState(null);
+  const [extractionError, setExtractionError] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  // Load vendors when create modal opens
+  useEffect(() => {
+    if (showCreateModal && vendors.length === 0) {
+      setVendorsLoading(true);
+      contactsService.list({ contact_type: 'vendor' })
+        .then(data => {
+          // Include all contacts as potential vendors
+          const allContacts = data?.data || data || [];
+          setVendors(allContacts);
+        })
+        .catch(err => {
+          console.error('Failed to load vendors:', err);
+        })
+        .finally(() => {
+          setVendorsLoading(false);
+        });
+    }
+  }, [showCreateModal, vendors.length]);
+
+  // Handle file selection for AI extraction
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setExtractedData(null);
+      setExtractionError(null);
+    }
+  };
+
+  // Handle AI extraction
+  const handleAIExtract = async () => {
+    if (!selectedFile) return;
+
+    setIsExtracting(true);
+    setExtractionError(null);
+
+    try {
+      // Convert file to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          // Remove data URL prefix (e.g., "data:image/png;base64,")
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+
+      const result = await aiService.extractInvoice(base64, selectedFile.type);
+      setExtractedData(result);
+    } catch (err) {
+      console.error('AI extraction failed:', err);
+      setExtractionError(err.response?.data?.message || err.message || t('ai_extraction_failed') || 'Extraction failed');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // Apply extracted data to create bill form
+  const handleApplyExtractedData = () => {
+    if (!extractedData?.extracted_data) return;
+
+    const data = extractedData.extracted_data;
+
+    setNewBill({
+      partner_id: '', // User needs to select vendor manually
+      invoice_number: data.invoice_number || '',
+      invoice_date: data.invoice_date || new Date().toISOString().split('T')[0],
+      due_date: data.due_date || '',
+      total_amount: data.total_amount || 0,
+      tax_amount: data.tax_amount || 0,
+      subtotal: data.subtotal || 0,
+    });
+
+    // Close upload modal and open create modal
+    setShowUploadModal(false);
+    setShowCreateModal(true);
+    setExtractedData(null);
+    setSelectedFile(null);
+  };
 
   // Export columns configuration
   const exportColumns = [
@@ -104,32 +209,44 @@ export default function AccountsPayable() {
     setFilteredBills(filtered);
   }, [vendorBills, searchQuery, statusFilter]);
 
-  const handleCreateBill = () => {
-    const billData = {
-      partner_id: newBill.partner_id,
-      invoice_date: newBill.invoice_date,
-      due_date: newBill.due_date,
-      total_amount: parseFloat(newBill.total_amount) || 0,
-      tax_amount: parseFloat(newBill.tax_amount) || 0,
-      subtotal: parseFloat(newBill.subtotal) || 0,
-      amount_due: parseFloat(newBill.total_amount) || 0,
-      amount_paid: 0,
-      status: 'draft',
-      three_way_match_status: 'pending'
-    };
+  const handleCreateBill = async () => {
+    setIsSaving(true);
+    try {
+      // Get selected vendor info
+      const selectedVendor = vendors.find(v => v.id === newBill.partner_id);
 
-    const created = createVendorBill(billData);
-    addAuditLog('create', created?.id || 'new', newBill.partner_id);
-    setShowCreateModal(false);
-    setNewBill({
-      partner_id: '',
-      invoice_number: '',
-      invoice_date: new Date().toISOString().split('T')[0],
-      due_date: '',
-      total_amount: 0,
-      tax_amount: 0,
-      subtotal: 0
-    });
+      const billData = {
+        partner_id: newBill.partner_id, // UUID of the vendor
+        vendor_id: newBill.partner_id,  // Backend expects vendor_id
+        partner_name: selectedVendor?.name || selectedVendor?.company_name || '',
+        invoice_date: newBill.invoice_date,
+        due_date: newBill.due_date,
+        total_amount: parseFloat(newBill.total_amount) || 0,
+        tax_amount: parseFloat(newBill.tax_amount) || 0,
+        subtotal: parseFloat(newBill.subtotal) || 0,
+        amount_due: parseFloat(newBill.total_amount) || 0,
+        amount_paid: 0,
+        status: 'draft',
+        three_way_match_status: 'pending'
+      };
+
+      const created = await createVendorBill(billData);
+      addAuditLog('create', created?.id || 'new', billData.partner_name);
+      setShowCreateModal(false);
+      setNewBill({
+        partner_id: '',
+        invoice_number: '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: '',
+        total_amount: 0,
+        tax_amount: 0,
+        subtotal: 0
+      });
+    } catch (error) {
+      console.error('Error creating vendor bill:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const approveBill = (billId) => {
@@ -396,20 +513,20 @@ export default function AccountsPayable() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium">{bill.partner_id}</TableCell>
+                      <TableCell className="font-medium">{bill.partner_name || bill.vendor_name || '-'}</TableCell>
                       <TableCell className="text-sm">
-                        {bill.invoice_date ? format(new Date(bill.invoice_date), 'MMM dd, yyyy') : '-'}
+                        {bill.invoice_date ? format(new Date(bill.invoice_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {bill.due_date ? format(new Date(bill.due_date), 'MMM dd, yyyy') : '-'}
+                        {bill.due_date ? format(new Date(bill.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
                       <TableCell className="font-semibold">${(bill.total_amount || 0).toLocaleString()}</TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(bill.status)}>{bill.status}</Badge>
+                        <Badge className={getStatusColor(bill.status)}>{t(bill.status) || bill.status}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge className={getMatchStatusColor(bill.three_way_match_status || 'not_applicable')}>
-                          {bill.three_way_match_status || 'N/A'}
+                          {t(bill.three_way_match_status) || bill.three_way_match_status || 'N/A'}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -419,9 +536,9 @@ export default function AccountsPayable() {
                             variant="ghost"
                             onClick={() => {
                               setSelectedBill(bill);
-                              setShowPrintPreview(true);
+                              setShowDetailModal(true);
                             }}
-                            title={t('view_and_print') || 'View and Print'}
+                            title={t('view') || 'View'}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -482,33 +599,175 @@ export default function AccountsPayable() {
       </Tabs>
 
       {/* Upload Modal */}
-      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-        <DialogContent>
+      <Dialog open={showUploadModal} onOpenChange={(open) => {
+        setShowUploadModal(open);
+        if (!open) {
+          setSelectedFile(null);
+          setExtractedData(null);
+          setExtractionError(null);
+        }
+      }}>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-purple-600" />
-              AI-Powered Invoice Upload
+              {t('ai_invoice_scan') || 'AI Invoice Scan'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center">
-              <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-sm text-slate-600 mb-4">
-                Upload vendor invoice (PDF, Image)
-                <br />
-                AI will automatically extract all data
-              </p>
-              <Input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                className="cursor-pointer"
-              />
+            {/* File Upload Area */}
+            <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              selectedFile ? 'border-purple-400 bg-purple-50' : 'border-slate-300 hover:border-purple-300'
+            }`}>
+              {!selectedFile ? (
+                <>
+                  <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                  <p className="text-sm text-slate-600 mb-3">
+                    {t('upload_invoice_description') || 'Upload vendor invoice (PDF, Image)'}
+                    <br />
+                    <span className="text-purple-600 font-medium">
+                      {t('ai_will_extract') || 'AI will automatically extract all data'}
+                    </span>
+                  </p>
+                  <Input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    className="cursor-pointer max-w-xs mx-auto"
+                    onChange={handleFileSelect}
+                  />
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <FileText className="w-8 h-8 text-purple-600" />
+                    <div className="text-left">
+                      <p className="font-medium text-slate-900 truncate max-w-[200px]">{selectedFile.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {(selectedFile.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setExtractedData(null);
+                      setExtractionError(null);
+                    }}
+                  >
+                    {t('change_file') || 'Change file'}
+                  </Button>
+                </div>
+              )}
             </div>
 
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>{t('note') || 'Note'}:</strong> {t('ai_extraction_note') || 'AI extraction will be available when connected to the backend. For now, please use manual entry.'}
-              </p>
+            {/* Extraction Error */}
+            {extractionError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  {extractionError}
+                </p>
+              </div>
+            )}
+
+            {/* Extracted Data Preview */}
+            {extractedData?.extracted_data && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg space-y-3">
+                <div className="flex items-center gap-2 text-green-800 font-medium">
+                  <CheckCircle className="w-4 h-4" />
+                  {t('data_extracted') || 'Data extracted successfully'}
+                  {extractedData.extracted_data.confidence > 0 && (
+                    <Badge variant="outline" className="bg-green-100 text-green-800 ml-auto">
+                      {Math.round(extractedData.extracted_data.confidence * 100)}% {t('confidence') || 'confidence'}
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-slate-500">{t('vendor')}:</span>
+                    <span className="ml-2 font-medium">{extractedData.extracted_data.vendor_name || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('invoice_number')}:</span>
+                    <span className="ml-2 font-medium">{extractedData.extracted_data.invoice_number || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('invoice_date')}:</span>
+                    <span className="ml-2 font-medium">{extractedData.extracted_data.invoice_date || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('due_date')}:</span>
+                    <span className="ml-2 font-medium">{extractedData.extracted_data.due_date || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('subtotal')}:</span>
+                    <span className="ml-2 font-medium">
+                      {extractedData.extracted_data.subtotal?.toLocaleString() || '0'} {extractedData.extracted_data.currency || 'UZS'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">{t('total')}:</span>
+                    <span className="ml-2 font-medium text-green-700">
+                      {extractedData.extracted_data.total_amount?.toLocaleString() || '0'} {extractedData.extracted_data.currency || 'UZS'}
+                    </span>
+                  </div>
+                </div>
+                {extractedData.model === 'demo' && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    {t('demo_mode_note') || 'Demo mode - Configure AI provider for real extraction'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Info Note */}
+            {!extractedData && (
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>{t('supported_formats') || 'Supported formats'}:</strong> PDF, PNG, JPG, JPEG, WebP
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowUploadModal(false)}
+                className="flex-1"
+                disabled={isExtracting}
+              >
+                {t('cancel')}
+              </Button>
+              {!extractedData ? (
+                <Button
+                  onClick={handleAIExtract}
+                  disabled={!selectedFile || isExtracting}
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                >
+                  {isExtracting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {t('extracting') || 'Extracting...'}
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-4 h-4 mr-2" />
+                      {t('extract_data') || 'Extract Data'}
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleApplyExtractedData}
+                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {t('use_extracted_data') || 'Use Extracted Data'}
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -532,12 +791,24 @@ export default function AccountsPayable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('vendor')} *</label>
-                <Input
-                  placeholder={t('vendor_name') || 'Vendor name'}
+                <Select
                   value={newBill.partner_id}
-                  onChange={(e) => setNewBill({...newBill, partner_id: e.target.value})}
-                  required
-                />
+                  onValueChange={(value) => setNewBill({...newBill, partner_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={vendorsLoading ? t('loading') : t('select_vendor') || 'Select vendor'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map(vendor => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-orange-500" />
+                          {vendor.company_name || vendor.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -599,15 +870,15 @@ export default function AccountsPayable() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1" disabled={isSaving}>
                 {t('cancel')}
               </Button>
               <Button
                 onClick={handleCreateBill}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={!newBill.partner_id || !newBill.due_date}
+                disabled={isSaving || !newBill.partner_id || !newBill.due_date}
               >
-                {t('create_bill') || 'Create Bill'}
+                {isSaving ? t('saving') || 'Saving...' : t('create_bill') || 'Create Bill'}
               </Button>
             </div>
           </div>
@@ -659,6 +930,144 @@ export default function AccountsPayable() {
         generateConfig={generatePrintConfig}
         entityName={t('invoice') || 'Invoice'}
       />
+
+      {/* Bill Detail Modal */}
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <FileText className="w-5 h-5 text-[var(--genix-purple)]" />
+              {t('bill_details') || 'Bill Details'}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedBill && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div>
+                  <p className="text-sm text-slate-500">{t('invoice_number')}</p>
+                  <p className="text-lg font-bold text-slate-900 font-mono">{selectedBill.invoice_number}</p>
+                </div>
+                <Badge className={getStatusColor(selectedBill.status)}>
+                  {t(selectedBill.status) || selectedBill.status}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('vendor')}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {selectedBill.partner_name || selectedBill.vendor_name || '-'}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
+                  <p className="text-sm font-bold text-slate-900">
+                    ${(selectedBill.total_amount || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('invoice_date')}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {selectedBill.invoice_date
+                      ? format(new Date(selectedBill.invoice_date), 'dd MMM yyyy', { locale: dateLocale })
+                      : '-'}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('due_date')}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {selectedBill.due_date
+                      ? format(new Date(selectedBill.due_date), 'dd MMM yyyy', { locale: dateLocale })
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('subtotal')}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    ${(selectedBill.subtotal || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('tax')}</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    ${(selectedBill.tax_amount || 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('amount_due')}</p>
+                  <p className="text-sm font-semibold text-red-600">
+                    ${(selectedBill.amount_due || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">{t('three_way_match')}</p>
+                <Badge className={getMatchStatusColor(selectedBill.three_way_match_status || 'not_applicable')}>
+                  {t(selectedBill.three_way_match_status) || selectedBill.three_way_match_status || 'N/A'}
+                </Badge>
+              </div>
+
+              {selectedBill.notes && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('notes')}</p>
+                  <p className="text-sm text-slate-700">{selectedBill.notes}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4">
+                {selectedBill.status === 'draft' && (
+                  <Button
+                    onClick={() => {
+                      approveBill(selectedBill.id);
+                      setSelectedBill({ ...selectedBill, status: 'confirmed' });
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {t('approve') || 'Approve'}
+                  </Button>
+                )}
+                {selectedBill.status === 'confirmed' && (
+                  <Button
+                    onClick={() => {
+                      payBill(selectedBill.id);
+                      setSelectedBill({ ...selectedBill, status: 'paid', amount_due: 0 });
+                    }}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    {t('mark_as_paid') || 'Mark as Paid'}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setShowPrintPreview(true);
+                  }}
+                  className="flex-1"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  {t('print') || 'Print'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDetailModal(false)}
+                >
+                  {t('close')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

@@ -60,7 +60,7 @@ export default function InventoryValuation() {
         productInventory = productInventory.filter(inv => inv.warehouse_id === selectedWarehouse);
       }
 
-      const totalQty = productInventory.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
+      const totalQty = productInventory.reduce((sum, inv) => sum + (inv.quantity_on_hand ?? inv.quantity ?? 0), 0);
       const unitCost = product.cost_price || 0;
       const totalValue = totalQty * unitCost;
       const listPrice = product.list_price || 0;

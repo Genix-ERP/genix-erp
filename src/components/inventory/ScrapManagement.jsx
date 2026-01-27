@@ -102,12 +102,18 @@ export default function ScrapManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedTab, setSelectedTab] = useState("orders");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [scrapToConfirm, setScrapToConfirm] = useState(null);
+  const [scrapToCancel, setScrapToCancel] = useState(null);
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
     return () => {
       setShowForm(false);
       setViewingScrap(null);
+      setShowConfirmModal(false);
+      setShowCancelModal(false);
     };
   }, []);
 
@@ -202,15 +208,29 @@ export default function ScrapManagement() {
     resetForm();
   };
 
-  const handleConfirm = async (id) => {
-    if (window.confirm(t('confirm_scrap') || 'Are you sure you want to confirm this scrap order? This will reduce inventory.')) {
-      await confirmScrapOrder(id, 'Current User');
+  const handleConfirmClick = (scrap) => {
+    setScrapToConfirm(scrap);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmScrap = async () => {
+    if (scrapToConfirm) {
+      await confirmScrapOrder(scrapToConfirm.id, 'Current User');
+      setShowConfirmModal(false);
+      setScrapToConfirm(null);
     }
   };
 
-  const handleCancel = async (id) => {
-    if (window.confirm(t('confirm_cancel_scrap') || 'Are you sure you want to cancel this scrap order?')) {
-      await cancelScrapOrder(id);
+  const handleCancelClick = (scrap) => {
+    setScrapToCancel(scrap);
+    setShowCancelModal(true);
+  };
+
+  const handleCancelScrap = async () => {
+    if (scrapToCancel) {
+      await cancelScrapOrder(scrapToCancel.id);
+      setShowCancelModal(false);
+      setScrapToCancel(null);
     }
   };
 
@@ -228,7 +248,7 @@ export default function ScrapManagement() {
     const inv = inventory.find(i =>
       i.product_id === productId && i.warehouse_id === warehouseId
     );
-    return inv?.quantity || 0;
+    return inv?.quantity_on_hand ?? inv?.quantity ?? 0;
   };
 
   const getStatusBadge = (status) => {
@@ -434,7 +454,7 @@ export default function ScrapManagement() {
                                     variant="ghost"
                                     size="icon"
                                     className="text-green-600 hover:text-green-700"
-                                    onClick={() => handleConfirm(order.id)}
+                                    onClick={() => handleConfirmClick(order)}
                                   >
                                     <Check className="w-4 h-4" />
                                   </Button>
@@ -444,7 +464,7 @@ export default function ScrapManagement() {
                                     variant="ghost"
                                     size="icon"
                                     className="text-red-600 hover:text-red-700"
-                                    onClick={() => handleCancel(order.id)}
+                                    onClick={() => handleCancelClick(order)}
                                   >
                                     <Ban className="w-4 h-4" />
                                   </Button>
@@ -649,7 +669,7 @@ export default function ScrapManagement() {
             {/* Reason Notes */}
             <div className="space-y-2">
               <LabelWithHelp
-                label={t('reason_notes') || 'Additional Notes'}
+                label={t('additional_notes') || "Qo'shimcha izohlar"}
                 helpText={t('help_scrap_notes') || "Chiqindi haqida qo'shimcha tafsilotlar. Sababni aniqroq tushuntirish uchun."}
               />
               <Textarea
@@ -763,6 +783,81 @@ export default function ScrapManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingScrap(null)}>
               {t('close') || 'Close'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Scrap Modal */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="w-5 h-5" />
+              {t('confirm_scrap_order') || 'Yaroqsiz buyurtmani tasdiqlash'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('confirm_scrap_message') || 'Haqiqatan ham bu yaroqsiz buyurtmani tasdiqlaysizmi? Bu zaxirani kamaytiradi.'}
+            </p>
+            {scrapToConfirm && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <p className="font-medium">{scrapToConfirm.scrap_number}</p>
+                <p className="text-sm text-slate-500">
+                  {t('product')}: {getProductName(scrapToConfirm.product_id)}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {t('quantity')}: {scrapToConfirm.quantity}
+                </p>
+              </div>
+            )}
+            <p className="mt-3 text-sm text-orange-600">
+              {t('inventory_will_be_reduced') || 'Zaxira miqdori kamaytiriladi.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleConfirmScrap}>
+              {t('confirm') || 'Tasdiqlash'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Scrap Modal */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('cancel_scrap_order') || 'Yaroqsiz buyurtmani bekor qilish'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('cancel_scrap_message') || 'Haqiqatan ham bu yaroqsiz buyurtmani bekor qilmoqchimisiz?'}
+            </p>
+            {scrapToCancel && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <p className="font-medium">{scrapToCancel.scrap_number}</p>
+                <p className="text-sm text-slate-500">
+                  {t('product')}: {getProductName(scrapToCancel.product_id)}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {t('quantity')}: {scrapToCancel.quantity}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelModal(false)}>
+              {t('no') || "Yo'q"}
+            </Button>
+            <Button variant="destructive" onClick={handleCancelScrap}>
+              {t('yes_cancel') || 'Ha, bekor qilish'}
             </Button>
           </DialogFooter>
         </DialogContent>

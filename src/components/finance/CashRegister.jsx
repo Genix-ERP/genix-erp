@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,18 +75,24 @@ export default function CashRegister() {
 
   // Calculate summaries
   const today = new Date().toISOString().split('T')[0];
+  // Helper to extract date string from transaction_date (handles both ISO timestamp and date string)
+  const getDateStr = useCallback((t) => {
+    if (!t.transaction_date) return '';
+    const dateStr = typeof t.transaction_date === 'string' ? t.transaction_date : t.transaction_date.toISOString();
+    return dateStr.split('T')[0];
+  }, []);
   const summaryStats = {
     currentBalance: getCashBalance(),
     todayIncome: cashTransactions
-      .filter(t => t.transaction_date === today && t.type === 'income')
+      .filter(t => getDateStr(t) === today && t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0),
     todayExpense: cashTransactions
-      .filter(t => t.transaction_date === today && t.type === 'expense')
+      .filter(t => getDateStr(t) === today && t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0),
     todayTransfers: cashTransactions
-      .filter(t => t.transaction_date === today && t.type === 'transfer')
+      .filter(t => getDateStr(t) === today && t.type === 'transfer')
       .reduce((sum, t) => sum + t.amount, 0),
-    transactionCount: cashTransactions.filter(t => t.transaction_date === today).length
+    transactionCount: cashTransactions.filter(t => getDateStr(t) === today).length
   };
 
   useEffect(() => {
@@ -105,17 +111,17 @@ export default function CashRegister() {
     }
 
     if (dateFilter === "today") {
-      filtered = filtered.filter(t => t.transaction_date === today);
+      filtered = filtered.filter(t => getDateStr(t) === today);
     } else if (dateFilter === "week") {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      filtered = filtered.filter(t => t.transaction_date >= weekAgo);
+      filtered = filtered.filter(t => getDateStr(t) >= weekAgo);
     } else if (dateFilter === "month") {
       const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      filtered = filtered.filter(t => t.transaction_date >= monthAgo);
+      filtered = filtered.filter(t => getDateStr(t) >= monthAgo);
     }
 
     setFilteredTransactions(filtered.sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)));
-  }, [cashTransactions, searchQuery, typeFilter, dateFilter, today]);
+  }, [cashTransactions, searchQuery, typeFilter, dateFilter, today, getDateStr]);
 
   const handleCreateTransaction = async () => {
     setIsSaving(true);
@@ -231,12 +237,11 @@ export default function CashRegister() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">{t('today') || 'Today'}</p>
-                <p className="text-2xl font-bold text-blue-800">{summaryStats.transactionCount}</p>
-                <p className="text-xs text-blue-500">{t('transaction') || 'transaction'}</p>
+                <p className="text-sm text-blue-600 font-medium">{t('today_transfer') || 'Today Transfer'}</p>
+                <p className="text-2xl font-bold text-blue-800">{formatCurrency(summaryStats.todayTransfers)}</p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                <Receipt className="w-6 h-6 text-blue-600" />
+                <ArrowRightLeft className="w-6 h-6 text-blue-600" />
               </div>
             </div>
           </CardContent>

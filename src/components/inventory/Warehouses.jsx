@@ -200,10 +200,10 @@ export default function Warehouses() {
     });
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     setIsSaving(true);
     try {
-      createWarehouse(formData);
+      await createWarehouse(formData);
       resetForm();
       setShowCreateModal(false);
     } catch (error) {
@@ -234,10 +234,10 @@ export default function Warehouses() {
     setShowEditModal(true);
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     setIsSaving(true);
     try {
-      updateWarehouse(selectedWarehouse.id, formData);
+      await updateWarehouse(selectedWarehouse.id, formData);
       resetForm();
       setSelectedWarehouse(null);
       setShowEditModal(false);
@@ -253,9 +253,9 @@ export default function Warehouses() {
     setShowDeleteModal(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     try {
-      deleteWarehouse(selectedWarehouse.id);
+      await deleteWarehouse(selectedWarehouse.id);
       setSelectedWarehouse(null);
       setShowDeleteModal(false);
     } catch (error) {
@@ -274,10 +274,10 @@ export default function Warehouses() {
     setShowLocationModal(true);
   };
 
-  const handleCreateLocation = () => {
+  const handleCreateLocation = async () => {
     setIsSaving(true);
     try {
-      createWarehouseLocation(selectedWarehouse.id, locationForm);
+      await createWarehouseLocation(selectedWarehouse.id, locationForm);
       resetLocationForm();
       setShowLocationModal(false);
     } catch (error) {
@@ -310,10 +310,10 @@ export default function Warehouses() {
     setShowEditLocationModal(true);
   };
 
-  const handleUpdateLocation = () => {
+  const handleUpdateLocation = async () => {
     setIsSaving(true);
     try {
-      updateWarehouseLocation(selectedWarehouse.id, selectedLocation.id, locationForm);
+      await updateWarehouseLocation(selectedWarehouse.id, selectedLocation.id, locationForm);
       resetLocationForm();
       setSelectedLocation(null);
       setShowEditLocationModal(false);
@@ -330,9 +330,9 @@ export default function Warehouses() {
     setShowDeleteLocationModal(true);
   };
 
-  const handleDeleteLocation = () => {
+  const handleDeleteLocation = async () => {
     try {
-      deleteWarehouseLocation(selectedWarehouse.id, selectedLocation.id);
+      await deleteWarehouseLocation(selectedWarehouse.id, selectedLocation.id);
       setSelectedLocation(null);
       setShowDeleteLocationModal(false);
     } catch (error) {

@@ -93,6 +93,8 @@ export default function CurrencyManagement() {
       setShowCreateCurrencyModal(false);
     } catch (err) {
       console.error('Error creating currency:', err);
+      const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to create currency';
+      alert(`Error: ${errorMsg}`);
     } finally {
       setIsSaving(false);
     }
@@ -372,10 +374,10 @@ export default function CurrencyManagement() {
                 </TableHeader>
                 <TableBody>
                   {exchangeRates
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .sort((a, b) => new Date(b.effective_date || b.date) - new Date(a.effective_date || a.date))
                     .map((rate) => (
                       <TableRow key={rate.id} className="hover:bg-slate-50">
-                        <TableCell>{format(new Date(rate.date), 'dd.MM.yyyy')}</TableCell>
+                        <TableCell>{format(new Date(rate.effective_date || rate.date), 'dd.MM.yyyy')}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{rate.from_currency}</Badge>

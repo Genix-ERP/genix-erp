@@ -90,19 +90,22 @@ export default function TaxRates() {
     });
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     setIsSaving(true);
     try {
       const taxData = {
         ...formData,
-        rate: parseFloat(formData.rate) || 0
+        rate: parseFloat(formData.rate) || 0,
+        type: 'percentage' // Backend requires type: percentage or fixed
       };
 
-      createTaxRate(taxData);
+      await createTaxRate(taxData);
       resetForm();
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating tax rate:', error);
+      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create tax rate';
+      alert(`Error: ${errorMsg}`);
     } finally {
       setIsSaving(false);
     }
@@ -122,7 +125,7 @@ export default function TaxRates() {
     setShowEditModal(true);
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     setIsSaving(true);
     try {
       const taxData = {
@@ -130,12 +133,14 @@ export default function TaxRates() {
         rate: parseFloat(formData.rate) || 0
       };
 
-      updateTaxRate(selectedTaxRate.id, taxData);
+      await updateTaxRate(selectedTaxRate.id, taxData);
       resetForm();
       setSelectedTaxRate(null);
       setShowEditModal(false);
     } catch (error) {
       console.error('Error updating tax rate:', error);
+      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to update tax rate';
+      alert(`Error: ${errorMsg}`);
     } finally {
       setIsSaving(false);
     }
@@ -146,13 +151,18 @@ export default function TaxRates() {
     setShowDeleteModal(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    setIsSaving(true);
     try {
-      deleteTaxRate(selectedTaxRate.id);
+      await deleteTaxRate(selectedTaxRate.id);
       setSelectedTaxRate(null);
       setShowDeleteModal(false);
     } catch (error) {
       console.error('Error deleting tax rate:', error);
+      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to delete tax rate';
+      alert(`Error: ${errorMsg}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -704,15 +714,17 @@ export default function TaxRates() {
                 variant="outline"
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1"
+                disabled={isSaving}
               >
                 {t('cancel')}
               </Button>
               <Button
                 onClick={handleDelete}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                disabled={isSaving}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                {t('delete')}
+                {isSaving ? (t('deleting') || 'Deleting...') : t('delete')}
               </Button>
             </div>
           </div>
