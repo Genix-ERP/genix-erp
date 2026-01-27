@@ -27,6 +27,7 @@ export default function BankReconciliation() {
     updateBankAccount,
     deleteBankAccount,
     bankTransactions,
+    loadBankTransactions,
     getBankTransactionsByAccount,
     createBankTransaction,
     reconcileBankTransaction,
@@ -59,6 +60,13 @@ export default function BankReconciliation() {
     type: 'credit',
     reference: ''
   });
+
+  // Load transactions when bank account is selected
+  useEffect(() => {
+    if (selectedBankAccount?.id) {
+      loadBankTransactions(selectedBankAccount.id);
+    }
+  }, [selectedBankAccount?.id, loadBankTransactions]);
 
   // Calculate summaries
   const accountSummary = {
@@ -310,7 +318,15 @@ export default function BankReconciliation() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedBankAccount(account);
+                            setActiveTab('transactions');
+                          }}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
                       </TableCell>

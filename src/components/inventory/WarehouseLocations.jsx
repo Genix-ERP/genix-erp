@@ -51,6 +51,7 @@ export default function WarehouseLocations() {
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
+  const [selectedLocations, setSelectedLocations] = useState([]);
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -214,6 +215,26 @@ export default function WarehouseLocations() {
     return LOCATION_TYPES.find(t => t.value === type) || LOCATION_TYPES[0];
   };
 
+  // Select all checkbox handlers
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedLocations(filteredLocations.map(loc => loc.id));
+    } else {
+      setSelectedLocations([]);
+    }
+  };
+
+  const handleSelectLocation = (locationId, checked) => {
+    if (checked) {
+      setSelectedLocations(prev => [...prev, locationId]);
+    } else {
+      setSelectedLocations(prev => prev.filter(id => id !== locationId));
+    }
+  };
+
+  const isAllSelected = filteredLocations.length > 0 && selectedLocations.length === filteredLocations.length;
+  const isSomeSelected = selectedLocations.length > 0 && selectedLocations.length < filteredLocations.length;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -294,7 +315,11 @@ export default function WarehouseLocations() {
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead className="w-12">
-                  <Checkbox />
+                  <Checkbox
+                    checked={isAllSelected}
+                    onCheckedChange={handleSelectAll}
+                    className={isSomeSelected ? "data-[state=checked]:bg-slate-400" : ""}
+                  />
                 </TableHead>
                 <TableHead>{t('location') || 'Lokatsiya'}</TableHead>
                 <TableHead>{t('location_type') || 'Turi'}</TableHead>
@@ -323,7 +348,10 @@ export default function WarehouseLocations() {
                   return (
                     <TableRow key={loc.id} className={!loc.is_active ? 'opacity-50' : ''}>
                       <TableCell>
-                        <Checkbox />
+                        <Checkbox
+                          checked={selectedLocations.includes(loc.id)}
+                          onCheckedChange={(checked) => handleSelectLocation(loc.id, checked)}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -340,8 +368,14 @@ export default function WarehouseLocations() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {loc.is_empty ? (
-                          <Check className="w-4 h-4 text-green-600" />
+                        {loc.is_empty === true ? (
+                          <Badge variant="secondary" className="bg-green-100 text-green-700">
+                            {t('yes') || 'Ha'}
+                          </Badge>
+                        ) : loc.is_empty === false ? (
+                          <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                            {t('no') || "Yo'q"}
+                          </Badge>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}

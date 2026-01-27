@@ -105,7 +105,17 @@ export function ModulesProvider({ children }) {
       setPurchaseOrders(poData?.items || poData || []);
       setSalesOrders(soData?.items || soData || []);
       setProjects(projectsData?.items || projectsData || []);
-      setContracts(contractsData?.items || contractsData || []);
+      // Map backend contract fields to frontend expected fields
+      const rawContracts = contractsData?.items || contractsData || [];
+      const mappedContracts = rawContracts.map(c => ({
+        ...c,
+        contract_name: c.title || c.contract_name,
+        party_name: c.vendor_name || c.party_name || '',
+        contract_value: c.value || c.contract_value || 0,
+        billing_cycle: c.terms || c.billing_cycle || 'monthly',
+        auto_renew: c.auto_renewal || c.auto_renew || false,
+      }));
+      setContracts(mappedContracts);
       setExpenses(expensesData?.items || expensesData || []);
       setAssets(assetsData?.items || assetsData || []);
       setPayrolls(payrollsData?.items || payrollsData || []);
@@ -488,27 +498,27 @@ export function ModulesProvider({ children }) {
 
   // Contract CRUD - API only
   const createContract = useCallback(async (data) => {
+    // Backend expects: title, vendor_id, contract_type, start_date, value (required)
+    // Backend contract_type options: fixed, annual, monthly, project
     const apiData = {
-      contract_number: data.contract_number,
-      title: data.contract_name || data.title,
-      supplier_name: data.party_name || data.supplier_name,
-      type: data.contract_type || data.type,
+      title: data.title || data.contract_name,
+      vendor_id: data.vendor_id,
+      contract_type: data.contract_type || 'fixed',
       start_date: data.start_date,
-      end_date: data.end_date,
-      value: data.contract_value || data.value || 0,
-      currency: data.currency || 'UZS',
-      auto_renew: data.auto_renew || false,
+      end_date: data.end_date || undefined,
+      value: data.value || data.contract_value || 0,
+      auto_renewal: data.auto_renewal || data.auto_renew || false,
       description: data.description,
-      payment_terms: data.billing_cycle || data.payment_terms
+      terms: data.terms || data.billing_cycle,
     };
     const result = await procurementService.createContract(apiData);
     if (result && result.id) {
       const mappedResult = {
         ...result,
         contract_name: result.title,
-        party_name: result.supplier_name,
+        party_name: result.vendor_name || data.party_name || '',
         contract_value: result.value,
-        billing_cycle: result.payment_terms
+        billing_cycle: result.terms
       };
       setContracts(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -519,30 +529,29 @@ export function ModulesProvider({ children }) {
   const updateContract = useCallback(async (id, data) => {
     const apiData = {
       title: data.contract_name || data.title,
-      supplier_name: data.party_name || data.supplier_name,
-      type: data.contract_type || data.type,
+      contract_type: data.contract_type,
       start_date: data.start_date,
       end_date: data.end_date,
       value: data.contract_value || data.value,
-      currency: data.currency,
-      auto_renew: data.auto_renew,
+      auto_renewal: data.auto_renew || data.auto_renewal,
       description: data.description,
-      payment_terms: data.billing_cycle || data.payment_terms,
+      terms: data.billing_cycle || data.terms,
       status: data.status
     };
     const result = await procurementService.updateContract(id, apiData);
-    if (result) {
-      const mappedResult = {
-        ...result,
-        contract_name: result.title,
-        party_name: result.supplier_name,
-        contract_value: result.value,
-        billing_cycle: result.payment_terms
-      };
-      setContracts(prev => prev.map(c => c.id === id ? mappedResult : c));
-      return mappedResult;
-    }
-    throw new Error('Failed to update contract');
+    // Update succeeded - update local state with mapped fields
+    // Keep original data and merge with any response data
+    const updatedContract = {
+      ...data,
+      id,
+      contract_name: data.contract_name || data.title,
+      party_name: data.party_name || data.vendor_name || '',
+      contract_value: data.contract_value || data.value || 0,
+      billing_cycle: data.billing_cycle || data.terms || 'monthly',
+      auto_renew: data.auto_renew || data.auto_renewal || false,
+    };
+    setContracts(prev => prev.map(c => c.id === id ? updatedContract : c));
+    return updatedContract;
   }, []);
 
   const deleteContract = useCallback(async (id) => {

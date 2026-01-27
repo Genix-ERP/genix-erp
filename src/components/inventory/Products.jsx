@@ -361,7 +361,7 @@ export default function Products() {
 
   const getProductStock = (productId) => {
     const stockItems = inventory.filter(i => i.product_id === productId);
-    return stockItems.reduce((sum, i) => sum + i.quantity, 0);
+    return stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   const resetForm = () => {

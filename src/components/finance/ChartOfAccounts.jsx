@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins } from "lucide-react";
+import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins, AlertTriangle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -75,8 +75,19 @@ export default function ChartOfAccounts() {
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowCreateModal(false);
+      setShowEditModal(false);
+      setShowDeleteConfirm(false);
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     code: '',
@@ -204,10 +215,17 @@ export default function ChartOfAccounts() {
     }
   };
 
-  const handleDelete = async (account) => {
-    if (window.confirm(`${t('confirm_delete_account') || 'Are you sure you want to delete this account?'}`)) {
+  const handleDeleteClick = (account) => {
+    setAccountToDelete(account);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (accountToDelete) {
       try {
-        await deleteAccount(account.id);
+        await deleteAccount(accountToDelete.id);
+        setShowDeleteConfirm(false);
+        setAccountToDelete(null);
       } catch (error) {
         console.error('Error deleting account:', error);
       }
@@ -316,7 +334,7 @@ export default function ChartOfAccounts() {
                 </Button>
               )}
               {canDelete(MODULES.FINANCIALS) && (
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(account)}>
+                <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(account)}>
                   <Trash2 className="w-4 h-4 text-red-500" />
                 </Button>
               )}
@@ -466,6 +484,9 @@ export default function ChartOfAccounts() {
               <Landmark className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('create_account') || 'Create Account'}
             </DialogTitle>
+            <DialogDescription>
+              {t('create_account_description') || 'Add a new account to your chart of accounts.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Row 1: Code and Name */}
@@ -624,6 +645,9 @@ export default function ChartOfAccounts() {
               <Edit2 className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('edit_account') || 'Edit Account'}
             </DialogTitle>
+            <DialogDescription>
+              {t('edit_account_description') || 'Modify the account details.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Row 1: Code and Name */}
@@ -764,6 +788,43 @@ export default function ChartOfAccounts() {
               disabled={isSaving || !formData.name}
             >
               {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('confirm_delete') || 'Confirm Delete'}
+            </DialogTitle>
+            <DialogDescription>
+              {t('delete_account_confirmation') || 'Are you sure you want to delete this account?'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {accountToDelete && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <p className="font-mono text-sm text-slate-500">{accountToDelete.code}</p>
+                <p className="font-medium">{accountToDelete.name}</p>
+                <Badge className={`mt-2 ${getTypeInfo(accountToDelete.type).color}`}>
+                  {getTypeInfo(accountToDelete.type).label}
+                </Badge>
+              </div>
+            )}
+            <p className="mt-3 text-sm text-red-600">
+              {t('action_cannot_be_undone') || 'This action cannot be undone.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              {t('delete') || 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,40 +8,69 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Send, DollarSign, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { ru, uz } from 'date-fns/locale';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { useCustomers } from '@/components/contexts/CustomersContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 
 const AGING_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
+// Helper to get date-fns locale
+const getDateLocale = (lang) => {
+  switch (lang) {
+    case 'ru': return ru;
+    case 'uz': return uz;
+    default: return undefined;
+  }
+};
+
 export default function AccountsReceivable() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const dateLocale = getDateLocale(language);
   const {
     customerInvoices,
     createCustomerInvoice,
     updateCustomerInvoice,
-    isLoading
+    isLoading,
+    refreshData
   } = useFinancials();
   const { canCreate } = usePermissions();
+
+  const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
 
   const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Map customers to a consistent format for the dropdown
+  // Filter out locally-created customers (IDs starting with 'cust_') as they don't exist in the backend
+  const customers = crmCustomers
+    .filter(c => c.id && !String(c.id).startsWith('cust_'))
+    .map(c => ({
+      id: c.id,
+      name: c.company_name || c.name || c.email || 'Unknown',
+      company_name: c.company_name || c.name || '',
+      email: c.email || ''
+    }));
+
   const [newInvoice, setNewInvoice] = useState({
     invoice_number: '',
-    partner_id: '',
+    customer_id: '',
+    customer_name: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: '',
     payment_terms: 'net_30',
     subtotal: 0,
     tax_amount: 0,
-    total_amount: 0
+    total_amount: 0,
+    description: '',
+    notes: ''
   });
 
   useEffect(() => {
@@ -68,44 +97,56 @@ export default function AccountsReceivable() {
     }
 
     if (searchQuery) {
-      filtered = filtered.filter(inv =>
-        inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.partner_id?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = filtered.filter(inv => {
+        const customer = customers.find(c => c.id === inv.customer_id);
+        const customerName = customer?.name || customer?.company_name || inv.customer_id || '';
+        return inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          customerName.toLowerCase().includes(searchQuery.toLowerCase());
+      });
     }
 
     setFilteredInvoices(filtered);
   }, [customerInvoices, searchQuery, statusFilter]);
 
-  const handleCreateInvoice = () => {
+  const handleCreateInvoice = async () => {
+    const subtotal = parseFloat(newInvoice.subtotal) || 0;
+
     const invoiceData = {
-      partner_id: newInvoice.partner_id,
+      customer_id: newInvoice.customer_id,
       invoice_date: newInvoice.invoice_date,
       due_date: newInvoice.due_date,
-      payment_terms: newInvoice.payment_terms,
-      subtotal: parseFloat(newInvoice.subtotal),
-      tax_amount: parseFloat(newInvoice.tax_amount),
-      total_amount: parseFloat(newInvoice.total_amount),
-      amount_due: parseFloat(newInvoice.total_amount),
-      amount_paid: 0,
-      status: 'sent',
-      dunning_level: 0
+      notes: newInvoice.notes || '',
+      lines: [{
+        description: newInvoice.description || 'Invoice item',
+        quantity: 1,
+        unit_price: subtotal,
+        discount_amount: 0,
+      }],
     };
 
-    createCustomerInvoice(invoiceData);
-    setShowCreateModal(false);
+    try {
+      await createCustomerInvoice(invoiceData);
+      setShowCreateModal(false);
 
-    // Reset form
-    setNewInvoice({
-      invoice_number: '',
-      partner_id: '',
-      invoice_date: new Date().toISOString().split('T')[0],
-      due_date: '',
-      payment_terms: 'net_30',
-      subtotal: 0,
-      tax_amount: 0,
-      total_amount: 0
-    });
+      // Reset form
+      setNewInvoice({
+        invoice_number: '',
+        customer_id: '',
+        customer_name: '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: '',
+        payment_terms: 'net_30',
+        subtotal: 0,
+        tax_amount: 0,
+        total_amount: 0,
+        description: '',
+        notes: ''
+      });
+    } catch (err) {
+      const errorMsg = err.response?.data?.error?.message || err.response?.data?.error || err.message || 'Failed to create invoice';
+      console.error('Invoice creation error:', err.response?.data || err);
+      alert(`Error creating invoice: ${errorMsg}`);
+    }
   };
 
   const sendReminder = (invoiceId) => {
@@ -120,13 +161,31 @@ export default function AccountsReceivable() {
     alert(`Reminder sent for invoice ${invoice.invoice_number}. Dunning level increased.`);
   };
 
-  const markAsPaid = (invoiceId) => {
+  const markAsPaid = async (invoiceId) => {
     const invoice = customerInvoices.find(inv => inv.id === invoiceId);
-    updateCustomerInvoice(invoiceId, {
-      status: 'paid',
-      amount_paid: invoice.total_amount,
-      amount_due: 0
-    });
+    const amountDue = (invoice.total_amount || 0) - (invoice.amount_paid || 0);
+
+    if (amountDue <= 0) {
+      alert('Invoice is already paid');
+      return;
+    }
+
+    try {
+      // Use the recordPayment API to mark as paid
+      const { salesService } = await import('@/api/services/sales');
+      await salesService.recordPayment(invoiceId, {
+        amount: amountDue,
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: 'Marked as paid'
+      });
+
+      // Refresh data from backend
+      await refreshData();
+    } catch (err) {
+      const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to record payment';
+      console.error('Mark as paid error:', err.response?.data || err);
+      alert(`Error marking invoice as paid: ${errorMsg}`);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -148,10 +207,21 @@ export default function AccountsReceivable() {
     return inv;
   });
 
+  // Calculate average days to pay from paid invoices
+  const paidInvoices = invoicesWithStatus.filter(inv => inv.status === 'paid' && inv.invoice_date && inv.updated_at);
+  const avgDaysToPay = paidInvoices.length > 0
+    ? Math.round(paidInvoices.reduce((sum, inv) => {
+        const invoiceDate = new Date(inv.invoice_date);
+        const paidDate = new Date(inv.updated_at);
+        const daysToPay = Math.max(0, Math.floor((paidDate - invoiceDate) / (1000 * 60 * 60 * 24)));
+        return sum + daysToPay;
+      }, 0) / paidInvoices.length)
+    : 0;
+
   const metrics = {
     totalReceivable: invoicesWithStatus.reduce((sum, inv) => sum + (inv.amount_due || 0), 0),
     overdueAmount: invoicesWithStatus.filter(inv => inv.status === 'overdue').reduce((sum, inv) => sum + (inv.amount_due || 0), 0),
-    avgDaysToPay: 35,
+    avgDaysToPay,
     overdueInvoices: invoicesWithStatus.filter(inv => inv.status === 'overdue').length
   };
 
@@ -226,7 +296,7 @@ export default function AccountsReceivable() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 ${agingData.length > 0 ? 'lg:grid-cols-3' : ''} gap-6`}>
 
         {/* Aging Report */}
         {agingData.length > 0 && (
@@ -260,7 +330,7 @@ export default function AccountsReceivable() {
         )}
 
         {/* Invoices List */}
-        <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <Card className={`${agingData.length > 0 ? 'lg:col-span-2' : ''} bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg`}>
           <CardHeader className="border-b border-slate-100">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -327,24 +397,27 @@ export default function AccountsReceivable() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvoices.map((invoice) => (
+                    {filteredInvoices.map((invoice) => {
+                      const customer = customers.find(c => c.id === invoice.customer_id);
+                      const customerName = customer?.name || customer?.company_name || invoice.customer_id || '-';
+                      return (
                       <TableRow key={invoice.id} className="hover:bg-slate-50">
                         <TableCell className="font-mono text-sm">{invoice.invoice_number}</TableCell>
-                        <TableCell className="font-medium">{invoice.partner_id}</TableCell>
+                        <TableCell className="font-medium">{customerName}</TableCell>
                         <TableCell className="text-sm">
-                          {invoice.invoice_date ? format(new Date(invoice.invoice_date), 'MMM dd, yyyy') : '-'}
+                          {invoice.invoice_date ? format(new Date(invoice.invoice_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {invoice.due_date ? format(new Date(invoice.due_date), 'MMM dd, yyyy') : '-'}
+                          {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
                         <TableCell className="font-semibold">${(invoice.total_amount || 0).toLocaleString()}</TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(invoice.status)}>{invoice.status}</Badge>
+                          <Badge className={getStatusColor(invoice.status)}>{t(invoice.status) || invoice.status}</Badge>
                         </TableCell>
                         <TableCell>
                           {invoice.dunning_level > 0 && (
                             <Badge variant="outline" className="bg-orange-50 text-orange-700">
-                              Level {invoice.dunning_level}
+                              {invoice.dunning_level}
                             </Badge>
                           )}
                         </TableCell>
@@ -363,7 +436,8 @@ export default function AccountsReceivable() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -391,12 +465,28 @@ export default function AccountsReceivable() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
-                <Input
-                  placeholder={t('customer_name_or_email') || 'Customer name or email'}
-                  value={newInvoice.partner_id}
-                  onChange={(e) => setNewInvoice({...newInvoice, partner_id: e.target.value})}
-                  required
-                />
+                <Select
+                  value={newInvoice.customer_id}
+                  onValueChange={(value) => {
+                    const customer = customers.find(c => c.id === value);
+                    setNewInvoice({
+                      ...newInvoice,
+                      customer_id: value,
+                      customer_name: customer?.name || customer?.company_name || ''
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingCustomers ? t('loading') : t('select_customer')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name || customer.company_name || customer.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -419,6 +509,16 @@ export default function AccountsReceivable() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">{t('description')} *</label>
+              <Input
+                placeholder={t('description')}
+                value={newInvoice.description}
+                onChange={(e) => setNewInvoice({...newInvoice, description: e.target.value})}
+                required
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -457,6 +557,15 @@ export default function AccountsReceivable() {
               </div>
             </div>
 
+            <div>
+              <label className="text-sm font-medium mb-1 block">{t('notes')}</label>
+              <Input
+                placeholder={t('optional_notes') || 'Optional notes'}
+                value={newInvoice.notes}
+                onChange={(e) => setNewInvoice({...newInvoice, notes: e.target.value})}
+              />
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
                 {t('cancel')}
@@ -464,7 +573,7 @@ export default function AccountsReceivable() {
               <Button
                 onClick={handleCreateInvoice}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={!newInvoice.partner_id || !newInvoice.due_date}
+                disabled={!newInvoice.customer_id || !newInvoice.due_date || !newInvoice.description}
               >
                 {t('create_invoice') || 'Create Invoice'}
               </Button>

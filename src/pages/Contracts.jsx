@@ -6,12 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, FileText, AlertTriangle, CheckCircle, Clock, Brain, Bell, Target, Lightbulb, Eye, Edit2, Trash2, Building2 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
+import { ru, uz } from 'date-fns/locale';
 import { analyzeContracts } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+
+const getDateLocale = (lang) => {
+  switch (lang) {
+    case 'ru': return ru;
+    case 'uz': return uz;
+    default: return undefined;
+  }
+};
 import { usePermissions } from "@/hooks/usePermissions";
+import { contactsService } from "@/api/services";
 
 export default function Contracts() {
   const { language } = useLanguage();
@@ -37,18 +47,41 @@ export default function Contracts() {
   const [renewalData, setRenewalData] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [vendors, setVendors] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
 
   const [newContract, setNewContract] = useState({
     contract_number: '',
     contract_name: '',
-    contract_type: 'customer',
-    party_name: '',
+    contract_type: 'vendor',
+    vendor_id: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
     contract_value: 0,
     billing_cycle: 'monthly',
     auto_renew: false
   });
+
+  // Load vendors when create modal opens
+  useEffect(() => {
+    if (showCreateModal && vendors.length === 0) {
+      setVendorsLoading(true);
+      contactsService.list()
+        .then(data => {
+          // Filter to only vendors
+          const vendorContacts = (data || []).filter(c =>
+            c.contact_type === 'vendor' || c.type === 'vendor' || c.type === 'both'
+          );
+          setVendors(vendorContacts);
+        })
+        .catch(err => {
+          console.error('Failed to load vendors:', err);
+        })
+        .finally(() => {
+          setVendorsLoading(false);
+        });
+    }
+  }, [showCreateModal, vendors.length]);
 
   useEffect(() => {
     let filtered = contracts.map(contract => {
@@ -82,11 +115,31 @@ export default function Contracts() {
   const handleCreateContract = async () => {
     setIsSubmitting(true);
     try {
+      // Get selected vendor info for display purposes
+      const selectedVendor = vendors.find(v => v.id === newContract.vendor_id);
+
+      // Map billing_cycle to backend contract_type
+      // Backend expects: fixed, annual, monthly, project
+      const billingToContractType = {
+        'monthly': 'monthly',
+        'quarterly': 'fixed',
+        'annually': 'annual',
+        'one_time': 'fixed',
+      };
+
       const contractData = {
-        ...newContract,
-        contract_number: newContract.contract_number || `CNT-${Date.now()}`,
-        contract_value: parseFloat(newContract.contract_value),
-        status: 'active'
+        title: newContract.contract_name,
+        vendor_id: newContract.vendor_id,
+        contract_type: billingToContractType[newContract.billing_cycle] || 'fixed',
+        start_date: newContract.start_date,
+        end_date: newContract.end_date || undefined,
+        value: parseFloat(newContract.contract_value) || 0,
+        auto_renewal: newContract.auto_renew,
+        // Keep frontend fields for UI display
+        contract_name: newContract.contract_name,
+        party_name: selectedVendor?.company_name || selectedVendor?.name || '',
+        contract_value: parseFloat(newContract.contract_value) || 0,
+        billing_cycle: newContract.billing_cycle,
       };
 
       await createContract(contractData);
@@ -95,8 +148,8 @@ export default function Contracts() {
       setNewContract({
         contract_number: '',
         contract_name: '',
-        contract_type: 'customer',
-        party_name: '',
+        contract_type: 'vendor',
+        vendor_id: '',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
         contract_value: 0,
@@ -539,13 +592,13 @@ Provide only analysis results based on the numbers and specific contract data, n
                             <div>
                               <span className="text-slate-500">{t('start')}: </span>
                               <span className="font-medium">
-                                {contract.start_date ? format(new Date(contract.start_date), 'MMM dd, yyyy') : '-'}
+                                {contract.start_date ? format(new Date(contract.start_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
                               </span>
                             </div>
                             <div>
                               <span className="text-slate-500">{t('end')}: </span>
                               <span className="font-medium">
-                                {contract.end_date ? format(new Date(contract.end_date), 'MMM dd, yyyy') : '-'}
+                                {contract.end_date ? format(new Date(contract.end_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
                               </span>
                             </div>
                             {contract.daysUntilExpiry !== undefined && contract.daysUntilExpiry >= 0 && contract.daysUntilExpiry <= 30 && (
@@ -636,13 +689,25 @@ Provide only analysis results based on the numbers and specific contract data, n
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">{t('party_name')} *</label>
-                <Input
-                  placeholder={t('party_name_placeholder')}
-                  value={newContract.party_name}
-                  onChange={(e) => setNewContract({...newContract, party_name: e.target.value})}
-                  required
-                />
+                <label className="text-sm font-medium mb-1 block">{t('vendor')} *</label>
+                <Select
+                  value={newContract.vendor_id}
+                  onValueChange={(value) => setNewContract({...newContract, vendor_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={vendorsLoading ? t('loading') : t('select_vendor')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map(vendor => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-orange-500" />
+                          {vendor.company_name || vendor.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -713,7 +778,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                 <Button
                   onClick={handleCreateContract}
                   className="flex-1 bg-gradient-to-r from-rose-600 to-pink-600"
-                  disabled={!newContract.contract_name || !newContract.party_name || isSubmitting}
+                  disabled={!newContract.contract_name || !newContract.vendor_id || isSubmitting}
                 >
                   {isSubmitting ? t('creating') : t('create_contract')}
                 </Button>
@@ -732,9 +797,9 @@ Provide only analysis results based on the numbers and specific contract data, n
               <div className="space-y-6 py-4">
                 <div className="flex items-center gap-3">
                   <h3 className="text-xl font-bold">{selectedContract.contract_name}</h3>
-                  <Badge className={getStatusColor(selectedContract.status)}>{selectedContract.status}</Badge>
+                  <Badge className={getStatusColor(selectedContract.status)}>{t(selectedContract.status)}</Badge>
                   <Badge className={getTypeColor(selectedContract.contract_type)} variant="outline">
-                    {selectedContract.contract_type}
+                    {t(selectedContract.contract_type) || selectedContract.contract_type}
                   </Badge>
                 </div>
 
@@ -761,13 +826,13 @@ Provide only analysis results based on the numbers and specific contract data, n
                     <div>
                       <p className="text-sm text-slate-500">{t('start_date')}</p>
                       <p className="font-medium">
-                        {selectedContract.start_date ? format(new Date(selectedContract.start_date), 'MMM dd, yyyy') : '-'}
+                        {selectedContract.start_date ? format(new Date(selectedContract.start_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">{t('end_date')}</p>
                       <p className="font-medium">
-                        {selectedContract.end_date ? format(new Date(selectedContract.end_date), 'MMM dd, yyyy') : '-'}
+                        {selectedContract.end_date ? format(new Date(selectedContract.end_date), 'MMM dd, yyyy', { locale: getDateLocale(language) }) : '-'}
                       </p>
                     </div>
                     <div>

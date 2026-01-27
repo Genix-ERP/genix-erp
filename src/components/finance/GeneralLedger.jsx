@@ -4,15 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { financeService } from "@/api/services";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -21,6 +23,7 @@ export default function GeneralLedger() {
     journalEntries,
     createJournalEntry,
     getJournalLines,
+    accounts,
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
@@ -31,18 +34,31 @@ export default function GeneralLedger() {
   const [selectedJournalLines, setSelectedJournalLines] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [journals, setJournals] = useState([]);
 
   const [newEntry, setNewEntry] = useState({
-    journal_number: '',
-    company_id: 'default',
-    posting_date: new Date().toISOString().split('T')[0],
+    journal_id: '',
+    entry_date: new Date().toISOString().split('T')[0],
     description: '',
-    journal_type: 'manual',
-    status: 'draft',
-    total_debit: 0,
-    total_credit: 0,
-    currency: 'USD'
+    reference: '',
+    lines: [
+      { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+      { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
+    ]
   });
+
+  // Fetch journals on component mount
+  useEffect(() => {
+    const fetchJournals = async () => {
+      try {
+        const data = await financeService.listJournals();
+        setJournals(data || []);
+      } catch (err) {
+        console.error('Failed to fetch journals:', err);
+      }
+    };
+    fetchJournals();
+  }, []);
 
   useEffect(() => {
     setFilteredEntries(journalEntries);
@@ -65,28 +81,55 @@ export default function GeneralLedger() {
     setSelectedJournalLines(lines);
   };
 
-  const handleCreateEntry = () => {
+  const handleCreateEntry = async () => {
     setIsSaving(true);
     try {
+      // Filter out empty lines and validate
+      const validLines = newEntry.lines.filter(line =>
+        line.account_id && (line.debit_amount > 0 || line.credit_amount > 0)
+      );
+
+      if (validLines.length < 2) {
+        alert(t('minimum_two_lines_required'));
+        setIsSaving(false);
+        return;
+      }
+
+      // Check if balanced
+      const totalDebit = validLines.reduce((sum, line) => sum + parseFloat(line.debit_amount || 0), 0);
+      const totalCredit = validLines.reduce((sum, line) => sum + parseFloat(line.credit_amount || 0), 0);
+
+      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        alert(t('debits_must_equal_credits'));
+        setIsSaving(false);
+        return;
+      }
+
       const entryData = {
-        ...newEntry,
-        total_debit: parseFloat(newEntry.total_debit) || 0,
-        total_credit: parseFloat(newEntry.total_credit) || 0
+        journal_id: newEntry.journal_id,
+        entry_date: newEntry.entry_date,
+        description: newEntry.description,
+        reference: newEntry.reference,
+        lines: validLines.map(line => ({
+          account_id: line.account_id,
+          description: line.description || '',
+          debit_amount: parseFloat(line.debit_amount) || 0,
+          credit_amount: parseFloat(line.credit_amount) || 0
+        }))
       };
 
-      createJournalEntry(entryData);
+      await createJournalEntry(entryData);
 
       // Reset form and close modal
       setNewEntry({
-        journal_number: '',
-        company_id: 'default',
-        posting_date: new Date().toISOString().split('T')[0],
+        journal_id: '',
+        entry_date: new Date().toISOString().split('T')[0],
         description: '',
-        journal_type: 'manual',
-        status: 'draft',
-        total_debit: 0,
-        total_credit: 0,
-        currency: 'USD'
+        reference: '',
+        lines: [
+          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
+        ]
       });
 
       setShowCreateModal(false);
@@ -96,6 +139,35 @@ export default function GeneralLedger() {
       setIsSaving(false);
     }
   };
+
+  const addLine = () => {
+    setNewEntry(prev => ({
+      ...prev,
+      lines: [...prev.lines, { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }]
+    }));
+  };
+
+  const removeLine = (index) => {
+    if (newEntry.lines.length <= 2) return; // Keep minimum 2 lines
+    setNewEntry(prev => ({
+      ...prev,
+      lines: prev.lines.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateLine = (index, field, value) => {
+    setNewEntry(prev => ({
+      ...prev,
+      lines: prev.lines.map((line, i) =>
+        i === index ? { ...line, [field]: value } : line
+      )
+    }));
+  };
+
+  // Calculate totals for display
+  const totalDebit = newEntry.lines.reduce((sum, line) => sum + parseFloat(line.debit_amount || 0), 0);
+  const totalCredit = newEntry.lines.reduce((sum, line) => sum + parseFloat(line.credit_amount || 0), 0);
+  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
   const getStatusColor = (status) => {
     const colors = {
@@ -349,7 +421,7 @@ export default function GeneralLedger() {
                   {t('select_entry_details')}
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Click on any entry from the list
+                  {t('click_entry_from_list')}
                 </p>
               </div>
             )}
@@ -359,24 +431,37 @@ export default function GeneralLedger() {
 
       {/* Create Journal Entry Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <FileText className="w-5 h-5 text-[var(--genix-blue)]" />
               {t('create')} {t('journal_entries')}
             </DialogTitle>
+            <DialogDescription>
+              {t('create_journal_entry_description')}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('journal')} # <span className="text-slate-400">({t('optional')})</span>
+                  {t('journal')} *
                 </label>
-                <Input
-                  placeholder={t('auto_generated_if_empty')}
-                  value={newEntry.journal_number}
-                  onChange={(e) => setNewEntry({...newEntry, journal_number: e.target.value})}
-                />
+                <Select
+                  value={newEntry.journal_id}
+                  onValueChange={(value) => setNewEntry({...newEntry, journal_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_journal')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {journals.map((journal) => (
+                      <SelectItem key={journal.id} value={journal.id}>
+                        {journal.code} - {journal.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
@@ -384,55 +469,159 @@ export default function GeneralLedger() {
                 </label>
                 <Input
                   type="date"
-                  value={newEntry.posting_date}
-                  onChange={(e) => setNewEntry({...newEntry, posting_date: e.target.value})}
+                  value={newEntry.entry_date}
+                  onChange={(e) => setNewEntry({...newEntry, entry_date: e.target.value})}
                   required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('reference')}
+                </label>
+                <Input
+                  placeholder={t('reference')}
+                  value={newEntry.reference}
+                  onChange={(e) => setNewEntry({...newEntry, reference: e.target.value})}
                 />
               </div>
             </div>
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('description')} *
+                {t('description')}
               </label>
               <Input
                 placeholder={t('enter_journal_description')}
                 value={newEntry.description}
                 onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
-                required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('total')} {t('debit')} *
+            {/* Journal Lines */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-slate-700">
+                  {t('journal_lines')} *
                 </label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={newEntry.total_debit}
-                  onChange={(e) => setNewEntry({...newEntry, total_debit: e.target.value})}
-                  required
-                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addLine}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {t('add_line')}
+                </Button>
               </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('total')} {t('credit')} *
-                </label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={newEntry.total_credit}
-                  onChange={(e) => setNewEntry({...newEntry, total_credit: e.target.value})}
-                  required
-                />
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[35%]">{t('account')}</TableHead>
+                      <TableHead className="w-[25%]">{t('description')}</TableHead>
+                      <TableHead className="w-[15%] text-right">{t('debit')}</TableHead>
+                      <TableHead className="w-[15%] text-right">{t('credit')}</TableHead>
+                      <TableHead className="w-[10%]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {newEntry.lines.map((line, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="p-2">
+                          <Select
+                            value={line.account_id}
+                            onValueChange={(value) => updateLine(index, 'account_id', value)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder={t('select_account')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {accounts.map((account) => (
+                                <SelectItem key={account.id} value={account.id}>
+                                  {account.code} - {account.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="p-2">
+                          <Input
+                            className="h-9"
+                            placeholder={t('description')}
+                            value={line.description}
+                            onChange={(e) => updateLine(index, 'description', e.target.value)}
+                          />
+                        </TableCell>
+                        <TableCell className="p-2">
+                          <Input
+                            className="h-9 text-right"
+                            type="number"
+                            placeholder="0.00"
+                            value={line.debit_amount || ''}
+                            onChange={(e) => {
+                              updateLine(index, 'debit_amount', e.target.value);
+                              if (e.target.value > 0) updateLine(index, 'credit_amount', 0);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="p-2">
+                          <Input
+                            className="h-9 text-right"
+                            type="number"
+                            placeholder="0.00"
+                            value={line.credit_amount || ''}
+                            onChange={(e) => {
+                              updateLine(index, 'credit_amount', e.target.value);
+                              if (e.target.value > 0) updateLine(index, 'debit_amount', 0);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell className="p-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeLine(index)}
+                            disabled={newEntry.lines.length <= 2}
+                            className="h-9 w-9 p-0"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Totals Row */}
+                    <TableRow className="bg-slate-50 font-medium">
+                      <TableCell colSpan={2} className="text-right">
+                        {t('total')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
             </div>
 
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-slate-600">
-                <strong>{t('note')}:</strong> {t('debits_must_equal_credits')}. {t('add_detailed_lines_later')}.
+            {/* Balance indicator */}
+            <div className={`p-3 rounded-lg ${isBalanced ? 'bg-green-50' : 'bg-red-50'}`}>
+              <p className={`text-sm ${isBalanced ? 'text-green-700' : 'text-red-700'}`}>
+                {isBalanced ? (
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    {t('entry_is_balanced')}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {t('debits_must_equal_credits')} ({t('difference')}: {Math.abs(totalDebit - totalCredit).toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                  </span>
+                )}
               </p>
             </div>
 
@@ -448,7 +637,7 @@ export default function GeneralLedger() {
               <Button
                 onClick={handleCreateEntry}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newEntry.description || !newEntry.posting_date}
+                disabled={isSaving || !newEntry.journal_id || !newEntry.entry_date || !isBalanced}
               >
                 {isSaving ? t('saving') : t('create')}
               </Button>

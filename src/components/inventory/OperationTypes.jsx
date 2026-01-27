@@ -28,7 +28,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
 
-// Icon mapping for operation types
+// Icon mapping for operation types (by type field: receipt, delivery, internal, pos)
 const getOperationIcon = (type) => {
   switch (type) {
     case 'receipt':
@@ -41,6 +41,20 @@ const getOperationIcon = (type) => {
       return <Store className="w-5 h-5" />;
     default:
       return <Package className="w-5 h-5" />;
+  }
+};
+
+// Icon mapping by operation_type (incoming, outgoing, internal)
+const getOperationDirectionIcon = (operationType, className = "w-4 h-4") => {
+  switch (operationType) {
+    case 'incoming':
+      return <PackagePlus className={className} />;
+    case 'outgoing':
+      return <Truck className={className} />;
+    case 'internal':
+      return <ArrowRightLeft className={className} />;
+    default:
+      return <Package className={className} />;
   }
 };
 
@@ -85,6 +99,7 @@ export default function OperationTypes() {
     warehouse_id: '',
     code: '',
     name: '',
+    operation_type: 'internal', // incoming, outgoing, internal
     type: 'custom',
     color: '#6366f1',
     show_operations: true,
@@ -141,6 +156,7 @@ export default function OperationTypes() {
       warehouse_id: warehouses[0]?.id || '',
       code: '',
       name: '',
+      operation_type: 'internal', // incoming, outgoing, internal
       type: 'custom',
       color: '#6366f1',
       show_operations: true,
@@ -473,6 +489,22 @@ export default function OperationTypes() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('operation_direction') || 'Operatsiya yo\'nalishi'} *
+              </label>
+              <Select value={formData.operation_type} onValueChange={(v) => setFormData({ ...formData, operation_type: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="incoming">{t('incoming') || 'Kiruvchi (Receipts)'}</SelectItem>
+                  <SelectItem value="outgoing">{t('outgoing') || 'Chiquvchi (Deliveries)'}</SelectItem>
+                  <SelectItem value="internal">{t('internal') || 'Ichki (Transfers)'}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

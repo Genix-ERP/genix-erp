@@ -149,8 +149,8 @@ export function SalesProvider({ children }) {
     setInvoices(prev => prev.filter(inv => inv.id !== id));
   }, []);
 
-  const recordPayment = useCallback(async (invoiceId, amount, method, date) => {
-    const result = await salesService.recordPayment(invoiceId, { amount, method, date });
+  const recordPayment = useCallback(async (invoiceId, amount, _method, date) => {
+    const result = await salesService.recordPayment(invoiceId, { amount, payment_date: date });
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? result : inv));
     return result;
   }, []);

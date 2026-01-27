@@ -16,6 +16,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { contactsService } from "@/api/services";
 
 export default function Payments() {
   const { language } = useLanguage();
@@ -37,6 +38,8 @@ export default function Payments() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
 
   const [newPayment, setNewPayment] = useState({
     payment_type: 'outbound',
@@ -46,10 +49,25 @@ export default function Payments() {
     currency: 'USD',
     reference: '',
     description: '',
-    party_type: 'vendor',
-    party_name: '',
-    account_id: '',
+    contact_id: '',
   });
+
+  // Load contacts when modal opens
+  useEffect(() => {
+    if (showCreateModal && contacts.length === 0) {
+      setContactsLoading(true);
+      contactsService.list()
+        .then(data => {
+          setContacts(data || []);
+        })
+        .catch(err => {
+          console.error('Failed to load contacts:', err);
+        })
+        .finally(() => {
+          setContactsLoading(false);
+        });
+    }
+  }, [showCreateModal, contacts.length]);
 
   // Summary calculations
   const summaryStats = {
@@ -85,15 +103,30 @@ export default function Payments() {
     setFilteredPayments(filtered);
   }, [searchQuery, typeFilter, statusFilter, payments]);
 
-  const handleCreatePayment = () => {
+  const handleCreatePayment = async () => {
     setIsSaving(true);
     try {
+      // Map frontend payment_type to backend type
+      // inbound (money received) = receipt, outbound (money paid) = payment
+      const backendType = newPayment.payment_type === 'inbound' ? 'receipt' : 'payment';
+
+      // Get selected contact info for display purposes
+      const selectedContact = contacts.find(c => c.id === newPayment.contact_id);
+
       const paymentData = {
-        ...newPayment,
-        amount: parseFloat(newPayment.amount) || 0
+        type: backendType,
+        contact_id: newPayment.contact_id,
+        payment_date: newPayment.payment_date,
+        amount: parseFloat(newPayment.amount) || 0,
+        reference: newPayment.reference,
+        notes: newPayment.description,
+        // Keep frontend fields for UI display
+        payment_type: newPayment.payment_type,
+        payment_method: newPayment.payment_method,
+        party_name: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
       };
 
-      createPayment(paymentData);
+      await createPayment(paymentData);
 
       setNewPayment({
         payment_type: 'outbound',
@@ -103,9 +136,7 @@ export default function Payments() {
         currency: 'USD',
         reference: '',
         description: '',
-        party_type: 'vendor',
-        party_name: '',
-        account_id: '',
+        contact_id: '',
       });
 
       setShowCreateModal(false);
@@ -355,11 +386,11 @@ export default function Payments() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPayments.map(payment => {
+                  {filteredPayments.map((payment, index) => {
                     const TypeIcon = getPaymentTypeIcon(payment.payment_type);
                     return (
                       <TableRow
-                        key={payment.id}
+                        key={payment.id || `payment-${index}`}
                         className="hover:bg-blue-50/50 transition-colors"
                       >
                         <TableCell>
@@ -491,37 +522,32 @@ export default function Payments() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('party_type')}
-                </label>
-                <Select
-                  value={newPayment.party_type}
-                  onValueChange={(value) => setNewPayment({...newPayment, party_type: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">{t('customer')}</SelectItem>
-                    <SelectItem value="vendor">{t('vendor')}</SelectItem>
-                    <SelectItem value="employee">{t('employee')}</SelectItem>
-                    <SelectItem value="other">{t('other')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('party_name')} *
-                </label>
-                <Input
-                  placeholder={t('enter_name')}
-                  value={newPayment.party_name}
-                  onChange={(e) => setNewPayment({...newPayment, party_name: e.target.value})}
-                  required
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('contact')} *
+              </label>
+              <Select
+                value={newPayment.contact_id}
+                onValueChange={(value) => setNewPayment({...newPayment, contact_id: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={contactsLoading ? t('loading') : t('select_contact')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {contacts.map(contact => (
+                    <SelectItem key={contact.id} value={contact.id}>
+                      <div className="flex items-center gap-2">
+                        {contact.contact_type === 'customer' ? (
+                          <User className="w-4 h-4 text-blue-500" />
+                        ) : (
+                          <Building2 className="w-4 h-4 text-orange-500" />
+                        )}
+                        {contact.company_name || contact.contact_name || contact.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -619,7 +645,7 @@ export default function Payments() {
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newPayment.amount || !newPayment.party_name || !newPayment.payment_date}
+                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date}
               >
                 {isSaving ? t('saving') : t('create_payment')}
               </Button>
