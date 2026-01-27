@@ -18,8 +18,8 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidUpdate(prevProps) {
-    // Reset error state when children change (e.g., navigation to different page)
-    if (this.state.hasError && this.props.children !== prevProps.children) {
+    // Reset error state when location changes (e.g., navigation to different page)
+    if (this.state.hasError && this.props.location !== prevProps.location) {
       this.setState({ hasError: false, error: null, errorInfo: null });
     }
   }

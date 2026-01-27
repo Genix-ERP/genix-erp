@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
@@ -28,6 +28,7 @@ import {
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
+import { inventoryService } from '@/api/services/inventory';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -160,9 +161,10 @@ export default function SalesOrders() {
     customer_name: '',
     customer_id: '',
     order_date: new Date().toISOString().split('T')[0],
-    delivery_date: '',
-    lines: [{ product_name: '', quantity: 1, unit_price: 0, description: '' }],
+    delivery_date: new Date().toISOString().split('T')[0], // Default to today
+    lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
+    tax_percent: 0,
     tax_amount: 0,
     shipping_cost: 0,
     total_amount: 0
@@ -171,6 +173,52 @@ export default function SalesOrders() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
+
+  // Products list for selection
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  // Track if delivery date was manually set (for new order)
+  const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
+  // Track if delivery date was manually set (for editing order)
+  const [isEditDeliveryDateManual, setIsEditDeliveryDateManual] = useState(false);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const data = await inventoryService.listProducts({ limit: 1000 });
+        setProducts(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // Calculate delivery date based on product lead times
+  const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
+    const baseDate = orderDate ? new Date(orderDate) : new Date();
+
+    // Get max lead time from all products in order lines
+    const maxLeadTime = orderLines.reduce((max, line) => {
+      const leadTime = line.product?.lead_time_days || line.lead_time_days || 0;
+      return Math.max(max, leadTime);
+    }, 0);
+
+    // If no lead times, return today's date
+    if (maxLeadTime === 0) {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // Add lead time days to base date
+    const deliveryDate = new Date(baseDate);
+    deliveryDate.setDate(deliveryDate.getDate() + maxLeadTime);
+    return deliveryDate.toISOString().split('T')[0];
+  }, []);
 
   useEffect(() => {
     let filtered = salesOrders;
@@ -192,61 +240,156 @@ export default function SalesOrders() {
     return subtotal;
   };
 
-  const handleAddLine = (order, setOrder) => {
+  const handleAddLine = (order, setOrder, isManualDelivery, setManualDelivery) => {
+    const newLines = [...order.lines, { product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }];
     setOrder({
       ...order,
-      lines: [...order.lines, { product_name: '', quantity: 1, unit_price: 0, description: '' }]
+      lines: newLines
     });
+    // Note: Adding empty line doesn't change delivery date
   };
 
-  const handleRemoveLine = (order, setOrder, index) => {
+  const handleRemoveLine = (order, setOrder, index, isManualDelivery) => {
     const newLines = order.lines.filter((_, i) => i !== index);
-    setOrder({ ...order, lines: newLines.length > 0 ? newLines : [{ product_name: '', quantity: 1, unit_price: 0, description: '' }] });
+    const updatedLines = newLines.length > 0 ? newLines : [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }];
+
+    // Recalculate delivery date if not manually set
+    if (!isManualDelivery) {
+      const newDeliveryDate = calculateDeliveryDate(updatedLines, order.order_date);
+      setOrder({ ...order, lines: updatedLines, delivery_date: newDeliveryDate });
+    } else {
+      setOrder({ ...order, lines: updatedLines });
+    }
   };
 
-  const handleLineChange = (order, setOrder, index, field, value) => {
+  const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
     const newLines = [...order.lines];
     newLines[index] = { ...newLines[index], [field]: value };
+
+    // If changing product selection, also update lead_time_days and recalculate delivery date
+    if (field === 'product_id' && value) {
+      const selectedProduct = products.find(p => p.id === value);
+      if (selectedProduct) {
+        newLines[index] = {
+          ...newLines[index],
+          product_name: selectedProduct.name,
+          product_id: selectedProduct.id,
+          unit_price: selectedProduct.sale_price || selectedProduct.price || 0,
+          lead_time_days: selectedProduct.lead_time_days || 0,
+          product: selectedProduct
+        };
+
+        // Recalculate delivery date if not manually set
+        if (!isManualDelivery) {
+          const newDeliveryDate = calculateDeliveryDate(newLines, order.order_date);
+          setOrder({ ...order, lines: newLines, delivery_date: newDeliveryDate });
+          return;
+        }
+      }
+    }
+
     setOrder({ ...order, lines: newLines });
   };
 
-  const handleCreateOrder = () => {
+  const handleCreateOrder = async () => {
     const subtotal = calculateOrderTotals(newOrder.lines);
-    const taxAmount = parseFloat(newOrder.tax_amount) || 0;
+    const taxPercent = parseFloat(newOrder.tax_percent) || 0;
+    const taxAmount = subtotal * (taxPercent / 100);
     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
     const total = subtotal + taxAmount + shippingCost;
 
-    createSalesOrder({
-      ...newOrder,
-      order_number: newOrder.order_number || `SO-${Date.now()}`,
+    // Filter and format lines - only include lines with valid product_id
+    const validLines = newOrder.lines
+      .filter(line => line.product_id && line.product_id.trim() !== '')
+      .map(line => ({
+        product_id: line.product_id,
+        description: line.description || line.product_name || '',
+        quantity: parseFloat(line.quantity) || 1,
+        unit_price: parseFloat(line.unit_price) || 0,
+      }));
+
+    // Check if customer_id is a valid UUID (backend requires UUID format)
+    const isValidUUID = (str) => {
+      if (!str) return false;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(str);
+    };
+
+    const orderData = {
+      order_number: newOrder.order_number || '',
+      customer_name: newOrder.customer_name,
+      // Only send customer_id if it's a valid UUID, otherwise backend will use customer_name
+      ...(isValidUUID(newOrder.customer_id) && { customer_id: newOrder.customer_id }),
+      order_date: newOrder.order_date,
+      delivery_date: newOrder.delivery_date,
+      expected_date: newOrder.delivery_date, // Backend uses expected_date
       subtotal,
       tax_amount: taxAmount,
+      shipping_amount: shippingCost,
       shipping_cost: shippingCost,
       total_amount: total,
-      status: 'quotation',
-      payment_status: 'unpaid'
-    });
-    setShowCreateModal(false);
-    resetOrderForm();
-    addAuditLog('create', 'new', newOrder.order_number || `SO-${Date.now()}`);
+      status: 'draft',
+      payment_status: 'unpaid',
+      lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
+    };
+
+    console.log('Creating sales order with data:', orderData);
+
+    try {
+      await createSalesOrder(orderData);
+      setShowCreateModal(false);
+      resetOrderForm();
+      addAuditLog('create', 'new', orderData.order_number || `SO-${Date.now()}`);
+    } catch (error) {
+      console.error('Error creating sales order:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Order data sent:', orderData);
+      // You could add a toast notification here
+    }
   };
 
-  const handleEditOrder = () => {
+  const handleEditOrder = async () => {
     const subtotal = calculateOrderTotals(editingOrder.lines);
-    const taxAmount = parseFloat(editingOrder.tax_amount) || 0;
+    const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
+    const taxAmount = subtotal * (taxPercent / 100);
     const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
     const total = subtotal + taxAmount + shippingCost;
 
-    updateSalesOrder(editingOrder.id, {
-      ...editingOrder,
-      subtotal,
-      tax_amount: taxAmount,
-      shipping_cost: shippingCost,
-      total_amount: total
-    });
-    setShowEditModal(false);
-    setEditingOrder(null);
-    addAuditLog('update', editingOrder.id, editingOrder.order_number);
+    // Filter and format lines - only include lines with valid product_id
+    const validLines = editingOrder.lines
+      .filter(line => line.product_id && line.product_id.trim() !== '')
+      .map(line => ({
+        product_id: line.product_id,
+        description: line.description || line.product_name || '',
+        quantity: parseFloat(line.quantity) || 1,
+        unit_price: parseFloat(line.unit_price) || 0,
+      }));
+
+    // Check if customer_id is a valid UUID
+    const isValidUUID = (str) => {
+      if (!str) return false;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(str);
+    };
+
+    try {
+      await updateSalesOrder(editingOrder.id, {
+        customer_name: editingOrder.customer_name,
+        ...(isValidUUID(editingOrder.customer_id) && { customer_id: editingOrder.customer_id }),
+        delivery_date: editingOrder.delivery_date,
+        expected_date: editingOrder.delivery_date,
+        subtotal,
+        tax_amount: taxAmount,
+        shipping_amount: shippingCost,
+        total_amount: total,
+        lines: validLines.length > 0 ? validLines : undefined,
+      });
+      setShowEditModal(false);
+      setEditingOrder(null);
+      addAuditLog('update', editingOrder.id, editingOrder.order_number);
+    } catch (error) {
+      console.error('Error updating sales order:', error);
+    }
   };
 
   const handleDeleteOrder = () => {
@@ -274,13 +417,15 @@ export default function SalesOrders() {
       customer_name: '',
       customer_id: '',
       order_date: new Date().toISOString().split('T')[0],
-      delivery_date: '',
-      lines: [{ product_name: '', quantity: 1, unit_price: 0, description: '' }],
+      delivery_date: new Date().toISOString().split('T')[0], // Default to today
+      lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
+      tax_percent: 0,
       tax_amount: 0,
       shipping_cost: 0,
       total_amount: 0
     });
+    setIsDeliveryDateManual(false);
   };
 
   const handleUpdateStatus = async (orderId, newStatus) => {
@@ -796,11 +941,14 @@ export default function SalesOrders() {
                   />
                 </div>
                 <div>
-                  <Label>{t('delivery_date')}</Label>
+                  <Label>{t('delivery_date')} {!isDeliveryDateManual && <span className="text-xs text-slate-500">({t('auto_calculated') || 'Auto'})</span>}</Label>
                   <Input
                     type="date"
                     value={newOrder.delivery_date}
-                    onChange={(e) => setNewOrder({...newOrder, delivery_date: e.target.value})}
+                    onChange={(e) => {
+                      setNewOrder({...newOrder, delivery_date: e.target.value});
+                      setIsDeliveryDateManual(true);
+                    }}
                   />
                 </div>
               </div>
@@ -809,7 +957,7 @@ export default function SalesOrders() {
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-3">
                   <Label className="text-base font-semibold">{t('order_items')}</Label>
-                  <Button size="sm" variant="outline" onClick={() => handleAddLine(newOrder, setNewOrder)}>
+                  <Button size="sm" variant="outline" onClick={() => handleAddLine(newOrder, setNewOrder, isDeliveryDateManual, setIsDeliveryDateManual)}>
                     <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                   </Button>
                 </div>
@@ -817,18 +965,28 @@ export default function SalesOrders() {
                   {newOrder.lines.map((line, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
                       <div className="col-span-4">
-                        <Input
-                          placeholder={t('product_name')}
-                          value={line.product_name}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'product_name', e.target.value)}
-                        />
+                        <Select
+                          value={line.product_id || ''}
+                          onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('select_product')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="col-span-2">
                         <Input
                           type="number"
                           placeholder={t('quantity')}
                           value={line.quantity}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value)}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
                         />
                       </div>
                       <div className="col-span-2">
@@ -836,21 +994,21 @@ export default function SalesOrders() {
                           type="number"
                           placeholder={t('price')}
                           value={line.unit_price}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value)}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
                         />
                       </div>
                       <div className="col-span-3">
                         <Input
                           placeholder={t('description')}
                           value={line.description}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value)}
+                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value, isDeliveryDateManual)}
                         />
                       </div>
                       <div className="col-span-1 flex justify-end">
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleRemoveLine(newOrder, setNewOrder, index)}
+                          onClick={() => handleRemoveLine(newOrder, setNewOrder, index, isDeliveryDateManual)}
                           disabled={newOrder.lines.length === 1}
                           className="text-red-600"
                         >
@@ -869,8 +1027,8 @@ export default function SalesOrders() {
                   <Input
                     type="number"
                     placeholder="12"
-                    value={newOrder.tax_amount}
-                    onChange={(e) => setNewOrder({...newOrder, tax_amount: e.target.value})}
+                    value={newOrder.tax_percent}
+                    onChange={(e) => setNewOrder({...newOrder, tax_percent: e.target.value})}
                   />
                 </div>
                 <div>
@@ -887,24 +1045,35 @@ export default function SalesOrders() {
               {/* Totals */}
               <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">{t('subtotal')}:</span>
-                    <span className="font-medium">{formatCurrency(calculateOrderTotals(newOrder.lines))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">{t('tax')}:</span>
-                    <span className="font-medium">{formatCurrency(parseFloat(newOrder.tax_amount || 0))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">{t('shipping')}:</span>
-                    <span className="font-medium">{formatCurrency(parseFloat(newOrder.shipping_cost || 0))}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-blue-300">
-                    <span className="font-semibold text-lg">{t('total_amount')}:</span>
-                    <span className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(calculateOrderTotals(newOrder.lines) + parseFloat(newOrder.tax_amount || 0) + parseFloat(newOrder.shipping_cost || 0))}
-                    </span>
-                  </div>
+                  {(() => {
+                    const subtotal = calculateOrderTotals(newOrder.lines);
+                    const taxPercent = parseFloat(newOrder.tax_percent) || 0;
+                    const taxAmount = subtotal * (taxPercent / 100);
+                    const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
+                    const total = subtotal + taxAmount + shippingCost;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('subtotal')}:</span>
+                          <span className="font-medium">{formatCurrency(subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('tax')}:</span>
+                          <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('shipping')}:</span>
+                          <span className="font-medium">{formatCurrency(shippingCost)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                          <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                          <span className="text-2xl font-bold text-blue-600">
+                            {formatCurrency(total)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -915,7 +1084,7 @@ export default function SalesOrders() {
                 <Button
                   onClick={handleCreateOrder}
                   className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newOrder.customer_name || newOrder.lines.every(l => !l.product_name)}
+                  disabled={!newOrder.customer_name || newOrder.lines.every(l => !l.product_id && !l.product_name)}
                 >
                   {t('create')}
                 </Button>
@@ -972,7 +1141,7 @@ export default function SalesOrders() {
 
         {/* Edit Order Modal */}
         {editingOrder && (
-          <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) setEditingOrder(null); }}>
+          <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) { setEditingOrder(null); setIsEditDeliveryDateManual(false); } }}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{t('edit_order')} - {editingOrder.order_number}</DialogTitle>
@@ -1001,11 +1170,14 @@ export default function SalesOrders() {
                     </Select>
                   </div>
                   <div>
-                    <Label>{t('delivery_date')}</Label>
+                    <Label>{t('delivery_date')} {!isEditDeliveryDateManual && <span className="text-xs text-slate-500">({t('auto_calculated') || 'Auto'})</span>}</Label>
                     <Input
                       type="date"
                       value={editingOrder.delivery_date || ''}
-                      onChange={(e) => setEditingOrder({...editingOrder, delivery_date: e.target.value})}
+                      onChange={(e) => {
+                        setEditingOrder({...editingOrder, delivery_date: e.target.value});
+                        setIsEditDeliveryDateManual(true);
+                      }}
                     />
                   </div>
                 </div>
@@ -1014,7 +1186,7 @@ export default function SalesOrders() {
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center mb-3">
                     <Label className="text-base font-semibold">{t('order_items')}</Label>
-                    <Button size="sm" variant="outline" onClick={() => handleAddLine(editingOrder, setEditingOrder)}>
+                    <Button size="sm" variant="outline" onClick={() => handleAddLine(editingOrder, setEditingOrder, isEditDeliveryDateManual, setIsEditDeliveryDateManual)}>
                       <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                     </Button>
                   </div>
@@ -1022,18 +1194,28 @@ export default function SalesOrders() {
                     {editingOrder.lines.map((line, index) => (
                       <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
                         <div className="col-span-4">
-                          <Input
-                            placeholder={t('product_name')}
-                            value={line.product_name}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'product_name', e.target.value)}
-                          />
+                          <Select
+                            value={line.product_id || ''}
+                            onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={line.product_name || t('select_product')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="col-span-2">
                           <Input
                             type="number"
                             placeholder={t('quantity')}
                             value={line.quantity}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value)}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
                           />
                         </div>
                         <div className="col-span-2">
@@ -1041,21 +1223,21 @@ export default function SalesOrders() {
                             type="number"
                             placeholder={t('price')}
                             value={line.unit_price}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value)}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
                           />
                         </div>
                         <div className="col-span-3">
                           <Input
                             placeholder={t('description')}
                             value={line.description || ''}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value)}
+                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
                           />
                         </div>
                         <div className="col-span-1 flex justify-end">
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index)}
+                            onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
                             disabled={editingOrder.lines.length === 1}
                             className="text-red-600"
                           >
@@ -1073,8 +1255,8 @@ export default function SalesOrders() {
                     <Label>{t('tax')} (%)</Label>
                     <Input
                       type="number"
-                      value={editingOrder.tax_amount || 0}
-                      onChange={(e) => setEditingOrder({...editingOrder, tax_amount: e.target.value})}
+                      value={editingOrder.tax_percent || 0}
+                      onChange={(e) => setEditingOrder({...editingOrder, tax_percent: e.target.value})}
                     />
                   </div>
                   <div>
@@ -1090,24 +1272,35 @@ export default function SalesOrders() {
                 {/* Totals */}
                 <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">{t('subtotal')}:</span>
-                      <span className="font-medium">{formatCurrency(calculateOrderTotals(editingOrder.lines))}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">{t('tax')}:</span>
-                      <span className="font-medium">{formatCurrency(parseFloat(editingOrder.tax_amount || 0))}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">{t('shipping')}:</span>
-                      <span className="font-medium">{formatCurrency(parseFloat(editingOrder.shipping_cost || 0))}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-blue-300">
-                      <span className="font-semibold text-lg">{t('total_amount')}:</span>
-                      <span className="text-2xl font-bold text-blue-600">
-                        {formatCurrency(calculateOrderTotals(editingOrder.lines) + parseFloat(editingOrder.tax_amount || 0) + parseFloat(editingOrder.shipping_cost || 0))}
-                      </span>
-                    </div>
+                    {(() => {
+                      const subtotal = calculateOrderTotals(editingOrder.lines);
+                      const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
+                      const taxAmount = subtotal * (taxPercent / 100);
+                      const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
+                      const total = subtotal + taxAmount + shippingCost;
+                      return (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-600">{t('subtotal')}:</span>
+                            <span className="font-medium">{formatCurrency(subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-600">{t('tax')}:</span>
+                            <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-600">{t('shipping')}:</span>
+                            <span className="font-medium">{formatCurrency(shippingCost)}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                            <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                            <span className="text-2xl font-bold text-blue-600">
+                              {formatCurrency(total)}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1118,7 +1311,7 @@ export default function SalesOrders() {
                   <Button
                     onClick={handleEditOrder}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600"
-                    disabled={!editingOrder.customer_name || editingOrder.lines.every(l => !l.product_name)}
+                    disabled={!editingOrder.customer_name || editingOrder.lines.every(l => !l.product_id && !l.product_name)}
                   >
                     {t('save_changes')}
                   </Button>

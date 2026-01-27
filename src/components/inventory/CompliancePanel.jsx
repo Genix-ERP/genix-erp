@@ -20,6 +20,14 @@ export default function CompliancePanel({ compliance }) {
   const [showReport, setShowReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Cleanup on unmount to prevent blocking navigation
+  React.useEffect(() => {
+    return () => {
+      setShowReport(false);
+      setShowSettings(false);
+    };
+  }, []);
+
   if (!compliance) return null;
 
   const generateReport = () => {

@@ -37,19 +37,18 @@ import {
 } from '@/components/shared';
 
 // Field Help Component - Odoo-style tooltip for field explanations
+// Note: TooltipProvider should be at a higher level, not per-component
 const FieldHelp = ({ text }) => (
-  <TooltipProvider delayDuration={200}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
-        <p>{text}</p>
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+      <p>{text}</p>
+    </TooltipContent>
+  </Tooltip>
 );
 
 // Label with help tooltip
@@ -99,6 +98,22 @@ export default function Products() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editCategoryName, setEditCategoryName] = useState('');
   const { addAuditLog } = useAuditTrail('products');
+
+  // Cleanup all modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowCreateModal(false);
+      setShowEditModal(false);
+      setShowDeleteModal(false);
+      setShowDetailModal(false);
+      setShowImportModal(false);
+      setShowExportModal(false);
+      setShowCategoryModal(false);
+      setShowCategoryManageModal(false);
+      setShowEditCategoryModal(false);
+      setShowDeleteCategoryModal(false);
+    };
+  }, []);
 
   // Export columns configuration - comprehensive product fields
   const exportColumns = [
@@ -194,8 +209,10 @@ export default function Products() {
 
   const handleImport = async (data) => {
     for (const row of data) {
+      const generatedCode = row.barcode || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
       const productData = {
         name: row.name,
+        code: generatedCode,
         barcode: row.barcode || '',
         tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
         type: 'product',
@@ -428,11 +445,14 @@ export default function Products() {
     setNewVariantAttribute({ name: '', values: '' });
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     setIsSaving(true);
     try {
+      // Generate code from barcode or name (backend requires 'code' field)
+      const generatedCode = formData.barcode || formData.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
       const productData = {
         ...formData,
+        code: generatedCode,
         cost_price: parseFloat(formData.cost_price) || 0,
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
@@ -454,7 +474,7 @@ export default function Products() {
         uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
-      createProduct(productData);
+      await createProduct(productData);
       resetForm();
       setShowCreateModal(false);
     } catch (error) {
@@ -676,6 +696,7 @@ export default function Products() {
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Sub-tabs for Products, Lots, Labels */}
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
@@ -2298,7 +2319,7 @@ export default function Products() {
               <Button
                 onClick={showEditModal ? handleUpdate : handleCreate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !formData.name || !formData.code}
+                disabled={isSaving || !formData.name}
               >
                 {isSaving ? t('saving') : showEditModal ? t('update_product') : t('create_product')}
               </Button>
@@ -2740,5 +2761,6 @@ export default function Products() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { inventoryService } from '@/api/services/inventory';
 import {
   Plus,
   Search,
@@ -31,6 +32,7 @@ import {
   RotateCcw,
   Receipt,
   Award,
+  X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -76,6 +78,51 @@ export default function Procurement() {
   const [editPO, setEditPO] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Products list for selection
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  // Track if delivery date was manually set
+  const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
+  const [isEditDeliveryDateManual, setIsEditDeliveryDateManual] = useState(false);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const data = await inventoryService.listProducts({ limit: 1000 });
+        setProducts(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // Calculate delivery date based on product lead times
+  const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
+    const baseDate = orderDate ? new Date(orderDate) : new Date();
+
+    // Get max lead time from all products in order lines
+    const maxLeadTime = orderLines.reduce((max, line) => {
+      const leadTime = line.product?.lead_time_days || line.lead_time_days || 0;
+      return Math.max(max, leadTime);
+    }, 0);
+
+    // If no lead times, return today's date
+    if (maxLeadTime === 0) {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // Add lead time days to base date
+    const deliveryDate = new Date(baseDate);
+    deliveryDate.setDate(deliveryDate.getDate() + maxLeadTime);
+    return deliveryDate.toISOString().split('T')[0];
+  }, []);
+
   // AI Analysis
   const procurementAnalysis = useMemo(() => analyzeProcurement(purchaseOrders), [purchaseOrders]);
 
@@ -84,9 +131,10 @@ export default function Procurement() {
     supplier_id: '',
     vendor_name: '',
     order_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: '',
+    expected_delivery_date: new Date().toISOString().split('T')[0], // Default to today
     total_amount: 0,
-    payment_terms: 'net_30'
+    payment_terms: 'net_30',
+    lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
 
   // Filter purchase orders
@@ -105,17 +153,70 @@ export default function Procurement() {
     setFilteredOrders(filtered);
   }, [purchaseOrders, searchQuery, statusFilter]);
 
+  // Calculate order total from line items
+  const calculateOrderTotal = (lines) => {
+    return lines.reduce((sum, line) => sum + (parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)), 0);
+  };
+
+  // Handle line item changes
+  const handleAddLine = () => {
+    const newLines = [...newPO.lines, { product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }];
+    setNewPO({ ...newPO, lines: newLines });
+  };
+
+  const handleRemoveLine = (index) => {
+    const newLines = newPO.lines.filter((_, i) => i !== index);
+    const updatedLines = newLines.length > 0 ? newLines : [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }];
+
+    if (!isDeliveryDateManual) {
+      const newDeliveryDate = calculateDeliveryDate(updatedLines, newPO.order_date);
+      setNewPO({ ...newPO, lines: updatedLines, expected_delivery_date: newDeliveryDate, total_amount: calculateOrderTotal(updatedLines) });
+    } else {
+      setNewPO({ ...newPO, lines: updatedLines, total_amount: calculateOrderTotal(updatedLines) });
+    }
+  };
+
+  const handleLineChange = (index, field, value) => {
+    const newLines = [...newPO.lines];
+    newLines[index] = { ...newLines[index], [field]: value };
+
+    // If changing product selection, also update lead_time_days and recalculate delivery date
+    if (field === 'product_id' && value) {
+      const selectedProduct = products.find(p => p.id === value);
+      if (selectedProduct) {
+        newLines[index] = {
+          ...newLines[index],
+          product_name: selectedProduct.name,
+          product_id: selectedProduct.id,
+          unit_price: selectedProduct.purchase_price || selectedProduct.cost_price || selectedProduct.price || 0,
+          lead_time_days: selectedProduct.lead_time_days || 0,
+          product: selectedProduct
+        };
+
+        // Recalculate delivery date if not manually set
+        if (!isDeliveryDateManual) {
+          const newDeliveryDate = calculateDeliveryDate(newLines, newPO.order_date);
+          setNewPO({ ...newPO, lines: newLines, expected_delivery_date: newDeliveryDate, total_amount: calculateOrderTotal(newLines) });
+          return;
+        }
+      }
+    }
+
+    setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
+  };
+
   const handleCreatePO = async () => {
     if (!newPO.supplier_id && !newPO.vendor_name) return;
 
     setIsSubmitting(true);
     try {
       const supplier = getSupplierById(newPO.supplier_id);
+      const totalAmount = calculateOrderTotal(newPO.lines);
       const poData = {
         ...newPO,
         po_number: newPO.po_number || `PO-${Date.now()}`,
         vendor_name: supplier?.name || newPO.vendor_name,
-        total_amount: parseFloat(newPO.total_amount) || 0,
+        total_amount: totalAmount,
         status: 'draft',
         ai_price_validation: true
       };
@@ -128,10 +229,12 @@ export default function Procurement() {
         supplier_id: '',
         vendor_name: '',
         order_date: new Date().toISOString().split('T')[0],
-        expected_delivery_date: '',
+        expected_delivery_date: new Date().toISOString().split('T')[0],
         total_amount: 0,
-        payment_terms: 'net_30'
+        payment_terms: 'net_30',
+        lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
+      setIsDeliveryDateManual(false);
     } catch (error) {
       console.error('Error creating PO:', error);
     } finally {
@@ -667,8 +770,8 @@ export default function Procurement() {
         </Tabs>
 
         {/* Create PO Modal */}
-        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-          <DialogContent className="max-w-2xl">
+        <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) setIsDeliveryDateManual(false); }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
             </DialogHeader>
@@ -720,24 +823,86 @@ export default function Procurement() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('delivery_date') || 'Delivery Date'}</label>
+                  <label className="text-sm font-medium mb-1 block">{t('delivery_date') || 'Delivery Date'} {!isDeliveryDateManual && <span className="text-xs text-slate-500">({t('auto_calculated') || 'Auto'})</span>}</label>
                   <Input
                     type="date"
                     value={newPO.expected_delivery_date}
-                    onChange={(e) => setNewPO({...newPO, expected_delivery_date: e.target.value})}
+                    onChange={(e) => {
+                      setNewPO({...newPO, expected_delivery_date: e.target.value});
+                      setIsDeliveryDateManual(true);
+                    }}
                   />
+                </div>
+              </div>
+
+              {/* Order Lines */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-base font-semibold">{t('order_items') || 'Order Items'}</label>
+                  <Button size="sm" variant="outline" onClick={handleAddLine}>
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
+                  </Button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {newPO.lines.map((line, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
+                      <div className="col-span-5">
+                        <Select
+                          value={line.product_id || ''}
+                          onValueChange={(value) => handleLineChange(index, 'product_id', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('select_product') || 'Select product'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          type="number"
+                          placeholder={t('quantity') || 'Qty'}
+                          value={line.quantity}
+                          onChange={(e) => handleLineChange(index, 'quantity', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <Input
+                          type="number"
+                          placeholder={t('price') || 'Price'}
+                          value={line.unit_price}
+                          onChange={(e) => handleLineChange(index, 'unit_price', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-2 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemoveLine(index)}
+                          disabled={newPO.lines.length === 1}
+                          className="text-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'} *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
                   <Input
                     type="number"
-                    placeholder="0"
-                    value={newPO.total_amount}
-                    onChange={(e) => setNewPO({...newPO, total_amount: e.target.value})}
-                    required
+                    value={calculateOrderTotal(newPO.lines)}
+                    disabled
+                    className="bg-slate-100"
                   />
                 </div>
                 <div>
@@ -764,7 +929,7 @@ export default function Procurement() {
                 <Button
                   onClick={handleCreatePO}
                   className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                  disabled={!newPO.supplier_id || !newPO.total_amount || isSubmitting}
+                  disabled={!newPO.supplier_id || newPO.lines.every(l => !l.product_id) || isSubmitting}
                 >
                   {isSubmitting ? (t('creating') || 'Creating...') : (t('create') || 'Create')}
                 </Button>

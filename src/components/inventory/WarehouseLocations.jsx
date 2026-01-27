@@ -52,6 +52,15 @@ export default function WarehouseLocations() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState(null);
 
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowCreateModal(false);
+      setShowEditModal(false);
+      setShowDeleteConfirm(false);
+    };
+  }, []);
+
   const [formData, setFormData] = useState({
     warehouse_id: '',
     code: '',
