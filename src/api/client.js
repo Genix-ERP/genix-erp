@@ -39,7 +39,7 @@ export const clearTokens = () => {
   refreshToken = null;
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
+  localStorage.removeItem('tenantId');
 };
 
 // Request interceptor - add auth token

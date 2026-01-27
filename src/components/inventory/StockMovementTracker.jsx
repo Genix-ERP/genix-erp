@@ -45,6 +45,14 @@ export default function StockMovementTracker({ movements, items }) {
   // New Movement Modal state
   const [showNewMovementModal, setShowNewMovementModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Cleanup on unmount to prevent blocking navigation
+  React.useEffect(() => {
+    return () => {
+      setShowNewMovementModal(false);
+    };
+  }, []);
+
   const [newMovement, setNewMovement] = useState({
     product_id: '',
     warehouse_id: '',

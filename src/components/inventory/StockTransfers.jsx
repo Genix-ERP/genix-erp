@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,18 +26,16 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 // Field Help Component
 const FieldHelp = ({ text }) => (
-  <TooltipProvider delayDuration={200}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
-        <p>{text}</p>
-      </TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" className="ml-1 text-slate-400 hover:text-slate-600 transition-colors">
+        <HelpCircle className="w-3.5 h-3.5" />
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs bg-slate-800 text-white p-2 rounded-lg shadow-lg">
+      <p>{text}</p>
+    </TooltipContent>
+  </Tooltip>
 );
 
 // Label with help tooltip
@@ -66,6 +64,13 @@ export default function StockTransfers() {
   const [destWarehouseFilter, setDestWarehouseFilter] = useState("all");
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Cleanup modals on unmount to prevent navigation blocking
+  useEffect(() => {
+    return () => {
+      setShowTransferModal(false);
+    };
+  }, []);
 
   const [transferForm, setTransferForm] = useState({
     product_id: '',
@@ -203,6 +208,7 @@ export default function StockTransfers() {
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
       {/* Header with Stats */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -443,16 +449,14 @@ export default function StockTransfers() {
                         </TableCell>
                         <TableCell>
                           {transfer.notes ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <FileText className="w-4 h-4 text-slate-400" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs">{transfer.notes}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <FileText className="w-4 h-4 text-slate-400" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">{transfer.notes}</p>
+                              </TooltipContent>
+                            </Tooltip>
                           ) : (
                             <span className="text-slate-300">-</span>
                           )}
@@ -675,5 +679,6 @@ export default function StockTransfers() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }
