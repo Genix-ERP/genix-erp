@@ -82,6 +82,7 @@ export default function InventoryManagement() {
     warehouse_id: '',
     quantity: '',
     reason: '',
+    notes: '',
     reference: ''
   });
 
@@ -116,18 +117,26 @@ export default function InventoryManagement() {
     return matchesSearch && matchesWarehouse;
   });
 
-  // Filter movements - only show movements with valid products and warehouses
+  // Filter movements - handle both backend format and localStorage format
   const filteredMovements = stockMovements.filter(movement => {
-    const product = products.find(p => p.id === movement.product_id);
-    const warehouse = warehouses.find(w => w.id === movement.warehouse_id);
-    // Skip movements without matching product or warehouse (orphaned mock data)
-    if (!product || !warehouse) return false;
+    // Backend returns product_name/product_code directly, localStorage has product_id
+    const productName = movement.product_name || products.find(p => p.id === movement.product_id)?.name;
+    const warehouseName = movement.from_warehouse_name || movement.to_warehouse_name ||
+                          warehouses.find(w => w.id === (movement.warehouse_id || movement.from_warehouse_id))?.name;
+
+    // For backend data, we have the names directly; for localStorage, we look them up
+    if (!productName && !movement.product_id) return false;
+
     const matchesSearch = !searchQuery ||
-      product?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      productName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      movement.product_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       movement.reference?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = movementTypeFilter === "all" || movement.movement_type === movementTypeFilter;
+
+    // Backend uses transaction_type, localStorage uses movement_type
+    const type = movement.transaction_type || movement.movement_type;
+    const matchesType = movementTypeFilter === "all" || type === movementTypeFilter;
     return matchesSearch && matchesType;
-  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }).sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
 
   const resetAdjustForm = () => {
     setAdjustForm({
@@ -135,6 +144,7 @@ export default function InventoryManagement() {
       warehouse_id: '',
       quantity: '',
       reason: '',
+      notes: '',
       reference: ''
     });
   };
@@ -150,29 +160,31 @@ export default function InventoryManagement() {
     });
   };
 
-  const handleAdjust = () => {
+  const handleAdjust = async () => {
     setIsSaving(true);
     try {
-      adjustInventory({
+      await adjustInventory({
         product_id: adjustForm.product_id,
         warehouse_id: adjustForm.warehouse_id,
         quantity: parseInt(adjustForm.quantity),
         reason: adjustForm.reason,
+        notes: adjustForm.notes,
         reference: adjustForm.reference || `ADJ-${Date.now()}`
       });
       resetAdjustForm();
       setShowAdjustModal(false);
     } catch (error) {
       console.error('Error adjusting inventory:', error);
+      alert(error.response?.data?.error?.message || error.message || 'Adjustment failed');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     setIsSaving(true);
     try {
-      transferInventory({
+      await transferInventory({
         product_id: transferForm.product_id,
         from_warehouse_id: transferForm.from_warehouse_id,
         to_warehouse_id: transferForm.to_warehouse_id,
@@ -184,6 +196,9 @@ export default function InventoryManagement() {
       setShowTransferModal(false);
     } catch (error) {
       console.error('Error transferring inventory:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMsg = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Transfer failed';
+      alert(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -208,21 +223,25 @@ export default function InventoryManagement() {
     const colors = {
       receipt: 'bg-green-100 text-green-800 border-green-200',
       shipment: 'bg-red-100 text-red-800 border-red-200',
+      issue: 'bg-red-100 text-red-800 border-red-200',
       adjustment: 'bg-blue-100 text-blue-800 border-blue-200',
-      transfer: 'bg-purple-100 text-purple-800 border-purple-200'
+      transfer: 'bg-purple-100 text-purple-800 border-purple-200',
+      count: 'bg-yellow-100 text-yellow-800 border-yellow-200'
     };
     return colors[type] || 'bg-gray-100 text-gray-800';
   };
 
   const getMovementTypeIcon = (type, quantity) => {
     if (type === 'transfer') return ArrowRightLeft;
-    if (type === 'adjustment') return RotateCcw;
+    if (type === 'adjustment' || type === 'count') return RotateCcw;
+    if (type === 'issue' || type === 'shipment') return ArrowUpRight;
+    if (type === 'receipt') return ArrowDownLeft;
     return quantity > 0 ? ArrowDownLeft : ArrowUpRight;
   };
 
   const getAvailableStock = (productId, warehouseId) => {
     const item = inventory.find(i => i.product_id === productId && i.warehouse_id === warehouseId);
-    return item?.quantity || 0;
+    return item?.quantity_on_hand ?? item?.quantity ?? 0;
   };
 
   return (
@@ -404,7 +423,10 @@ export default function InventoryManagement() {
                       {filteredInventory.map(item => {
                         const product = products.find(p => p.id === item.product_id);
                         const warehouse = warehouses.find(w => w.id === item.warehouse_id);
-                        const quantity = item.quantity || 0;
+                        // Backend returns quantity_on_hand, quantity_reserved, quantity_available
+                        const quantity = item.quantity_on_hand ?? item.quantity ?? 0;
+                        const reserved = item.quantity_reserved ?? item.reserved_quantity ?? 0;
+                        const available = item.quantity_available ?? item.available_quantity ?? quantity;
                         const isLowStock = product?.min_stock_level && quantity <= product.min_stock_level;
                         const isOutOfStock = quantity === 0;
 
@@ -423,13 +445,13 @@ export default function InventoryManagement() {
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                              {(item.quantity || 0).toLocaleString()}
+                              {quantity.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right text-slate-600 tabular-nums">
-                              {(item.reserved_quantity || 0).toLocaleString()}
+                              {reserved.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-medium text-green-600 tabular-nums">
-                              {(item.available_quantity || item.quantity || 0).toLocaleString()}
+                              {available.toLocaleString()}
                             </TableCell>
                             <TableCell className="font-mono text-sm text-slate-600">
                               {item.lot_number || '-'}
@@ -473,9 +495,10 @@ export default function InventoryManagement() {
                   <SelectContent>
                     <SelectItem value="all">{t('all_types')}</SelectItem>
                     <SelectItem value="receipt">{t('receipt')}</SelectItem>
-                    <SelectItem value="shipment">{t('shipment')}</SelectItem>
+                    <SelectItem value="issue">{t('issue') || 'Issue'}</SelectItem>
                     <SelectItem value="adjustment">{t('adjustment')}</SelectItem>
                     <SelectItem value="transfer">{t('transfer')}</SelectItem>
+                    <SelectItem value="count">{t('count') || 'Count'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -514,36 +537,42 @@ export default function InventoryManagement() {
                     <TableBody>
                       {filteredMovements.map(movement => {
                         const movementQty = movement.quantity || 0;
-                        const TypeIcon = getMovementTypeIcon(movement.movement_type, movementQty);
+                        const movementType = movement.transaction_type || movement.movement_type;
+                        const TypeIcon = getMovementTypeIcon(movementType, movementQty);
                         const isPositive = movementQty > 0;
+                        const movementDate = movement.transaction_date || movement.created_at;
+                        const productName = movement.product_name || getProductName(movement.product_id);
+                        const productCode = movement.product_code || getProductCode(movement.product_id);
+                        const fromWarehouse = movement.from_warehouse_name || getWarehouseName(movement.from_warehouse_id || movement.warehouse_id);
+                        const toWarehouse = movement.to_warehouse_name || (movement.to_warehouse_id ? getWarehouseName(movement.to_warehouse_id) : null);
 
                         return (
                           <TableRow key={movement.id} className="hover:bg-blue-50/50">
                             <TableCell>
-                              <Badge className={getMovementTypeColor(movement.movement_type)}>
+                              <Badge className={getMovementTypeColor(movementType)}>
                                 <TypeIcon className="w-3 h-3 mr-1" />
-                                {movement.movement_type}
+                                {t(movementType) || movementType}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-slate-700">
-                              {movement.created_at
-                                ? format(new Date(movement.created_at), 'MMM dd, yyyy HH:mm')
+                              {movementDate
+                                ? format(new Date(movementDate), 'MMM dd, yyyy HH:mm')
                                 : '-'}
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium text-slate-900">{getProductName(movement.product_id)}</p>
-                                <p className="text-xs text-slate-500">{getProductCode(movement.product_id)}</p>
+                                <p className="font-medium text-slate-900">{productName}</p>
+                                <p className="text-xs text-slate-500">{productCode}</p>
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1 text-slate-700">
                                 <Warehouse className="w-4 h-4 text-slate-400" />
-                                {getWarehouseName(movement.warehouse_id)}
-                                {movement.to_warehouse_id && (
+                                {fromWarehouse}
+                                {toWarehouse && (
                                   <>
                                     <ArrowRightLeft className="w-3 h-3 mx-1 text-slate-400" />
-                                    {getWarehouseName(movement.to_warehouse_id)}
+                                    {toWarehouse}
                                   </>
                                 )}
                               </div>
@@ -598,7 +627,7 @@ export default function InventoryManagement() {
                   <SelectValue placeholder={t('select_product')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.filter(p => p.is_stockable).map(product => (
+                  {products.filter(p => p.is_stockable !== false).map(product => (
                     <SelectItem key={product.id} value={product.id}>
                       {product.name} ({product.code})
                     </SelectItem>
@@ -677,6 +706,19 @@ export default function InventoryManagement() {
               />
             </div>
 
+            <div>
+              <LabelWithHelp
+                label={t('notes')}
+                helpText={t('help_adjust_notes') || "Qo'shimcha izohlar. Tarix va hisobotlarda ko'rsatiladi."}
+              />
+              <Textarea
+                placeholder={t('optional_notes')}
+                value={adjustForm.notes}
+                onChange={(e) => setAdjustForm({...adjustForm, notes: e.target.value})}
+                rows={2}
+              />
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button
                 variant="outline"
@@ -725,7 +767,7 @@ export default function InventoryManagement() {
                   <SelectValue placeholder={t('select_product')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.filter(p => p.is_stockable).map(product => (
+                  {products.filter(p => p.is_stockable !== false).map(product => (
                     <SelectItem key={product.id} value={product.id}>
                       {product.name} ({product.code})
                     </SelectItem>

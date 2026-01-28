@@ -170,6 +170,7 @@ export function FinancialsProvider({ children }) {
   const [customerInvoices, setCustomerInvoices] = useState([]);
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [accountTypes, setAccountTypes] = useState([]);
   const [payments, setPayments] = useState([]);
   const [taxRates, setTaxRates] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -294,18 +295,59 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
-          const [entries, invoices, accountsData, paymentsData, taxRatesData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData] = await Promise.all([
             financeService.listJournalEntries(),
-            salesService.listInvoices(),
+            salesService.listInvoices().catch(() => []),
             financeService.listAccounts(),
             financeService.listPayments(),
-            financeService.listTaxRates()
+            financeService.listTaxRates(),
+            financeService.listAccountTypes().catch(() => []),
+            financeService.listPurchaseInvoices().catch(() => ({ data: [] })),
+            financeService.listBankAccounts().catch(() => []),
+            financeService.listCashTransactions().catch(() => []),
+            financeService.listCurrencies().catch(() => []),
+            financeService.listExchangeRates().catch(() => [])
           ]);
           setJournalEntries(entries || []);
-          setCustomerInvoices(invoices || []);
+          // Handle paginated response - could be array directly or { items: [...] }
+          const invoicesArray = Array.isArray(invoicesResponse) ? invoicesResponse : (invoicesResponse?.items || []);
+          // Map backend invoice response to frontend format
+          const mappedInvoices = invoicesArray.map(inv => ({
+            ...inv,
+            invoice_type: 'customer_invoice',
+            total_amount: inv.total_amount || 0,
+            amount_due: inv.amount_due ?? (inv.total_amount - (inv.amount_paid || 0)),
+            amount_paid: inv.amount_paid || 0,
+          }));
+          setCustomerInvoices(mappedInvoices);
           setAccounts(accountsData || []);
-          setPayments(paymentsData || []);
+          // Map backend payment response to frontend format
+          const mappedPayments = (paymentsData || []).map(p => ({
+            ...p,
+            payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
+            party_name: p.contact_name || '',
+            payment_method: p.payment_method || 'bank_transfer',
+          }));
+          setPayments(mappedPayments);
           setTaxRates(taxRatesData || []);
+          setAccountTypes(accountTypesData || []);
+          // Map backend vendor bills to frontend format
+          const rawBills = vendorBillsData?.data || vendorBillsData || [];
+          const mappedBills = rawBills.map(b => ({
+            ...b,
+            invoice_type: 'vendor_bill',
+            partner_id: b.vendor_id || b.partner_id,
+            partner_name: b.vendor_name || b.partner_name || '',
+          }));
+          setVendorBills(mappedBills);
+          // Set bank accounts from backend
+          setBankAccounts(bankAccountsData || []);
+          // Set cash transactions from backend
+          setCashTransactions(cashTransactionsData || []);
+          // Set currencies from backend
+          setCurrencies(currenciesData || []);
+          // Set exchange rates from backend
+          setExchangeRates(exchangeRatesData || []);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -331,12 +373,44 @@ export function FinancialsProvider({ children }) {
   }, [loadData]);
 
   // ==================== ACCOUNTS CRUD ====================
+  // Helper to map frontend type to backend account_type_id
+  const getAccountTypeId = useCallback((type) => {
+    // Account types from backend have a 'category' field: asset, liability, equity, revenue, expense
+    // Find the first matching account type for this category
+    const matchingType = accountTypes.find(at => at.category === type);
+
+    if (!matchingType) {
+      console.warn('No matching account type found for category:', type, 'Available types:', accountTypes);
+    }
+
+    return matchingType?.id || null;
+  }, [accountTypes]);
+
   const createAccount = useCallback(async (accountData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(ACCOUNTS_KEY, companyId);
     if (backendAvailable) {
       try {
-        const newAccount = await financeService.createAccount(accountData);
+        // Map frontend fields to backend expected format
+        const backendData = {
+          code: accountData.code,
+          name: accountData.name,
+          description: accountData.description || '',
+          account_type_id: getAccountTypeId(accountData.type),
+          parent_id: accountData.parent_id || null,
+          is_bank_account: accountData.is_bank_account || false,
+          is_reconcilable: accountData.allow_reconciliation || false,
+          is_control_account: false,
+          budget_tracking: false,
+          opening_balance: 0
+        };
+
+        if (!backendData.account_type_id) {
+          console.warn('Could not map account type:', accountData.type);
+          throw new Error('Invalid account type');
+        }
+
+        const newAccount = await financeService.createAccount(backendData);
         setAccounts(prev => [newAccount, ...prev]);
         return newAccount;
       } catch (err) { console.error('API error, falling back to local:', err); }
@@ -346,7 +420,7 @@ export function FinancialsProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setAccounts(updated);
     return newAccount;
-  }, [backendAvailable, accounts, activeCompany]);
+  }, [backendAvailable, accounts, activeCompany, getAccountTypeId]);
 
   const updateAccount = useCallback(async (id, accountData) => {
     const companyId = activeCompany?.id;
@@ -390,13 +464,36 @@ export function FinancialsProvider({ children }) {
   const createPayment = useCallback(async (paymentData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(PAYMENTS_KEY, companyId);
-    if (backendAvailable) {
+
+    // Only call backend API if required fields are present (contact_id for backend)
+    const hasBackendRequiredFields = paymentData.contact_id && paymentData.type && paymentData.payment_date;
+
+    if (backendAvailable && hasBackendRequiredFields) {
       try {
-        const newPayment = await financeService.createPayment(paymentData);
+        const apiPayment = await financeService.createPayment({
+          type: paymentData.type,
+          contact_id: paymentData.contact_id,
+          payment_date: paymentData.payment_date,
+          amount: paymentData.amount,
+          reference: paymentData.reference || '',
+          notes: paymentData.notes || paymentData.description || '',
+        });
+        // Map backend response to frontend format for UI consistency
+        const newPayment = {
+          ...apiPayment,
+          payment_type: apiPayment.type === 'receipt' ? 'inbound' : 'outbound',
+          party_name: apiPayment.contact_name || paymentData.party_name || '',
+          payment_method: paymentData.payment_method || 'bank_transfer',
+        };
         setPayments(prev => [newPayment, ...prev]);
         return newPayment;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+      } catch (err) {
+        console.error('API error, falling back to local:', err);
+        throw err; // Re-throw to let the UI handle the error
+      }
     }
+
+    // Fallback to local storage for demo mode or when backend is not available
     const newPayment = { id: `pay_${Date.now()}`, payment_number: `PAY-${new Date().getFullYear()}-${String(payments.length + 1).padStart(3, '0')}`, ...paymentData, status: 'draft', created_at: new Date().toISOString() };
     const updated = [newPayment, ...payments];
     localStorage.setItem(storageKey, JSON.stringify(updated));
@@ -421,195 +518,156 @@ export function FinancialsProvider({ children }) {
 
   // ==================== TAX RATES CRUD ====================
   const createTaxRate = useCallback(async (taxData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(TAX_RATES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const newTax = await financeService.createTaxRate(taxData);
-        setTaxRates(prev => [newTax, ...prev]);
-        return newTax;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      const newTax = await financeService.createTaxRate(taxData);
+      setTaxRates(prev => [newTax, ...prev]);
+      return newTax;
+    } catch (err) {
+      console.error('API error creating tax rate:', err);
+      throw err;
     }
-    const newTax = { id: `tax_${Date.now()}`, ...taxData, is_active: true, created_at: new Date().toISOString() };
-    const updated = [newTax, ...taxRates];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setTaxRates(updated);
-    return newTax;
-  }, [backendAvailable, taxRates, activeCompany]);
+  }, []);
 
   const updateTaxRate = useCallback(async (id, taxData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(TAX_RATES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const updated = await financeService.updateTaxRate(id, taxData);
-        setTaxRates(prev => prev.map(t => t.id === id ? updated : t));
-        return updated;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const updated = await financeService.updateTaxRate(id, taxData);
+      setTaxRates(prev => prev.map(t => t.id === id ? { ...t, ...updated } : t));
+      return updated;
+    } catch (err) {
+      console.error('API error updating tax rate:', err);
+      throw err;
     }
-    const updated = taxRates.map(t => t.id === id ? { ...t, ...taxData } : t);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setTaxRates(updated);
-  }, [backendAvailable, taxRates, activeCompany]);
+  }, []);
 
   const deleteTaxRate = useCallback(async (id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(TAX_RATES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        await financeService.deleteTaxRate(id);
-        setTaxRates(prev => prev.filter(t => t.id !== id));
-        return;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.deleteTaxRate(id);
+      setTaxRates(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      console.error('API error deleting tax rate:', err);
+      throw err;
     }
-    const updated = taxRates.filter(t => t.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setTaxRates(updated);
-  }, [backendAvailable, taxRates, activeCompany]);
+  }, []);
 
   // ==================== BANK ACCOUNTS CRUD ====================
   const createBankAccount = useCallback(async (accountData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BANK_ACCOUNTS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const newAccount = await financeService.createBankAccount(accountData);
-        setBankAccounts(prev => [newAccount, ...prev]);
-        return newAccount;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      const newAccount = await financeService.createBankAccount(accountData);
+      setBankAccounts(prev => [newAccount, ...prev]);
+      return newAccount;
+    } catch (err) {
+      console.error('Failed to create bank account:', err);
+      throw err;
     }
-    const newAccount = { id: `ba_${Date.now()}`, ...accountData, balance: accountData.balance || 0, is_active: true, created_at: new Date().toISOString() };
-    const updated = [newAccount, ...bankAccounts];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBankAccounts(updated);
-    return newAccount;
-  }, [backendAvailable, bankAccounts, activeCompany]);
+  }, []);
 
   const updateBankAccount = useCallback(async (id, accountData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BANK_ACCOUNTS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const updated = await financeService.updateBankAccount(id, accountData);
-        setBankAccounts(prev => prev.map(acc => acc.id === id ? updated : acc));
-        return updated;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const updated = await financeService.updateBankAccount(id, accountData);
+      setBankAccounts(prev => prev.map(acc => acc.id === id ? updated : acc));
+      return updated;
+    } catch (err) {
+      console.error('Failed to update bank account:', err);
+      throw err;
     }
-    const updated = bankAccounts.map(acc => acc.id === id ? { ...acc, ...accountData } : acc);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBankAccounts(updated);
-  }, [backendAvailable, bankAccounts, activeCompany]);
+  }, []);
 
   const deleteBankAccount = useCallback(async (id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BANK_ACCOUNTS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        await financeService.deleteBankAccount(id);
-        setBankAccounts(prev => prev.filter(acc => acc.id !== id));
-        return;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.deleteBankAccount(id);
+      setBankAccounts(prev => prev.filter(acc => acc.id !== id));
+    } catch (err) {
+      console.error('Failed to delete bank account:', err);
+      throw err;
     }
-    const updated = bankAccounts.filter(acc => acc.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBankAccounts(updated);
-  }, [backendAvailable, bankAccounts, activeCompany]);
+  }, []);
 
   // ==================== BANK TRANSACTIONS CRUD ====================
+  const loadBankTransactions = useCallback(async (bankAccountId) => {
+    try {
+      const transactions = await financeService.listBankTransactions(bankAccountId);
+      setBankTransactions(transactions || []);
+      return transactions || [];
+    } catch (err) {
+      console.error('Failed to load bank transactions:', err);
+      return [];
+    }
+  }, []);
+
   const getBankTransactionsByAccount = useCallback((bankAccountId) => {
     return bankTransactions.filter(t => t.bank_account_id === bankAccountId);
   }, [bankTransactions]);
 
   const createBankTransaction = useCallback(async (bankAccountId, transactionData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BANK_TRANSACTIONS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const newTransaction = await financeService.createBankTransaction(bankAccountId, transactionData);
-        setBankTransactions(prev => [newTransaction, ...prev]);
-        return newTransaction;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      const newTransaction = await financeService.createBankTransaction(bankAccountId, transactionData);
+      setBankTransactions(prev => [newTransaction, ...prev]);
+      // Refresh bank accounts to get updated balance
+      const bankAccountsData = await financeService.listBankAccounts().catch(() => []);
+      setBankAccounts(bankAccountsData || []);
+      return newTransaction;
+    } catch (err) {
+      console.error('Failed to create bank transaction:', err);
+      throw err;
     }
-    const newTransaction = { id: `bt_${Date.now()}`, bank_account_id: bankAccountId, ...transactionData, is_reconciled: false, created_at: new Date().toISOString() };
-    const updated = [newTransaction, ...bankTransactions];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBankTransactions(updated);
-    // Update bank account balance
-    const bankAccountsKey = getStorageKey(BANK_ACCOUNTS_KEY, companyId);
-    const balanceChange = transactionData.type === 'credit' ? transactionData.amount : -transactionData.amount;
-    const updatedAccounts = bankAccounts.map(acc => acc.id === bankAccountId ? { ...acc, balance: acc.balance + balanceChange } : acc);
-    localStorage.setItem(bankAccountsKey, JSON.stringify(updatedAccounts));
-    setBankAccounts(updatedAccounts);
-    return newTransaction;
-  }, [backendAvailable, bankTransactions, bankAccounts, activeCompany]);
+  }, []);
 
   const reconcileBankTransaction = useCallback(async (bankAccountId, transactionId) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BANK_TRANSACTIONS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const reconciled = await financeService.reconcileBankTransaction(bankAccountId, transactionId);
-        setBankTransactions(prev => prev.map(t => t.id === transactionId ? reconciled : t));
-        return reconciled;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.reconcileBankTransaction(bankAccountId, transactionId);
+      setBankTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, is_reconciled: true, status: 'reconciled' } : t));
+      // Refresh bank accounts to get updated last_reconciled date
+      const bankAccountsData = await financeService.listBankAccounts().catch(() => []);
+      setBankAccounts(bankAccountsData || []);
+    } catch (err) {
+      console.error('Failed to reconcile bank transaction:', err);
+      throw err;
     }
-    const updated = bankTransactions.map(t => t.id === transactionId ? { ...t, is_reconciled: true, reconciled_date: new Date().toISOString().split('T')[0] } : t);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBankTransactions(updated);
-    // Update bank account last_reconciled date
-    const bankAccountsKey = getStorageKey(BANK_ACCOUNTS_KEY, companyId);
-    const updatedAccounts = bankAccounts.map(acc => acc.id === bankAccountId ? { ...acc, last_reconciled: new Date().toISOString().split('T')[0] } : acc);
-    localStorage.setItem(bankAccountsKey, JSON.stringify(updatedAccounts));
-    setBankAccounts(updatedAccounts);
-  }, [backendAvailable, bankTransactions, bankAccounts, activeCompany]);
+  }, []);
 
   // ==================== CASH TRANSACTIONS CRUD ====================
   const createCashTransaction = useCallback(async (transactionData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CASH_TRANSACTIONS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const newTransaction = await financeService.createCashTransaction(transactionData);
-        setCashTransactions(prev => [newTransaction, ...prev]);
-        return newTransaction;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      // Format data for backend
+      const backendData = {
+        transaction_date: transactionData.transaction_date || new Date().toISOString().split('T')[0],
+        type: transactionData.type,
+        amount: transactionData.amount,
+        currency: transactionData.currency || 'UZS',
+        description: transactionData.description,
+        category: transactionData.category || '',
+        reference: transactionData.reference || '',
+        cashier: transactionData.cashier || ''
+      };
+      const newTransaction = await financeService.createCashTransaction(backendData);
+      setCashTransactions(prev => [newTransaction, ...prev]);
+      return newTransaction;
+    } catch (err) {
+      console.error('Failed to create cash transaction:', err);
+      throw err;
     }
-    const newTransaction = { id: `ct_${Date.now()}`, reference: `CASH-${String(cashTransactions.length + 1).padStart(3, '0')}`, ...transactionData, created_at: new Date().toISOString() };
-    const updated = [newTransaction, ...cashTransactions];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCashTransactions(updated);
-    return newTransaction;
-  }, [backendAvailable, cashTransactions, activeCompany]);
+  }, []);
 
   const updateCashTransaction = useCallback(async (id, transactionData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CASH_TRANSACTIONS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const updated = await financeService.updateCashTransaction(id, transactionData);
-        setCashTransactions(prev => prev.map(t => t.id === id ? updated : t));
-        return updated;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const updated = await financeService.updateCashTransaction(id, transactionData);
+      setCashTransactions(prev => prev.map(t => t.id === id ? updated : t));
+      return updated;
+    } catch (err) {
+      console.error('Failed to update cash transaction:', err);
+      throw err;
     }
-    const updated = cashTransactions.map(t => t.id === id ? { ...t, ...transactionData } : t);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCashTransactions(updated);
-  }, [backendAvailable, cashTransactions, activeCompany]);
+  }, []);
 
   const deleteCashTransaction = useCallback(async (id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CASH_TRANSACTIONS_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        await financeService.deleteCashTransaction(id);
-        setCashTransactions(prev => prev.filter(t => t.id !== id));
-        return;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.deleteCashTransaction(id);
+      setCashTransactions(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      console.error('Failed to delete cash transaction:', err);
+      throw err;
     }
-    const updated = cashTransactions.filter(t => t.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCashTransactions(updated);
-  }, [backendAvailable, cashTransactions, activeCompany]);
+  }, []);
 
   const getCashBalance = useCallback(() => {
     return cashTransactions.reduce((balance, t) => {
@@ -622,51 +680,44 @@ export function FinancialsProvider({ children }) {
 
   // ==================== CURRENCIES CRUD ====================
   const createCurrency = useCallback(async (currencyData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CURRENCIES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const newCurrency = await financeService.createCurrency(currencyData);
-        setCurrencies(prev => [newCurrency, ...prev]);
-        return newCurrency;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      // Format data for backend
+      const backendData = {
+        code: currencyData.code,
+        name: currencyData.name,
+        symbol: currencyData.symbol,
+        decimal_places: currencyData.decimal_places ?? 2,
+        is_base_currency: currencyData.is_base ?? false
+      };
+      const newCurrency = await financeService.createCurrency(backendData);
+      setCurrencies(prev => [newCurrency, ...prev]);
+      return newCurrency;
+    } catch (err) {
+      console.error('Failed to create currency:', err);
+      throw err;
     }
-    const newCurrency = { ...currencyData, is_active: true };
-    const updated = [newCurrency, ...currencies];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCurrencies(updated);
-    return newCurrency;
-  }, [backendAvailable, currencies, activeCompany]);
+  }, []);
 
   const updateCurrency = useCallback(async (code, currencyData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CURRENCIES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        const updated = await financeService.updateCurrency(code, currencyData);
-        setCurrencies(prev => prev.map(c => c.code === code ? updated : c));
-        return updated;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const updated = await financeService.updateCurrency(code, currencyData);
+      setCurrencies(prev => prev.map(c => c.code === code ? updated : c));
+      return updated;
+    } catch (err) {
+      console.error('Failed to update currency:', err);
+      throw err;
     }
-    const updated = currencies.map(c => c.code === code ? { ...c, ...currencyData } : c);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCurrencies(updated);
-  }, [backendAvailable, currencies, activeCompany]);
+  }, []);
 
   const deleteCurrency = useCallback(async (code) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(CURRENCIES_KEY, companyId);
-    if (backendAvailable) {
-      try {
-        await financeService.deleteCurrency(code);
-        setCurrencies(prev => prev.filter(c => c.code !== code));
-        return;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.deleteCurrency(code);
+      setCurrencies(prev => prev.filter(c => c.code !== code));
+    } catch (err) {
+      console.error('Failed to delete currency:', err);
+      throw err;
     }
-    const updated = currencies.filter(c => c.code !== code);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCurrencies(updated);
-  }, [backendAvailable, currencies, activeCompany]);
+  }, []);
 
   // ==================== EXCHANGE RATES CRUD ====================
   const setExchangeRate = useCallback(async (code, rateData) => {
@@ -675,9 +726,14 @@ export function FinancialsProvider({ children }) {
     if (backendAvailable) {
       try {
         const newRate = await financeService.setExchangeRate(code, rateData);
-        setExchangeRates(prev => [newRate, ...prev]);
+        // Reload exchange rates to get the full list with proper IDs
+        const allRates = await financeService.listExchangeRates().catch(() => []);
+        setExchangeRates(allRates || []);
         return newRate;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+      } catch (err) {
+        console.error('API error, falling back to local:', err);
+        throw err;
+      }
     }
     const newRate = { id: `er_${Date.now()}`, from_currency: code, to_currency: 'UZS', ...rateData, date: rateData.date || new Date().toISOString().split('T')[0] };
     const updated = [newRate, ...exchangeRates];
@@ -689,7 +745,8 @@ export function FinancialsProvider({ children }) {
   const getLatestExchangeRate = useCallback((fromCurrency, toCurrency = 'UZS') => {
     const rates = exchangeRates.filter(r => r.from_currency === fromCurrency && r.to_currency === toCurrency);
     if (rates.length === 0) return null;
-    return rates.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    // Handle both date and effective_date field names
+    return rates.sort((a, b) => new Date(b.effective_date || b.date) - new Date(a.effective_date || a.date))[0];
   }, [exchangeRates]);
 
   const convertCurrency = useCallback((amount, fromCurrency, toCurrency = 'UZS') => {
@@ -784,19 +841,61 @@ export function FinancialsProvider({ children }) {
   // ==================== VENDOR BILLS CRUD ====================
   const createVendorBill = useCallback(async (billData) => {
     const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(VENDOR_BILLS_KEY, companyId);
+
+    // Call backend API if available
+    if (backendAvailable) {
+      try {
+        const apiBill = await financeService.createPurchaseInvoice({
+          vendor_id: billData.partner_id || billData.vendor_id,
+          invoice_date: billData.invoice_date,
+          due_date: billData.due_date,
+          subtotal: billData.subtotal || 0,
+          tax_amount: billData.tax_amount || 0,
+          total_amount: billData.total_amount || 0,
+          notes: billData.description || billData.notes || '',
+        });
+        // Map backend response to frontend format
+        const newBill = {
+          ...apiBill,
+          invoice_type: 'vendor_bill',
+          partner_id: apiBill.vendor_id || apiBill.partner_id,
+          partner_name: apiBill.vendor_name || apiBill.partner_name || '',
+        };
+        setVendorBills(prev => [newBill, ...prev]);
+        return newBill;
+      } catch (err) {
+        console.error('API error creating vendor bill:', err);
+        throw err;
+      }
+    }
+
+    // Fallback to localStorage
     const newBill = { id: `vb_${Date.now()}`, invoice_type: 'vendor_bill', invoice_number: billData.invoice_number || `BILL-${Date.now()}`, ...billData, company_id: companyId, created_date: new Date().toISOString() };
     const updated = [newBill, ...vendorBills];
-    localStorage.setItem(getStorageKey(VENDOR_BILLS_KEY, companyId), JSON.stringify(updated));
+    localStorage.setItem(storageKey, JSON.stringify(updated));
     setVendorBills(updated);
     return newBill;
-  }, [vendorBills, activeCompany]);
+  }, [backendAvailable, vendorBills, activeCompany]);
 
-  const updateVendorBill = useCallback((id, billData) => {
+  const updateVendorBill = useCallback(async (id, billData) => {
     const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(VENDOR_BILLS_KEY, companyId);
+
+    if (backendAvailable) {
+      try {
+        const updated = await financeService.updatePurchaseInvoice(id, billData);
+        setVendorBills(prev => prev.map(bill => bill.id === id ? { ...bill, ...updated } : bill));
+        return updated;
+      } catch (err) {
+        console.error('API error updating vendor bill:', err);
+      }
+    }
+
     const updated = vendorBills.map(bill => bill.id === id ? { ...bill, ...billData } : bill);
-    localStorage.setItem(getStorageKey(VENDOR_BILLS_KEY, companyId), JSON.stringify(updated));
+    localStorage.setItem(storageKey, JSON.stringify(updated));
     setVendorBills(updated);
-  }, [vendorBills, activeCompany]);
+  }, [backendAvailable, vendorBills, activeCompany]);
 
   const listVendorBills = useCallback((sortField, limit) => {
     let sorted = [...vendorBills];
@@ -811,27 +910,26 @@ export function FinancialsProvider({ children }) {
   // ==================== CUSTOMER INVOICES CRUD ====================
   const createCustomerInvoice = useCallback(async (invoiceData) => {
     const companyId = activeCompany?.id;
-    if (backendAvailable) {
-      try {
-        const newInvoice = await salesService.createInvoice({ ...invoiceData, company_id: companyId });
-        setCustomerInvoices(prev => [newInvoice, ...prev]);
-        return newInvoice;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const newInvoice = await salesService.createInvoice({ ...invoiceData, company_id: companyId });
+      setCustomerInvoices(prev => [newInvoice, ...prev]);
+      return newInvoice;
+    } catch (err) {
+      console.error('API error creating customer invoice:', err);
+      throw err;
     }
-    const newInvoice = { id: `ci_${Date.now()}`, invoice_type: 'customer_invoice', invoice_number: invoiceData.invoice_number || `INV-${Date.now()}`, ...invoiceData, company_id: companyId, created_date: new Date().toISOString() };
-    const updated = [newInvoice, ...customerInvoices];
-    localStorage.setItem(getStorageKey(CUSTOMER_INVOICES_KEY, companyId), JSON.stringify(updated));
-    setCustomerInvoices(updated);
-    return newInvoice;
-  }, [backendAvailable, customerInvoices, activeCompany]);
+  }, [activeCompany]);
 
   const updateCustomerInvoice = useCallback(async (id, invoiceData) => {
-    const companyId = activeCompany?.id;
-    if (backendAvailable) { try { await salesService.updateInvoice(id, invoiceData); } catch (err) { console.error('API error:', err); } }
-    const updated = customerInvoices.map(inv => inv.id === id ? { ...inv, ...invoiceData } : inv);
-    localStorage.setItem(getStorageKey(CUSTOMER_INVOICES_KEY, companyId), JSON.stringify(updated));
-    setCustomerInvoices(updated);
-  }, [backendAvailable, customerInvoices, activeCompany]);
+    try {
+      const updated = await salesService.updateInvoice(id, invoiceData);
+      setCustomerInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, ...updated } : inv));
+      return updated;
+    } catch (err) {
+      console.error('API error updating customer invoice:', err);
+      throw err;
+    }
+  }, []);
 
   const listCustomerInvoices = useCallback((sortField, limit) => {
     let sorted = [...customerInvoices];
@@ -1270,12 +1368,12 @@ export function FinancialsProvider({ children }) {
   return (
     <FinancialsContext.Provider value={{
       journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
-      accounts, createAccount, updateAccount, deleteAccount, getAccountTransactions,
+      accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
       payments, createPayment, confirmPayment,
       taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
       // Bank Accounts & Transactions
       bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
-      bankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
+      bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
       // Cash Transactions (Kassa)
       cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance,
       // Currencies & Exchange Rates

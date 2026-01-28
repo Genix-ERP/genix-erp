@@ -4,7 +4,7 @@ export const procurementService = {
   // Suppliers
   async listSuppliers(params = {}) {
     const response = await apiClient.get('/contacts', {
-      params: { ...params, contact_type: 'vendor' }
+      params: { ...params, type: 'vendor' }
     });
     return response.data.data;
   },
@@ -15,7 +15,15 @@ export const procurementService = {
   },
 
   async createSupplier(data) {
-    const response = await apiClient.post('/contacts', { ...data, contact_type: 'vendor' });
+    // Backend expects 'type' not 'contact_type', and 'name' is required
+    // Backend requires 'code' with validation - generate if not provided
+    const payload = {
+      ...data,
+      type: 'vendor',
+      name: data.name,
+      code: data.code || `VEN-${Date.now()}`,
+    };
+    const response = await apiClient.post('/contacts', payload);
     return response.data.data;
   },
 

@@ -72,6 +72,12 @@ export const financeService = {
     await apiClient.delete(`/cash-transactions/${id}`);
   },
 
+  // Account Types (for Chart of Accounts)
+  async listAccountTypes() {
+    const response = await apiClient.get('/account-types');
+    return response.data.data;
+  },
+
   // Chart of Accounts
   async listAccounts(params = {}) {
     const response = await apiClient.get('/accounts', { params });
@@ -99,6 +105,12 @@ export const financeService = {
 
   async getAccountTransactions(accountId, params = {}) {
     const response = await apiClient.get(`/accounts/${accountId}/transactions`, { params });
+    return response.data.data;
+  },
+
+  // Journals (accounting journals like GEN, SAL, PUR)
+  async listJournals() {
+    const response = await apiClient.get('/journals');
     return response.data.data;
   },
 
@@ -326,6 +338,41 @@ export const financeService = {
   async runDepreciation(data) {
     const response = await apiClient.post('/run-depreciation', data);
     return response.data;
+  },
+
+  // Purchase Invoices (Vendor Bills)
+  async listPurchaseInvoices(params = {}) {
+    const response = await apiClient.get('/purchase-invoices', { params });
+    return response.data;
+  },
+
+  async getPurchaseInvoice(id) {
+    const response = await apiClient.get(`/purchase-invoices/${id}`);
+    return response.data.data;
+  },
+
+  async createPurchaseInvoice(data) {
+    const response = await apiClient.post('/purchase-invoices', data);
+    return response.data.data;
+  },
+
+  async updatePurchaseInvoice(id, data) {
+    const response = await apiClient.put(`/purchase-invoices/${id}`, data);
+    return response.data.data;
+  },
+
+  async deletePurchaseInvoice(id) {
+    await apiClient.delete(`/purchase-invoices/${id}`);
+  },
+
+  async confirmPurchaseInvoice(id) {
+    const response = await apiClient.post(`/purchase-invoices/${id}/confirm`);
+    return response.data.data;
+  },
+
+  async payPurchaseInvoice(id, amount = 0) {
+    const response = await apiClient.post(`/purchase-invoices/${id}/pay`, { amount });
+    return response.data.data;
   },
 };
 

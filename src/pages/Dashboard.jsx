@@ -192,7 +192,7 @@ export default function Dashboard() {
                 <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 w-full sm:min-w-[200px]">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="w-5 h-5" />
-                    <span className="text-sm font-medium">Business Health</span>
+                    <span className="text-sm font-medium">{t('business_health')}</span>
                   </div>
                   <div className="flex items-end gap-2">
                     <span className={`text-5xl font-bold ${businessHealth.score >= 60 ? 'text-white' : 'text-orange-300'}`}>
@@ -202,12 +202,12 @@ export default function Dashboard() {
                   </div>
                   <div className="mt-2">
                     <Badge className={`bg-gradient-to-r ${getHealthBg(businessHealth.score)} text-white border-0`}>
-                      {businessHealth.status.replace('_', ' ').toUpperCase()}
+                      {t(businessHealth.status).toUpperCase()}
                     </Badge>
                   </div>
                   {businessHealth.criticalIssues.length > 0 && (
                     <p className="text-xs text-white/70 mt-2">
-                      {businessHealth.criticalIssues.length} issue(s) need attention
+                      {businessHealth.criticalIssues.length} {t('issues_need_attention')}
                     </p>
                   )}
                 </div>
