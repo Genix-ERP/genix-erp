@@ -195,16 +195,33 @@ export function ProcurementProvider({ children }) {
     if (backendAvailable) {
       try {
         const response = await procurementService.createSupplier({
-          ...supplierData,
-          type: 'vendor',
+          name: supplierData.name,
+          email: supplierData.email || undefined,
+          phone: supplierData.phone || undefined,
+          tax_id: supplierData.tax_id || undefined,
+          notes: supplierData.notes || undefined,
+          // Map frontend payment_terms to backend expected format (days as integer)
+          payment_terms: supplierData.payment_terms === 'net_30' ? 30 :
+                        supplierData.payment_terms === 'net_60' ? 60 :
+                        supplierData.payment_terms === 'net_15' ? 15 : 30,
         });
-        setSuppliers(prev => [...prev, response]);
-        return response;
+        // Map backend response to frontend format
+        const mappedSupplier = {
+          ...response,
+          contact_person: response.contact_persons?.[0]?.name || '',
+          address: response.billing_address?.street || response.shipping_address?.street || '',
+          rating: 0,
+          total_orders: 0,
+          total_spent: 0,
+        };
+        setSuppliers(prev => [...prev, mappedSupplier]);
+        return mappedSupplier;
       } catch (error) {
         console.error('Failed to create supplier via API:', error);
+        throw error; // Re-throw to let UI handle the error
       }
     }
-    // Fallback to local
+    // Fallback to local only when backend is not available
     const newSupplier = {
       ...supplierData,
       id: Date.now().toString(),

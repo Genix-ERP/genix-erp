@@ -14,24 +14,24 @@ import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 
-// SAP-style document types
+// SAP-style document types - using translation keys
 const documentTypes = [
-  { value: 'PO', label: 'Purchase Order' },
-  { value: 'SO', label: 'Sales Order' },
-  { value: 'GRN', label: 'Goods Receipt Note' },
-  { value: 'GDN', label: 'Goods Delivery Note' },
-  { value: 'TR', label: 'Transfer Order' },
-  { value: 'ADJ', label: 'Adjustment' },
-  { value: 'RET', label: 'Return' },
-  { value: 'PROD', label: 'Production Order' },
+  { value: 'PO', labelKey: 'purchase_order' },
+  { value: 'SO', labelKey: 'sales_order' },
+  { value: 'GRN', labelKey: 'goods_receipt_note' },
+  { value: 'GDN', labelKey: 'goods_delivery_note' },
+  { value: 'TR', labelKey: 'transfer_order' },
+  { value: 'ADJ', labelKey: 'adjustment' },
+  { value: 'RET', labelKey: 'return' },
+  { value: 'PROD', labelKey: 'production_order' },
 ];
 
-// SAP quality statuses
+// SAP quality statuses - using translation keys
 const qualityStatuses = [
-  { value: 'released', label: 'Released', color: 'bg-green-100 text-green-800' },
-  { value: 'blocked', label: 'Blocked', color: 'bg-red-100 text-red-800' },
-  { value: 'in_qc', label: 'In QC', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'quarantine', label: 'Quarantine', color: 'bg-orange-100 text-orange-800' },
+  { value: 'released', labelKey: 'released', color: 'bg-green-100 text-green-800' },
+  { value: 'blocked', labelKey: 'blocked', color: 'bg-red-100 text-red-800' },
+  { value: 'in_qc', labelKey: 'in_qc', color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'quarantine', labelKey: 'quarantine', color: 'bg-orange-100 text-orange-800' },
 ];
 
 export default function StockMovementTracker({ movements, items }) {
@@ -108,24 +108,49 @@ export default function StockMovementTracker({ movements, items }) {
     return colors[type] || "bg-gray-100 text-gray-800";
   };
 
-  const getItemName = (productId) => {
-    const product = products.find(p => p.id === productId);
+  const getItemName = (movement) => {
+    // Backend may provide product_name directly
+    if (movement.product_name) return movement.product_name;
+    const product = products.find(p => p.id === movement.product_id);
     return product ? product.name : t('unknown');
   };
 
-  const getItemSku = (productId) => {
-    const product = products.find(p => p.id === productId);
+  const getItemSku = (movement) => {
+    // Backend may provide product_code directly
+    if (movement.product_code) return movement.product_code;
+    const product = products.find(p => p.id === movement.product_id);
     return product ? (product.sku || product.code) : 'N/A';
   };
 
+  // Helper to get movement type (backend uses transaction_type)
+  const getMovementType = (movement) => {
+    const type = movement.transaction_type || movement.movement_type;
+    // Map backend types to frontend display types
+    if (type === 'receipt') return 'inbound';
+    if (type === 'issue') return 'outbound';
+    if (type === 'adjustment') return 'adjustment';
+    if (type === 'transfer') return 'transfer';
+    return type || 'unknown';
+  };
+
   const calculateTotalValue = (movements) => {
-    return movements.reduce((sum, movement) => sum + (movement.total_value || 0), 0);
+    return movements.reduce((sum, movement) => {
+      // Backend uses total_cost, fallback to total_value or calculate from quantity * unit_cost
+      const value = movement.total_cost || movement.total_value || (Math.abs(movement.quantity || 0) * (movement.unit_cost || 0));
+      return sum + value;
+    }, 0);
   };
 
   const movementStats = React.useMemo(() => {
-    const inbound = filteredMovements.filter(m => m.movement_type === 'inbound');
-    const outbound = filteredMovements.filter(m => m.movement_type === 'outbound');
-    const adjustments = filteredMovements.filter(m => m.movement_type === 'adjustment');
+    const inbound = filteredMovements.filter(m => {
+      const type = getMovementType(m);
+      return type === 'inbound' || type === 'receipt' || (m.quantity > 0 && type !== 'transfer');
+    });
+    const outbound = filteredMovements.filter(m => {
+      const type = getMovementType(m);
+      return type === 'outbound' || type === 'issue' || (m.quantity < 0 && type !== 'transfer');
+    });
+    const adjustments = filteredMovements.filter(m => getMovementType(m) === 'adjustment');
 
     return {
       totalMovements: filteredMovements.length,
@@ -188,7 +213,8 @@ export default function StockMovementTracker({ movements, items }) {
         quantity: quantity,
         unit_cost: parseFloat(newMovement.unit_cost) || 0,
         reference: newMovement.reference || `${newMovement.movement_type.toUpperCase()}-${Date.now()}`,
-        reason: newMovement.notes,
+        reason: newMovement.notes || newMovement.movement_type || 'Stock adjustment',
+        notes: newMovement.notes,
         supplier_or_customer: newMovement.supplier_or_customer
       });
 
@@ -305,19 +331,25 @@ export default function StockMovementTracker({ movements, items }) {
               <TableBody>
                 {filteredMovements.length > 0 ? (
                   filteredMovements.map((movement, index) => {
-                    const MovementIcon = getMovementIcon(movement.movement_type);
+                    const movementType = getMovementType(movement);
+                    const MovementIcon = getMovementIcon(movementType);
+                    const movementDate = movement.transaction_date || movement.created_at;
+                    const unitCost = movement.unit_cost || 0;
+                    const totalValue = movement.total_cost || movement.total_value || (Math.abs(movement.quantity || 0) * unitCost);
+                    const isPositive = (movement.quantity || 0) > 0;
+
                     return (
                       <TableRow key={movement.id || index} className="hover:bg-slate-50/80">
                         <TableCell>
                           <div className="text-sm">
-                            <div>{movement.created_at ? format(new Date(movement.created_at), 'MMM d, yyyy') : 'N/A'}</div>
-                            <div className="text-slate-500">{movement.created_at ? format(new Date(movement.created_at), 'HH:mm') : ''}</div>
+                            <div>{movementDate ? format(new Date(movementDate), 'MMM d, yyyy') : 'N/A'}</div>
+                            <div className="text-slate-500">{movementDate ? format(new Date(movementDate), 'HH:mm') : ''}</div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{getItemName(movement.product_id)}</p>
-                            <p className="text-sm text-slate-500">{getItemSku(movement.product_id)}</p>
+                            <p className="font-medium">{getItemName(movement)}</p>
+                            <p className="text-sm text-slate-500">{getItemSku(movement)}</p>
                             {movement.batch_number && (
                               <Badge variant="outline" className="text-xs mt-1">
                                 {t('batch')}: {movement.batch_number}
@@ -328,21 +360,20 @@ export default function StockMovementTracker({ movements, items }) {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <MovementIcon className="w-4 h-4" />
-                            <Badge className={getMovementColor(movement.movement_type)}>
-                              {movement.movement_type?.replace('_', ' ').toUpperCase()}
+                            <Badge className={getMovementColor(movementType)}>
+                              {(movement.transaction_type || movement.movement_type || 'unknown').replace('_', ' ').toUpperCase()}
                             </Badge>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className={`font-medium ${movement.movement_type === 'inbound' ? 'text-green-600' : movement.movement_type === 'outbound' ? 'text-red-600' : 'text-slate-600'}`}>
-                            {movement.movement_type === 'inbound' ? '+' : movement.movement_type === 'outbound' ? '-' : ''}
-                            {movement.quantity || 0}
+                          <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPositive ? '+' : ''}{movement.quantity || 0}
                           </span>
                         </TableCell>
-                        <TableCell>${(movement.unit_cost || 0).toFixed(2)}</TableCell>
+                        <TableCell>${unitCost.toFixed(2)}</TableCell>
                         <TableCell>
-                          <span className={`font-medium ${movement.movement_type === 'inbound' ? 'text-green-600' : movement.movement_type === 'outbound' ? 'text-red-600' : 'text-slate-600'}`}>
-                            ${(movement.total_value || 0).toLocaleString()}
+                          <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                            ${Math.abs(totalValue).toLocaleString()}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -354,7 +385,7 @@ export default function StockMovementTracker({ movements, items }) {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {movement.movement_type === 'outbound' && (
+                          {!isPositive && (
                             <div>
                               <div className="font-medium">${(movement.cogs_calculated || 0).toFixed(2)}</div>
                               <Badge className="text-xs bg-slate-100 text-slate-800">
@@ -412,7 +443,7 @@ export default function StockMovementTracker({ movements, items }) {
                     </SelectTrigger>
                     <SelectContent>
                       {documentTypes.map(dt => (
-                        <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
+                        <SelectItem key={dt.value} value={dt.value}>{t(dt.labelKey)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -594,7 +625,7 @@ export default function StockMovementTracker({ movements, items }) {
                   <SelectContent>
                     {qualityStatuses.map(qs => (
                       <SelectItem key={qs.value} value={qs.value}>
-                        <Badge className={qs.color}>{qs.label}</Badge>
+                        <Badge className={qs.color}>{t(qs.labelKey)}</Badge>
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -169,8 +169,9 @@ export function CustomersProvider({ children }) {
           const demoMode = isDemoMode();
 
           // Load contacts (customers) from API
-          const contacts = await contactsService.list();
-          const customerContacts = (contacts || []).filter(c => c.contact_type === 'customer' || !c.contact_type);
+          const contacts = await contactsService.list({ type: 'customer' });
+          const contactsArray = Array.isArray(contacts) ? contacts : (contacts?.items || []);
+          const customerContacts = contactsArray.filter(c => c.type === 'customer' || !c.type);
 
           // If API returns empty, check localStorage for any locally stored customers
           if (customerContacts.length === 0) {
@@ -182,7 +183,23 @@ export function CustomersProvider({ children }) {
               setCustomers(demoMode ? sampleCustomers : []);
             }
           } else {
-            setCustomers(customerContacts);
+            // Map backend response to frontend format
+            const mappedCustomers = customerContacts.map(c => ({
+              id: c.id,
+              company_name: c.name || '',
+              contact_name: c.legal_name || '',
+              email: c.email || '',
+              phone: c.phone || '',
+              industry: c.industry || (c.tags && c.tags[0]) || 'other',
+              status: (c.tags && c.tags.find(t => ['prospect', 'active', 'inactive', 'churned'].includes(t))) || (c.is_active ? 'active' : 'inactive'),
+              annual_revenue: c.annual_revenue || 0,
+              employee_count: c.employee_count || 0,
+              monthly_value: c.monthly_value || 0,
+              subscription_tier: c.subscription_tier || 'freemium',
+              address: c.billing_address || {},
+              created_date: c.created_at || new Date().toISOString()
+            }));
+            setCustomers(mappedCustomers);
           }
 
           // Load leads from API
@@ -285,41 +302,61 @@ export function CustomersProvider({ children }) {
     return () => window.removeEventListener('companyChanged', handleCompanyChange);
   }, [loadData]);
 
-  // Customer CRUD - always saves to localStorage for persistence
+  // Customer CRUD - uses backend with localStorage as cache
   const createCustomer = useCallback(async (customerData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
-    let newCustomer;
+    // Map frontend fields to backend expected format
+    const backendData = {
+      type: 'customer',
+      name: customerData.company_name || customerData.name || '',
+      legal_name: customerData.contact_name || '',
+      email: customerData.email || '',
+      phone: customerData.phone || '',
+      industry: customerData.industry || '',
+      billing_address: customerData.address ? {
+        street: customerData.address.street || '',
+        city: customerData.address.city || '',
+        state: customerData.address.state || '',
+        postal_code: customerData.address.zip || '',
+        country: customerData.address.country || ''
+      } : null,
+      notes: customerData.notes || '',
+      tags: customerData.status ? [customerData.status] : [],
+    };
 
-    if (backendAvailable) {
-      try {
-        newCustomer = await contactsService.create({
-          ...customerData,
-          contact_type: 'customer',
-          company_id: companyId
-        });
-      } catch (err) {
-        console.error('API error, falling back to local:', err);
-      }
-    }
+    try {
+      const result = await contactsService.create(backendData);
 
-    // If API call failed or backend not available, create local customer
-    if (!newCustomer) {
-      newCustomer = {
-        id: `cust_${Date.now()}`,
-        ...customerData,
+      // Map backend response back to frontend format for consistent state
+      const newCustomer = {
+        id: result.id,
+        company_name: result.name,
+        contact_name: result.legal_name || '',
+        email: result.email || '',
+        phone: result.phone || '',
+        industry: customerData.industry || '',
+        status: customerData.status || 'prospect',
+        annual_revenue: customerData.annual_revenue || 0,
+        employee_count: customerData.employee_count || 0,
+        monthly_value: customerData.monthly_value || 0,
+        subscription_tier: customerData.subscription_tier || 'freemium',
+        address: customerData.address || {},
         company_id: companyId,
-        created_date: new Date().toISOString()
+        created_date: result.created_at || new Date().toISOString()
       };
-    }
 
-    // Always update state and localStorage
-    const updated = [...customers, newCustomer];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setCustomers(updated);
-    return newCustomer;
-  }, [backendAvailable, customers, activeCompany]);
+      // Update state and localStorage cache
+      const updated = [...customers, newCustomer];
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      setCustomers(updated);
+      return newCustomer;
+    } catch (err) {
+      console.error('API error creating customer:', err);
+      throw err;
+    }
+  }, [customers, activeCompany]);
 
   const updateCustomer = useCallback(async (id, customerData) => {
     const companyId = activeCompany?.id;
@@ -327,7 +364,24 @@ export function CustomersProvider({ children }) {
 
     if (backendAvailable) {
       try {
-        await contactsService.update(id, customerData);
+        // Map frontend fields to backend expected format
+        const backendData = {};
+        if (customerData.company_name !== undefined) backendData.name = customerData.company_name;
+        if (customerData.contact_name !== undefined) backendData.legal_name = customerData.contact_name;
+        if (customerData.email !== undefined) backendData.email = customerData.email;
+        if (customerData.phone !== undefined) backendData.phone = customerData.phone;
+        if (customerData.industry !== undefined) backendData.industry = customerData.industry;
+        if (customerData.address !== undefined) {
+          backendData.billing_address = {
+            street: customerData.address.street || '',
+            city: customerData.address.city || '',
+            state: customerData.address.state || '',
+            postal_code: customerData.address.zip || '',
+            country: customerData.address.country || ''
+          };
+        }
+
+        await contactsService.update(id, backendData);
       } catch (err) {
         console.error('API error:', err);
       }

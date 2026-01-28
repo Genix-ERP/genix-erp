@@ -682,7 +682,7 @@ export default function StockCounting() {
                     .filter(inv => inv.warehouse_id === newCount.warehouse_id)
                     .map(inv => {
                       const product = products.find(p => p.id === inv.product_id);
-                      return product ? { ...product, system_qty: inv.quantity } : null;
+                      return product ? { ...product, system_qty: inv.quantity_on_hand ?? inv.quantity ?? 0 } : null;
                     })
                     .filter(Boolean);
 

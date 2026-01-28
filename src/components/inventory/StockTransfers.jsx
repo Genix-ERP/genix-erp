@@ -84,30 +84,32 @@ export default function StockTransfers() {
   // Get transfer movements only
   const transferMovements = useMemo(() => {
     return stockMovements
-      .filter(m => m.movement_type === 'transfer')
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      .filter(m => (m.transaction_type || m.movement_type) === 'transfer')
+      .sort((a, b) => new Date(b.transaction_date || b.created_at) - new Date(a.transaction_date || a.created_at));
   }, [stockMovements]);
 
   // Filter transfers based on search and warehouse filters
   const filteredTransfers = useMemo(() => {
     return transferMovements.filter(transfer => {
-      const product = products.find(p => p.id === transfer.product_id);
-      const fromWarehouse = warehouses.find(w => w.id === transfer.warehouse_id);
-      const toWarehouse = warehouses.find(w => w.id === transfer.to_warehouse_id);
+      const productName = transfer.product_name || products.find(p => p.id === transfer.product_id)?.name;
+      const productCode = transfer.product_code || products.find(p => p.id === transfer.product_id)?.code;
+      const fromWarehouseId = transfer.from_warehouse_id || transfer.warehouse_id;
+      const fromWarehouseName = transfer.from_warehouse_name || warehouses.find(w => w.id === fromWarehouseId)?.name;
+      const toWarehouseName = transfer.to_warehouse_name || warehouses.find(w => w.id === transfer.to_warehouse_id)?.name;
 
       // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        const matchProduct = product?.name?.toLowerCase().includes(query) ||
-                            product?.code?.toLowerCase().includes(query);
-        const matchWarehouse = fromWarehouse?.name?.toLowerCase().includes(query) ||
-                              toWarehouse?.name?.toLowerCase().includes(query);
+        const matchProduct = productName?.toLowerCase().includes(query) ||
+                            productCode?.toLowerCase().includes(query);
+        const matchWarehouse = fromWarehouseName?.toLowerCase().includes(query) ||
+                              toWarehouseName?.toLowerCase().includes(query);
         const matchRef = transfer.reference?.toLowerCase().includes(query);
         if (!matchProduct && !matchWarehouse && !matchRef) return false;
       }
 
       // Source warehouse filter
-      if (sourceWarehouseFilter !== "all" && transfer.warehouse_id !== sourceWarehouseFilter) {
+      if (sourceWarehouseFilter !== "all" && fromWarehouseId !== sourceWarehouseFilter) {
         return false;
       }
 
@@ -125,7 +127,7 @@ export default function StockTransfers() {
     const stockItem = inventory.find(
       i => i.product_id === productId && i.warehouse_id === warehouseId
     );
-    return stockItem?.quantity || 0;
+    return stockItem?.quantity_on_hand ?? stockItem?.quantity ?? 0;
   };
 
   // Calculate transfer statistics
@@ -133,23 +135,26 @@ export default function StockTransfers() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const todayTransfers = transferMovements.filter(t => {
-      const transferDate = new Date(t.created_at);
+    // Only count positive quantities (incoming side of transfer) to avoid double counting
+    const positiveTransfers = transferMovements.filter(t => (t.quantity || 0) > 0);
+
+    const todayTransfers = positiveTransfers.filter(t => {
+      const transferDate = new Date(t.transaction_date || t.created_at);
       transferDate.setHours(0, 0, 0, 0);
       return transferDate.getTime() === today.getTime();
     });
 
-    const thisMonth = transferMovements.filter(t => {
-      const transferDate = new Date(t.created_at);
+    const thisMonth = positiveTransfers.filter(t => {
+      const transferDate = new Date(t.transaction_date || t.created_at);
       return transferDate.getMonth() === today.getMonth() &&
              transferDate.getFullYear() === today.getFullYear();
     });
 
     return {
-      total: transferMovements.length,
+      total: positiveTransfers.length,
       today: todayTransfers.length,
       thisMonth: thisMonth.length,
-      totalQuantity: transferMovements.reduce((sum, t) => sum + (t.quantity || 0), 0)
+      totalQuantity: positiveTransfers.reduce((sum, t) => sum + Math.abs(t.quantity || 0), 0)
     };
   }, [transferMovements]);
 
@@ -181,6 +186,7 @@ export default function StockTransfers() {
       });
     } catch (error) {
       console.error('Transfer error:', error);
+      alert(error.response?.data?.error?.message || error.message || 'Transfer failed');
     } finally {
       setIsSaving(false);
     }
@@ -304,32 +310,38 @@ export default function StockTransfers() {
                 className="pl-10"
               />
             </div>
-            <Select value={sourceWarehouseFilter} onValueChange={setSourceWarehouseFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder={t('source_warehouse') || "Manba ombori"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
-                {warehouses.filter(w => w.is_active).map(warehouse => (
-                  <SelectItem key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500">{t('from') || "Dan"}</span>
+              <Select value={sourceWarehouseFilter} onValueChange={setSourceWarehouseFilter}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder={t('source_warehouse') || "Manba ombori"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
+                  {warehouses.filter(w => w.is_active).map(warehouse => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-slate-500">{t('to') || "Ga"}</span>
+              <Select value={destWarehouseFilter} onValueChange={setDestWarehouseFilter}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder={t('destination_warehouse') || "Manzil ombori"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
+                  {warehouses.filter(w => w.is_active).map(warehouse => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={destWarehouseFilter} onValueChange={setDestWarehouseFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder={t('destination_warehouse') || "Manzil ombori"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
-                {warehouses.filter(w => w.is_active).map(warehouse => (
-                  <SelectItem key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {(searchQuery || sourceWarehouseFilter !== "all" || destWarehouseFilter !== "all") && (
               <Button variant="outline" onClick={resetFilters}>
                 <Filter className="w-4 h-4 mr-2" />
@@ -388,8 +400,13 @@ export default function StockTransfers() {
                 </TableHeader>
                 <TableBody>
                   {filteredTransfers.map((transfer) => {
-                    const fromType = getWarehouseType(transfer.warehouse_id);
+                    const fromWarehouseId = transfer.from_warehouse_id || transfer.warehouse_id;
+                    const fromType = getWarehouseType(fromWarehouseId);
                     const toType = getWarehouseType(transfer.to_warehouse_id);
+                    const productName = transfer.product_name || getProductName(transfer.product_id);
+                    const fromWarehouseName = transfer.from_warehouse_name || getWarehouseName(fromWarehouseId);
+                    const toWarehouseName = transfer.to_warehouse_name || getWarehouseName(transfer.to_warehouse_id);
+                    const transferDate = transfer.transaction_date || transfer.created_at;
 
                     return (
                       <TableRow key={transfer.id}>
@@ -401,7 +418,7 @@ export default function StockTransfers() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Package className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium">{getProductName(transfer.product_id)}</span>
+                            <span className="font-medium">{productName}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -411,7 +428,7 @@ export default function StockTransfers() {
                             ) : (
                               <MapPin className="w-4 h-4 text-green-500" />
                             )}
-                            <span>{getWarehouseName(transfer.warehouse_id)}</span>
+                            <span>{fromWarehouseName}</span>
                             {fromType === 'main' && (
                               <Badge variant="secondary" className="text-[10px] px-1">
                                 {t('main') || "Bosh"}
@@ -429,7 +446,7 @@ export default function StockTransfers() {
                             ) : (
                               <MapPin className="w-4 h-4 text-green-500" />
                             )}
-                            <span>{getWarehouseName(transfer.to_warehouse_id)}</span>
+                            <span>{toWarehouseName}</span>
                             {toType === 'main' && (
                               <Badge variant="secondary" className="text-[10px] px-1">
                                 {t('main') || "Bosh"}
@@ -439,12 +456,12 @@ export default function StockTransfers() {
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="font-semibold text-purple-600">
-                            {transfer.quantity?.toLocaleString()}
+                            {Math.abs(transfer.quantity || 0).toLocaleString()}
                           </span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-slate-500">
-                            {format(new Date(transfer.created_at), 'dd.MM.yyyy HH:mm')}
+                            {format(new Date(transferDate), 'dd.MM.yyyy HH:mm')}
                           </span>
                         </TableCell>
                         <TableCell>

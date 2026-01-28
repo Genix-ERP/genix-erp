@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,11 +138,14 @@ export default function ReorderRules() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [selectedTab, setSelectedTab] = useState("rules");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState(null);
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
     return () => {
       setShowForm(false);
+      setShowDeleteConfirm(false);
     };
   }, []);
 
@@ -281,9 +284,16 @@ export default function ReorderRules() {
     resetForm();
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm(t('confirm_delete') || 'Are you sure you want to delete this rule?')) {
-      await deleteReorderRule(id);
+  const handleDeleteClick = (rule) => {
+    setRuleToDelete(rule);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (ruleToDelete) {
+      await deleteReorderRule(ruleToDelete.id);
+      setShowDeleteConfirm(false);
+      setRuleToDelete(null);
     }
   };
 
@@ -307,7 +317,7 @@ export default function ReorderRules() {
       i.product_id === productId &&
       (!warehouseId || i.warehouse_id === warehouseId)
     );
-    return invItems.reduce((sum, i) => sum + i.quantity, 0);
+    return invItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   if (isLoading) {
@@ -515,7 +525,7 @@ export default function ReorderRules() {
                                   variant="ghost"
                                   size="icon"
                                   className="text-red-600 hover:text-red-700"
-                                  onClick={() => handleDelete(rule.id)}
+                                  onClick={() => handleDeleteClick(rule)}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
@@ -975,6 +985,42 @@ export default function ReorderRules() {
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
             >
               {editingRule ? (t('save_changes') || 'Save Changes') : (t('create_rule') || 'Create Rule')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('confirm_delete') || 'Confirm Delete'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('delete_rule_confirmation') || 'Are you sure you want to delete this reorder rule?'}
+            </p>
+            {ruleToDelete && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                <p className="font-medium">{getProductName(ruleToDelete.product_id)}</p>
+                <p className="text-sm text-slate-500">
+                  {t('warehouse')}: {getWarehouseName(ruleToDelete.warehouse_id)}
+                </p>
+              </div>
+            )}
+            <p className="mt-3 text-sm text-red-600">
+              {t('action_cannot_be_undone') || 'This action cannot be undone.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              {t('delete') || 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
