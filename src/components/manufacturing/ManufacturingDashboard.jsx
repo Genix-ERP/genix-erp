@@ -117,7 +117,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-blue-50 text-blue-700 border-blue-200">Active</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{activeProductionOrders}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{activeProductionOrders?.length || 0}</p>
             <p className="text-sm text-slate-600">{t('production_orders') || 'Production Orders'}</p>
           </CardContent>
         </Card>
@@ -130,7 +130,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-green-50 text-green-700 border-green-200">{t('today') || 'Today'}</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday}</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{completedToday?.length || 0}</p>
             <p className="text-sm text-slate-600">{t('orders_completed') || 'Orders Completed'}</p>
           </CardContent>
         </Card>
@@ -143,7 +143,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-purple-50 text-purple-700 border-purple-200">OEE</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{averageOEE}%</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(averageOEE || 0)}%</p>
             <p className="text-sm text-slate-600">{t('avg_equipment_efficiency') || 'Avg Equipment Efficiency'}</p>
           </CardContent>
         </Card>
@@ -156,7 +156,7 @@ export default function ManufacturingDashboard() {
               </div>
               <Badge className="bg-orange-50 text-orange-700 border-orange-200">{t('quality') || 'Quality'}</Badge>
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{qualityRate}%</p>
+            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(qualityRate || 0)}%</p>
             <p className="text-sm text-slate-600">{t('quality_pass_rate') || 'Quality Pass Rate'}</p>
           </CardContent>
         </Card>

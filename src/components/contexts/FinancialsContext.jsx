@@ -295,7 +295,7 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData] = await Promise.all([
             financeService.listJournalEntries(),
             salesService.listInvoices().catch(() => []),
             financeService.listAccounts(),
@@ -306,7 +306,12 @@ export function FinancialsProvider({ children }) {
             financeService.listBankAccounts().catch(() => []),
             financeService.listCashTransactions().catch(() => []),
             financeService.listCurrencies().catch(() => []),
-            financeService.listExchangeRates().catch(() => [])
+            financeService.listExchangeRates().catch(() => []),
+            financeService.listFiscalYears().catch(() => []),
+            financeService.listFiscalPeriods().catch(() => []),
+            financeService.listBudgets().catch(() => []),
+            financeService.listBudgetLines().catch(() => []),
+            financeService.listFixedAssets().catch(() => [])
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -348,6 +353,14 @@ export function FinancialsProvider({ children }) {
           setCurrencies(currenciesData || []);
           // Set exchange rates from backend
           setExchangeRates(exchangeRatesData || []);
+          // Set fiscal years and periods from backend
+          setFiscalYears(fiscalYearsData || []);
+          setFiscalPeriods(fiscalPeriodsData || []);
+          // Set budgets and budget lines from backend
+          setBudgets(budgetsData || []);
+          setBudgetLines(budgetLinesData || []);
+          // Set fixed assets from backend
+          setFixedAssets(fixedAssetsData || []);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -988,90 +1001,94 @@ export function FinancialsProvider({ children }) {
   }, [backendAvailable]);
 
   // ==================== FISCAL YEARS CRUD ====================
-  const createFiscalYear = useCallback((yearData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
-    const newYear = { id: `fy_${Date.now()}`, ...yearData, status: 'open', created_at: new Date().toISOString() };
-    const updated = [newYear, ...fiscalYears];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalYears(updated);
-    return newYear;
-  }, [fiscalYears, activeCompany]);
+  const createFiscalYear = useCallback(async (yearData) => {
+    try {
+      const newYear = await financeService.createFiscalYear(yearData);
+      setFiscalYears(prev => [newYear, ...prev]);
+      return newYear;
+    } catch (error) {
+      console.error('Failed to create fiscal year:', error);
+      throw error;
+    }
+  }, []);
 
-  const updateFiscalYear = useCallback((id, yearData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
-    const updated = fiscalYears.map(fy => fy.id === id ? { ...fy, ...yearData } : fy);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalYears(updated);
-  }, [fiscalYears, activeCompany]);
+  const updateFiscalYear = useCallback(async (id, yearData) => {
+    try {
+      const updated = await financeService.updateFiscalYear(id, yearData);
+      setFiscalYears(prev => prev.map(fy => fy.id === id ? updated : fy));
+      return updated;
+    } catch (error) {
+      console.error('Failed to update fiscal year:', error);
+      throw error;
+    }
+  }, []);
 
-  const closeFiscalYear = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
-    const periodsKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    // Close all periods in this fiscal year
-    const updatedPeriods = fiscalPeriods.map(fp =>
-      fp.fiscal_year_id === id ? { ...fp, status: 'closed' } : fp
-    );
-    localStorage.setItem(periodsKey, JSON.stringify(updatedPeriods));
-    setFiscalPeriods(updatedPeriods);
-    // Close the fiscal year
-    const updated = fiscalYears.map(fy => fy.id === id ? { ...fy, status: 'closed' } : fy);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalYears(updated);
-  }, [fiscalYears, fiscalPeriods, activeCompany]);
+  const closeFiscalYear = useCallback(async (id) => {
+    try {
+      await financeService.closeFiscalYear(id);
+      // Update local state to reflect closed status
+      setFiscalYears(prev => prev.map(fy => fy.id === id ? { ...fy, status: 'closed' } : fy));
+      setFiscalPeriods(prev => prev.map(fp => fp.fiscal_year_id === id ? { ...fp, status: 'closed' } : fp));
+    } catch (error) {
+      console.error('Failed to close fiscal year:', error);
+      throw error;
+    }
+  }, []);
 
-  const deleteFiscalYear = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_YEARS_KEY, companyId);
-    const periodsKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    // Delete all periods in this fiscal year
-    const updatedPeriods = fiscalPeriods.filter(fp => fp.fiscal_year_id !== id);
-    localStorage.setItem(periodsKey, JSON.stringify(updatedPeriods));
-    setFiscalPeriods(updatedPeriods);
-    // Delete the fiscal year
-    const updated = fiscalYears.filter(fy => fy.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalYears(updated);
-  }, [fiscalYears, fiscalPeriods, activeCompany]);
+  const deleteFiscalYear = useCallback(async (id) => {
+    try {
+      await financeService.deleteFiscalYear(id);
+      // Update local state to remove deleted fiscal year and its periods
+      setFiscalYears(prev => prev.filter(fy => fy.id !== id));
+      setFiscalPeriods(prev => prev.filter(fp => fp.fiscal_year_id !== id));
+    } catch (error) {
+      console.error('Failed to delete fiscal year:', error);
+      throw error;
+    }
+  }, []);
 
   // ==================== FISCAL PERIODS CRUD ====================
-  const createFiscalPeriod = useCallback((periodData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    const newPeriod = { id: `fp_${Date.now()}`, ...periodData, status: 'open' };
-    const updated = [...fiscalPeriods, newPeriod];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalPeriods(updated);
-    return newPeriod;
-  }, [fiscalPeriods, activeCompany]);
+  const createFiscalPeriod = useCallback(async (periodData) => {
+    try {
+      const newPeriod = await financeService.createFiscalPeriod(periodData);
+      setFiscalPeriods(prev => [...prev, newPeriod]);
+      return newPeriod;
+    } catch (error) {
+      console.error('Failed to create fiscal period:', error);
+      throw error;
+    }
+  }, []);
 
-  const createFiscalPeriods = useCallback((periods) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    const newPeriods = periods.map((p, idx) => ({ id: `fp_${Date.now()}_${idx}`, ...p, status: 'open' }));
-    const updated = [...fiscalPeriods, ...newPeriods];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalPeriods(updated);
-    return newPeriods;
-  }, [fiscalPeriods, activeCompany]);
+  const createFiscalPeriods = useCallback(async (periods) => {
+    try {
+      const newPeriods = await financeService.createFiscalPeriods(periods);
+      setFiscalPeriods(prev => [...prev, ...newPeriods]);
+      return newPeriods;
+    } catch (error) {
+      console.error('Failed to create fiscal periods:', error);
+      throw error;
+    }
+  }, []);
 
-  const closeFiscalPeriod = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    const updated = fiscalPeriods.map(fp => fp.id === id ? { ...fp, status: 'closed' } : fp);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalPeriods(updated);
-  }, [fiscalPeriods, activeCompany]);
+  const closeFiscalPeriod = useCallback(async (id) => {
+    try {
+      await financeService.closeFiscalPeriod(id);
+      setFiscalPeriods(prev => prev.map(fp => fp.id === id ? { ...fp, status: 'closed' } : fp));
+    } catch (error) {
+      console.error('Failed to close fiscal period:', error);
+      throw error;
+    }
+  }, []);
 
-  const reopenFiscalPeriod = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FISCAL_PERIODS_KEY, companyId);
-    const updated = fiscalPeriods.map(fp => fp.id === id ? { ...fp, status: 'open' } : fp);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFiscalPeriods(updated);
-  }, [fiscalPeriods, activeCompany]);
+  const reopenFiscalPeriod = useCallback(async (id) => {
+    try {
+      await financeService.reopenFiscalPeriod(id);
+      setFiscalPeriods(prev => prev.map(fp => fp.id === id ? { ...fp, status: 'open' } : fp));
+    } catch (error) {
+      console.error('Failed to reopen fiscal period:', error);
+      throw error;
+    }
+  }, []);
 
   const getFiscalPeriodsByYear = useCallback((fiscalYearId) => {
     return fiscalPeriods.filter(fp => fp.fiscal_year_id === fiscalYearId)
@@ -1079,72 +1096,81 @@ export function FinancialsProvider({ children }) {
   }, [fiscalPeriods]);
 
   // ==================== BUDGETS CRUD ====================
-  const createBudget = useCallback((budgetData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
-    const newBudget = { id: `bud_${Date.now()}`, ...budgetData, status: 'draft', created_at: new Date().toISOString() };
-    const updated = [newBudget, ...budgets];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgets(updated);
-    return newBudget;
-  }, [budgets, activeCompany]);
+  const createBudget = useCallback(async (budgetData) => {
+    try {
+      const newBudget = await financeService.createBudget(budgetData);
+      setBudgets(prev => [newBudget, ...prev]);
+      return newBudget;
+    } catch (error) {
+      console.error('Failed to create budget:', error);
+      throw error;
+    }
+  }, []);
 
-  const updateBudget = useCallback((id, budgetData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
-    const updated = budgets.map(b => b.id === id ? { ...b, ...budgetData } : b);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgets(updated);
-  }, [budgets, activeCompany]);
+  const updateBudget = useCallback(async (id, budgetData) => {
+    try {
+      const updated = await financeService.updateBudget(id, budgetData);
+      setBudgets(prev => prev.map(b => b.id === id ? updated : b));
+      return updated;
+    } catch (error) {
+      console.error('Failed to update budget:', error);
+      throw error;
+    }
+  }, []);
 
-  const deleteBudget = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
-    const linesKey = getStorageKey(BUDGET_LINES_KEY, companyId);
-    // Delete all budget lines
-    const updatedLines = budgetLines.filter(bl => bl.budget_id !== id);
-    localStorage.setItem(linesKey, JSON.stringify(updatedLines));
-    setBudgetLines(updatedLines);
-    // Delete the budget
-    const updated = budgets.filter(b => b.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgets(updated);
-  }, [budgets, budgetLines, activeCompany]);
+  const deleteBudget = useCallback(async (id) => {
+    try {
+      await financeService.deleteBudget(id);
+      setBudgets(prev => prev.filter(b => b.id !== id));
+      setBudgetLines(prev => prev.filter(bl => bl.budget_id !== id));
+    } catch (error) {
+      console.error('Failed to delete budget:', error);
+      throw error;
+    }
+  }, []);
 
-  const activateBudget = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGETS_KEY, companyId);
-    const updated = budgets.map(b => b.id === id ? { ...b, status: 'active' } : b);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgets(updated);
-  }, [budgets, activeCompany]);
+  const activateBudget = useCallback(async (id) => {
+    try {
+      await financeService.activateBudget(id);
+      setBudgets(prev => prev.map(b => b.id === id ? { ...b, status: 'active' } : b));
+    } catch (error) {
+      console.error('Failed to activate budget:', error);
+      throw error;
+    }
+  }, []);
 
   // ==================== BUDGET LINES CRUD ====================
-  const createBudgetLine = useCallback((lineData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
-    const newLine = { id: `bl_${Date.now()}`, ...lineData, actual_amount: 0 };
-    const updated = [...budgetLines, newLine];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgetLines(updated);
-    return newLine;
-  }, [budgetLines, activeCompany]);
+  const createBudgetLine = useCallback(async (lineData) => {
+    try {
+      const newLine = await financeService.createBudgetLine(lineData);
+      setBudgetLines(prev => [...prev, newLine]);
+      return newLine;
+    } catch (error) {
+      console.error('Failed to create budget line:', error);
+      throw error;
+    }
+  }, []);
 
-  const updateBudgetLine = useCallback((id, lineData) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
-    const updated = budgetLines.map(bl => bl.id === id ? { ...bl, ...lineData } : bl);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgetLines(updated);
-  }, [budgetLines, activeCompany]);
+  const updateBudgetLine = useCallback(async (id, lineData) => {
+    try {
+      const updated = await financeService.updateBudgetLine(id, lineData);
+      setBudgetLines(prev => prev.map(bl => bl.id === id ? updated : bl));
+      return updated;
+    } catch (error) {
+      console.error('Failed to update budget line:', error);
+      throw error;
+    }
+  }, []);
 
-  const deleteBudgetLine = useCallback((id) => {
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(BUDGET_LINES_KEY, companyId);
-    const updated = budgetLines.filter(bl => bl.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setBudgetLines(updated);
-  }, [budgetLines, activeCompany]);
+  const deleteBudgetLine = useCallback(async (id) => {
+    try {
+      await financeService.deleteBudgetLine(id);
+      setBudgetLines(prev => prev.filter(bl => bl.id !== id));
+    } catch (error) {
+      console.error('Failed to delete budget line:', error);
+      throw error;
+    }
+  }, []);
 
   const getBudgetLinesByBudget = useCallback((budgetId) => {
     return budgetLines.filter(bl => bl.budget_id === budgetId);
@@ -1165,86 +1191,47 @@ export function FinancialsProvider({ children }) {
 
   // ==================== FIXED ASSETS CRUD ====================
   const createFixedAsset = useCallback(async (assetData) => {
-    if (backendAvailable) {
-      try {
-        const newAsset = await financeService.createFixedAsset(assetData);
-        setFixedAssets(prev => [newAsset, ...prev]);
-        return newAsset;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+    try {
+      const newAsset = await financeService.createFixedAsset(assetData);
+      setFixedAssets(prev => [newAsset, ...prev]);
+      return newAsset;
+    } catch (error) {
+      console.error('Failed to create fixed asset:', error);
+      throw error;
     }
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-    const newAsset = {
-      id: `fa_${Date.now()}`,
-      code: `FA-${String(fixedAssets.length + 1).padStart(3, '0')}`,
-      ...assetData,
-      accumulated_depreciation: 0,
-      status: 'active',
-      created_at: new Date().toISOString()
-    };
-    const updated = [newAsset, ...fixedAssets];
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFixedAssets(updated);
-    return newAsset;
-  }, [backendAvailable, fixedAssets, activeCompany]);
+  }, []);
 
   const updateFixedAsset = useCallback(async (id, assetData) => {
-    if (backendAvailable) {
-      try {
-        const updated = await financeService.updateFixedAsset(id, assetData);
-        setFixedAssets(prev => prev.map(fa => fa.id === id ? updated : fa));
-        return updated;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const updated = await financeService.updateFixedAsset(id, assetData);
+      setFixedAssets(prev => prev.map(fa => fa.id === id ? updated : fa));
+      return updated;
+    } catch (error) {
+      console.error('Failed to update fixed asset:', error);
+      throw error;
     }
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-    const updated = fixedAssets.map(fa => fa.id === id ? { ...fa, ...assetData } : fa);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFixedAssets(updated);
-  }, [backendAvailable, fixedAssets, activeCompany]);
+  }, []);
 
   const deleteFixedAsset = useCallback(async (id) => {
-    if (backendAvailable) {
-      try {
-        await financeService.deleteFixedAsset(id);
-        setFixedAssets(prev => prev.filter(fa => fa.id !== id));
-        setDepreciationEntries(prev => prev.filter(de => de.asset_id !== id));
-        return;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      await financeService.deleteFixedAsset(id);
+      setFixedAssets(prev => prev.filter(fa => fa.id !== id));
+    } catch (error) {
+      console.error('Failed to delete fixed asset:', error);
+      throw error;
     }
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-    const depKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
-    // Delete depreciation entries
-    const updatedDep = depreciationEntries.filter(de => de.asset_id !== id);
-    localStorage.setItem(depKey, JSON.stringify(updatedDep));
-    setDepreciationEntries(updatedDep);
-    // Delete the asset
-    const updated = fixedAssets.filter(fa => fa.id !== id);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFixedAssets(updated);
-  }, [backendAvailable, fixedAssets, depreciationEntries, activeCompany]);
+  }, []);
 
   const disposeFixedAsset = useCallback(async (id, disposalData) => {
-    if (backendAvailable) {
-      try {
-        const disposed = await financeService.disposeFixedAsset(id, disposalData);
-        setFixedAssets(prev => prev.map(fa => fa.id === id ? disposed : fa));
-        return disposed;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const disposed = await financeService.disposeFixedAsset(id, disposalData);
+      setFixedAssets(prev => prev.map(fa => fa.id === id ? disposed : fa));
+      return disposed;
+    } catch (error) {
+      console.error('Failed to dispose fixed asset:', error);
+      throw error;
     }
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-    const updated = fixedAssets.map(fa => fa.id === id ? {
-      ...fa,
-      status: 'disposed',
-      disposal_date: disposalData.disposal_date,
-      disposal_amount: disposalData.disposal_amount,
-      disposal_reason: disposalData.reason
-    } : fa);
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-    setFixedAssets(updated);
-  }, [backendAvailable, fixedAssets, activeCompany]);
+  }, []);
 
   // ==================== DEPRECIATION ENTRIES CRUD ====================
   const createDepreciationEntry = useCallback(async (entryData) => {
@@ -1267,14 +1254,13 @@ export function FinancialsProvider({ children }) {
   }, [depreciationEntries, fixedAssets, activeCompany]);
 
   const getDepreciationEntriesByAsset = useCallback(async (assetId) => {
-    if (backendAvailable) {
-      try {
-        return await financeService.getDepreciationEntries(assetId);
-      } catch (err) { console.error('API error:', err); }
+    try {
+      return await financeService.getDepreciationEntries(assetId);
+    } catch (error) {
+      console.error('Failed to get depreciation entries:', error);
+      throw error;
     }
-    return depreciationEntries.filter(de => de.asset_id === assetId)
-      .sort((a, b) => new Date(b.depreciation_date) - new Date(a.depreciation_date));
-  }, [backendAvailable, depreciationEntries]);
+  }, []);
 
   const calculateMonthlyDepreciation = useCallback((asset) => {
     if (!asset || asset.status !== 'active') return 0;
@@ -1308,62 +1294,17 @@ export function FinancialsProvider({ children }) {
   }, []);
 
   const runDepreciationForPeriod = useCallback(async (period) => {
-    if (backendAvailable) {
-      try {
-        const result = await financeService.runDepreciation({ period });
-        // Reload fixed assets to get updated accumulated_depreciation
-        const assetsData = await financeService.listFixedAssets();
-        setFixedAssets(assetsData || []);
-        return result;
-      } catch (err) { console.error('API error:', err); }
+    try {
+      const result = await financeService.runDepreciation({ period });
+      // Reload fixed assets to get updated accumulated_depreciation
+      const assetsData = await financeService.listFixedAssets();
+      setFixedAssets(assetsData || []);
+      return result;
+    } catch (error) {
+      console.error('Failed to run depreciation:', error);
+      throw error;
     }
-    const companyId = activeCompany?.id;
-    const storageKey = getStorageKey(DEPRECIATION_ENTRIES_KEY, companyId);
-    const assetsKey = getStorageKey(FIXED_ASSETS_KEY, companyId);
-
-    const activeAssets = fixedAssets.filter(fa => fa.status === 'active');
-    const newEntries = [];
-    const assetUpdates = {};
-
-    activeAssets.forEach(asset => {
-      // Check if depreciation already exists for this period
-      const existingEntry = depreciationEntries.find(
-        de => de.asset_id === asset.id && de.period === period
-      );
-      if (existingEntry) return;
-
-      const amount = calculateMonthlyDepreciation(asset);
-      if (amount > 0) {
-        const entry = {
-          id: `de_${Date.now()}_${asset.id}`,
-          asset_id: asset.id,
-          period: period,
-          amount: amount,
-          depreciation_date: new Date().toISOString().split('T')[0],
-          method: asset.depreciation_method,
-          created_at: new Date().toISOString()
-        };
-        newEntries.push(entry);
-        assetUpdates[asset.id] = (asset.accumulated_depreciation || 0) + amount;
-      }
-    });
-
-    if (newEntries.length > 0) {
-      const updatedEntries = [...depreciationEntries, ...newEntries];
-      localStorage.setItem(storageKey, JSON.stringify(updatedEntries));
-      setDepreciationEntries(updatedEntries);
-
-      const updatedAssets = fixedAssets.map(fa =>
-        assetUpdates[fa.id] !== undefined
-          ? { ...fa, accumulated_depreciation: assetUpdates[fa.id] }
-          : fa
-      );
-      localStorage.setItem(assetsKey, JSON.stringify(updatedAssets));
-      setFixedAssets(updatedAssets);
-    }
-
-    return newEntries;
-  }, [backendAvailable, fixedAssets, depreciationEntries, calculateMonthlyDepreciation, activeCompany]);
+  }, []);
 
   return (
     <FinancialsContext.Provider value={{
