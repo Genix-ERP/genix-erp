@@ -13,6 +13,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from '@/api/services';
 
 export default function ProductionOrders() {
   const { language } = useLanguage();
@@ -35,6 +36,7 @@ export default function ProductionOrders() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [products, setProducts] = useState([]);
   const [newOrder, setNewOrder] = useState({
     name: '',
     product_name: '',
@@ -45,6 +47,19 @@ export default function ProductionOrders() {
     scheduled_start: new Date().toISOString().split('T')[0],
     scheduled_end: ''
   });
+
+  // Load products
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const productsData = await inventoryService.listProducts();
+        setProducts(productsData || []);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+      }
+    };
+    loadProducts();
+  }, []);
 
   const filteredOrders = useMemo(() => {
     let filtered = productionOrders;
@@ -85,6 +100,10 @@ export default function ProductionOrders() {
       });
     } catch (error) {
       console.error('Error creating production order:', error);
+      const errorMsg = typeof error.response?.data?.error === 'string'
+        ? error.response.data.error
+        : error.response?.data?.error?.message || error.message;
+      alert(`Failed to create production order: ${errorMsg}`);
     }
   };
 
@@ -133,6 +152,15 @@ export default function ProductionOrders() {
     if (priority <= 4) return { label: t('high') || 'High', color: 'bg-orange-100 text-orange-700' };
     if (priority <= 6) return { label: t('normal') || 'Normal', color: 'bg-blue-100 text-blue-700' };
     return { label: t('low') || 'Low', color: 'bg-slate-100 text-slate-700' };
+  };
+
+  const getStatusLabel = (status) => {
+    const statusKey = status?.toLowerCase();
+    return t(statusKey) || status?.replace('_', ' ');
+  };
+
+  const getUnitLabel = (uom) => {
+    return t(uom) || uom;
   };
 
   return (
@@ -235,22 +263,22 @@ export default function ProductionOrders() {
                           <div className="text-sm">
                             <span className="font-semibold">{order.quantity_produced || 0}</span>
                             <span className="text-slate-500"> / {order.quantity_planned}</span>
-                            <span className="text-xs text-slate-400 ml-1">{order.uom}</span>
+                            <span className="text-xs text-slate-400 ml-1">{getUnitLabel(order.uom)}</span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge className={priorityInfo.color}>{priorityInfo.label}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(order.status)}>{order.status?.replace('_', ' ')}</Badge>
+                          <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
                         </TableCell>
                         <TableCell>
                           <div className="text-xs">
                             <p className="text-slate-600">
-                              Start: {order.scheduled_start ? format(new Date(order.scheduled_start), 'MMM dd') : '-'}
+                              {t('start') || 'Start'}: {order.scheduled_start ? format(new Date(order.scheduled_start), 'MMM dd') : '-'}
                             </p>
                             <p className="text-slate-600">
-                              End: {order.scheduled_end ? format(new Date(order.scheduled_end), 'MMM dd') : '-'}
+                              {t('end') || 'End'}: {order.scheduled_end ? format(new Date(order.scheduled_end), 'MMM dd') : '-'}
                             </p>
                           </div>
                         </TableCell>
@@ -268,27 +296,27 @@ export default function ProductionOrders() {
                         <TableCell>
                           <div className="flex gap-1">
                             {order.status === 'draft' && (
-                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'confirm')} title="Confirm">
+                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'confirm')} title={t('confirm') || 'Confirm'}>
                                 <CheckCircle className="w-4 h-4" />
                               </Button>
                             )}
                             {(order.status === 'confirmed' || order.status === 'paused') && (
-                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'start')} title="Start">
+                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'start')} title={t('start') || 'Start'}>
                                 <Play className="w-4 h-4" />
                               </Button>
                             )}
                             {order.status === 'in_progress' && (
                               <>
-                                <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'pause')} title="Pause">
+                                <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'pause')} title={t('paused') || 'Pause'}>
                                   <Pause className="w-4 h-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'complete')} title="Complete">
+                                <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'complete')} title={t('completed') || 'Complete'}>
                                   <CheckCircle className="w-4 h-4 text-green-600" />
                                 </Button>
                               </>
                             )}
                             {!['completed', 'cancelled', 'closed'].includes(order.status) && (
-                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'cancel')} title="Cancel">
+                              <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'cancel')} title={t('cancel') || 'Cancel'}>
                                 <X className="w-4 h-4 text-red-500" />
                               </Button>
                             )}
@@ -338,25 +366,33 @@ export default function ProductionOrders() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-1 block">{t('product_name') || 'Product Name'} *</label>
-              <Input
-                placeholder={t('enter_product_name') || 'Enter product name'}
-                value={newOrder.product_name}
-                onChange={(e) => setNewOrder({...newOrder, product_name: e.target.value})}
-                required
-              />
+              <label className="text-sm font-medium mb-1 block">{t('product') || 'Product'} *</label>
+              <Select
+                value={newOrder.product_id}
+                onValueChange={(value) => {
+                  const product = products.find(p => p.id === value);
+                  setNewOrder({
+                    ...newOrder,
+                    product_id: value,
+                    product_name: product?.name || '',
+                    uom: product?.uom || 'units'
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_product') || 'Select a product'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} ({product.sku || product.code || 'No SKU'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('product_id') || 'Product ID'} *</label>
-                <Input
-                  placeholder={t('product_id') || 'Product ID'}
-                  value={newOrder.product_id}
-                  onChange={(e) => setNewOrder({...newOrder, product_id: e.target.value})}
-                  required
-                />
-              </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('quantity') || 'Quantity'} *</label>
                 <Input
