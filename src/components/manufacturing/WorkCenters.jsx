@@ -24,26 +24,41 @@ export default function WorkCenters() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [newWorkCenter, setNewWorkCenter] = useState({
-    work_center_code: '',
+    code: '',
     name: '',
-    work_center_type: 'machine',
-    capacity_per_day: 0,
-    efficiency_rate: 100,
-    cost_per_hour: 0,
-    location: '',
-    status: 'operational'
+    description: '',
+    department: '',
+    capacity_per_hour: 1,
+    efficiency_factor: 100,
+    oee_target: 85,
+    working_hours_per_day: 8,
+    hourly_cost: 0,
+    setup_cost: 0,
+    overhead_cost: 0,
+    currency: 'USD',
+    status: 'active',
+    is_available: true,
+    notes: ''
   });
 
   const handleCreateWorkCenter = async () => {
     try {
       const wcData = {
-        ...newWorkCenter,
-        work_center_code: newWorkCenter.work_center_code || `WC-${Date.now()}`,
-        capacity_per_day: parseFloat(newWorkCenter.capacity_per_day),
-        efficiency_rate: parseFloat(newWorkCenter.efficiency_rate),
-        cost_per_hour: parseFloat(newWorkCenter.cost_per_hour),
-        utilization_rate: 0,
-        oee_score: 85 // Default OEE
+        code: newWorkCenter.code || `WC-${Date.now()}`,
+        name: newWorkCenter.name,
+        description: newWorkCenter.description || null,
+        department: newWorkCenter.department || null,
+        capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
+        efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
+        oee_target: parseFloat(newWorkCenter.oee_target) || 85,
+        working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
+        hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
+        setup_cost: parseFloat(newWorkCenter.setup_cost) || 0,
+        overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
+        currency: newWorkCenter.currency || 'USD',
+        status: newWorkCenter.status || 'active',
+        is_available: newWorkCenter.is_available !== false,
+        notes: newWorkCenter.notes || null
       };
 
       await createWorkCenter(wcData);
@@ -51,19 +66,28 @@ export default function WorkCenters() {
       resetForm();
     } catch (error) {
       console.error('Error creating work center:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Failed to create work center: ${errorMsg}`);
     }
   };
 
   const resetForm = () => {
     setNewWorkCenter({
-      work_center_code: '',
+      code: '',
       name: '',
-      work_center_type: 'machine',
-      capacity_per_day: 0,
-      efficiency_rate: 100,
-      cost_per_hour: 0,
-      location: '',
-      status: 'operational'
+      description: '',
+      department: '',
+      capacity_per_hour: 1,
+      efficiency_factor: 100,
+      oee_target: 85,
+      working_hours_per_day: 8,
+      hourly_cost: 0,
+      setup_cost: 0,
+      overhead_cost: 0,
+      currency: 'USD',
+      status: 'active',
+      is_available: true,
+      notes: ''
     });
   };
 
@@ -141,11 +165,11 @@ export default function WorkCenters() {
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle className="text-base font-bold">{wc.name}</CardTitle>
-                      <p className="text-xs text-slate-500 mt-1">{wc.work_center_code}</p>
+                      <p className="text-xs text-slate-500 mt-1">{wc.code}</p>
                     </div>
                     <Badge className={getStatusColor(wc.status)}>
                       {getStatusIcon(wc.status)}
-                      <span className="ml-1">{wc.status}</span>
+                      <span className="ml-1">{t(wc.status) || wc.status}</span>
                     </Badge>
                   </div>
                 </CardHeader>
@@ -153,33 +177,33 @@ export default function WorkCenters() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-blue-50 rounded-lg">
                       <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
-                      <p className="text-lg font-bold text-blue-900">{wc.utilization_rate || 0}%</p>
+                      <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
                     </div>
                     <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-purple-600 font-medium">{t('oee_score')}</p>
-                      <p className="text-lg font-bold text-purple-900">{wc.oee_score || 0}%</p>
+                      <p className="text-xs text-purple-600 font-medium">{t('oee_target')}</p>
+                      <p className="text-lg font-bold text-purple-900">{Math.round(wc.oee_target || 0)}%</p>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">{t('type')}:</span>
-                      <Badge variant="outline" className="text-xs">{t(wc.work_center_type) || wc.work_center_type}</Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">{t('capacity_per_day')}:</span>
-                      <span className="font-semibold">{wc.capacity_per_day || 0} {t('units')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">{t('cost_per_hour')}:</span>
-                      <span className="font-semibold">${wc.cost_per_hour || 0}</span>
-                    </div>
-                    {wc.location && (
+                    {wc.department && (
                       <div className="flex justify-between">
-                        <span className="text-slate-600">{t('location')}:</span>
-                        <span className="font-medium">{wc.location}</span>
+                        <span className="text-slate-600">{t('department')}:</span>
+                        <span className="font-medium">{wc.department}</span>
                       </div>
                     )}
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">{t('capacity_per_hour')}:</span>
+                      <span className="font-semibold">{wc.capacity_per_hour || 0} {t('units')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">{t('hourly_cost')}:</span>
+                      <span className="font-semibold">${wc.hourly_cost || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">{t('working_hours_per_day')}:</span>
+                      <span className="font-semibold">{wc.working_hours_per_day || 0} {t('hours')}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -232,8 +256,8 @@ export default function WorkCenters() {
                 <Input
                   id="wc_code"
                   placeholder={t('auto_generated_if_empty')}
-                  value={newWorkCenter.work_center_code}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, work_center_code: e.target.value})}
+                  value={newWorkCenter.code}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, code: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
@@ -250,40 +274,34 @@ export default function WorkCenters() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_type" label={t('type')} helpText={t('help_workcenter_type')} required />
-                <Select value={newWorkCenter.work_center_type} onValueChange={(value) => setNewWorkCenter({...newWorkCenter, work_center_type: value})}>
-                  <SelectTrigger id="wc_type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="machine">{t('machine')}</SelectItem>
-                    <SelectItem value="assembly_line">{t('assembly_line')}</SelectItem>
-                    <SelectItem value="quality_station">{t('quality_station')}</SelectItem>
-                    <SelectItem value="packaging">{t('packaging')}</SelectItem>
-                    <SelectItem value="warehouse">{t('warehouse')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <LabelWithHelp htmlFor="wc_department" label={t('department')} helpText={t('help_workcenter_department')} />
+                <Input
+                  id="wc_department"
+                  placeholder={t('department')}
+                  value={newWorkCenter.department}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, department: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_location" label={t('location')} helpText={t('help_workcenter_location')} />
+                <LabelWithHelp htmlFor="wc_description" label={t('description')} helpText={t('help_workcenter_description')} />
                 <Input
-                  id="wc_location"
-                  placeholder={t('physical_location')}
-                  value={newWorkCenter.location}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, location: e.target.value})}
+                  id="wc_description"
+                  placeholder={t('description')}
+                  value={newWorkCenter.description}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, description: e.target.value})}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_day')} helpText={t('help_workcenter_capacity')} />
+                <LabelWithHelp htmlFor="wc_capacity" label={t('capacity_per_hour')} helpText={t('help_workcenter_capacity')} />
                 <Input
                   id="wc_capacity"
                   type="number"
-                  placeholder="0"
-                  value={newWorkCenter.capacity_per_day}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_day: e.target.value})}
+                  placeholder="1"
+                  value={newWorkCenter.capacity_per_hour || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, capacity_per_hour: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
@@ -292,18 +310,51 @@ export default function WorkCenters() {
                   id="wc_efficiency"
                   type="number"
                   placeholder="100"
-                  value={newWorkCenter.efficiency_rate}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, efficiency_rate: e.target.value})}
+                  value={newWorkCenter.efficiency_factor || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, efficiency_factor: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_cost" label={t('cost_per_hour')} helpText={t('help_workcenter_cost')} />
+                <LabelWithHelp htmlFor="wc_hours" label={t('working_hours_per_day')} helpText={t('help_workcenter_hours')} />
                 <Input
-                  id="wc_cost"
+                  id="wc_hours"
+                  type="number"
+                  placeholder="8"
+                  value={newWorkCenter.working_hours_per_day || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, working_hours_per_day: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_hourly_cost" label={t('hourly_cost')} helpText={t('help_workcenter_hourly_cost')} />
+                <Input
+                  id="wc_hourly_cost"
                   type="number"
                   placeholder="0"
-                  value={newWorkCenter.cost_per_hour}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, cost_per_hour: e.target.value})}
+                  value={newWorkCenter.hourly_cost || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_setup_cost" label={t('setup_cost')} helpText={t('help_workcenter_setup_cost')} />
+                <Input
+                  id="wc_setup_cost"
+                  type="number"
+                  placeholder="0"
+                  value={newWorkCenter.setup_cost || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, setup_cost: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="wc_oee" label={t('oee_target')} helpText={t('help_workcenter_oee')} />
+                <Input
+                  id="wc_oee"
+                  type="number"
+                  placeholder="85"
+                  value={newWorkCenter.oee_target || ''}
+                  onChange={(e) => setNewWorkCenter({...newWorkCenter, oee_target: e.target.value})}
                 />
               </div>
             </div>

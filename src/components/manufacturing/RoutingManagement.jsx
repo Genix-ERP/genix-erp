@@ -346,7 +346,7 @@ export default function RoutingManagement() {
                     <div className="flex items-center gap-2">
                       <div className="text-right mr-4">
                         <p className="text-sm text-slate-500">{t('total_time') || "Jami vaqt"}</p>
-                        <p className="font-medium">{(totals.totalDuration / 60).toFixed(1)}h</p>
+                        <p className="font-medium">{(totals.totalDuration / 60).toFixed(1)}{t('h')}</p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -393,8 +393,8 @@ export default function RoutingManagement() {
                           </div>
                           <div className="text-xs text-slate-500">
                             <Clock className="w-3 h-3 inline mr-1" />
-                            {op.duration_minutes}min
-                            {op.setup_time_minutes > 0 && ` (+${op.setup_time_minutes}min)`}
+                            {op.duration_minutes}{t('min')}
+                            {op.setup_time_minutes > 0 && ` (+${op.setup_time_minutes}${t('min')})`}
                           </div>
                         </div>
                         {index < routing.operations.length - 1 && (
@@ -480,7 +480,7 @@ export default function RoutingManagement() {
                       <div className="flex-1">
                         <p className="font-medium text-sm">{op.name}</p>
                         <p className="text-xs text-slate-500">
-                          {workCenters.find(wc => wc.id === op.work_center_id)?.name || op.work_center_id} • {op.duration_minutes}min
+                          {workCenters.find(wc => wc.id === op.work_center_id)?.name || op.work_center_id} • {op.duration_minutes}{t('min')}
                         </p>
                       </div>
                       <Button
@@ -655,8 +655,8 @@ export default function RoutingManagement() {
                           <TableCell>
                             {workCenters.find(wc => wc.id === op.work_center_id)?.name || op.work_center_id}
                           </TableCell>
-                          <TableCell className="text-right">{op.duration_minutes} min</TableCell>
-                          <TableCell className="text-right">{op.setup_time_minutes} min</TableCell>
+                          <TableCell className="text-right">{op.duration_minutes} {t('min')}</TableCell>
+                          <TableCell className="text-right">{op.setup_time_minutes} {t('min')}</TableCell>
                           <TableCell className="text-right">${opCost.toFixed(2)}</TableCell>
                         </TableRow>
                       );
@@ -669,7 +669,7 @@ export default function RoutingManagement() {
                 <div>
                   <p className="text-sm text-slate-500">{t('total_time') || "Jami vaqt"}</p>
                   <p className="text-xl font-bold">
-                    {(calculateRoutingTotals(selectedRouting).totalDuration / 60).toFixed(1)}h
+                    {(calculateRoutingTotals(selectedRouting).totalDuration / 60).toFixed(1)}{t('h')}
                   </p>
                 </div>
                 <div>
@@ -678,6 +678,231 @@ export default function RoutingManagement() {
                     ${calculateRoutingTotals(selectedRouting).totalCost.toFixed(2)}
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Routing Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('edit_routing') || "Marshrutni tahrirlash"}</DialogTitle>
+          </DialogHeader>
+          {selectedRouting && (
+            <div className="space-y-6 py-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('routing_name') || "Nomi"} *</Label>
+                  <Input
+                    value={selectedRouting.name}
+                    onChange={e => setSelectedRouting({ ...selectedRouting, name: e.target.value })}
+                    placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('routing_code') || "Kod"} *</Label>
+                  <Input
+                    value={selectedRouting.code}
+                    onChange={e => setSelectedRouting({ ...selectedRouting, code: e.target.value })}
+                    placeholder="RT-001"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('description') || "Tavsif"}</Label>
+                <Textarea
+                  value={selectedRouting.description}
+                  onChange={e => setSelectedRouting({ ...selectedRouting, description: e.target.value })}
+                  placeholder={t('enter_description') || "Tavsif kiriting..."}
+                  rows={2}
+                />
+              </div>
+
+              {/* Operations */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-medium mb-4">{t('operations') || "Operatsiyalar"}</h3>
+
+                {/* Existing Operations */}
+                {selectedRouting.operations && selectedRouting.operations.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {selectedRouting.operations.map((op, index) => (
+                      <div key={op.id} className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const newOps = [...selectedRouting.operations];
+                              if (index > 0) {
+                                [newOps[index], newOps[index - 1]] = [newOps[index - 1], newOps[index]];
+                                newOps.forEach((o, idx) => { o.sequence = (idx + 1) * 10; });
+                                setSelectedRouting({ ...selectedRouting, operations: newOps });
+                              }
+                            }}
+                            disabled={index === 0}
+                            className="h-6 w-6 p-0"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const newOps = [...selectedRouting.operations];
+                              if (index < newOps.length - 1) {
+                                [newOps[index], newOps[index + 1]] = [newOps[index + 1], newOps[index]];
+                                newOps.forEach((o, idx) => { o.sequence = (idx + 1) * 10; });
+                                setSelectedRouting({ ...selectedRouting, operations: newOps });
+                              }
+                            }}
+                            disabled={index === selectedRouting.operations.length - 1}
+                            className="h-6 w-6 p-0"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <Badge variant="outline">{op.sequence}</Badge>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{op.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {workCenters.find(wc => wc.id === op.work_center_id)?.name || op.work_center_id} • {op.duration_minutes}{t('min')}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const newOps = selectedRouting.operations.filter(o => o.id !== op.id);
+                            setSelectedRouting({ ...selectedRouting, operations: newOps });
+                          }}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Operation */}
+                <div className="p-4 border border-dashed border-slate-300 rounded-lg space-y-4">
+                  <h4 className="font-medium text-sm">{t('add_operation') || "Operatsiya qo'shish"}</h4>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>{t('operation_name') || "Operatsiya nomi"}</Label>
+                      <Input
+                        value={newOperation.name}
+                        onChange={e => setNewOperation({ ...newOperation, name: e.target.value })}
+                        placeholder={t('enter_operation_name') || "Operatsiya nomini kiriting"}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t('work_center') || "Ish markazi"}</Label>
+                      <Select
+                        value={newOperation.work_center_id}
+                        onValueChange={value => setNewOperation({ ...newOperation, work_center_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workCenters.map(wc => (
+                            <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>{t('duration_minutes') || "Davomiyligi (daq)"}</Label>
+                      <Input
+                        type="number"
+                        value={newOperation.duration_minutes}
+                        onChange={e => setNewOperation({ ...newOperation, duration_minutes: parseInt(e.target.value) || 0 })}
+                        placeholder="60"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t('setup_time') || "Sozlash vaqti (daq)"}</Label>
+                      <Input
+                        type="number"
+                        value={newOperation.setup_time_minutes}
+                        onChange={e => setNewOperation({ ...newOperation, setup_time_minutes: parseInt(e.target.value) || 0 })}
+                        placeholder="10"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t('cost_per_hour') || "Soatlik narx"}</Label>
+                      <Input
+                        type="number"
+                        value={newOperation.cost_per_hour}
+                        onChange={e => setNewOperation({ ...newOperation, cost_per_hour: parseFloat(e.target.value) || 0 })}
+                        placeholder="100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t('operation_description') || "Tavsif"}</Label>
+                    <Textarea
+                      value={newOperation.description}
+                      onChange={e => setNewOperation({ ...newOperation, description: e.target.value })}
+                      placeholder={t('enter_operation_description') || "Operatsiya tavsifini kiriting..."}
+                      rows={2}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      if (newOperation.name && newOperation.work_center_id) {
+                        const operation = {
+                          id: `op_${Date.now()}`,
+                          ...newOperation,
+                          sequence: ((selectedRouting.operations?.length || 0) + 1) * 10,
+                        };
+                        setSelectedRouting({
+                          ...selectedRouting,
+                          operations: [...(selectedRouting.operations || []), operation],
+                        });
+                        setNewOperation({
+                          sequence: 1,
+                          name: '',
+                          work_center_id: '',
+                          description: '',
+                          duration_minutes: 0,
+                          setup_time_minutes: 0,
+                          cost_per_hour: 0,
+                        });
+                      }
+                    }}
+                    disabled={!newOperation.name || !newOperation.work_center_id}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('add_to_routing') || "Texjarayonga qo'shish"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => { setShowEditModal(false); setSelectedRouting(null); }}>
+                  {t('cancel') || "Bekor qilish"}
+                </Button>
+                <Button
+                  onClick={handleUpdateRouting}
+                  disabled={isSubmitting || !selectedRouting.name || !selectedRouting.code || !selectedRouting.operations || selectedRouting.operations.length === 0}
+                  className="bg-gradient-to-r from-blue-600 to-purple-600"
+                >
+                  {t('update') || "Yangilash"}
+                </Button>
               </div>
             </div>
           )}

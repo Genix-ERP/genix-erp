@@ -374,6 +374,117 @@ export const financeService = {
     const response = await apiClient.post(`/purchase-invoices/${id}/pay`, { amount });
     return response.data.data;
   },
+
+  // Fiscal Years
+  async listFiscalYears(params = {}) {
+    const response = await apiClient.get('/fiscal-years', { params });
+    return response.data.data;
+  },
+
+  async getFiscalYear(id) {
+    const response = await apiClient.get(`/fiscal-years/${id}`);
+    return response.data.data;
+  },
+
+  async createFiscalYear(data) {
+    const response = await apiClient.post('/fiscal-years', data);
+    return response.data.data;
+  },
+
+  async updateFiscalYear(id, data) {
+    const response = await apiClient.put(`/fiscal-years/${id}`, data);
+    return response.data.data;
+  },
+
+  async closeFiscalYear(id) {
+    const response = await apiClient.post(`/fiscal-years/${id}/close`);
+    return response.data.data;
+  },
+
+  async deleteFiscalYear(id) {
+    await apiClient.delete(`/fiscal-years/${id}`);
+  },
+
+  // Fiscal Periods
+  async listFiscalPeriods(params = {}) {
+    const response = await apiClient.get('/fiscal-periods', { params });
+    return response.data.data;
+  },
+
+  async getFiscalPeriod(id) {
+    const response = await apiClient.get(`/fiscal-periods/${id}`);
+    return response.data.data;
+  },
+
+  async createFiscalPeriod(data) {
+    const response = await apiClient.post('/fiscal-periods', data);
+    return response.data.data;
+  },
+
+  async createFiscalPeriods(periods) {
+    const response = await apiClient.post('/fiscal-periods/batch', { periods });
+    return response.data.data;
+  },
+
+  async closeFiscalPeriod(id) {
+    const response = await apiClient.post(`/fiscal-periods/${id}/close`);
+    return response.data.data;
+  },
+
+  async reopenFiscalPeriod(id) {
+    const response = await apiClient.post(`/fiscal-periods/${id}/reopen`);
+    return response.data.data;
+  },
+
+  // Budgets
+  async listBudgets(params = {}) {
+    const response = await apiClient.get('/budgets', { params });
+    return response.data.data;
+  },
+
+  async getBudget(id) {
+    const response = await apiClient.get(`/budgets/${id}`);
+    return response.data.data;
+  },
+
+  async createBudget(data) {
+    const response = await apiClient.post('/budgets', data);
+    return response.data.data;
+  },
+
+  async updateBudget(id, data) {
+    const response = await apiClient.put(`/budgets/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteBudget(id) {
+    await apiClient.delete(`/budgets/${id}`);
+  },
+
+  async activateBudget(id) {
+    const response = await apiClient.post(`/budgets/${id}/activate`);
+    return response.data.data;
+  },
+
+  // Budget Lines
+  async listBudgetLines(params = {}) {
+    const response = await apiClient.get('/budget-lines', { params });
+    return response.data.data;
+  },
+
+  async createBudgetLine(data) {
+    const response = await apiClient.post('/budget-lines', data);
+    return response.data.data;
+  },
+
+  async updateBudgetLine(id, data) {
+    const response = await apiClient.put(`/budget-lines/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteBudgetLine(id) {
+    await apiClient.delete(`/budget-lines/${id}`);
+  },
 };
 
 export default financeService;

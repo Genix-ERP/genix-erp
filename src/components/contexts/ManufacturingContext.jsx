@@ -276,6 +276,16 @@ export function ManufacturingProvider({ children }) {
     backflushEnabled: getSetting('manufacturing.production.backflush_enabled', false)
   }), [getSetting]);
 
+  // Helper function to load demo data
+  const loadDemoData = useCallback((demoMode) => {
+    setWorkCenters(demoMode ? sampleWorkCenters : []);
+    setProductionOrders(demoMode ? sampleProductionOrders : []);
+    setWorkOrders(demoMode ? sampleWorkOrders : []);
+    setQualityChecks(demoMode ? sampleQualityChecks : []);
+    setBoms(demoMode ? sampleBOMs : []);
+    setManufacturingStats(null);
+  }, []);
+
   // Load data from API or localStorage
   const loadData = useCallback(async () => {
     if (!activeCompany) return;
@@ -290,27 +300,40 @@ export function ManufacturingProvider({ children }) {
       setBackendAvailable(isBackendAvailable);
 
       if (isBackendAvailable) {
-        try {
-          // Load all manufacturing data from API
-          const [wcData, poData, woData, qcData, bomData, statsData] = await Promise.all([
-            workCentersService.list(companyId),
-            productionOrdersService.list(companyId),
-            workOrdersService.list(companyId),
-            qualityChecksService.list(companyId),
-            bomsService.list(companyId),
-            productionOrdersService.getStats(companyId)
-          ]);
+        // Load all manufacturing data from API
+        const [wcData, poData, woData, qcData, bomData, statsData] = await Promise.all([
+          workCentersService.list(companyId).catch(err => {
+            console.error('Failed to load work centers:', err);
+            return [];
+          }),
+          productionOrdersService.list(companyId).catch(err => {
+            console.error('Failed to load production orders:', err);
+            return [];
+          }),
+          workOrdersService.list(companyId).catch(err => {
+            console.error('Failed to load work orders:', err);
+            return [];
+          }),
+          qualityChecksService.list(companyId).catch(err => {
+            console.error('Failed to load quality checks:', err);
+            return [];
+          }),
+          bomsService.list(companyId).catch(err => {
+            console.error('Failed to load BOMs:', err);
+            return [];
+          }),
+          productionOrdersService.getStats(companyId).catch(err => {
+            console.error('Failed to load stats:', err);
+            return null;
+          })
+        ]);
 
-          setWorkCenters(Array.isArray(wcData) ? wcData : (demoMode ? sampleWorkCenters : []));
-          setProductionOrders(Array.isArray(poData) ? poData : (demoMode ? sampleProductionOrders : []));
-          setWorkOrders(Array.isArray(woData) ? woData : (demoMode ? sampleWorkOrders : []));
-          setQualityChecks(Array.isArray(qcData) ? qcData : (demoMode ? sampleQualityChecks : []));
-          setBoms(Array.isArray(bomData) ? bomData : (demoMode ? sampleBOMs : []));
-          setManufacturingStats(statsData);
-        } catch (apiError) {
-          console.warn('API call failed, falling back to demo data:', apiError);
-          loadDemoData(demoMode);
-        }
+        setWorkCenters(wcData || []);
+        setProductionOrders(poData || []);
+        setWorkOrders(woData || []);
+        setQualityChecks(qcData || []);
+        setBoms(bomData || []);
+        setManufacturingStats(statsData);
       } else {
         loadDemoData(demoMode);
       }
@@ -321,16 +344,7 @@ export function ManufacturingProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  }, [activeCompany]);
-
-  const loadDemoData = (demoMode) => {
-    setWorkCenters(demoMode ? sampleWorkCenters : []);
-    setProductionOrders(demoMode ? sampleProductionOrders : []);
-    setWorkOrders(demoMode ? sampleWorkOrders : []);
-    setQualityChecks(demoMode ? sampleQualityChecks : []);
-    setBoms(demoMode ? sampleBOMs : []);
-    setManufacturingStats(null);
-  };
+  }, [activeCompany, loadDemoData]);
 
   useEffect(() => {
     loadData();
