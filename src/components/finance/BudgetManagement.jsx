@@ -42,7 +42,9 @@ export default function BudgetManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showLinesModal, setShowLinesModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState(null);
+  const [budgetToDelete, setBudgetToDelete] = useState(null);
   const [typeFilter, setTypeFilter] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -119,14 +121,23 @@ export default function BudgetManagement() {
     }
   };
 
-  const handleDeleteBudget = async (budget) => {
-    if (window.confirm(t('confirm_delete_budget') || 'Are you sure you want to delete this budget?')) {
-      try {
-        await deleteBudget(budget.id);
-      } catch (error) {
-        console.error('Error deleting budget:', error);
-      }
+  const handleDeleteBudget = async () => {
+    if (!budgetToDelete) return;
+    setIsSaving(true);
+    try {
+      await deleteBudget(budgetToDelete.id);
+      setShowDeleteModal(false);
+      setBudgetToDelete(null);
+    } catch (error) {
+      console.error('Error deleting budget:', error);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const openDeleteModal = (budget) => {
+    setBudgetToDelete(budget);
+    setShowDeleteModal(true);
   };
 
   const handleAddBudgetLine = async () => {
@@ -436,7 +447,7 @@ export default function BudgetManagement() {
                             <Edit2 className="w-4 h-4 text-slate-500" />
                           </Button>
                           {canDelete(MODULES.FINANCIALS) && (
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteBudget(budget)} title={t('delete') || 'Delete'}>
+                            <Button variant="ghost" size="sm" onClick={() => openDeleteModal(budget)} title={t('delete') || 'Delete'}>
                               <Trash2 className="w-4 h-4 text-red-500" />
                             </Button>
                           )}
@@ -501,6 +512,22 @@ export default function BudgetManagement() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
+            </div>
+
+            <div className="space-y-2">
+              <LabelWithHelp htmlFor="fiscal_year" label={t('fiscal_year') || 'Fiscal Year'} helpText={t('help_budget_fiscal_year')} required />
+              <Select value={formData.fiscal_year_id} onValueChange={(v) => setFormData({ ...formData, fiscal_year_id: v })}>
+                <SelectTrigger id="fiscal_year">
+                  <SelectValue placeholder={t('select_fiscal_year') || 'Select fiscal year'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {fiscalYears.filter(fy => fy.status === 'open').map(fy => (
+                    <SelectItem key={fy.id} value={fy.id}>
+                      {fy.name} ({fy.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -690,6 +717,52 @@ export default function BudgetManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowLinesModal(false)}>
               {t('close') || 'Close'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowDeleteModal(false);
+          setBudgetToDelete(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              {t('delete_budget') || 'Delete Budget'}
+            </DialogTitle>
+            <DialogDescription>
+              {t('confirm_delete_budget') || 'Are you sure you want to delete this budget?'}
+            </DialogDescription>
+          </DialogHeader>
+          {budgetToDelete && (
+            <div className="py-4">
+              <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-600">{t('code') || 'Code'}:</span>
+                  <span className="font-mono font-medium">{budgetToDelete.code}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-600">{t('name') || 'Name'}:</span>
+                  <span className="font-medium">{budgetToDelete.name}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)} disabled={isSaving}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button
+              onClick={handleDeleteBudget}
+              className="bg-red-500 hover:bg-red-600 text-white"
+              disabled={isSaving}
+            >
+              {isSaving ? (t('deleting') || 'Deleting...') : (t('delete') || 'Delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

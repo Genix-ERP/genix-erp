@@ -125,6 +125,24 @@ export default function EquipmentMaintenance() {
     next_maintenance_date: '',
   });
 
+  // Populate completion data when task is selected
+  useEffect(() => {
+    if (selectedItem && showCompleteModal) {
+      const eq = equipment.find(e => e.id === selectedItem.equipment_id);
+      const nextMaintenanceDate = eq?.maintenance_interval_days
+        ? addDays(new Date(), eq.maintenance_interval_days).toISOString().split('T')[0]
+        : '';
+
+      setCompletionData({
+        actual_date: new Date().toISOString().split('T')[0],
+        actual_duration: selectedItem.estimated_duration || 0,
+        cost: 0,
+        notes: '',
+        next_maintenance_date: nextMaintenanceDate,
+      });
+    }
+  }, [selectedItem, showCompleteModal, equipment]);
+
   // Load data from localStorage
   useEffect(() => {
     const storedEquipment = localStorage.getItem('genix_equipment');

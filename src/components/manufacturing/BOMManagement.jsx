@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, FileText, Trash2, Edit } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from '@/api/services';
 
 export default function BOMManagement() {
   const { language } = useLanguage();
@@ -24,30 +26,62 @@ export default function BOMManagement() {
   const [editBom, setEditBom] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [products, setProducts] = useState([]);
   const [newBom, setNewBom] = useState({
-    bom_reference: '',
-    product_name: '',
-    product_code: '',
-    product_quantity: 1,
-    bom_type: 'manufacture',
-    components: [],
-    operations: [],
-    status: 'active'
+    code: '',
+    name: '',
+    product_id: '',
+    quantity: 1,
+    bom_type: 'manufacturing',
+    lines: []
   });
 
   const [newComponent, setNewComponent] = useState({
-    component_name: '',
-    component_code: '',
+    component_id: '',
     quantity: 0,
-    unit: 'pcs',
-    cost: 0
+    unit: 'pcs'
   });
+
+  // Load products for selection
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const productsData = await inventoryService.listProducts();
+        setProducts(productsData || []);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+      }
+    };
+    loadProducts();
+  }, []);
+
+  // Helper function to get product name from product_id
+  const getProductName = (bom) => {
+    if (bom.product_name) return bom.product_name;
+    if (bom.product_id) {
+      const product = products.find(p => p.id === bom.product_id);
+      return product?.name || bom.name || '-';
+    }
+    return bom.name || '-';
+  };
+
+  // Helper function to get product code from product_id
+  const getProductCode = (bom) => {
+    if (bom.product_code) return bom.product_code;
+    if (bom.product_id) {
+      const product = products.find(p => p.id === bom.product_id);
+      return product?.sku || product?.code || '';
+    }
+    return '';
+  };
 
   // Filter BOMs based on search query
   const filteredBoms = useMemo(() => {
     if (!searchQuery) return boms;
     return boms.filter(b =>
       b.product_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.bom_reference?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [boms, searchQuery]);
@@ -56,8 +90,12 @@ export default function BOMManagement() {
     setIsSubmitting(true);
     try {
       const bomData = {
-        ...newBom,
-        bom_reference: newBom.bom_reference || `BOM-${Date.now()}`
+        code: newBom.code || `BOM-${Date.now()}`,
+        name: newBom.name,
+        product_id: newBom.product_id,
+        bom_type: newBom.bom_type,
+        quantity: newBom.quantity,
+        lines: newBom.lines
       };
 
       await createBOM(bomData);
@@ -65,46 +103,43 @@ export default function BOMManagement() {
       resetForm();
     } catch (error) {
       console.error('Error creating BOM:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+      alert(`Failed to create BOM: ${errorMsg}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const addComponent = () => {
-    if (newComponent.component_name && newComponent.quantity > 0) {
+    if (newComponent.component_id && newComponent.quantity > 0) {
       setNewBom({
         ...newBom,
-        components: [...newBom.components, {...newComponent}]
+        lines: [...newBom.lines, {...newComponent}]
       });
       setNewComponent({
-        component_name: '',
-        component_code: '',
+        component_id: '',
         quantity: 0,
-        unit: 'pcs',
-        cost: 0
+        unit: 'pcs'
       });
     }
   };
 
   const removeComponent = (index) => {
-    const updated = newBom.components.filter((_, i) => i !== index);
-    setNewBom({ ...newBom, components: updated });
+    const updated = newBom.lines.filter((_, i) => i !== index);
+    setNewBom({ ...newBom, lines: updated });
   };
 
   const [editComponent, setEditComponent] = useState({
-    component_name: '',
-    component_code: '',
+    component_id: '',
     quantity: 0,
-    unit: 'pcs',
-    cost: 0
+    unit: 'pcs'
   });
 
   const handleEditBom = (bom, e) => {
     e.stopPropagation();
     setEditBom({
       ...bom,
-      components: bom.components || [],
-      operations: bom.operations || []
+      lines: bom.lines || []
     });
     setShowEditModal(true);
   };
@@ -126,36 +161,32 @@ export default function BOMManagement() {
   };
 
   const addEditComponent = () => {
-    if (editComponent.component_name && editComponent.quantity > 0) {
+    if (editComponent.component_id && editComponent.quantity > 0) {
       setEditBom({
         ...editBom,
-        components: [...editBom.components, {...editComponent}]
+        lines: [...editBom.lines, {...editComponent}]
       });
       setEditComponent({
-        component_name: '',
-        component_code: '',
+        component_id: '',
         quantity: 0,
-        unit: 'pcs',
-        cost: 0
+        unit: 'pcs'
       });
     }
   };
 
   const removeEditComponent = (index) => {
-    const updated = editBom.components.filter((_, i) => i !== index);
-    setEditBom({ ...editBom, components: updated });
+    const updated = editBom.lines.filter((_, i) => i !== index);
+    setEditBom({ ...editBom, lines: updated });
   };
 
   const resetForm = () => {
     setNewBom({
-      bom_reference: '',
-      product_name: '',
-      product_code: '',
-      product_quantity: 1,
-      bom_type: 'manufacture',
-      components: [],
-      operations: [],
-      status: 'active'
+      code: '',
+      name: '',
+      product_id: '',
+      quantity: 1,
+      bom_type: 'manufacturing',
+      lines: []
     });
   };
 
@@ -166,6 +197,14 @@ export default function BOMManagement() {
       obsolete: 'bg-red-100 text-red-800'
     };
     return colors[status] || colors.draft;
+  };
+
+  const getStatusLabel = (status) => {
+    return t(status) || status;
+  };
+
+  const getBomTypeLabel = (bomType) => {
+    return t(bomType) || bomType;
   };
 
   return (
@@ -233,20 +272,22 @@ export default function BOMManagement() {
                 <TableBody>
                   {filteredBoms.map((bom) => (
                     <TableRow key={bom.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedBom(bom)}>
-                      <TableCell className="font-mono text-sm">{bom.bom_reference}</TableCell>
+                      <TableCell className="font-mono text-sm">{bom.code || bom.bom_reference || '-'}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{bom.product_name}</p>
-                          <p className="text-xs text-slate-500">{bom.product_code}</p>
+                          <p className="font-medium">{getProductName(bom)}</p>
+                          <p className="text-xs text-slate-500">{getProductCode(bom)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{bom.bom_type}</Badge>
+                        <Badge variant="outline">{getBomTypeLabel(bom.bom_type || 'manufacturing')}</Badge>
                       </TableCell>
-                      <TableCell>{bom.components?.length || 0} items</TableCell>
+                      <TableCell>{bom.lines?.length || bom.components?.length || 0} {t('items') || 'items'}</TableCell>
                       <TableCell className="font-semibold">${(bom.total_cost || 0).toFixed(2)}</TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(bom.status)}>{bom.status}</Badge>
+                        <Badge className={getStatusColor(bom.status || (bom.is_active ? 'active' : 'draft'))}>
+                          {getStatusLabel(bom.status || (bom.is_active ? 'active' : 'draft'))}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -277,34 +318,39 @@ export default function BOMManagement() {
               <h3 className="font-semibold text-slate-900">{t('product_information')}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('bom_reference')}</label>
+                  <label className="text-sm font-medium mb-1 block">{t('bom_code')}</label>
                   <Input
                     placeholder={t('auto_generated_if_empty')}
-                    value={newBom.bom_reference}
-                    onChange={(e) => setNewBom({...newBom, bom_reference: e.target.value})}
+                    value={newBom.code}
+                    onChange={(e) => setNewBom({...newBom, code: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('bom_type')}</label>
-                  <Input value={newBom.bom_type} disabled />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('product_name')} *</label>
+                  <label className="text-sm font-medium mb-1 block">{t('bom_name')} *</label>
                   <Input
-                    placeholder={t('final_product_name')}
-                    value={newBom.product_name}
-                    onChange={(e) => setNewBom({...newBom, product_name: e.target.value})}
+                    placeholder={t('bom_name')}
+                    value={newBom.name}
+                    onChange={(e) => setNewBom({...newBom, name: e.target.value})}
                     required
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('product_code')} *</label>
-                  <Input
-                    placeholder={t('sku')}
-                    value={newBom.product_code}
-                    onChange={(e) => setNewBom({...newBom, product_code: e.target.value})}
-                    required
-                  />
+                <div className="col-span-2">
+                  <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
+                  <Select
+                    value={newBom.product_id}
+                    onValueChange={(value) => setNewBom({...newBom, product_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_product')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((product) => (
+                        <SelectItem key={product.id} value={product.id}>
+                          {product.name} ({product.sku || product.code || 'No SKU'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -315,33 +361,32 @@ export default function BOMManagement() {
 
               {/* Add Component Form */}
               <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-                <div className="grid grid-cols-5 gap-3">
-                  <Input
-                    placeholder={t('component_name')}
-                    value={newComponent.component_name}
-                    onChange={(e) => setNewComponent({...newComponent, component_name: e.target.value})}
-                  />
-                  <Input
-                    placeholder={t('code')}
-                    value={newComponent.component_code}
-                    onChange={(e) => setNewComponent({...newComponent, component_code: e.target.value})}
-                  />
+                <div className="grid grid-cols-3 gap-3">
+                  <Select
+                    value={newComponent.component_id}
+                    onValueChange={(value) => setNewComponent({...newComponent, component_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_component')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((product) => (
+                        <SelectItem key={product.id} value={product.id}>
+                          {product.name} ({product.sku || product.code || 'No SKU'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     type="number"
                     placeholder={t('quantity')}
-                    value={newComponent.quantity}
-                    onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value)})}
+                    value={newComponent.quantity || ''}
+                    onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value) || 0})}
                   />
                   <Input
                     placeholder={t('unit')}
                     value={newComponent.unit}
                     onChange={(e) => setNewComponent({...newComponent, unit: e.target.value})}
-                  />
-                  <Input
-                    type="number"
-                    placeholder={t('cost')}
-                    value={newComponent.cost}
-                    onChange={(e) => setNewComponent({...newComponent, cost: parseFloat(e.target.value)})}
                   />
                 </div>
                 <Button onClick={addComponent} size="sm" className="w-full">
@@ -350,36 +395,33 @@ export default function BOMManagement() {
               </div>
 
               {/* Components List */}
-              {newBom.components.length > 0 && (
+              {newBom.lines.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50">
                         <TableHead>{t('component')}</TableHead>
-                        <TableHead>{t('code')}</TableHead>
                         <TableHead>{t('qty')}</TableHead>
                         <TableHead>{t('unit')}</TableHead>
-                        <TableHead>{t('cost')}</TableHead>
-                        <TableHead>{t('total')}</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {newBom.components.map((comp, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{comp.component_name}</TableCell>
-                          <TableCell>{comp.component_code}</TableCell>
-                          <TableCell>{comp.quantity}</TableCell>
-                          <TableCell>{comp.unit}</TableCell>
-                          <TableCell>${comp.cost}</TableCell>
-                          <TableCell className="font-semibold">${(comp.quantity * comp.cost).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => removeComponent(index)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {newBom.lines.map((line, index) => {
+                        const component = products.find(p => p.id === line.component_id);
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{component?.name || line.component_id}</TableCell>
+                            <TableCell>{line.quantity}</TableCell>
+                            <TableCell>{line.unit}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" onClick={() => removeComponent(index)}>
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -393,9 +435,9 @@ export default function BOMManagement() {
               <Button
                 onClick={handleCreateBom}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                disabled={!newBom.product_name || !newBom.product_code || newBom.components.length === 0}
+                disabled={!newBom.name || !newBom.product_id || newBom.lines.length === 0 || isSubmitting}
               >
-                {t('create_bom')}
+                {isSubmitting ? t('saving') : t('create_bom')}
               </Button>
             </div>
           </div>
@@ -457,33 +499,32 @@ export default function BOMManagement() {
 
                 {/* Add Component Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-                  <div className="grid grid-cols-5 gap-3">
-                    <Input
-                      placeholder={t('component_name')}
-                      value={editComponent.component_name}
-                      onChange={(e) => setEditComponent({...editComponent, component_name: e.target.value})}
-                    />
-                    <Input
-                      placeholder={t('code')}
-                      value={editComponent.component_code}
-                      onChange={(e) => setEditComponent({...editComponent, component_code: e.target.value})}
-                    />
+                  <div className="grid grid-cols-3 gap-3">
+                    <Select
+                      value={editComponent.component_id}
+                      onValueChange={(value) => setEditComponent({...editComponent, component_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_component')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id}>
+                            {product.name} ({product.sku || product.code || 'No SKU'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Input
                       type="number"
                       placeholder={t('quantity')}
-                      value={editComponent.quantity}
-                      onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value)})}
+                      value={editComponent.quantity || ''}
+                      onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value) || 0})}
                     />
                     <Input
                       placeholder={t('unit')}
                       value={editComponent.unit}
                       onChange={(e) => setEditComponent({...editComponent, unit: e.target.value})}
-                    />
-                    <Input
-                      type="number"
-                      placeholder={t('cost')}
-                      value={editComponent.cost}
-                      onChange={(e) => setEditComponent({...editComponent, cost: parseFloat(e.target.value)})}
                     />
                   </div>
                   <Button onClick={addEditComponent} size="sm" className="w-full">
@@ -492,36 +533,33 @@ export default function BOMManagement() {
                 </div>
 
                 {/* Components List */}
-                {editBom.components.length > 0 && (
+                {editBom.lines && editBom.lines.length > 0 && (
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50">
                           <TableHead>{t('component')}</TableHead>
-                          <TableHead>{t('code')}</TableHead>
                           <TableHead>{t('qty')}</TableHead>
                           <TableHead>{t('unit')}</TableHead>
-                          <TableHead>{t('cost')}</TableHead>
-                          <TableHead>{t('total')}</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {editBom.components.map((comp, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{comp.component_name}</TableCell>
-                            <TableCell>{comp.component_code}</TableCell>
-                            <TableCell>{comp.quantity}</TableCell>
-                            <TableCell>{comp.unit}</TableCell>
-                            <TableCell>${comp.cost}</TableCell>
-                            <TableCell className="font-semibold">${(comp.quantity * comp.cost).toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="ghost" onClick={() => removeEditComponent(index)}>
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {editBom.lines.map((line, index) => {
+                          const component = products.find(p => p.id === line.component_id);
+                          return (
+                            <TableRow key={index}>
+                              <TableCell>{component?.name || line.component_id}</TableCell>
+                              <TableCell>{line.quantity}</TableCell>
+                              <TableCell>{line.unit}</TableCell>
+                              <TableCell>
+                                <Button size="sm" variant="ghost" onClick={() => removeEditComponent(index)}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

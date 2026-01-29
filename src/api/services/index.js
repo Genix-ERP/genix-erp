@@ -30,7 +30,6 @@ export {
   qualityChecksService,
   bomsService
 } from './manufacturing';
-export { default as manufacturingService } from './manufacturing';
 
 // Re-export the API client
 export { default as apiClient } from '../client';
