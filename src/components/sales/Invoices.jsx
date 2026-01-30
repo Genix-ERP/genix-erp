@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
 
 export default function Invoices() {
   const { language } = useLanguage();
@@ -75,8 +76,22 @@ export default function Invoices() {
   const { customers } = useCustomers();
   const { canCreate } = usePermissions();
 
+  const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Load products on mount
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await inventoryService.listProducts();
+        setProducts(data || []);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+      }
+    };
+    loadProducts();
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -90,7 +105,7 @@ export default function Invoices() {
     customer_name: "",
     invoice_date: new Date().toISOString().split("T")[0],
     due_date: "",
-    items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+    items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     discount_amount: 0,
     tax_percent: 12,
     notes: "",
@@ -149,7 +164,7 @@ export default function Invoices() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { product_name: "", quantity: 1, unit_price: 0 }],
+      items: [...formData.items, { product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     });
   };
 
@@ -160,8 +175,22 @@ export default function Invoices() {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
-    newItems[index][field] = field === "product_name" ? value : parseFloat(value) || 0;
+    newItems[index][field] = field === "product_name" || field === "product_id" ? value : parseFloat(value) || 0;
     setFormData({ ...formData, items: newItems });
+  };
+
+  const handleProductSelect = (index, productId) => {
+    const product = products.find((p) => p.id === productId);
+    if (product) {
+      const newItems = [...formData.items];
+      newItems[index] = {
+        ...newItems[index],
+        product_id: productId,
+        product_name: product.name,
+        unit_price: product.list_price || product.price || 0,
+      };
+      setFormData({ ...formData, items: newItems });
+    }
   };
 
   const handleCustomerSelect = (customerId) => {
@@ -182,21 +211,26 @@ export default function Invoices() {
       formData.tax_percent
     );
 
+    // Backend expects 'lines' not 'items', and 'description' is required
     const data = {
-      ...formData,
-      items: formData.items.map((item) => ({
-        ...item,
-        total: item.quantity * item.unit_price,
+      customer_id: formData.customer_id,
+      invoice_date: formData.invoice_date,
+      due_date: formData.due_date,
+      notes: formData.notes,
+      lines: formData.items.map((item) => ({
+        product_id: item.product_id,
+        description: item.product_name || "Product",
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_amount: 0,
       })),
-      subtotal,
-      tax_amount: taxAmount,
-      total_amount: total,
     };
 
     if (editMode && selectedInvoice) {
       await updateInvoice(selectedInvoice.id, data);
     } else {
-      await createInvoice(data);
+      // Pass customer_name so it appears immediately in the list
+      await createInvoice(data, formData.customer_name);
     }
     resetForm();
   };
@@ -210,7 +244,7 @@ export default function Invoices() {
       customer_name: "",
       invoice_date: new Date().toISOString().split("T")[0],
       due_date: "",
-      items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+      items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_amount: 0,
       tax_percent: 12,
       notes: "",
@@ -225,6 +259,7 @@ export default function Invoices() {
 
       // Convert lines to items format for the form
       const items = (fullInvoice.lines || fullInvoice.items || []).map(line => ({
+        product_id: line.product_id || "",
         product_name: line.description || line.product_name || "",
         quantity: line.quantity || 1,
         unit_price: line.unit_price || 0,
@@ -235,7 +270,7 @@ export default function Invoices() {
         customer_name: fullInvoice.customer_name || "",
         invoice_date: fullInvoice.invoice_date || "",
         due_date: fullInvoice.due_date || "",
-        items: items.length > 0 ? items : [{ product_name: "", quantity: 1, unit_price: 0 }],
+        items: items.length > 0 ? items : [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: fullInvoice.discount_amount || 0,
         tax_percent: fullInvoice.tax_percent || 12,
         notes: fullInvoice.notes || "",
@@ -251,7 +286,7 @@ export default function Invoices() {
         customer_name: invoice.customer_name || "",
         invoice_date: invoice.invoice_date || "",
         due_date: invoice.due_date || "",
-        items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+        items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: invoice.discount_amount || 0,
         tax_percent: invoice.tax_percent || 12,
         notes: invoice.notes || "",
@@ -669,13 +704,21 @@ export default function Invoices() {
                     {formData.items.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell>
-                          <Input
-                            value={item.product_name}
-                            onChange={(e) =>
-                              handleItemChange(index, "product_name", e.target.value)
-                            }
-                            placeholder={t('product_name')}
-                          />
+                          <Select
+                            value={item.product_id}
+                            onValueChange={(value) => handleProductSelect(index, value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('select_product')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Input

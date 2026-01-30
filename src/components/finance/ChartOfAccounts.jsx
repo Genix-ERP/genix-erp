@@ -143,12 +143,13 @@ export default function ChartOfAccounts() {
     return filtered;
   }, [accounts, searchQuery, typeFilter]);
 
-  // Calculate totals by type
+  // Calculate totals by type (category from backend)
   const totals = useMemo(() => {
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
     accounts.forEach(acc => {
-      if (result[acc.type] !== undefined) {
-        result[acc.type] += acc.balance || 0;
+      const category = acc.category || acc.type;
+      if (result[category] !== undefined) {
+        result[category] += acc.current_balance || 0;
       }
     });
     return result;
@@ -282,7 +283,7 @@ export default function ChartOfAccounts() {
   const renderAccountRow = (account, level = 0) => {
     const hasChildren = account.children && account.children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
-    const typeInfo = getTypeInfo(account.type);
+    const typeInfo = getTypeInfo(account.category || account.type);
     const TypeIcon = typeInfo.icon;
 
     return (
@@ -319,7 +320,7 @@ export default function ChartOfAccounts() {
             </Badge>
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums">
-            ${(account.balance || 0).toLocaleString()}
+            ${(account.current_balance || 0).toLocaleString()}
           </TableCell>
           <TableCell>
             <Badge variant={account.is_active ? "default" : "secondary"}>

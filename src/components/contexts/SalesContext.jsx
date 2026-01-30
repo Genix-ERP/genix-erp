@@ -50,56 +50,55 @@ export function SalesProvider({ children }) {
     setIsLoading(true);
     setError(null);
     try {
-      const [ordersData, invoicesData] = await Promise.all([
+      const [quotationsData, ordersData, invoicesData, returnsData] = await Promise.all([
+        salesService.listQuotations(),
         salesService.listOrders(),
         salesService.listInvoices(),
+        salesService.listReturns(),
       ]);
+      setQuotations(quotationsData || []);
       setSalesOrders(ordersData || []);
       setInvoices(invoicesData || []);
+      setReturns(returnsData || []);
     } catch (err) {
       console.error('Error loading sales data:', err);
       setError(err.message);
+      setQuotations([]);
       setSalesOrders([]);
       setInvoices([]);
+      setReturns([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Quotation CRUD (quotations API to be implemented)
+  // Quotation CRUD - now using backend API
   const createQuotation = useCallback(async (data) => {
-    const newQuotation = {
-      ...data,
-      id: Date.now().toString(),
-      quotation_number: `QT-${new Date().getFullYear()}-${String(quotations.length + 1).padStart(3, '0')}`,
-      status: 'draft',
-      created_at: new Date().toISOString().split('T')[0],
-    };
+    const newQuotation = await salesService.createQuotation(data);
     setQuotations(prev => [...prev, newQuotation]);
     return newQuotation;
-  }, [quotations.length]);
+  }, []);
 
   const updateQuotation = useCallback(async (id, updates) => {
-    setQuotations(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+    const updated = await salesService.updateQuotation(id, updates);
+    setQuotations(prev => prev.map(q => q.id === id ? updated : q));
+    return updated;
   }, []);
 
   const deleteQuotation = useCallback(async (id) => {
+    await salesService.deleteQuotation(id);
     setQuotations(prev => prev.filter(q => q.id !== id));
   }, []);
 
   const convertQuotationToOrder = useCallback(async (quotationId) => {
-    const quotation = quotations.find(q => q.id === quotationId);
-    if (!quotation) return null;
-
-    const orderNumber = `SO-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
-
-    updateQuotation(quotationId, {
-      status: 'accepted',
-      converted_to_order: orderNumber,
-    });
-
-    return { order_number: orderNumber, ...quotation };
-  }, [quotations, updateQuotation]);
+    const result = await salesService.convertQuotationToOrder(quotationId);
+    // Update quotation in state with new status
+    setQuotations(prev => prev.map(q => q.id === quotationId ? result : q));
+    // Refresh sales orders to include the new order
+    const ordersData = await salesService.listOrders();
+    setSalesOrders(ordersData || []);
+    return result;
+  }, []);
 
   // Sales Order CRUD
   const createSalesOrder = useCallback(async (data) => {
@@ -137,16 +136,27 @@ export function SalesProvider({ children }) {
     return newInvoice;
   }, []);
 
+  // Get single sales order with lines
+  const getOrder = useCallback(async (id) => {
+    const order = await salesService.getOrder(id);
+    return order;
+  }, []);
+
   // Invoice CRUD
   const getInvoice = useCallback(async (id) => {
     const invoice = await salesService.getInvoice(id);
     return invoice;
   }, []);
 
-  const createInvoice = useCallback(async (data) => {
+  const createInvoice = useCallback(async (data, customerName) => {
     const newInvoice = await salesService.createInvoice(data);
-    setInvoices(prev => [...prev, newInvoice]);
-    return newInvoice;
+    // Backend may not return customer_name, so merge it from the input
+    const invoiceWithCustomer = {
+      ...newInvoice,
+      customer_name: newInvoice.customer_name || customerName || '',
+    };
+    setInvoices(prev => [...prev, invoiceWithCustomer]);
+    return invoiceWithCustomer;
   }, []);
 
   const updateInvoice = useCallback(async (id, updates) => {
@@ -168,35 +178,41 @@ export function SalesProvider({ children }) {
     return result;
   }, []);
 
-  // Return CRUD (returns API to be implemented)
+  // Return CRUD - using backend API
   const createReturn = useCallback(async (data) => {
-    const newReturn = {
-      ...data,
-      id: Date.now().toString(),
-      return_number: `RET-${new Date().getFullYear()}-${String(returns.length + 1).padStart(3, '0')}`,
-      status: 'pending',
-      refund_status: 'pending',
-      created_at: new Date().toISOString().split('T')[0],
-    };
+    const newReturn = await salesService.createReturn(data);
     setReturns(prev => [...prev, newReturn]);
     return newReturn;
-  }, [returns.length]);
+  }, []);
 
   const updateReturn = useCallback(async (id, updates) => {
-    setReturns(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+    const updated = await salesService.updateReturn(id, updates);
+    setReturns(prev => prev.map(r => r.id === id ? updated : r));
+    return updated;
+  }, []);
+
+  const deleteReturn = useCallback(async (id) => {
+    await salesService.deleteReturn(id);
+    setReturns(prev => prev.filter(r => r.id !== id));
   }, []);
 
   const approveReturn = useCallback(async (returnId) => {
-    updateReturn(returnId, { status: 'approved' });
-  }, [updateReturn]);
+    const approved = await salesService.approveReturn(returnId);
+    setReturns(prev => prev.map(r => r.id === returnId ? approved : r));
+    return approved;
+  }, []);
 
-  const processRefund = useCallback(async (returnId, method) => {
-    updateReturn(returnId, {
-      refund_status: 'processed',
-      refund_method: method,
-      refund_date: new Date().toISOString().split('T')[0],
-    });
-  }, [updateReturn]);
+  const rejectReturn = useCallback(async (returnId) => {
+    const rejected = await salesService.rejectReturn(returnId);
+    setReturns(prev => prev.map(r => r.id === returnId ? rejected : r));
+    return rejected;
+  }, []);
+
+  const processRefund = useCallback(async (returnId, data) => {
+    const processed = await salesService.processRefund(returnId, data);
+    setReturns(prev => prev.map(r => r.id === returnId ? processed : r));
+    return processed;
+  }, []);
 
   // Discount CRUD (discounts API to be implemented)
   const createDiscount = useCallback(async (data) => {
@@ -415,6 +431,7 @@ export function SalesProvider({ children }) {
     convertQuotationToOrder,
 
     // Sales Order operations
+    getOrder,
     createSalesOrder,
     updateSalesOrder,
     deleteSalesOrder,
@@ -432,7 +449,9 @@ export function SalesProvider({ children }) {
     // Return operations
     createReturn,
     updateReturn,
+    deleteReturn,
     approveReturn,
+    rejectReturn,
     processRefund,
 
     // Discount operations

@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -79,7 +79,23 @@ export default function SalesOrders() {
   const [showBatchPrint, setShowBatchPrint] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderReturns, setOrderReturns] = useState([]);
   const { addAuditLog } = useAuditTrail('sales_orders');
+
+  // Check if an order has returns
+  const orderHasReturns = useCallback((orderId) => {
+    return returns.some(r => r.sales_order_id === orderId);
+  }, [returns]);
+
+  // Get returns for a specific order
+  const getOrderReturns = useCallback((orderId) => {
+    return returns.filter(r => r.sales_order_id === orderId);
+  }, [returns]);
+
+  // Check if an order already has an invoice
+  const orderHasInvoice = useCallback((orderId) => {
+    return invoices.some(inv => inv.sales_order_id === orderId && inv.status !== 'cancelled');
+  }, [invoices]);
 
   // Carrier state
   const [showCarrierModal, setShowCarrierModal] = useState(false);
@@ -320,7 +336,7 @@ export default function SalesOrders() {
           ...newLines[index],
           product_name: selectedProduct.name,
           product_id: selectedProduct.id,
-          unit_price: selectedProduct.sale_price || selectedProduct.price || 0,
+          unit_price: selectedProduct.list_price || selectedProduct.cost_price || 0,
           lead_time_days: selectedProduct.lead_time_days || 0,
           product: selectedProduct
         };
@@ -514,11 +530,15 @@ export default function SalesOrders() {
       // Fetch full order details including lines
       const fullOrder = await salesService.getOrder(order.id);
       setSelectedOrder(fullOrder);
+      // Get returns for this order
+      const orderReturnsData = getOrderReturns(order.id);
+      setOrderReturns(orderReturnsData);
       setShowDetailModal(true);
     } catch (error) {
       console.error('Failed to fetch order details:', error);
       // Fallback to using the list order data
       setSelectedOrder(order);
+      setOrderReturns(getOrderReturns(order.id));
       setShowDetailModal(true);
     }
   };
@@ -914,7 +934,14 @@ export default function SalesOrders() {
                         <TableBody>
                           {filteredOrders.map((order) => (
                             <TableRow key={order.id} className="hover:bg-slate-50">
-                              <TableCell className="font-mono text-sm">{order.order_number}</TableCell>
+                              <TableCell className="font-mono text-sm">
+                                <div className="flex items-center gap-2">
+                                  {order.order_number}
+                                  {orderHasReturns(order.id) && (
+                                    <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
+                                  )}
+                                </div>
+                              </TableCell>
                               <TableCell className="font-medium">{order.customer_name}</TableCell>
                               <TableCell className="text-sm">
                                 {order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}
@@ -940,7 +967,7 @@ export default function SalesOrders() {
                                       <Truck className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && (
+                                  {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order.id) && (
                                     <Button size="sm" variant="ghost" onClick={() => handleCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
                                       <Receipt className="w-4 h-4 text-green-600" />
                                     </Button>
@@ -1432,10 +1459,18 @@ export default function SalesOrders() {
         )}
 
         {/* Order Detail Modal */}
-        <Dialog open={showDetailModal} onOpenChange={(open) => { setShowDetailModal(open); if (!open) setSelectedOrder(null); }}>
+        <Dialog open={showDetailModal} onOpenChange={(open) => { setShowDetailModal(open); if (!open) { setSelectedOrder(null); setOrderReturns([]); } }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t('order_details') || 'Order Details'}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                {t('order_details') || 'Order Details'}
+                {selectedOrder && orderHasReturns(selectedOrder.id) && (
+                  <Badge className="bg-red-100 text-red-700">
+                    <MessageSquareWarning className="w-3 h-3 mr-1" />
+                    {t('has_returns') || 'Has Returns'}
+                  </Badge>
+                )}
+              </DialogTitle>
             </DialogHeader>
             {selectedOrder && (
               <div className="space-y-4">
@@ -1461,12 +1496,20 @@ export default function SalesOrders() {
                   <div>
                     <p className="text-sm text-slate-500">{t('delivery_date') || 'Delivery Date'}</p>
                     <p className="font-medium">
-                      {(selectedOrder.expected_date || selectedOrder.delivery_date) ? format(new Date(selectedOrder.expected_date || selectedOrder.delivery_date), 'dd.MM.yyyy') : '-'}
+                      {(selectedOrder.expected_date || selectedOrder.delivery_date || selectedOrder.expected_delivery_date)
+                        ? format(new Date(selectedOrder.expected_date || selectedOrder.delivery_date || selectedOrder.expected_delivery_date), 'dd.MM.yyyy')
+                        : '-'}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('payment_status') || 'Payment Status'}</p>
-                    <p className="font-medium">{t(selectedOrder.payment_status) || selectedOrder.payment_status || '-'}</p>
+                    <Badge className={
+                      selectedOrder.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                      selectedOrder.payment_status === 'partial' || selectedOrder.payment_status === 'partial_paid' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }>
+                      {t(selectedOrder.payment_status) || selectedOrder.payment_status || t('unpaid') || 'Unpaid'}
+                    </Badge>
                   </div>
                 </div>
 
@@ -1511,6 +1554,66 @@ export default function SalesOrders() {
                   </div>
                 </div>
 
+                {/* Returns Section */}
+                {orderReturns.length > 0 && (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-2 flex items-center gap-2 text-red-600">
+                      <RotateCcw className="w-4 h-4" />
+                      {t('returns') || 'Returns'}
+                    </p>
+                    <div className="space-y-3">
+                      {orderReturns.map((ret) => (
+                        <div key={ret.id} className="p-3 bg-red-50 border border-red-100 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-red-700">{ret.return_number}</span>
+                              <Badge className={
+                                ret.status === 'completed' || ret.status === 'refunded' ? 'bg-green-100 text-green-800' :
+                                ret.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                ret.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                ret.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                                'bg-gray-100 text-gray-800'
+                              }>{t(ret.status) || ret.status}</Badge>
+                            </div>
+                            <span className="text-sm text-slate-500">
+                              {ret.return_date ? format(new Date(ret.return_date), 'dd.MM.yyyy') : '-'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-slate-500">{t('reason') || 'Reason'}:</span>
+                              <span className="ml-1 font-medium">{t(ret.return_reason) || ret.return_reason}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">{t('total_value') || 'Total Value'}:</span>
+                              <span className="ml-1 font-semibold text-red-600">{formatCurrency(ret.total_amount || ret.refund_amount || 0)}</span>
+                            </div>
+                          </div>
+                          {/* Returned Items */}
+                          {ret.items && ret.items.length > 0 && (
+                            <div className="mt-2 border-t border-red-100 pt-2">
+                              <p className="text-xs text-slate-500 mb-1">{t('returned_items') || 'Returned Items'}:</p>
+                              <div className="space-y-1">
+                                {ret.items.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-sm bg-white/50 px-2 py-1 rounded">
+                                    <span className="font-medium">{item.product_name}</span>
+                                    <span className="text-red-600 font-semibold">
+                                      {item.quantity} {t('pcs') || 'pcs'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {ret.notes && (
+                            <p className="text-sm text-slate-600 mt-2 border-t border-red-100 pt-2">{ret.notes}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {selectedOrder.notes && (
                   <div>
                     <p className="text-sm text-slate-500">{t('notes') || 'Notes'}</p>
@@ -1519,7 +1622,7 @@ export default function SalesOrders() {
                 )}
 
                 <div className="flex gap-3 pt-4">
-                  <Button variant="outline" onClick={() => { setShowDetailModal(false); setSelectedOrder(null); }} className="flex-1">
+                  <Button variant="outline" onClick={() => { setShowDetailModal(false); setSelectedOrder(null); setOrderReturns([]); }} className="flex-1">
                     {t('close') || 'Close'}
                   </Button>
                   <Button onClick={() => { setShowDetailModal(false); handlePrintOrder(selectedOrder); }} className="flex-1">
