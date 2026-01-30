@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, Briefcase, Clock, DollarSign, TrendingUp, Brain, CheckCircle, AlertTriangle, Target, Lightbulb, Edit2, LayoutGrid, Columns, Settings, X, GripVertical } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { analyzeProjects } from '@/api/services/aiAnalytics';
+import { contactsService } from '@/api/services/contacts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -57,6 +58,7 @@ export default function Projects() {
   });
 
   const [newStatus, setNewStatus] = useState({ label: '', color: 'bg-blue-100 text-blue-800' });
+  const [clients, setClients] = useState([]);
 
   // AI Analysis
   const projectAnalysis = useMemo(() => analyzeProjects(projects), [projects]);
@@ -78,6 +80,20 @@ export default function Projects() {
       setCustomStatuses(DEFAULT_STATUSES);
     }
   }, [DEFAULT_STATUSES, customStatuses]);
+
+  // Fetch clients/contacts for dropdown
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const data = await contactsService.list({ contact_type: 'customer' });
+        setClients(data || []);
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+        setClients([]);
+      }
+    };
+    fetchClients();
+  }, []);
 
   useEffect(() => {
     let filtered = projects;
@@ -311,7 +327,7 @@ export default function Projects() {
           </div>
           <div>
             <p className="text-slate-500 mb-1">{t('spent')}</p>
-            <p className="font-semibold">${Number(project.actual_cost || 0).toLocaleString()}</p>
+            <p className="font-semibold">${Number(project.spent || 0).toLocaleString()}</p>
           </div>
         </div>
 
@@ -323,7 +339,7 @@ export default function Projects() {
           )}
           <Badge variant="outline" className="text-xs">
             <Clock className="w-3 h-3 mr-1" />
-            {Number(project.total_hours_logged || 0)}h
+            {Number(project.total_hours || 0).toFixed(1)}h
           </Badge>
         </div>
       </CardContent>
@@ -626,12 +642,21 @@ export default function Projects() {
 
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('client_name')} *</label>
-                <Input
-                  placeholder={t('client_name')}
+                <Select
                   value={newProject.client_name}
-                  onChange={(e) => setNewProject({...newProject, client_name: e.target.value})}
-                  required
-                />
+                  onValueChange={(value) => setNewProject({...newProject, client_name: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_customer')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map(client => (
+                      <SelectItem key={client.id} value={client.name || client.company_name}>
+                        {client.name || client.company_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -737,10 +762,21 @@ export default function Projects() {
 
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('client_name')} *</label>
-                  <Input
-                    value={editProject.client_name}
-                    onChange={(e) => setEditProject({...editProject, client_name: e.target.value})}
-                  />
+                  <Select
+                    value={editProject.client_name || ''}
+                    onValueChange={(value) => setEditProject({...editProject, client_name: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_customer')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map(client => (
+                        <SelectItem key={client.id} value={client.name || client.company_name}>
+                          {client.name || client.company_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

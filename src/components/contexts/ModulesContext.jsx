@@ -104,7 +104,14 @@ export function ModulesProvider({ children }) {
       setEmployees(empData?.items || empData || []);
       setPurchaseOrders(poData?.items || poData || []);
       setSalesOrders(soData?.items || soData || []);
-      setProjects(projectsData?.items || projectsData || []);
+      // Map backend project fields to frontend expected fields
+      const rawProjects = projectsData?.items || projectsData || [];
+      const mappedProjects = rawProjects.map(p => ({
+        ...p,
+        project_name: p.name || p.project_name,
+        progress_percentage: p.progress || p.progress_percentage || 0
+      }));
+      setProjects(mappedProjects);
       // Map backend contract fields to frontend expected fields
       const rawContracts = contractsData?.items || contractsData || [];
       const mappedContracts = rawContracts.map(c => ({
@@ -240,7 +247,9 @@ export function ModulesProvider({ children }) {
     if (result && result.data) {
       const mappedResult = {
         ...result.data,
-        project_name: result.data.name
+        project_name: result.data.name || result.data.project_name,
+        client_name: result.data.client_name || data.client_name,
+        progress_percentage: result.data.progress || 0
       };
       setProjects(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -258,13 +267,15 @@ export function ModulesProvider({ children }) {
       budget: data.budget,
       billing_type: data.billing_type,
       priority: data.priority,
-      status: data.status
+      status: data.status,
+      progress: data.progress_percentage !== undefined ? data.progress_percentage : data.progress
     };
     const result = await projectsService.updateProject(id, apiData);
     if (result && result.data) {
       const mappedResult = {
         ...result.data,
-        project_name: result.data.name
+        project_name: result.data.name || result.data.project_name,
+        progress_percentage: result.data.progress
       };
       setProjects(prev => prev.map(p => p.id === id ? mappedResult : p));
       return mappedResult;

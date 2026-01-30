@@ -59,7 +59,8 @@ export default function Returns() {
   const { t } = useTranslation(language);
   const {
     returns,
-    invoices,
+    salesOrders,
+    getOrder,
     createReturn,
     updateReturn,
     approveReturn,
@@ -77,7 +78,7 @@ export default function Returns() {
   const [selectedReturn, setSelectedReturn] = useState(null);
 
   const [formData, setFormData] = useState({
-    invoice_id: "",
+    sales_order_id: "",
     customer_id: "",
     customer_name: "",
     return_date: new Date().toISOString().split("T")[0],
@@ -111,25 +112,50 @@ export default function Returns() {
     return { total, pending, approved, totalAmount, refundedAmount };
   }, [returns]);
 
-  const handleInvoiceSelect = (invoiceId) => {
-    if (!invoices || !Array.isArray(invoices)) return;
-    const invoice = invoices.find((inv) => inv.id === invoiceId);
-    if (invoice) {
-      setFormData({
-        ...formData,
-        invoice_id: invoiceId,
-        sales_order_id: invoice.sales_order_id,
-        customer_id: invoice.customer_id,
-        customer_name: invoice.customer_name,
-        items: invoice.items?.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          quantity: 1,
-          max_quantity: item.quantity,
-          unit_price: item.unit_price,
-          condition: "damaged",
-        })) || [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
-      });
+  // Filter to show only shipped or delivered orders
+  const shippedOrders = useMemo(() => {
+    if (!salesOrders || !Array.isArray(salesOrders)) return [];
+    return salesOrders.filter(order =>
+      order.status === 'shipped' || order.status === 'delivered'
+    );
+  }, [salesOrders]);
+
+  const handleOrderSelect = async (orderId) => {
+    if (!orderId) return;
+
+    try {
+      // Fetch full order with lines
+      const fullOrder = await getOrder(orderId);
+      if (fullOrder) {
+        const orderLines = fullOrder.lines || fullOrder.items || [];
+        setFormData({
+          ...formData,
+          sales_order_id: orderId,
+          customer_id: fullOrder.customer_id,
+          customer_name: fullOrder.customer_name,
+          items: orderLines.length > 0 ? orderLines.map((item) => ({
+            product_id: item.product_id,
+            product_name: item.product_name || item.description || 'Unknown Product',
+            quantity: 1,
+            max_quantity: item.quantity_delivered || item.quantity || 1,
+            unit_price: item.unit_price || 0,
+            condition: "damaged",
+          })) : [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      // Fallback to basic order from list
+      const order = salesOrders?.find((o) => o.id === orderId);
+      if (order) {
+        setFormData({
+          ...formData,
+          sales_order_id: orderId,
+          customer_id: order.customer_id,
+          customer_name: order.customer_name,
+          items: [{ product_name: "", quantity: 1, unit_price: 0, condition: "damaged" }],
+        });
+      }
     }
   };
 
@@ -167,7 +193,7 @@ export default function Returns() {
     setShowForm(false);
     setSelectedReturn(null);
     setFormData({
-      invoice_id: "",
+      sales_order_id: "",
       customer_id: "",
       customer_name: "",
       return_date: new Date().toISOString().split("T")[0],
@@ -191,7 +217,7 @@ export default function Returns() {
   };
 
   const handleProcessRefund = async (returnItem, method) => {
-    await processRefund(returnItem.id, method);
+    await processRefund(returnItem.id, { refund_method: method });
   };
 
   const getStatusBadge = (status) => {
@@ -461,20 +487,20 @@ export default function Returns() {
             <DialogTitle>{t('new_return')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4">
-            {/* Invoice Selection */}
+            {/* Order Selection - only shipped/delivered orders */}
             <div className="space-y-2">
-              <Label>{t('invoice')} *</Label>
+              <Label>{t('sales_order')} *</Label>
               <Select
-                value={formData.invoice_id}
-                onValueChange={handleInvoiceSelect}
+                value={formData.sales_order_id}
+                onValueChange={handleOrderSelect}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t('select_invoice')} />
+                  <SelectValue placeholder={t('select_sales_order')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(invoices || []).map((invoice) => (
-                    <SelectItem key={invoice.id} value={invoice.id}>
-                      {invoice.invoice_number} - {invoice.customer_name}
+                  {shippedOrders.map((order) => (
+                    <SelectItem key={order.id} value={order.id}>
+                      {order.order_number} - {order.customer_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -609,7 +635,7 @@ export default function Returns() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.invoice_id || totalAmount === 0}
+                disabled={!formData.sales_order_id || totalAmount === 0}
               >
                 {t('create')}
               </Button>
@@ -633,7 +659,7 @@ export default function Returns() {
                 <div>
                   <h3 className="font-semibold text-lg">{selectedReturn.customer_name}</h3>
                   <p className="text-sm text-slate-500">
-                    Faktura: {selectedReturn.invoice_id}
+                    {t('order')}: {selectedReturn.so_number || selectedReturn.sales_order_id}
                   </p>
                 </div>
                 <div className="flex gap-2">

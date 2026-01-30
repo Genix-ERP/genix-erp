@@ -1,6 +1,36 @@
 import apiClient from '../client';
 
 export const salesService = {
+  // Quotations
+  async listQuotations(params = {}) {
+    const response = await apiClient.get('/quotations', { params });
+    return response.data.data;
+  },
+
+  async getQuotation(id) {
+    const response = await apiClient.get(`/quotations/${id}`);
+    return response.data.data;
+  },
+
+  async createQuotation(data) {
+    const response = await apiClient.post('/quotations', data);
+    return response.data.data;
+  },
+
+  async updateQuotation(id, data) {
+    const response = await apiClient.put(`/quotations/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteQuotation(id) {
+    await apiClient.delete(`/quotations/${id}`);
+  },
+
+  async convertQuotationToOrder(id) {
+    const response = await apiClient.post(`/quotations/${id}/convert`);
+    return response.data.data;
+  },
+
   // Sales Orders
   async listOrders(params = {}) {
     const response = await apiClient.get('/sales-orders', { params });
@@ -110,6 +140,46 @@ export const salesService = {
 
   async cancelDeliveryOrder(id) {
     const response = await apiClient.post(`/sales/delivery-orders/${id}/cancel`);
+    return response.data.data;
+  },
+
+  // Sales Returns
+  async listReturns(params = {}) {
+    const response = await apiClient.get('/sales-returns', { params });
+    return response.data.data;
+  },
+
+  async getReturn(id) {
+    const response = await apiClient.get(`/sales-returns/${id}`);
+    return response.data.data;
+  },
+
+  async createReturn(data) {
+    const response = await apiClient.post('/sales-returns', data);
+    return response.data.data;
+  },
+
+  async updateReturn(id, data) {
+    const response = await apiClient.put(`/sales-returns/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteReturn(id) {
+    await apiClient.delete(`/sales-returns/${id}`);
+  },
+
+  async approveReturn(id) {
+    const response = await apiClient.post(`/sales-returns/${id}/approve`);
+    return response.data.data;
+  },
+
+  async rejectReturn(id) {
+    const response = await apiClient.post(`/sales-returns/${id}/reject`);
+    return response.data.data;
+  },
+
+  async processRefund(id, data) {
+    const response = await apiClient.post(`/sales-returns/${id}/refund`, data);
     return response.data.data;
   },
 };

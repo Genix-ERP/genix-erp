@@ -1,12 +1,26 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings } from 'lucide-react';
 import { format, addDays, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, startOfWeek, endOfWeek, isSameDay, addMonths, subMonths } from 'date-fns';
+import { ru } from 'date-fns/locale/ru';
+import { uz } from 'date-fns/locale/uz';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+
+// Locale mapping for date-fns
+const getDateLocale = (lang) => {
+  switch (lang) {
+    case 'ru':
+      return ru;
+    case 'uz':
+      return uz;
+    default:
+      return undefined; // English default
+  }
+};
 
 /**
  * GanttChart Component
@@ -24,7 +38,7 @@ import { useTranslation } from '@/components/utils/translations';
  * - Critical path highlighting
  *
  * @param {Array} tasks - Array of task objects with start_date, due_date, title, progress, etc.
- * @param {Array} milestones - Array of milestone objects with target_date, title, status
+ * @param {Array} milestones - Array of milestone objects with due_date (or target_date), title, status
  * @param {Function} onTaskUpdate - Callback when task dates are updated
  * @param {String} projectStartDate - Project start date for timeline calculation
  * @param {String} projectEndDate - Project end date for timeline calculation
@@ -43,6 +57,8 @@ export default function GanttChart({
   const [viewMode, setViewMode] = useState('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hoveredTask, setHoveredTask] = useState(null);
+  const timelineScrollRef = useRef(null);
+  const todayMarkerRef = useRef(null);
 
   // Calculate timeline range
   const timelineRange = useMemo(() => {
@@ -56,7 +72,7 @@ export default function GanttChart({
       const allDates = [
         ...tasks.map(t => new Date(t.start_date)),
         ...tasks.map(t => new Date(t.due_date)),
-        ...milestones.map(m => new Date(m.target_date))
+        ...milestones.map(m => new Date(m.due_date || m.target_date))
       ].filter(d => !isNaN(d));
 
       if (allDates.length > 0) {
@@ -75,14 +91,18 @@ export default function GanttChart({
     return { start, end };
   }, [tasks, milestones, projectStartDate, projectEndDate]);
 
+  // Get locale for date formatting
+  const dateLocale = getDateLocale(language);
+
   // Generate timeline columns based on view mode
   const timelineColumns = useMemo(() => {
     const { start, end } = timelineRange;
+    const localeOptions = dateLocale ? { locale: dateLocale } : {};
 
     if (viewMode === 'day') {
       return eachDayOfInterval({ start, end }).map(date => ({
         date,
-        label: format(date, 'dd MMM'),
+        label: format(date, 'dd MMM', localeOptions),
         key: format(date, 'yyyy-MM-dd')
       }));
     } else if (viewMode === 'week') {
@@ -91,7 +111,7 @@ export default function GanttChart({
         const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
         return {
           date: weekStart,
-          label: `${format(weekStart, 'dd MMM')} - ${format(weekEnd, 'dd MMM')}`,
+          label: `${format(weekStart, 'dd MMM', localeOptions)} - ${format(weekEnd, 'dd MMM', localeOptions)}`,
           key: format(weekStart, 'yyyy-MM-dd'),
           weekEnd
         };
@@ -105,7 +125,7 @@ export default function GanttChart({
       while (current <= endDate) {
         months.push({
           date: current,
-          label: format(current, 'MMM yyyy'),
+          label: format(current, 'MMM yyyy', localeOptions),
           key: format(current, 'yyyy-MM')
         });
         current = addMonths(current, 1);
@@ -113,7 +133,7 @@ export default function GanttChart({
 
       return months;
     }
-  }, [timelineRange, viewMode]);
+  }, [timelineRange, viewMode, dateLocale]);
 
   // Calculate task bar position and width
   const calculateTaskBar = (task) => {
@@ -136,7 +156,7 @@ export default function GanttChart({
 
   // Calculate milestone position
   const calculateMilestonePosition = (milestone) => {
-    const milestoneDate = new Date(milestone.target_date);
+    const milestoneDate = new Date(milestone.due_date || milestone.target_date);
     const { start, end } = timelineRange;
 
     const totalDays = differenceInDays(end, start);
@@ -185,6 +205,14 @@ export default function GanttChart({
 
   const handleToday = () => {
     setCurrentDate(new Date());
+    // Scroll to today marker
+    if (todayMarkerRef.current && timelineScrollRef.current) {
+      const container = timelineScrollRef.current;
+      const marker = todayMarkerRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const markerLeft = (todayPosition / 100) * container.scrollWidth;
+      container.scrollLeft = markerLeft - containerRect.width / 2;
+    }
   };
 
   // Calculate today's position for the "today" marker
@@ -236,7 +264,7 @@ export default function GanttChart({
             <div className="w-64 p-3 border-r font-semibold sticky left-0 bg-slate-50 z-10">
               {t('task_name') || 'Task Name'}
             </div>
-            <div className="flex-1 overflow-x-auto">
+            <div className="flex-1 overflow-x-auto" ref={timelineScrollRef}>
               <div className="flex min-w-max">
                 {timelineColumns.map((col) => (
                   <div
@@ -262,6 +290,7 @@ export default function GanttChart({
                 {/* Today marker */}
                 {todayPosition >= 0 && todayPosition <= 100 && (
                   <div
+                    ref={todayMarkerRef}
                     className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
                     style={{ left: `calc(16rem + ${todayPosition}%)` }}
                   >
@@ -353,7 +382,7 @@ export default function GanttChart({
                             milestone.status === 'completed' ? 'border-t-green-500' : 'border-t-yellow-500'
                           } border-l-transparent border-r-transparent`}></div>
                           <div className="absolute top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-medium">
-                            {format(new Date(milestone.target_date), 'MMM dd')}
+                            {format(new Date(milestone.due_date || milestone.target_date), 'MMM dd', dateLocale ? { locale: dateLocale } : {})}
                           </div>
                         </div>
                       </div>

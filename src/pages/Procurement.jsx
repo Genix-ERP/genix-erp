@@ -33,6 +33,8 @@ import {
   Receipt,
   Award,
   X,
+  Eye,
+  MessageSquareWarning,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -42,6 +44,7 @@ import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { procurementService } from '@/api/services/procurement';
 
 import Suppliers from '@/components/procurement/Suppliers';
 import RFQManagement from '@/components/procurement/RFQManagement';
@@ -75,8 +78,14 @@ export default function Procurement() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [editPO, setEditPO] = useState(null);
+  const [detailPO, setDetailPO] = useState(null);
+  const [detailPOLines, setDetailPOLines] = useState([]);
+  const [orderReturns, setOrderReturns] = useState([]);
+  const [purchaseReturns, setPurchaseReturns] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   // Products list for selection
   const [products, setProducts] = useState([]);
@@ -101,6 +110,29 @@ export default function Procurement() {
     };
     fetchProducts();
   }, []);
+
+  // Fetch purchase returns to identify orders with returns
+  useEffect(() => {
+    const fetchReturns = async () => {
+      try {
+        const returns = await procurementService.listReturns();
+        setPurchaseReturns(Array.isArray(returns) ? returns : []);
+      } catch (error) {
+        console.error('Failed to fetch purchase returns:', error);
+      }
+    };
+    fetchReturns();
+  }, []);
+
+  // Check if an order has returns
+  const orderHasReturns = useCallback((poId) => {
+    return purchaseReturns.some(r => r.purchase_order_id === poId);
+  }, [purchaseReturns]);
+
+  // Get returns for a specific order
+  const getOrderReturns = useCallback((poId) => {
+    return purchaseReturns.filter(r => r.purchase_order_id === poId);
+  }, [purchaseReturns]);
 
   // Calculate delivery date based on product lead times
   const calculateDeliveryDate = useCallback((orderLines, orderDate) => {
@@ -242,13 +274,55 @@ export default function Procurement() {
     }
   };
 
+  const handleViewPO = async (po, e) => {
+    e.stopPropagation();
+    setIsLoadingDetails(true);
+    setDetailPO(po);
+    setShowDetailModal(true);
+
+    try {
+      // Fetch full order details with lines
+      const fullOrder = await procurementService.getOrder(po.id);
+      setDetailPO(fullOrder);
+      setDetailPOLines(fullOrder.lines || []);
+
+      // Get returns for this order and fetch their details (with lines)
+      const basicReturns = getOrderReturns(po.id);
+      if (basicReturns.length > 0) {
+        // Fetch full details for each return to get the lines
+        const detailedReturns = await Promise.all(
+          basicReturns.map(async (ret) => {
+            try {
+              const fullReturn = await procurementService.getReturn(ret.id);
+              return fullReturn;
+            } catch {
+              return ret; // fallback to basic return if fetch fails
+            }
+          })
+        );
+        setOrderReturns(detailedReturns);
+      } else {
+        setOrderReturns([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
+      setDetailPOLines([]);
+      setOrderReturns([]);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
   const handleEditPO = (po, e) => {
     e.stopPropagation();
     setEditPO({
       ...po,
+      // Map backend field names to frontend field names
+      po_number: po.po_number || po.order_number,
+      supplier_name: po.supplier_name || po.vendor_name,
       total_amount: po.total_amount || 0,
-      // Map backend field name to frontend field name
       expected_delivery_date: po.expected_delivery_date || po.expected_date || '',
+      order_date: po.order_date ? (typeof po.order_date === 'string' ? po.order_date.split('T')[0] : po.order_date) : '',
     });
     setShowEditModal(true);
   };
@@ -695,7 +769,14 @@ export default function Procurement() {
                       <TableBody>
                         {filteredOrders.map((po) => (
                           <TableRow key={po.id} className="hover:bg-slate-50">
-                            <TableCell className="font-mono text-sm">{po.po_number}</TableCell>
+                            <TableCell className="font-mono text-sm">
+                              <div className="flex items-center gap-2">
+                                {po.po_number}
+                                {orderHasReturns(po.id) && (
+                                  <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="font-medium">{po.supplier_name || po.vendor_name}</TableCell>
                             <TableCell className="text-sm">
                               {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
@@ -709,6 +790,9 @@ export default function Procurement() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={(e) => handleViewPO(po, e)} title={t('view_details') || 'View Details'}>
+                                  <Eye className="w-4 h-4" />
+                                </Button>
                                 {canUpdate(MODULES.PURCHASES) && (
                                   <Button size="sm" variant="ghost" onClick={(e) => handleEditPO(po, e)} title={t('edit') || 'Edit'}>
                                     <Edit2 className="w-4 h-4" />
@@ -1051,6 +1135,196 @@ export default function Procurement() {
                   >
                     {isSubmitting ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
                   </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Order Details Modal */}
+        <Dialog open={showDetailModal} onOpenChange={(open) => { setShowDetailModal(open); if (!open) { setDetailPO(null); setDetailPOLines([]); setOrderReturns([]); } }}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {t('order_details') || 'Order Details'}
+                {detailPO && orderHasReturns(detailPO.id) && (
+                  <Badge className="bg-red-100 text-red-700">
+                    <MessageSquareWarning className="w-3 h-3 mr-1" />
+                    {t('has_returns') || 'Has Returns'}
+                  </Badge>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {detailPO && (
+              <div className="space-y-6 py-4">
+                {/* Order Header Info */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-xs text-slate-500">{t('po_number') || 'PO Number'}</p>
+                    <p className="font-mono font-semibold">{detailPO.po_number || detailPO.order_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('supplier') || 'Supplier'}</p>
+                    <p className="font-medium">{detailPO.supplier_name || detailPO.vendor_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('status') || 'Status'}</p>
+                    <Badge className={getStatusColor(detailPO.status)}>{t(detailPO.status) || detailPO.status}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('total_amount') || 'Total Amount'}</p>
+                    <p className="font-bold text-lg">{(detailPO.total_amount || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500">{t('order_date') || 'Order Date'}</p>
+                    <p className="font-medium">{detailPO.order_date ? format(new Date(detailPO.order_date), 'dd.MM.yyyy') : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('delivery_date') || 'Delivery Date'}</p>
+                    <p className="font-medium">{(detailPO.expected_delivery_date || detailPO.expected_date) ? format(new Date(detailPO.expected_delivery_date || detailPO.expected_date), 'dd.MM.yyyy') : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('payment_terms') || 'Payment Terms'}</p>
+                    <p className="font-medium">{detailPO.payment_terms || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('vendor_reference') || 'Vendor Reference'}</p>
+                    <p className="font-medium">{detailPO.vendor_reference || '-'}</p>
+                  </div>
+                </div>
+
+                {/* Order Lines */}
+                <div className="border-t pt-4">
+                  <h3 className="text-base font-semibold mb-3">{t('order_items') || 'Order Items'}</h3>
+                  {isLoadingDetails ? (
+                    <div className="flex justify-center py-6">
+                      <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  ) : detailPOLines.length === 0 ? (
+                    <p className="text-slate-500 text-sm py-4 text-center">{t('no_items') || 'No items'}</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead>{t('product') || 'Product'}</TableHead>
+                            <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>
+                            <TableHead className="text-right">{t('unit_price') || 'Unit Price'}</TableHead>
+                            <TableHead className="text-right">{t('total') || 'Total'}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {detailPOLines.map((line, idx) => (
+                            <TableRow key={line.id || idx}>
+                              <TableCell className="font-medium">{line.product_name || line.description}</TableCell>
+                              <TableCell className="text-right">{line.quantity}</TableCell>
+                              <TableCell className="text-right">{(line.unit_price || 0).toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-semibold">{((line.quantity || 0) * (line.unit_price || 0)).toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Returns Section */}
+                {orderReturns.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h3 className="text-base font-semibold mb-3 flex items-center gap-2 text-red-600">
+                      <RotateCcw className="w-4 h-4" />
+                      {t('returns') || 'Returns'}
+                    </h3>
+                    <div className="space-y-3">
+                      {orderReturns.map((ret) => (
+                        <div key={ret.id} className="p-4 bg-red-50 border border-red-100 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-semibold text-red-700">{ret.return_number}</span>
+                              <Badge className={
+                                ret.status === 'credited' ? 'bg-green-100 text-green-800' :
+                                ret.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
+                                ret.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                ret.status === 'submitted' ? 'bg-yellow-100 text-yellow-800' :
+                                ret.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                                'bg-gray-100 text-gray-800'
+                              }>{t(ret.status) || ret.status}</Badge>
+                            </div>
+                            <span className="text-sm text-slate-500">
+                              {ret.return_date ? format(new Date(ret.return_date), 'dd.MM.yyyy') : '-'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <span className="text-slate-500">{t('reason') || 'Reason'}:</span>
+                              <span className="ml-1 font-medium">{t(ret.reason) || ret.reason}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">{t('total_value') || 'Total Value'}:</span>
+                              <span className="ml-1 font-semibold text-red-600">{(ret.total_value || 0).toLocaleString()}</span>
+                            </div>
+                            {ret.credit_note_number && (
+                              <div>
+                                <span className="text-slate-500">{t('credit_note') || 'Credit Note'}:</span>
+                                <span className="ml-1 font-mono">{ret.credit_note_number}</span>
+                              </div>
+                            )}
+                            {ret.tracking_number && (
+                              <div>
+                                <span className="text-slate-500">{t('tracking') || 'Tracking'}:</span>
+                                <span className="ml-1 font-mono">{ret.tracking_number}</span>
+                              </div>
+                            )}
+                          </div>
+                          {/* Returned Items */}
+                          {ret.lines && ret.lines.length > 0 && (
+                            <div className="mt-3 border-t border-red-100 pt-3">
+                              <p className="text-xs text-slate-500 mb-2">{t('returned_items') || 'Returned Items'}:</p>
+                              <div className="space-y-1">
+                                {ret.lines.map((line, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-sm bg-white/50 px-2 py-1 rounded">
+                                    <span className="font-medium">{line.product_name}</span>
+                                    <span className="text-red-600 font-semibold">
+                                      {line.return_quantity || line.quantity} {line.unit || t('pcs') || 'pcs'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {ret.notes && (
+                            <p className="text-sm text-slate-600 mt-2 border-t border-red-100 pt-2">{ret.notes}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {detailPO.notes && (
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-2">{t('notes') || 'Notes'}</h3>
+                    <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded">{detailPO.notes}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button variant="outline" onClick={() => { setShowDetailModal(false); setDetailPO(null); setDetailPOLines([]); setOrderReturns([]); }} className="flex-1">
+                    {t('close') || 'Close'}
+                  </Button>
+                  {canUpdate(MODULES.PURCHASES) && (
+                    <Button
+                      onClick={(e) => { setShowDetailModal(false); handleEditPO(detailPO, e); }}
+                      className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      {t('edit') || 'Edit'}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

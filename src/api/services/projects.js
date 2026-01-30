@@ -57,6 +57,15 @@ export const projectsService = {
     return response.data;
   },
 
+  async updateProjectMilestone(projectId, milestoneId, data) {
+    const response = await apiClient.put(`/projects/${projectId}/milestones/${milestoneId}`, data);
+    return response.data;
+  },
+
+  async deleteProjectMilestone(projectId, milestoneId) {
+    await apiClient.delete(`/projects/${projectId}/milestones/${milestoneId}`);
+  },
+
   // Time Entries
   async listTimeEntries(projectId) {
     const response = await apiClient.get(`/projects/${projectId}/time-entries`);
@@ -66,6 +75,36 @@ export const projectsService = {
   async createTimeEntry(projectId, data) {
     const response = await apiClient.post(`/projects/${projectId}/time-entries`, data);
     return response.data;
+  },
+
+  // Project Expenses
+  async listProjectExpenses(projectId) {
+    const response = await apiClient.get(`/projects/${projectId}/expenses`);
+    return response.data.data;
+  },
+
+  async createProjectExpense(projectId, data) {
+    const response = await apiClient.post(`/projects/${projectId}/expenses`, data);
+    return response.data;
+  },
+
+  async deleteProjectExpense(projectId, expenseId) {
+    await apiClient.delete(`/projects/${projectId}/expenses/${expenseId}`);
+  },
+
+  // Team Members
+  async listTeamMembers(projectId) {
+    const response = await apiClient.get(`/projects/${projectId}/team-members`);
+    return response.data.data;
+  },
+
+  async addTeamMember(projectId, data) {
+    const response = await apiClient.post(`/projects/${projectId}/team-members`, data);
+    return response.data;
+  },
+
+  async removeTeamMember(projectId, memberId) {
+    await apiClient.delete(`/projects/${projectId}/team-members/${memberId}`);
   },
 };
 
