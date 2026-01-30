@@ -246,27 +246,42 @@ export default function Procurement() {
     e.stopPropagation();
     setEditPO({
       ...po,
-      total_amount: po.total_amount || 0
+      total_amount: po.total_amount || 0,
+      // Map backend field name to frontend field name
+      expected_delivery_date: po.expected_delivery_date || po.expected_date || '',
     });
     setShowEditModal(true);
   };
 
   const handleUpdatePO = async () => {
-    if (!editPO || (!editPO.vendor_name && !editPO.supplier_name)) return;
+    if (!editPO) return;
 
     setIsSubmitting(true);
     try {
-      const updates = {
-        po_number: editPO.po_number,
-        vendor_name: editPO.vendor_name || editPO.supplier_name,
-        order_date: editPO.order_date,
-        expected_delivery_date: editPO.expected_delivery_date,
-        total_amount: parseFloat(editPO.total_amount) || 0,
-        payment_terms: editPO.payment_terms,
-        status: editPO.status
-      };
+      // Backend expects these specific field names (see UpdatePurchaseOrderInput)
+      const updates = {};
 
-      updatePurchaseOrder(editPO.id, updates);
+      // Only include fields that have changed and are supported by backend
+      if (editPO.expected_delivery_date) {
+        updates.expected_date = editPO.expected_delivery_date;
+      }
+      if (editPO.payment_terms) {
+        updates.payment_terms = editPO.payment_terms;
+      }
+      if (editPO.status) {
+        updates.status = editPO.status;
+      }
+      if (editPO.notes !== undefined) {
+        updates.notes = editPO.notes;
+      }
+      if (editPO.vendor_reference !== undefined) {
+        updates.vendor_reference = editPO.vendor_reference;
+      }
+
+      // Only call update if there are changes
+      if (Object.keys(updates).length > 0) {
+        await updatePurchaseOrder(editPO.id, updates);
+      }
       setShowEditModal(false);
       setEditPO(null);
     } catch (error) {
@@ -276,12 +291,10 @@ export default function Procurement() {
     }
   };
 
-  const updatePOStatus = (poId, newStatus) => {
+  const updatePOStatus = async (poId, newStatus) => {
+    // Backend only accepts 'status' field for update
     const updates = { status: newStatus };
-    if (newStatus === 'received') {
-      updates.actual_delivery_date = new Date().toISOString().split('T')[0];
-    }
-    updatePurchaseOrder(poId, updates);
+    await updatePurchaseOrder(poId, updates);
   };
 
   const getStatusColor = (status) => {
@@ -597,7 +610,7 @@ export default function Procurement() {
                             <p className="text-xs text-slate-500">{po.supplier_name || po.vendor_name}</p>
                           </div>
                           <div className="text-right">
-                            <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
+                            <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                             <p className="text-xs text-slate-500 mt-1">
                               {(po.total_amount || 0).toLocaleString()}
                             </p>
@@ -688,11 +701,11 @@ export default function Procurement() {
                               {po.order_date ? format(new Date(po.order_date), 'dd.MM.yyyy') : '-'}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {po.expected_delivery_date ? format(new Date(po.expected_delivery_date), 'dd.MM.yyyy') : '-'}
+                              {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
                             </TableCell>
                             <TableCell className="font-semibold">{(po.total_amount || 0).toLocaleString()}</TableCell>
                             <TableCell>
-                              <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
+                              <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
@@ -802,7 +815,7 @@ export default function Procurement() {
                       <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {suppliers.filter(s => s.status === 'active').map((supplier) => (
+                      {suppliers.filter(s => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
                         <SelectItem key={supplier.id} value={supplier.id}>
                           {supplier.name}
                         </SelectItem>

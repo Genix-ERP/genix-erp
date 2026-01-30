@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
 
 export default function PriceHistory() {
   const { language } = useLanguage();
@@ -70,13 +71,33 @@ export default function PriceHistory() {
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   const [formData, setFormData] = useState({
+    product_id: "",
     product_name: "",
     supplier_id: "",
     price: "",
     currency: "UZS",
   });
+
+  // Fetch products from backend
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const data = await inventoryService.listProducts();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+        setProducts([]);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Filter price history
   const filteredHistory = useMemo(() => {
@@ -134,18 +155,24 @@ export default function PriceHistory() {
   }, [selectedProduct, priceHistory]);
 
   const handleSubmit = async () => {
-    await addPriceRecord(
-      formData.product_name,
-      formData.supplier_id,
-      parseFloat(formData.price) || 0,
-      formData.currency
-    );
-    resetForm();
+    try {
+      await addPriceRecord(
+        formData.product_name,
+        formData.supplier_id,
+        parseFloat(formData.price) || 0,
+        formData.currency,
+        formData.product_id
+      );
+      resetForm();
+    } catch (error) {
+      console.error('Failed to add price record:', error);
+    }
   };
 
   const resetForm = () => {
     setShowForm(false);
     setFormData({
+      product_id: "",
       product_name: "",
       supplier_id: "",
       price: "",
@@ -426,18 +453,35 @@ export default function PriceHistory() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>{t('product_name') || "Mahsulot nomi"} *</Label>
-              <Input
-                value={formData.product_name}
-                onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                placeholder={t('enter_product_name') || "Mahsulot nomini kiriting"}
-                list="products-list"
-              />
-              <datalist id="products-list">
-                {Array.from(uniqueProducts.keys()).map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
+              <Label>{t('product') || "Mahsulot"} *</Label>
+              <Select
+                value={formData.product_id}
+                onValueChange={(value) => {
+                  const selectedProd = products.find(p => p.id === value);
+                  setFormData({
+                    ...formData,
+                    product_id: value,
+                    product_name: selectedProd?.name || ""
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_product') || "Mahsulotni tanlang"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {productsLoading ? (
+                    <SelectItem value="" disabled>
+                      {t('loading') || "Yuklanmoqda..."}
+                    </SelectItem>
+                  ) : (
+                    products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -451,7 +495,7 @@ export default function PriceHistory() {
                 </SelectTrigger>
                 <SelectContent>
                   {suppliers
-                    .filter((s) => s.status === "active")
+                    .filter((s) => s.is_active !== false && s.status !== 'inactive')
                     .map((supplier) => (
                       <SelectItem key={supplier.id} value={supplier.id}>
                         {supplier.name}
@@ -494,7 +538,7 @@ export default function PriceHistory() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.product_name || !formData.supplier_id || !formData.price}
+                disabled={!formData.product_id || !formData.supplier_id || !formData.price}
               >
                 {t('save') || "Saqlash"}
               </Button>

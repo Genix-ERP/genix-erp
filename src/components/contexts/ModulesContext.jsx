@@ -116,7 +116,17 @@ export function ModulesProvider({ children }) {
         auto_renew: c.auto_renewal || c.auto_renew || false,
       }));
       setContracts(mappedContracts);
-      setExpenses(expensesData?.items || expensesData || []);
+      // Map backend expense fields to frontend expected fields
+      // Backend returns: date (not expense_date), expense_number, category (not category_name)
+      const rawExpenses = expensesData?.items || expensesData || [];
+      const mappedExpenses = rawExpenses.map(e => ({
+        ...e,
+        claim_number: e.expense_number || e.claim_number,
+        expense_date: e.date || e.expense_date || e.claim_date, // Backend returns 'date'
+        claim_date: e.date || e.expense_date || e.claim_date,
+        category: e.category || e.category_name || 'other', // Backend returns 'category'
+      }));
+      setExpenses(mappedExpenses);
       setAssets(assetsData?.items || assetsData || []);
       setPayrolls(payrollsData?.items || payrollsData || []);
 
@@ -357,13 +367,14 @@ export function ModulesProvider({ children }) {
   const createExpense = useCallback(async (data) => {
     const apiData = {
       date: data.expense_date || data.claim_date || data.date,
-      description: data.description,
+      description: data.description || 'Expense', // Default description if empty
       amount: data.amount || 0,
       tax_amount: data.tax_amount || 0,
       currency: data.currency || 'UZS',
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
+      category: data.category, // Send category name to backend
       payment_method: data.payment_method,
       reference: data.reference || data.claim_number,
       reimbursable: data.reimbursable || false,
@@ -374,8 +385,9 @@ export function ModulesProvider({ children }) {
       const mappedResult = {
         ...result,
         claim_number: result.expense_number,
-        claim_date: result.expense_date,
-        category: result.category_name
+        expense_date: result.date || result.expense_date,
+        claim_date: result.date || result.expense_date,
+        category: result.category || result.category_name || data.category || 'other',
       };
       setExpenses(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -393,6 +405,7 @@ export function ModulesProvider({ children }) {
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
+      category: data.category, // Send category name to backend
       payment_method: data.payment_method,
       reference: data.reference,
       reimbursable: data.reimbursable,
@@ -404,8 +417,9 @@ export function ModulesProvider({ children }) {
       const mappedResult = {
         ...result,
         claim_number: result.expense_number,
-        claim_date: result.expense_date,
-        category: result.category_name
+        expense_date: result.date || result.expense_date,
+        claim_date: result.date || result.expense_date,
+        category: result.category || result.category_name || data.category || 'other',
       };
       setExpenses(prev => prev.map(e => e.id === id ? mappedResult : e));
       return mappedResult;

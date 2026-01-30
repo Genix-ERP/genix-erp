@@ -26,6 +26,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
 
 const priorityColors = {
   low: 'bg-gray-100 text-gray-800',
@@ -66,13 +67,34 @@ export default function PurchaseRequisitions() {
     priority: 'medium',
     purpose: '',
     notes: '',
-    lines: [{ product_name: '', quantity: 1, unit: 'pcs', estimated_price: 0, vendor_name: '' }],
+    lines: [{ product_id: '', product_name: '', quantity: 1, unit: 'dona', estimated_price: 0 }],
   });
 
   const [convertData, setConvertData] = useState({
     supplier_id: '',
     payment_terms: 'net_30',
   });
+
+  // Products state
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  // Fetch products from backend
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const data = await inventoryService.listProducts();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+        setProducts([]);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Load from localStorage
   useEffect(() => {
@@ -127,7 +149,7 @@ export default function PurchaseRequisitions() {
       priority: 'medium',
       purpose: '',
       notes: '',
-      lines: [{ product_name: '', quantity: 1, unit: 'pcs', estimated_price: 0, vendor_name: '' }],
+      lines: [{ product_id: '', product_name: '', quantity: 1, unit: 'dona', estimated_price: 0 }],
     });
   };
 
@@ -198,7 +220,7 @@ export default function PurchaseRequisitions() {
   const addLine = () => {
     setNewPR(prev => ({
       ...prev,
-      lines: [...prev.lines, { product_name: '', quantity: 1, unit: 'pcs', estimated_price: 0, vendor_name: '' }],
+      lines: [...prev.lines, { product_id: '', product_name: '', quantity: 1, unit: 'dona', estimated_price: 0 }],
     }));
   };
 
@@ -438,11 +460,31 @@ export default function PurchaseRequisitions() {
                 {newPR.lines.map((line, index) => (
                   <div key={index} className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2 rounded">
                     <div className="col-span-4">
-                      <Input
-                        placeholder={t('product_name') || 'Product name'}
-                        value={line.product_name}
-                        onChange={(e) => updateLine(index, 'product_name', e.target.value)}
-                      />
+                      <Select
+                        value={line.product_id}
+                        onValueChange={(value) => {
+                          const selectedProd = products.find(p => p.id === value);
+                          updateLine(index, 'product_id', value);
+                          updateLine(index, 'product_name', selectedProd?.name || '');
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select_product') || 'Mahsulotni tanlang'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {productsLoading ? (
+                            <SelectItem value="" disabled>
+                              {t('loading') || 'Yuklanmoqda...'}
+                            </SelectItem>
+                          ) : (
+                            products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="col-span-2">
                       <Input
@@ -458,10 +500,10 @@ export default function PurchaseRequisitions() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pcs">{t('pieces') || 'pcs'}</SelectItem>
+                          <SelectItem value="dona">{t('pieces') || 'dona'}</SelectItem>
                           <SelectItem value="kg">{t('kg') || 'kg'}</SelectItem>
-                          <SelectItem value="liters">{t('liters') || 'liters'}</SelectItem>
-                          <SelectItem value="meters">{t('meters') || 'meters'}</SelectItem>
+                          <SelectItem value="litr">{t('liters') || 'litr'}</SelectItem>
+                          <SelectItem value="metr">{t('meters') || 'metr'}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -490,7 +532,7 @@ export default function PurchaseRequisitions() {
               <Button
                 onClick={handleCreatePR}
                 className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600"
-                disabled={!newPR.requested_by || newPR.lines.every(l => !l.product_name)}
+                disabled={!newPR.requested_by || newPR.lines.every(l => !l.product_id)}
               >
                 {t('create') || 'Create'}
               </Button>
@@ -585,7 +627,7 @@ export default function PurchaseRequisitions() {
                   <SelectValue placeholder={t('select_supplier') || 'Select supplier'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {suppliers.filter(s => s.status === 'active').map((supplier) => (
+                  {suppliers.filter(s => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
                     <SelectItem key={supplier.id} value={supplier.id}>
                       {supplier.name}
                     </SelectItem>

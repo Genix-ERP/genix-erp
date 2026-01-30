@@ -51,6 +51,8 @@ export default function AccountsPayable() {
     vendorBills,
     createVendorBill,
     updateVendorBill,
+    postVendorBill,
+    payVendorBill,
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
@@ -254,14 +256,24 @@ export default function AccountsPayable() {
     addAuditLog('approve', billId, 'Vendor Bill', { oldStatus: 'draft', newStatus: 'confirmed' });
   };
 
-  const payBill = (billId) => {
-    const bill = vendorBills.find(b => b.id === billId);
-    updateVendorBill(billId, {
-      status: 'paid',
-      amount_paid: bill.total_amount,
-      amount_due: 0
-    });
-    addAuditLog('status_change', billId, 'Vendor Bill', { oldStatus: 'confirmed', newStatus: 'paid' });
+  const postBill = async (billId) => {
+    try {
+      await postVendorBill(billId);
+      addAuditLog('post', billId, 'Vendor Bill', { oldStatus: 'draft', newStatus: 'posted', note: 'Journal entry created' });
+    } catch (err) {
+      console.error('Failed to post bill:', err);
+    }
+  };
+
+  const payBill = async (billId) => {
+    try {
+      const bill = vendorBills.find(b => b.id === billId);
+      // Use payVendorBill which creates a Payment record and journal entry
+      await payVendorBill(billId, bill?.total_amount - (bill?.amount_paid || 0));
+      addAuditLog('status_change', billId, 'Vendor Bill', { oldStatus: bill?.status, newStatus: 'paid' });
+    } catch (err) {
+      console.error('Failed to pay bill:', err);
+    }
   };
 
   const handleStatusChange = (billId, newStatus, comment) => {
@@ -316,7 +328,9 @@ export default function AccountsPayable() {
     const colors = {
       draft: 'bg-gray-100 text-gray-800 border-gray-200',
       confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
+      posted: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       paid: 'bg-green-100 text-green-800 border-green-200',
+      partial: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       overdue: 'bg-red-100 text-red-800 border-red-200',
       cancelled: 'bg-slate-100 text-slate-800 border-slate-200'
     };
@@ -491,11 +505,12 @@ export default function AccountsPayable() {
                   <TableRow className="bg-slate-50">
                     <TableHead>{t('invoice_number')}</TableHead>
                     <TableHead>{t('vendor')}</TableHead>
+                    <TableHead>{t('po_reference') || 'PO Ref'}</TableHead>
+                    <TableHead>{t('gr_reference') || 'GR Ref'}</TableHead>
                     <TableHead>{t('date')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead>{t('amount')}</TableHead>
                     <TableHead>{t('status')}</TableHead>
-                    <TableHead>{t('three_way_match')}</TableHead>
                     <TableHead>{t('actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -514,6 +529,12 @@ export default function AccountsPayable() {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">{bill.partner_name || bill.vendor_name || '-'}</TableCell>
+                      <TableCell className="text-sm font-mono">
+                        {bill.purchase_order_number || '-'}
+                      </TableCell>
+                      <TableCell className="text-sm font-mono">
+                        {bill.goods_receipt_number || '-'}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {bill.invoice_date ? format(new Date(bill.invoice_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
@@ -523,11 +544,6 @@ export default function AccountsPayable() {
                       <TableCell className="font-semibold">${(bill.total_amount || 0).toLocaleString()}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bill.status)}>{t(bill.status) || bill.status}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getMatchStatusColor(bill.three_way_match_status || 'not_applicable')}>
-                          {t(bill.three_way_match_status) || bill.three_way_match_status || 'N/A'}
-                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -543,12 +559,23 @@ export default function AccountsPayable() {
                             <Eye className="w-4 h-4" />
                           </Button>
                           {bill.status === 'draft' && (
-                            <Button size="sm" variant="ghost" onClick={() => approveBill(bill.id)}>
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => postBill(bill.id)}
+                                title={t('post') || 'Post (Create Journal Entry)'}
+                                className="text-green-600 hover:text-green-700"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => approveBill(bill.id)} title={t('confirm') || 'Confirm'}>
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                            </>
                           )}
-                          {bill.status === 'confirmed' && (
-                            <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)}>
+                          {(bill.status === 'confirmed' || bill.status === 'posted') && (
+                            <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)} title={t('pay') || 'Record Payment'}>
                               <DollarSign className="w-4 h-4" />
                             </Button>
                           )}
@@ -1007,6 +1034,23 @@ export default function AccountsPayable() {
                 </div>
               </div>
 
+              {(selectedBill.purchase_order_number || selectedBill.goods_receipt_number) && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-slate-500 mb-1">{t('po_reference') || 'PO Reference'}</p>
+                    <p className="text-sm font-semibold text-blue-800 font-mono">
+                      {selectedBill.purchase_order_number || '-'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <p className="text-xs text-slate-500 mb-1">{t('gr_reference') || 'GR Reference'}</p>
+                    <p className="text-sm font-semibold text-purple-800 font-mono">
+                      {selectedBill.goods_receipt_number || '-'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="p-3 bg-slate-50 rounded-lg">
                 <p className="text-xs text-slate-500 mb-1">{t('three_way_match')}</p>
                 <Badge className={getMatchStatusColor(selectedBill.three_way_match_status || 'not_applicable')}>
@@ -1023,21 +1067,33 @@ export default function AccountsPayable() {
 
               <div className="flex gap-2 pt-4">
                 {selectedBill.status === 'draft' && (
-                  <Button
-                    onClick={() => {
-                      approveBill(selectedBill.id);
-                      setSelectedBill({ ...selectedBill, status: 'confirmed' });
-                    }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {t('approve') || 'Approve'}
-                  </Button>
+                  <>
+                    <Button
+                      onClick={async () => {
+                        await postBill(selectedBill.id);
+                        setSelectedBill({ ...selectedBill, status: 'posted' });
+                      }}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      {t('post') || 'Post'}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        approveBill(selectedBill.id);
+                        setSelectedBill({ ...selectedBill, status: 'confirmed' });
+                      }}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {t('confirm') || 'Confirm'}
+                    </Button>
+                  </>
                 )}
-                {selectedBill.status === 'confirmed' && (
+                {(selectedBill.status === 'confirmed' || selectedBill.status === 'posted') && (
                   <Button
-                    onClick={() => {
-                      payBill(selectedBill.id);
+                    onClick={async () => {
+                      await payBill(selectedBill.id);
                       setSelectedBill({ ...selectedBill, status: 'paid', amount_due: 0 });
                     }}
                     className="flex-1 bg-green-600 hover:bg-green-700"

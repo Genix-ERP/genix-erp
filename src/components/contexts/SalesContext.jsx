@@ -131,7 +131,18 @@ export function SalesProvider({ children }) {
     return cancelled;
   }, []);
 
+  const createInvoiceFromOrder = useCallback(async (orderId) => {
+    const newInvoice = await salesService.createInvoiceFromOrder(orderId);
+    setInvoices(prev => [...prev, newInvoice]);
+    return newInvoice;
+  }, []);
+
   // Invoice CRUD
+  const getInvoice = useCallback(async (id) => {
+    const invoice = await salesService.getInvoice(id);
+    return invoice;
+  }, []);
+
   const createInvoice = useCallback(async (data) => {
     const newInvoice = await salesService.createInvoice(data);
     setInvoices(prev => [...prev, newInvoice]);
@@ -140,7 +151,8 @@ export function SalesProvider({ children }) {
 
   const updateInvoice = useCallback(async (id, updates) => {
     const updated = await salesService.updateInvoice(id, updates);
-    setInvoices(prev => prev.map(inv => inv.id === id ? updated : inv));
+    // Merge updated data with existing invoice to preserve all fields
+    setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, ...updated } : inv));
     return updated;
   }, []);
 
@@ -151,7 +163,8 @@ export function SalesProvider({ children }) {
 
   const recordPayment = useCallback(async (invoiceId, amount, _method, date) => {
     const result = await salesService.recordPayment(invoiceId, { amount, payment_date: date });
-    setInvoices(prev => prev.map(inv => inv.id === invoiceId ? result : inv));
+    // Merge result with existing invoice to preserve fields like customer_name
+    setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...result } : inv));
     return result;
   }, []);
 
@@ -407,8 +420,10 @@ export function SalesProvider({ children }) {
     deleteSalesOrder,
     confirmSalesOrder,
     cancelSalesOrder,
+    createInvoiceFromOrder,
 
     // Invoice operations
+    getInvoice,
     createInvoice,
     updateInvoice,
     deleteInvoice,

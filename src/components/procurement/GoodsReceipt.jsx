@@ -26,6 +26,8 @@ import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
+import { procurementService } from "@/api/services/procurement";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -55,6 +57,8 @@ export default function GoodsReceipt() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showInspectModal, setShowInspectModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedGR, setSelectedGR] = useState(null);
 
   const [newGR, setNewGR] = useState({
@@ -71,18 +75,47 @@ export default function GoodsReceipt() {
     lines: [],
   });
 
-  // Load from localStorage
+  // Warehouses state
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(false);
+
+  // Fetch warehouses from backend
   useEffect(() => {
-    const stored = localStorage.getItem('demo_goods_receipts');
-    if (stored) {
-      setReceipts(JSON.parse(stored));
-    }
+    const fetchWarehouses = async () => {
+      setWarehousesLoading(true);
+      try {
+        const data = await inventoryService.listWarehouses();
+        setWarehouses(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to fetch warehouses:", error);
+        setWarehouses([]);
+      } finally {
+        setWarehousesLoading(false);
+      }
+    };
+    fetchWarehouses();
   }, []);
 
-  // Save to localStorage
+  // Loading state
+  const [loading, setLoading] = useState(false);
+
+  // Fetch goods receipts from API
+  const fetchReceipts = async () => {
+    setLoading(true);
+    try {
+      const response = await procurementService.listGoodsReceipts();
+      setReceipts(response.data || response || []);
+    } catch (error) {
+      console.error('Failed to fetch goods receipts:', error);
+      setReceipts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem('demo_goods_receipts', JSON.stringify(receipts));
-  }, [receipts]);
+    fetchReceipts();
+  }, []);
 
   // Filter receipts
   useEffect(() => {
@@ -100,23 +133,58 @@ export default function GoodsReceipt() {
     setFilteredReceipts(filtered);
   }, [receipts, searchQuery, statusFilter]);
 
-  // Get open POs for dropdown
-  const openPOs = purchaseOrders.filter(po => po.status === 'approved' || po.status === 'partial');
+  // Get open POs for dropdown (approved, ordered, or partial POs)
+  const openPOs = purchaseOrders.filter(po =>
+    po.status === 'approved' || po.status === 'ordered' || po.status === 'partial' ||
+    po.status === 'sent' || po.status === 'confirmed'
+  );
 
-  const handleSelectPO = (poId) => {
-    const po = purchaseOrders.find(o => o.id === poId);
-    if (po) {
+  const handleSelectPO = async (poId) => {
+    const poFromList = purchaseOrders.find(o => o.id === poId);
+    if (!poFromList) return;
+
+    try {
+      // Fetch full PO details including lines from API
+      const po = await procurementService.getOrder(poId);
+      const poLines = po.lines || po.items || [];
+
       setNewGR({
         ...newGR,
         po_id: poId,
-        po_number: po.po_number,
+        po_number: po.order_number || po.po_number,
+        supplier_id: po.vendor_id || po.supplier_id,
         supplier_name: po.vendor_name || po.supplier_name,
-        lines: (po.items || []).map(item => ({
-          product_id: item.product_id || item.id,
-          product_name: item.product_name || item.name,
+        lines: poLines.map(item => ({
+          po_line_id: item.id,
+          product_id: item.product_id,
+          product_name: item.product_name || item.description || item.name || 'Product',
+          ordered_quantity: item.quantity,
+          received_quantity: item.quantity - (item.quantity_received || 0), // Only unreceived quantity
+          unit: item.unit_name || item.unit || 'pcs',
+          unit_price: item.unit_price || item.price || 0,
+          batch_number: '',
+          expiry_date: '',
+          storage_location: '',
+        })),
+      });
+    } catch (error) {
+      console.error('Failed to fetch PO details:', error);
+      // Fallback to list data
+      const poLines = poFromList.lines || poFromList.items || [];
+      setNewGR({
+        ...newGR,
+        po_id: poId,
+        po_number: poFromList.order_number || poFromList.po_number,
+        supplier_id: poFromList.vendor_id || poFromList.supplier_id,
+        supplier_name: poFromList.vendor_name || poFromList.supplier_name,
+        lines: poLines.map(item => ({
+          po_line_id: item.id,
+          product_id: item.product_id,
+          product_name: item.product_name || item.description || item.name || 'Product',
           ordered_quantity: item.quantity,
           received_quantity: item.quantity,
-          unit: item.unit || 'pcs',
+          unit: item.unit_name || item.unit || 'pcs',
+          unit_price: item.unit_price || item.price || 0,
           batch_number: '',
           expiry_date: '',
           storage_location: '',
@@ -125,95 +193,155 @@ export default function GoodsReceipt() {
     }
   };
 
-  const handleCreateGR = () => {
+  const handleCreateGR = async () => {
     if (!newGR.po_id || !newGR.received_by) return;
 
-    const totalReceived = newGR.lines.reduce((sum, line) => sum + (line.received_quantity || 0), 0);
+    const selectedWarehouse = warehouses.find(w => w.id === newGR.warehouse_location);
 
-    const gr = {
-      id: Date.now().toString(),
-      gr_number: `GR-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(receipts.length + 1).padStart(4, '0')}`,
-      ...newGR,
-      receipt_date: new Date().toISOString().split('T')[0],
-      total_received: totalReceived,
-      status: 'pending',
-      quality_status: 'pending',
-      created_at: new Date().toISOString(),
-    };
+    // Filter lines with received quantity > 0 and ensure product_name is set
+    const validLines = newGR.lines
+      .filter(line => line.received_quantity > 0)
+      .map(line => ({
+        po_line_id: line.po_line_id,
+        product_id: line.product_id,
+        product_name: line.product_name || 'Product',
+        product_code: line.product_code || '',
+        ordered_quantity: line.ordered_quantity,
+        received_quantity: line.received_quantity,
+        unit: line.unit || 'pcs',
+        unit_price: line.unit_price || 0,
+        batch_number: line.batch_number || '',
+        expiry_date: line.expiry_date || '',
+        storage_location: line.storage_location || '',
+      }));
 
-    setReceipts(prev => [gr, ...prev]);
-    setShowCreateModal(false);
-    setNewGR({
-      po_id: '',
-      received_by: '',
-      warehouse_location: '',
-      notes: '',
-      lines: [],
-    });
+    if (validLines.length === 0) {
+      alert(t('no_items_to_receive') || 'Please enter received quantities for at least one item');
+      return;
+    }
+
+    try {
+      const payload = {
+        purchase_order_id: newGR.po_id,
+        received_by: newGR.received_by || 'User',
+        warehouse_id: newGR.warehouse_location || undefined,
+        warehouse_name: selectedWarehouse?.name || '',
+        notes: newGR.notes || '',
+        lines: validLines,
+      };
+      console.log('Creating GR with payload:', JSON.stringify(payload, null, 2));
+      await procurementService.createGoodsReceipt(payload);
+
+      // Refresh the list
+      await fetchReceipts();
+      setShowCreateModal(false);
+      setNewGR({
+        po_id: '',
+        received_by: '',
+        warehouse_location: '',
+        notes: '',
+        lines: [],
+      });
+    } catch (error) {
+      console.error('Failed to create goods receipt:', error);
+      alert(t('error_creating_receipt') || 'Failed to create goods receipt');
+    }
   };
 
-  const handleStartInspection = (gr) => {
-    setSelectedGR(gr);
-    setInspectionData({
-      quality_status: 'passed',
-      quality_notes: '',
-      lines: gr.lines.map(line => ({
-        ...line,
-        accepted_quantity: line.received_quantity,
-        rejected_quantity: 0,
+  const handleStartInspection = async (gr) => {
+    try {
+      // Fetch full GR details including lines
+      const fullGR = await procurementService.getGoodsReceipt(gr.id);
+      const grLines = fullGR.lines || [];
+
+      setSelectedGR(fullGR);
+      setInspectionData({
         quality_status: 'passed',
-        defect_notes: '',
-      })),
-    });
-    setShowInspectModal(true);
+        quality_notes: '',
+        lines: grLines.map(line => ({
+          ...line,
+          accepted_quantity: line.received_quantity || 0,
+          rejected_quantity: 0,
+          quality_status: 'passed',
+          defect_notes: '',
+        })),
+      });
+      setShowInspectModal(true);
+    } catch (error) {
+      console.error('Failed to fetch GR details:', error);
+      alert(t('error_fetching_details') || 'Failed to fetch goods receipt details');
+    }
   };
 
-  const handleSaveInspection = () => {
+  const handleSaveInspection = async () => {
     if (!selectedGR) return;
 
-    const totalAccepted = inspectionData.lines.reduce((sum, line) => sum + (line.accepted_quantity || 0), 0);
-    const totalRejected = inspectionData.lines.reduce((sum, line) => sum + (line.rejected_quantity || 0), 0);
+    try {
+      await procurementService.inspectGoodsReceipt(selectedGR.id, {
+        inspected_by: newGR.received_by || 'Inspector',
+        inspection_notes: inspectionData.quality_notes,
+        lines: inspectionData.lines.map(line => ({
+          line_id: line.id,
+          accepted_quantity: line.accepted_quantity || 0,
+          rejected_quantity: line.rejected_quantity || 0,
+          rejection_reason: line.defect_notes || '',
+        })),
+      });
 
-    setReceipts(prev => prev.map(gr =>
-      gr.id === selectedGR.id
-        ? {
-          ...gr,
-          status: 'inspecting',
-          quality_status: inspectionData.quality_status,
-          quality_notes: inspectionData.quality_notes,
-          total_accepted: totalAccepted,
-          total_rejected: totalRejected,
-          lines: inspectionData.lines,
-          inspected_at: new Date().toISOString(),
-        }
-        : gr
-    ));
-
-    setShowInspectModal(false);
-    setSelectedGR(null);
+      // Refresh the list
+      await fetchReceipts();
+      setShowInspectModal(false);
+      setSelectedGR(null);
+    } catch (error) {
+      console.error('Failed to save inspection:', error);
+      alert(t('error_saving_inspection') || 'Failed to save inspection');
+    }
   };
 
-  const handleCompleteGR = (gr) => {
-    setReceipts(prev => prev.map(g =>
-      g.id === gr.id
-        ? { ...g, status: 'completed', completed_at: new Date().toISOString() }
-        : g
-    ));
+  const handleCompleteGR = async (gr) => {
+    try {
+      await procurementService.completeGoodsReceipt(gr.id);
+      // Refresh the list - inventory is now updated on the backend!
+      await fetchReceipts();
+    } catch (error) {
+      console.error('Failed to complete goods receipt:', error);
+      alert(t('error_completing_receipt') || 'Failed to complete goods receipt. Make sure inspection is done first.');
+    }
   };
 
   const handleCancelGR = (gr) => {
-    if (confirm(t('confirm_cancel_receipt') || 'Are you sure you want to cancel this receipt?')) {
-      setReceipts(prev => prev.map(g =>
-        g.id === gr.id
-          ? { ...g, status: 'cancelled', cancelled_at: new Date().toISOString() }
-          : g
-      ));
+    setSelectedGR(gr);
+    setShowCancelModal(true);
+  };
+
+  const confirmCancelGR = async () => {
+    if (!selectedGR) return;
+    try {
+      await procurementService.cancelGoodsReceipt(selectedGR.id);
+      await fetchReceipts();
+      setShowCancelModal(false);
+      setSelectedGR(null);
+    } catch (error) {
+      console.error('Failed to cancel goods receipt:', error);
+      alert(t('error_cancelling_receipt') || 'Failed to cancel goods receipt');
     }
   };
 
   const handleDeleteGR = (gr) => {
-    if (confirm(t('confirm_delete_receipt') || 'Are you sure you want to delete this receipt?')) {
-      setReceipts(prev => prev.filter(g => g.id !== gr.id));
+    setSelectedGR(gr);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteGR = async () => {
+    if (!selectedGR) return;
+    try {
+      await procurementService.deleteGoodsReceipt(selectedGR.id);
+      await fetchReceipts();
+      setShowDeleteModal(false);
+      setSelectedGR(null);
+    } catch (error) {
+      console.error('Failed to delete goods receipt:', error);
+      alert(t('error_deleting_receipt') || 'Failed to delete goods receipt. Only draft receipts can be deleted.');
     }
   };
 
@@ -302,7 +430,12 @@ export default function GoodsReceipt() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {filteredReceipts.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <Package className="w-16 h-16 text-slate-300 mx-auto mb-4 animate-pulse" />
+            <p className="text-slate-500">{t('loading') || 'Loading...'}</p>
+          </div>
+        ) : filteredReceipts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_receipts_yet') || 'No receipts yet'}</p>
@@ -417,11 +550,31 @@ export default function GoodsReceipt() {
 
             <div>
               <label className="text-sm font-medium mb-1 block">{t('warehouse_location') || 'Warehouse Location'}</label>
-              <Input
+              <Select
                 value={newGR.warehouse_location}
-                onChange={(e) => setNewGR({ ...newGR, warehouse_location: e.target.value })}
-                placeholder={t('warehouse_location') || 'Warehouse location'}
-              />
+                onValueChange={(value) => setNewGR({ ...newGR, warehouse_location: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehousesLoading ? (
+                    <SelectItem value="" disabled>
+                      {t('loading') || 'Loading...'}
+                    </SelectItem>
+                  ) : warehouses.length === 0 ? (
+                    <SelectItem value="" disabled>
+                      {t('no_warehouses') || 'No warehouses found'}
+                    </SelectItem>
+                  ) : (
+                    warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Line Items */}
@@ -641,7 +794,9 @@ export default function GoodsReceipt() {
               {selectedGR.warehouse_location && (
                 <div>
                   <p className="text-sm text-slate-500">{t('warehouse_location') || 'Warehouse Location'}</p>
-                  <p className="font-medium">{selectedGR.warehouse_location}</p>
+                  <p className="font-medium">
+                    {selectedGR.warehouse_name || warehouses.find(w => w.id === selectedGR.warehouse_location)?.name || selectedGR.warehouse_location}
+                  </p>
                 </div>
               )}
 
@@ -683,6 +838,66 @@ export default function GoodsReceipt() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Modal */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('confirm_cancel') || 'Confirm Cancel'}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('confirm_cancel_receipt_message') || 'Are you sure you want to cancel this goods receipt?'}
+            </p>
+            {selectedGR && (
+              <p className="mt-2 font-mono text-sm text-slate-500">
+                {selectedGR.gr_number}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setShowCancelModal(false)} className="flex-1">
+              {t('no') || 'No'}
+            </Button>
+            <Button
+              onClick={confirmCancelGR}
+              className="flex-1 bg-red-600 hover:bg-red-700"
+            >
+              {t('yes_cancel') || 'Yes, Cancel'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('confirm_delete') || 'Confirm Delete'}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-slate-600">
+              {t('confirm_delete_receipt_message') || 'Are you sure you want to delete this goods receipt? This action cannot be undone.'}
+            </p>
+            {selectedGR && (
+              <p className="mt-2 font-mono text-sm text-slate-500">
+                {selectedGR.gr_number}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)} className="flex-1">
+              {t('no') || 'No'}
+            </Button>
+            <Button
+              onClick={confirmDeleteGR}
+              className="flex-1 bg-red-600 hover:bg-red-700"
+            >
+              {t('yes_delete') || 'Yes, Delete'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

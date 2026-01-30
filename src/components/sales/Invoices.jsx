@@ -64,6 +64,7 @@ export default function Invoices() {
 
   const {
     invoices,
+    getInvoice,
     createInvoice,
     updateInvoice,
     deleteInvoice,
@@ -113,16 +114,24 @@ export default function Invoices() {
   }, [invoices, searchQuery, statusFilter]);
 
   const stats = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const total = invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const paid = invoices
       .filter((inv) => inv.payment_status === "paid")
       .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const outstanding = invoices
       .filter((inv) => inv.payment_status !== "paid")
-      .reduce((sum, inv) => sum + (inv.balance || 0), 0);
+      .reduce((sum, inv) => sum + (inv.balance || inv.amount_due || 0), 0);
     const overdue = invoices
-      .filter((inv) => inv.payment_status !== "paid" && new Date(inv.due_date) < new Date())
-      .reduce((sum, inv) => sum + (inv.balance || 0), 0);
+      .filter((inv) => {
+        if (inv.payment_status === "paid") return false;
+        const dueDate = new Date(inv.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate < today; // Only overdue if BEFORE today
+      })
+      .reduce((sum, inv) => sum + (inv.balance || inv.amount_due || 0), 0);
     return { total, paid, outstanding, overdue };
   }, [invoices]);
 
@@ -208,25 +217,62 @@ export default function Invoices() {
     });
   };
 
-  const handleEdit = (invoice) => {
-    setSelectedInvoice(invoice);
-    setFormData({
-      customer_id: invoice.customer_id || "",
-      customer_name: invoice.customer_name || "",
-      invoice_date: invoice.invoice_date || "",
-      due_date: invoice.due_date || "",
-      items: invoice.items || [{ product_name: "", quantity: 1, unit_price: 0 }],
-      discount_amount: invoice.discount_amount || 0,
-      tax_percent: invoice.tax_percent || 12,
-      notes: invoice.notes || "",
-    });
-    setEditMode(true);
-    setShowForm(true);
+  const handleEdit = async (invoice) => {
+    try {
+      // Fetch full invoice details with lines
+      const fullInvoice = await getInvoice(invoice.id);
+      setSelectedInvoice(fullInvoice);
+
+      // Convert lines to items format for the form
+      const items = (fullInvoice.lines || fullInvoice.items || []).map(line => ({
+        product_name: line.description || line.product_name || "",
+        quantity: line.quantity || 1,
+        unit_price: line.unit_price || 0,
+      }));
+
+      setFormData({
+        customer_id: fullInvoice.customer_id || "",
+        customer_name: fullInvoice.customer_name || "",
+        invoice_date: fullInvoice.invoice_date || "",
+        due_date: fullInvoice.due_date || "",
+        items: items.length > 0 ? items : [{ product_name: "", quantity: 1, unit_price: 0 }],
+        discount_amount: fullInvoice.discount_amount || 0,
+        tax_percent: fullInvoice.tax_percent || 12,
+        notes: fullInvoice.notes || "",
+      });
+      setEditMode(true);
+      setShowForm(true);
+    } catch (error) {
+      console.error('Failed to fetch invoice for editing:', error);
+      // Fallback to list data
+      setSelectedInvoice(invoice);
+      setFormData({
+        customer_id: invoice.customer_id || "",
+        customer_name: invoice.customer_name || "",
+        invoice_date: invoice.invoice_date || "",
+        due_date: invoice.due_date || "",
+        items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+        discount_amount: invoice.discount_amount || 0,
+        tax_percent: invoice.tax_percent || 12,
+        notes: invoice.notes || "",
+      });
+      setEditMode(true);
+      setShowForm(true);
+    }
   };
 
-  const handleView = (invoice) => {
-    setSelectedInvoice(invoice);
-    setShowDetails(true);
+  const handleView = async (invoice) => {
+    try {
+      // Fetch full invoice details with lines
+      const fullInvoice = await getInvoice(invoice.id);
+      setSelectedInvoice(fullInvoice);
+      setShowDetails(true);
+    } catch (error) {
+      console.error('Failed to fetch invoice details:', error);
+      // Fallback to list data if fetch fails
+      setSelectedInvoice(invoice);
+      setShowDetails(true);
+    }
   };
 
   const handleSend = async (invoice) => {
@@ -286,7 +332,13 @@ export default function Invoices() {
     if (invoice.payment_status === "paid") {
       return getStatusBadge("paid");
     }
-    if (new Date(invoice.due_date) < new Date()) {
+    // Only mark as overdue if due date is BEFORE today (not including today)
+    const dueDate = new Date(invoice.due_date);
+    const today = new Date();
+    // Set both to start of day for accurate comparison
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    if (dueDate < today) {
       return getStatusBadge("overdue");
     }
     return getStatusBadge(invoice.payment_status);
@@ -480,10 +532,10 @@ export default function Invoices() {
                         <TableCell className="text-right">
                           <span
                             className={`font-medium ${
-                              invoice.balance > 0 ? "text-red-600" : "text-green-600"
+                              (invoice.balance || invoice.amount_due || 0) > 0 ? "text-red-600" : "text-green-600"
                             }`}
                           >
-                            {formatCurrency(invoice.balance)}
+                            {formatCurrency(invoice.balance || invoice.amount_due || 0)}
                           </span>
                         </TableCell>
                         <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
@@ -911,15 +963,15 @@ export default function Invoices() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedInvoice.items?.map((item, index) => (
+                    {(selectedInvoice.lines || selectedInvoice.items || []).map((line, index) => (
                       <TableRow key={index}>
-                        <TableCell>{item.product_name}</TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell>{line.description || line.product_name}</TableCell>
+                        <TableCell className="text-center">{line.quantity}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.unit_price)}
+                          {formatCurrency(line.unit_price)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.total)}
+                          {formatCurrency(line.line_total || line.total)}
                         </TableCell>
                       </TableRow>
                     ))}

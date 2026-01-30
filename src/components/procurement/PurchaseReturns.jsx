@@ -27,6 +27,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { procurementService } from "@/api/services/procurement";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -52,7 +53,7 @@ const reasonLabels = {
 export default function PurchaseReturns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { orders, suppliers } = useProcurement();
+  const { purchaseOrders = [], suppliers } = useProcurement();
   const { canCreate } = usePermissions();
 
   const [returns, setReturns] = useState([]);
@@ -114,27 +115,59 @@ export default function PurchaseReturns() {
     setFilteredReturns(filtered);
   }, [returns, searchQuery, statusFilter]);
 
-  // Get receivable POs (completed or with goods received)
-  const returnablePOs = (orders || []).filter(po => po.status === 'completed' || po.status === 'partial' || po.status === 'received');
+  // Get receivable POs (received or confirmed - items that have been delivered can be returned)
+  const returnablePOs = purchaseOrders.filter(po =>
+    po.status === 'received' || po.status === 'confirmed' || po.status === 'partial'
+  );
 
-  const handleSelectPO = (poId) => {
-    if (!orders || !Array.isArray(orders)) return;
-    const po = orders.find(o => o.id === poId);
-    if (po) {
-      const supplier = suppliers?.find(s => s.id === po.supplier_id);
+  const handleSelectPO = async (poId) => {
+    if (!purchaseOrders || !Array.isArray(purchaseOrders)) return;
+
+    // First set basic info from the list
+    const poFromList = purchaseOrders.find(o => o.id === poId);
+    if (!poFromList) return;
+
+    // Fetch full PO details including lines from API
+    try {
+      const po = await procurementService.getOrder(poId);
+      const supplier = suppliers?.find(s => s.id === po.supplier_id || s.id === po.vendor_id);
+      // Backend uses 'lines', frontend may use 'items' - handle both
+      const poLines = po.lines || po.items || [];
+
       setNewReturn({
         ...newReturn,
         po_id: poId,
-        po_number: po.po_number,
-        supplier_id: po.supplier_id,
+        po_number: po.po_number || po.order_number,
+        supplier_id: po.supplier_id || po.vendor_id,
         supplier_name: po.vendor_name || po.supplier_name || supplier?.name,
-        lines: (po.items || []).map(item => ({
+        lines: poLines.map(item => ({
           product_id: item.product_id || item.id,
-          product_name: item.product_name || item.name,
+          product_name: item.product_name || item.description || item.name,
           original_quantity: item.quantity,
           return_quantity: 0,
           unit_price: item.price || item.unit_price || 0,
-          unit: item.unit || 'pcs',
+          unit: item.unit || item.unit_name || 'pcs',
+          return_reason: 'defective',
+        })),
+      });
+    } catch (error) {
+      console.error('Failed to fetch PO details:', error);
+      // Fallback to list data
+      const supplier = suppliers?.find(s => s.id === poFromList.supplier_id || s.id === poFromList.vendor_id);
+      const poLines = poFromList.lines || poFromList.items || [];
+      setNewReturn({
+        ...newReturn,
+        po_id: poId,
+        po_number: poFromList.po_number || poFromList.order_number,
+        supplier_id: poFromList.supplier_id || poFromList.vendor_id,
+        supplier_name: poFromList.vendor_name || poFromList.supplier_name || supplier?.name,
+        lines: poLines.map(item => ({
+          product_id: item.product_id || item.id,
+          product_name: item.product_name || item.description || item.name,
+          original_quantity: item.quantity,
+          return_quantity: 0,
+          unit_price: item.price || item.unit_price || 0,
+          unit: item.unit || item.unit_name || 'pcs',
           return_reason: 'defective',
         })),
       });

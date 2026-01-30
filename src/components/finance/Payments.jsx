@@ -24,6 +24,7 @@ export default function Payments() {
   const {
     payments,
     accounts,
+    vendorBills,
     createPayment,
     confirmPayment,
     isLoading
@@ -50,7 +51,13 @@ export default function Payments() {
     reference: '',
     description: '',
     contact_id: '',
+    bill_id: '', // Link to vendor bill
   });
+
+  // Get unpaid vendor bills for bill selector
+  const unpaidBills = vendorBills.filter(b =>
+    b.status === 'posted' || b.status === 'confirmed' || b.status === 'draft'
+  ).filter(b => (b.amount_due || b.total_amount || 0) > 0);
 
   // Load contacts when modal opens
   useEffect(() => {
@@ -124,6 +131,9 @@ export default function Payments() {
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
         party_name: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
+        // Link to bill if selected
+        entity_type: newPayment.bill_id ? 'purchase_invoice' : null,
+        entity_id: newPayment.bill_id || null,
       };
 
       await createPayment(paymentData);
@@ -137,6 +147,7 @@ export default function Payments() {
         reference: '',
         description: '',
         contact_id: '',
+        bill_id: '',
       });
 
       setShowCreateModal(false);
@@ -549,6 +560,54 @@ export default function Payments() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Bill Selector - Only show for outbound payments */}
+            {newPayment.payment_type === 'outbound' && unpaidBills.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('apply_to_bill') || 'Apply to Bill'} ({t('optional') || 'Optional'})
+                </label>
+                <Select
+                  value={newPayment.bill_id}
+                  onValueChange={(value) => {
+                    const selectedBill = unpaidBills.find(b => b.id === value);
+                    if (selectedBill) {
+                      setNewPayment({
+                        ...newPayment,
+                        bill_id: value,
+                        amount: (selectedBill.amount_due || selectedBill.total_amount || 0).toString(),
+                        contact_id: selectedBill.vendor_id || selectedBill.partner_id || '',
+                        reference: `Payment for ${selectedBill.invoice_number}`,
+                      });
+                    } else {
+                      setNewPayment({...newPayment, bill_id: value});
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_bill') || 'Select a bill to pay'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">
+                      <span className="text-slate-500">{t('no_bill') || 'No specific bill'}</span>
+                    </SelectItem>
+                    {unpaidBills.map(bill => (
+                      <SelectItem key={bill.id} value={bill.id}>
+                        <div className="flex items-center justify-between gap-4 w-full">
+                          <span className="font-mono text-sm">{bill.invoice_number}</span>
+                          <span className="text-slate-500">
+                            {bill.partner_name || bill.vendor_name}
+                          </span>
+                          <span className="font-semibold text-red-600">
+                            ${(bill.amount_due || bill.total_amount || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>

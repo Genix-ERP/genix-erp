@@ -49,6 +49,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from '@/api/services/inventory';
 
 export default function VendorBills() {
   const { language } = useLanguage();
@@ -62,6 +63,8 @@ export default function VendorBills() {
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showMatchingDialog, setShowMatchingDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [billToDelete, setBillToDelete] = useState(null);
   const [selectedBill, setSelectedBill] = useState(null);
   const [editingBill, setEditingBill] = useState(null);
   const [newBill, setNewBill] = useState({
@@ -81,6 +84,9 @@ export default function VendorBills() {
     lines: []
   });
 
+  // Products list for dropdown
+  const [products, setProducts] = useState([]);
+
   // Sample vendors (in real app, fetch from API)
   const vendors = [
     { id: '1', name: t('tech_supplies_ltd') || 'Tech Supplies Ltd' },
@@ -94,6 +100,19 @@ export default function VendorBills() {
     { id: 'PO-002', vendor_id: '2', total: 3000000 },
     { id: 'PO-003', vendor_id: '3', total: 7500000 }
   ]);
+
+  // Fetch products for dropdown
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const data = await inventoryService.listProducts();
+        setProducts(data || []);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Load bills from localStorage
   useEffect(() => {
@@ -153,9 +172,16 @@ export default function VendorBills() {
     setEditingBill(null);
   };
 
-  const handleDeleteBill = (billId) => {
-    if (window.confirm(t('delete_bill_confirm') || 'Are you sure you want to delete this bill?')) {
-      setBills(bills.filter(bill => bill.id !== billId));
+  const handleDeleteBill = (bill) => {
+    setBillToDelete(bill);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteBill = () => {
+    if (billToDelete) {
+      setBills(bills.filter(bill => bill.id !== billToDelete.id));
+      setShowDeleteDialog(false);
+      setBillToDelete(null);
     }
   };
 
@@ -205,6 +231,8 @@ export default function VendorBills() {
     const currentBill = editingBill || newBill;
     const newLine = {
       id: String(currentBill.lines.length + 1),
+      product_id: '',
+      product_name: '',
       description: '',
       quantity: 1,
       unit_price: 0,
@@ -512,7 +540,7 @@ export default function VendorBills() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDeleteBill(bill.id)}
+                                onClick={() => handleDeleteBill(bill)}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -712,7 +740,7 @@ export default function VendorBills() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t('description') || 'Description'}</TableHead>
+                      <TableHead>{t('product') || 'Product'}</TableHead>
                       <TableHead className="w-24">{t('quantity') || 'Qty'}</TableHead>
                       <TableHead className="w-32">{t('unit_price') || 'Unit Price'}</TableHead>
                       <TableHead className="w-32">{t('amount') || 'Amount'}</TableHead>
@@ -723,11 +751,44 @@ export default function VendorBills() {
                     {(editingBill?.lines || newBill.lines).map((line, index) => (
                       <TableRow key={line.id}>
                         <TableCell>
-                          <Input
-                            value={line.description}
-                            onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                            placeholder={t('enter_description') || 'Description'}
-                          />
+                          <Select
+                            value={line.product_id || ''}
+                            onValueChange={(value) => {
+                              const product = products.find(p => String(p.id) === value);
+                              // Update all fields at once to avoid state batching issues
+                              const currentBill = editingBill || newBill;
+                              const updatedLines = [...currentBill.lines];
+                              updatedLines[index] = {
+                                ...updatedLines[index],
+                                product_id: value,
+                                product_name: product?.name || '',
+                                description: product?.name || '',
+                                unit_price: product?.cost || updatedLines[index].unit_price,
+                                amount: updatedLines[index].quantity * (product?.cost || updatedLines[index].unit_price)
+                              };
+
+                              const subtotal = updatedLines.reduce((sum, l) => sum + l.amount, 0);
+                              const tax_amount = subtotal * 0.1;
+                              const total_amount = subtotal + tax_amount;
+
+                              if (editingBill) {
+                                setEditingBill({ ...editingBill, lines: updatedLines, subtotal, tax_amount, total_amount });
+                              } else {
+                                setNewBill({ ...newBill, lines: updatedLines, subtotal, tax_amount, total_amount });
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('select_product') || 'Select product'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map(product => (
+                                <SelectItem key={product.id} value={String(product.id)}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Input
@@ -854,7 +915,7 @@ export default function VendorBills() {
                 <Table className="mt-2">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t('description') || 'Description'}</TableHead>
+                      <TableHead>{t('product') || 'Product'}</TableHead>
                       <TableHead className="text-right">{t('quantity') || 'Qty'}</TableHead>
                       <TableHead className="text-right">{t('unit_price') || 'Price'}</TableHead>
                       <TableHead className="text-right">{t('amount') || 'Amount'}</TableHead>
@@ -863,7 +924,7 @@ export default function VendorBills() {
                   <TableBody>
                     {selectedBill.lines.map((line) => (
                       <TableRow key={line.id}>
-                        <TableCell>{line.description}</TableCell>
+                        <TableCell>{line.product_name || line.description}</TableCell>
                         <TableCell className="text-right">{line.quantity}</TableCell>
                         <TableCell className="text-right">{line.unit_price.toLocaleString()}</TableCell>
                         <TableCell className="text-right font-semibold">{line.amount.toLocaleString()}</TableCell>
@@ -982,6 +1043,48 @@ export default function VendorBills() {
               setShowMatchingDialog(false);
             }}>
               {t('approve_matching') || 'Approve Matching'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('delete_bill') || 'Delete Bill'}
+            </DialogTitle>
+            <DialogDescription>
+              {t('delete_bill_confirm_message') || 'Are you sure you want to delete this bill? This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {billToDelete && (
+            <div className="py-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('bill_number') || 'Bill Number'}:</span>
+                <span className="font-medium">{billToDelete.bill_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('vendor') || 'Vendor'}:</span>
+                <span className="font-medium">{billToDelete.vendor_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('total_amount') || 'Amount'}:</span>
+                <span className="font-medium">{billToDelete.total_amount?.toLocaleString()} {billToDelete.currency}</span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowDeleteDialog(false); setBillToDelete(null); }}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteBill}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('delete') || 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

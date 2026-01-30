@@ -920,6 +920,63 @@ export function FinancialsProvider({ children }) {
     return limit ? sorted.slice(0, limit) : sorted;
   }, [vendorBills]);
 
+  // Post vendor bill - creates journal entry
+  const postVendorBill = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        const updated = await financeService.postPurchaseInvoice(id);
+        setVendorBills(prev => prev.map(bill => bill.id === id ? { ...bill, status: 'posted', ...updated } : bill));
+        return updated;
+      } catch (err) {
+        console.error('API error posting vendor bill:', err);
+        throw err;
+      }
+    }
+
+    // Fallback for localStorage mode
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(VENDOR_BILLS_KEY, companyId);
+    const updated = vendorBills.map(bill => bill.id === id ? { ...bill, status: 'posted' } : bill);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setVendorBills(updated);
+    return updated.find(b => b.id === id);
+  }, [backendAvailable, vendorBills, activeCompany]);
+
+  // Pay vendor bill - creates payment record and journal entry
+  const payVendorBill = useCallback(async (id, amount = 0) => {
+    if (backendAvailable) {
+      try {
+        const updated = await financeService.payPurchaseInvoice(id, amount);
+        setVendorBills(prev => prev.map(bill => bill.id === id ? { ...bill, ...updated } : bill));
+        // Refresh payments list to show the new payment
+        const paymentsData = await financeService.listPayments();
+        if (paymentsData) {
+          const mappedPayments = (paymentsData.data || paymentsData || []).map(p => ({
+            ...p,
+            payment_type: p.payment_type || (p.amount >= 0 ? 'inbound' : 'outbound'),
+          }));
+          setPayments(mappedPayments);
+        }
+        return updated;
+      } catch (err) {
+        console.error('API error paying vendor bill:', err);
+        throw err;
+      }
+    }
+
+    // Fallback for localStorage mode
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(VENDOR_BILLS_KEY, companyId);
+    const bill = vendorBills.find(b => b.id === id);
+    const payAmount = amount || (bill?.total_amount - (bill?.amount_paid || 0));
+    const newAmountPaid = (bill?.amount_paid || 0) + payAmount;
+    const newStatus = newAmountPaid >= bill?.total_amount ? 'paid' : 'partial';
+    const updated = vendorBills.map(b => b.id === id ? { ...b, amount_paid: newAmountPaid, status: newStatus } : b);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setVendorBills(updated);
+    return updated.find(b => b.id === id);
+  }, [backendAvailable, vendorBills, activeCompany]);
+
   // ==================== CUSTOMER INVOICES CRUD ====================
   const createCustomerInvoice = useCallback(async (invoiceData) => {
     const companyId = activeCompany?.id;
@@ -1321,7 +1378,7 @@ export function FinancialsProvider({ children }) {
       currencies, createCurrency, updateCurrency, deleteCurrency,
       exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency,
       // Invoices & Bills
-      vendorBills, createVendorBill, updateVendorBill, listVendorBills,
+      vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill,
       customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices,
       financialTransactions, listFinancialTransactions,
       // Fiscal Years & Periods

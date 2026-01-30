@@ -23,7 +23,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
-  CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X
+  CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -38,6 +39,7 @@ import Quotations from '@/components/sales/Quotations';
 import Invoices from '@/components/sales/Invoices';
 import Returns from '@/components/sales/Returns';
 import Discounts from '@/components/sales/Discounts';
+import DeliveryOrders from '@/components/sales/DeliveryOrders';
 
 // Import universal ERP components
 import {
@@ -53,17 +55,20 @@ export default function SalesOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading } = useModules();
+  const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const {
     quotations = [],
     invoices = [],
     returns = [],
     discounts = [],
-    isLoading: salesLoading
+    isLoading: salesLoading,
+    confirmSalesOrder,
+    createInvoiceFromOrder,
+    refreshData: refreshSalesData
   } = useSales();
 
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -72,8 +77,23 @@ export default function SalesOrders() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showBatchPrint, setShowBatchPrint] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const { addAuditLog } = useAuditTrail('sales_orders');
+
+  // Carrier state
+  const [showCarrierModal, setShowCarrierModal] = useState(false);
+  const [editingCarrier, setEditingCarrier] = useState(null);
+  const [newCarrier, setNewCarrier] = useState({
+    code: '',
+    name: '',
+    tracking_url: '',
+    phone: '',
+    email: '',
+    website: '',
+    notes: '',
+    is_active: true,
+  });
 
   // Export columns configuration
   const exportColumns = [
@@ -162,6 +182,8 @@ export default function SalesOrders() {
     customer_id: '',
     order_date: new Date().toISOString().split('T')[0],
     delivery_date: new Date().toISOString().split('T')[0], // Default to today
+    warehouse_id: '',
+    carrier: '',
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
@@ -178,12 +200,18 @@ export default function SalesOrders() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
 
+  // Warehouses list for selection
+  const [warehouses, setWarehouses] = useState([]);
+
+  // Carriers list for selection
+  const [carriers, setCarriers] = useState([]);
+
   // Track if delivery date was manually set (for new order)
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
   // Track if delivery date was manually set (for editing order)
   const [isEditDeliveryDateManual, setIsEditDeliveryDateManual] = useState(false);
 
-  // Fetch products on component mount
+  // Fetch products and warehouses on component mount
   useEffect(() => {
     const fetchProducts = async () => {
       setProductsLoading(true);
@@ -196,7 +224,25 @@ export default function SalesOrders() {
         setProductsLoading(false);
       }
     };
+    const fetchWarehouses = async () => {
+      try {
+        const data = await inventoryService.listWarehouses({ limit: 100 });
+        setWarehouses(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch warehouses:', error);
+      }
+    };
+    const fetchCarriers = async () => {
+      try {
+        const data = await inventoryService.listCarriers({ active: 'true' });
+        setCarriers(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch carriers:', error);
+      }
+    };
     fetchProducts();
+    fetchWarehouses();
+    fetchCarriers();
   }, []);
 
   // Calculate delivery date based on product lead times
@@ -323,6 +369,8 @@ export default function SalesOrders() {
       order_date: newOrder.order_date,
       delivery_date: newOrder.delivery_date,
       expected_date: newOrder.delivery_date, // Backend uses expected_date
+      warehouse_id: newOrder.warehouse_id || undefined,
+      carrier: newOrder.carrier || undefined,
       subtotal,
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
@@ -378,6 +426,8 @@ export default function SalesOrders() {
         ...(isValidUUID(editingOrder.customer_id) && { customer_id: editingOrder.customer_id }),
         delivery_date: editingOrder.delivery_date,
         expected_date: editingOrder.delivery_date,
+        warehouse_id: editingOrder.warehouse_id || undefined,
+        carrier: editingOrder.carrier || undefined,
         subtotal,
         tax_amount: taxAmount,
         shipping_amount: shippingCost,
@@ -418,6 +468,8 @@ export default function SalesOrders() {
       customer_id: '',
       order_date: new Date().toISOString().split('T')[0],
       delivery_date: new Date().toISOString().split('T')[0], // Default to today
+      warehouse_id: '',
+      carrier: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
       tax_percent: 0,
@@ -430,9 +482,30 @@ export default function SalesOrders() {
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      await updateSalesOrder(orderId, { status: newStatus });
+      if (newStatus === 'confirmed') {
+        // Use the confirm endpoint which creates delivery order
+        await confirmSalesOrder(orderId);
+        // Refresh to get updated data
+        if (refreshSalesData) refreshSalesData();
+        if (refreshModulesData) refreshModulesData();
+      } else {
+        await updateSalesOrder(orderId, { status: newStatus });
+      }
     } catch (error) {
       console.error('Failed to update status:', error);
+    }
+  };
+
+  const handleCreateInvoice = async (orderId) => {
+    try {
+      await createInvoiceFromOrder(orderId);
+      // Refresh to get updated invoices
+      if (refreshSalesData) refreshSalesData();
+      // Switch to invoices tab to show the new invoice
+      setActiveTab('invoices');
+    } catch (error) {
+      console.error('Failed to create invoice:', error);
+      alert(t('error_creating_invoice') || 'Failed to create invoice');
     }
   };
 
@@ -441,10 +514,86 @@ export default function SalesOrders() {
       // Fetch full order details including lines
       const fullOrder = await salesService.getOrder(order.id);
       setSelectedOrder(fullOrder);
-      setShowPrintPreview(true);
+      setShowDetailModal(true);
     } catch (error) {
       console.error('Failed to fetch order details:', error);
       // Fallback to using the list order data
+      setSelectedOrder(order);
+      setShowDetailModal(true);
+    }
+  };
+
+  // Carrier handlers
+  const handleCreateCarrier = async () => {
+    try {
+      const created = await inventoryService.createCarrier(newCarrier);
+      setCarriers(prev => [...prev, created]);
+      setShowCarrierModal(false);
+      resetCarrierForm();
+    } catch (error) {
+      console.error('Failed to create carrier:', error);
+      alert(t('error_creating_carrier') || 'Failed to create carrier');
+    }
+  };
+
+  const handleUpdateCarrier = async () => {
+    if (!editingCarrier) return;
+    try {
+      const updated = await inventoryService.updateCarrier(editingCarrier.id, editingCarrier);
+      setCarriers(prev => prev.map(c => c.id === editingCarrier.id ? updated : c));
+      setShowCarrierModal(false);
+      setEditingCarrier(null);
+    } catch (error) {
+      console.error('Failed to update carrier:', error);
+      alert(t('error_updating_carrier') || 'Failed to update carrier');
+    }
+  };
+
+  const handleEditCarrier = (carrier) => {
+    setEditingCarrier({ ...carrier });
+    setShowCarrierModal(true);
+  };
+
+  const handleToggleCarrierStatus = async (carrier) => {
+    try {
+      const updated = await inventoryService.updateCarrier(carrier.id, { is_active: !carrier.is_active });
+      setCarriers(prev => prev.map(c => c.id === carrier.id ? updated : c));
+    } catch (error) {
+      console.error('Failed to toggle carrier status:', error);
+    }
+  };
+
+  const handleDeleteCarrier = async (carrier) => {
+    if (!confirm((t('confirm_delete_carrier') || 'Are you sure you want to delete this carrier?'))) return;
+    try {
+      await inventoryService.deleteCarrier(carrier.id);
+      setCarriers(prev => prev.filter(c => c.id !== carrier.id));
+    } catch (error) {
+      console.error('Failed to delete carrier:', error);
+      alert(t('error_deleting_carrier') || 'Failed to delete carrier');
+    }
+  };
+
+  const resetCarrierForm = () => {
+    setNewCarrier({
+      code: '',
+      name: '',
+      tracking_url: '',
+      phone: '',
+      email: '',
+      website: '',
+      notes: '',
+      is_active: true,
+    });
+  };
+
+  const handlePrintOrder = async (order) => {
+    try {
+      const fullOrder = await salesService.getOrder(order.id);
+      setSelectedOrder(fullOrder);
+      setShowPrintPreview(true);
+    } catch (error) {
+      console.error('Failed to fetch order details:', error);
       setSelectedOrder(order);
       setShowPrintPreview(true);
     }
@@ -521,96 +670,13 @@ export default function SalesOrders() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6">
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <ShoppingBag className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('orders')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-green-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-slate-600">{t('revenue')}</p>
-                  <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(metrics.totalRevenue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('quotations')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.totalQuotations}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Receipt className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('unpaid')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.unpaidInvoices}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                  <RotateCcw className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('returns')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Tag className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600">{t('active_discounts')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{metrics.activeDiscounts}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content with Tabs */}
+        {/* Main Content with Tabs - MOVED ABOVE STATS */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="dashboard" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('dashboard') || 'Dashboard'}</span>
+            </TabsTrigger>
             <TabsTrigger value="orders" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <ShoppingBag className="w-4 h-4" />
               <span className="hidden sm:inline">{t('orders')}</span>
@@ -646,14 +712,109 @@ export default function SalesOrders() {
                 <Badge className="ml-2 bg-blue-100 text-blue-800">{tabCounts.discounts}</Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="deliveries" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Truck className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('deliveries') || 'Deliveries'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="carriers" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Building2 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('carriers') || 'Carriers'}</span>
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('analytics')}</span>
             </TabsTrigger>
           </TabsList>
 
-          {/* Orders Tab */}
-          <TabsContent value="orders" className="space-y-6">
+          {/* Dashboard Tab - Stats */}
+          <TabsContent value="dashboard" className="space-y-6">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <ShoppingBag className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t('orders')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-600">{t('revenue')}</p>
+                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(metrics.totalRevenue)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <FileText className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t('quotations')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalQuotations}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <Receipt className="w-5 h-5 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t('unpaid')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.unpaidInvoices}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <RotateCcw className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t('returns')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Tag className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t('active_discounts')}</p>
+                      <p className="text-2xl font-bold text-slate-900">{metrics.activeDiscounts}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Sales Trend Chart */}
             {chartData.length > 0 && (
               <Card className="bg-white/80 backdrop-blur-sm">
@@ -673,6 +834,10 @@ export default function SalesOrders() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Orders Tab */}
+          <TabsContent value="orders" className="space-y-6">
 
             {/* Orders Table */}
             <Card className="bg-white/80 backdrop-blur-sm">
@@ -775,15 +940,36 @@ export default function SalesOrders() {
                                       <Truck className="w-4 h-4" />
                                     </Button>
                                   )}
+                                  {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && (
+                                    <Button size="sm" variant="ghost" onClick={() => handleCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
+                                      <Receipt className="w-4 h-4 text-green-600" />
+                                    </Button>
+                                  )}
                                   <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)} title={t('view')}>
                                     <Eye className="w-4 h-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handlePrintOrder(order)} title={t('print')}>
+                                    <Printer className="w-4 h-4" />
                                   </Button>
                                   {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && (
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={() => {
-                                        setEditingOrder({...order, lines: order.lines || [{ product_name: '', quantity: 1, unit_price: 0, description: '' }]});
+                                      onClick={async () => {
+                                        try {
+                                          // Fetch full order details including lines
+                                          const fullOrder = await salesService.getOrder(order.id);
+                                          setEditingOrder({
+                                            ...fullOrder,
+                                            delivery_date: fullOrder.expected_date || fullOrder.delivery_date || '',
+                                            shipping_cost: fullOrder.shipping_amount || fullOrder.shipping_cost || 0,
+                                            lines: fullOrder.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]
+                                          });
+                                        } catch (error) {
+                                          console.error('Failed to fetch order details:', error);
+                                          // Fallback to list data
+                                          setEditingOrder({...order, lines: order.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]});
+                                        }
                                         setShowEditModal(true);
                                       }}
                                       title={t('edit')}
@@ -832,6 +1018,83 @@ export default function SalesOrders() {
           {/* Discounts Tab */}
           <TabsContent value="discounts">
             <Discounts />
+          </TabsContent>
+
+          {/* Deliveries Tab */}
+          <TabsContent value="deliveries">
+            <DeliveryOrders />
+          </TabsContent>
+
+          {/* Carriers Tab */}
+          <TabsContent value="carriers" className="space-y-6">
+            <Card className="bg-white/80 backdrop-blur-sm">
+              <CardHeader className="border-b">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-lg">{t('carriers') || 'Carriers'}</CardTitle>
+                  <Button onClick={() => setShowCarrierModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_carrier') || 'New Carrier'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {carriers.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <p className="text-slate-500">{t('no_carriers_found') || 'No carriers found'}</p>
+                    <Button onClick={() => setShowCarrierModal(true)} className="mt-4">{t('create_first_carrier') || 'Create First Carrier'}</Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>{t('code') || 'Code'}</TableHead>
+                          <TableHead>{t('name') || 'Name'}</TableHead>
+                          <TableHead>{t('phone') || 'Phone'}</TableHead>
+                          <TableHead>{t('website') || 'Website'}</TableHead>
+                          <TableHead>{t('status') || 'Status'}</TableHead>
+                          <TableHead>{t('actions') || 'Actions'}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {carriers.map((carrier) => (
+                          <TableRow key={carrier.id} className="hover:bg-slate-50">
+                            <TableCell className="font-mono text-sm">{carrier.code}</TableCell>
+                            <TableCell className="font-medium">{carrier.name}</TableCell>
+                            <TableCell className="text-sm">{carrier.phone || '-'}</TableCell>
+                            <TableCell className="text-sm">
+                              {carrier.website ? (
+                                <a href={carrier.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                  {carrier.website}
+                                </a>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={carrier.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}>
+                                {carrier.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => handleEditCarrier(carrier)} title={t('edit') || 'Edit'}>
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => handleToggleCarrierStatus(carrier)} title={carrier.is_active ? (t('deactivate') || 'Deactivate') : (t('activate') || 'Activate')}>
+                                  {carrier.is_active ? <ToggleRight className="w-4 h-4 text-green-600" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => handleDeleteCarrier(carrier)} title={t('delete') || 'Delete'}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Analytics Tab */}
@@ -910,19 +1173,23 @@ export default function SalesOrders() {
                 <div>
                   <Label>{t('customer')} *</Label>
                   <Select
-                    value={newOrder.customer_name}
+                    value={newOrder.customer_id || ''}
                     onValueChange={(value) => {
-                      const customer = customers.find(c => c.company_name === value);
-                      setNewOrder({...newOrder, customer_name: value, customer_id: customer?.id || ''});
+                      const customer = customers.find(c => c.id === value);
+                      setNewOrder({
+                        ...newOrder,
+                        customer_id: value,
+                        customer_name: customer?.company_name || customer?.name || ''
+                      });
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('select_customer')} />
+                      <SelectValue placeholder={t('select_customer') || 'Select customer'} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.company_name}>
-                          {customer.company_name}
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.company_name || customer.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -950,6 +1217,45 @@ export default function SalesOrders() {
                       setIsDeliveryDateManual(true);
                     }}
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('warehouse') || 'Warehouse'}</Label>
+                  <Select
+                    value={newOrder.warehouse_id || ''}
+                    onValueChange={(value) => setNewOrder({...newOrder, warehouse_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((warehouse) => (
+                        <SelectItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('carrier') || 'Carrier'}</Label>
+                  <Select
+                    value={newOrder.carrier || ''}
+                    onValueChange={(value) => setNewOrder({...newOrder, carrier: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_carrier') || 'Select carrier'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {carriers.map((carrier) => (
+                        <SelectItem key={carrier.id} value={carrier.name}>
+                          {carrier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1125,6 +1431,106 @@ export default function SalesOrders() {
           />
         )}
 
+        {/* Order Detail Modal */}
+        <Dialog open={showDetailModal} onOpenChange={(open) => { setShowDetailModal(open); if (!open) setSelectedOrder(null); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t('order_details') || 'Order Details'}</DialogTitle>
+            </DialogHeader>
+            {selectedOrder && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">{t('order_number') || 'Order Number'}</p>
+                    <p className="font-mono font-medium">{selectedOrder.order_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('status') || 'Status'}</p>
+                    <Badge className={getStatusColor(selectedOrder.status)}>{t(selectedOrder.status)}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('customer') || 'Customer'}</p>
+                    <p className="font-medium">{selectedOrder.customer_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('order_date') || 'Order Date'}</p>
+                    <p className="font-medium">
+                      {selectedOrder.order_date ? format(new Date(selectedOrder.order_date), 'dd.MM.yyyy') : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('delivery_date') || 'Delivery Date'}</p>
+                    <p className="font-medium">
+                      {(selectedOrder.expected_date || selectedOrder.delivery_date) ? format(new Date(selectedOrder.expected_date || selectedOrder.delivery_date), 'dd.MM.yyyy') : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('payment_status') || 'Payment Status'}</p>
+                    <p className="font-medium">{t(selectedOrder.payment_status) || selectedOrder.payment_status || '-'}</p>
+                  </div>
+                </div>
+
+                {selectedOrder.lines && selectedOrder.lines.length > 0 && (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-2">{t('order_items') || 'Order Items'}</p>
+                    <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                      {selectedOrder.lines.map((line, i) => (
+                        <div key={i} className="flex justify-between items-center border-b border-slate-200 pb-2 last:border-0 last:pb-0">
+                          <div>
+                            <span className="font-medium">{line.description || line.product_name || 'Product'}</span>
+                            <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">{formatCurrency(line.quantity * line.unit_price)}</span>
+                            <p className="text-xs text-slate-500">{formatCurrency(line.unit_price)} x {line.quantity}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('subtotal')}:</span>
+                      <span className="font-medium">{formatCurrency(selectedOrder.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('tax')}:</span>
+                      <span className="font-medium">{formatCurrency(selectedOrder.tax_amount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">{t('shipping')}:</span>
+                      <span className="font-medium">{formatCurrency(selectedOrder.shipping_amount || selectedOrder.shipping_cost || 0)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                      <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                      <span className="text-2xl font-bold text-blue-600">{formatCurrency(selectedOrder.total_amount)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedOrder.notes && (
+                  <div>
+                    <p className="text-sm text-slate-500">{t('notes') || 'Notes'}</p>
+                    <p className="text-sm">{selectedOrder.notes}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" onClick={() => { setShowDetailModal(false); setSelectedOrder(null); }} className="flex-1">
+                    {t('close') || 'Close'}
+                  </Button>
+                  <Button onClick={() => { setShowDetailModal(false); handlePrintOrder(selectedOrder); }} className="flex-1">
+                    <Printer className="w-4 h-4 mr-2" /> {t('print') || 'Print'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Batch Print Modal */}
         <BatchPrintModal
           open={showBatchPrint}
@@ -1151,19 +1557,23 @@ export default function SalesOrders() {
                   <div>
                     <Label>{t('customer')} *</Label>
                     <Select
-                      value={editingOrder.customer_name}
+                      value={editingOrder.customer_id || ''}
                       onValueChange={(value) => {
-                        const customer = customers.find(c => c.company_name === value);
-                        setEditingOrder({...editingOrder, customer_name: value, customer_id: customer?.id || ''});
+                        const customer = customers.find(c => c.id === value);
+                        setEditingOrder({
+                          ...editingOrder,
+                          customer_id: value,
+                          customer_name: customer?.company_name || customer?.name || ''
+                        });
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder={editingOrder.customer_name || t('select_customer') || 'Select customer'} />
                       </SelectTrigger>
                       <SelectContent>
                         {customers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.company_name}>
-                            {customer.company_name}
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.company_name || customer.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1179,6 +1589,45 @@ export default function SalesOrders() {
                         setIsEditDeliveryDateManual(true);
                       }}
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('warehouse') || 'Warehouse'}</Label>
+                    <Select
+                      value={editingOrder.warehouse_id || ''}
+                      onValueChange={(value) => setEditingOrder({...editingOrder, warehouse_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>{t('carrier') || 'Carrier'}</Label>
+                    <Select
+                      value={editingOrder.carrier || ''}
+                      onValueChange={(value) => setEditingOrder({...editingOrder, carrier: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_carrier') || 'Select carrier'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {carriers.map((carrier) => (
+                          <SelectItem key={carrier.id} value={carrier.name}>
+                            {carrier.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1343,6 +1792,117 @@ export default function SalesOrders() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Carrier Modal */}
+        <Dialog open={showCarrierModal} onOpenChange={(open) => { setShowCarrierModal(open); if (!open) { setEditingCarrier(null); resetCarrierForm(); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingCarrier ? (t('edit_carrier') || 'Edit Carrier') : (t('create_carrier') || 'Create Carrier')}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('code') || 'Code'} *</Label>
+                  <Input
+                    placeholder="e.g. DHL"
+                    value={editingCarrier ? editingCarrier.code : newCarrier.code}
+                    onChange={(e) => editingCarrier
+                      ? setEditingCarrier({...editingCarrier, code: e.target.value})
+                      : setNewCarrier({...newCarrier, code: e.target.value})
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>{t('name') || 'Name'} *</Label>
+                  <Input
+                    placeholder="e.g. DHL Express"
+                    value={editingCarrier ? editingCarrier.name : newCarrier.name}
+                    onChange={(e) => editingCarrier
+                      ? setEditingCarrier({...editingCarrier, name: e.target.value})
+                      : setNewCarrier({...newCarrier, name: e.target.value})
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('phone') || 'Phone'}</Label>
+                  <Input
+                    placeholder="+1 234 567 890"
+                    value={editingCarrier ? (editingCarrier.phone || '') : newCarrier.phone}
+                    onChange={(e) => editingCarrier
+                      ? setEditingCarrier({...editingCarrier, phone: e.target.value})
+                      : setNewCarrier({...newCarrier, phone: e.target.value})
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>{t('email') || 'Email'}</Label>
+                  <Input
+                    type="email"
+                    placeholder="support@carrier.com"
+                    value={editingCarrier ? (editingCarrier.email || '') : newCarrier.email}
+                    onChange={(e) => editingCarrier
+                      ? setEditingCarrier({...editingCarrier, email: e.target.value})
+                      : setNewCarrier({...newCarrier, email: e.target.value})
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>{t('website') || 'Website'}</Label>
+                <Input
+                  placeholder="https://www.carrier.com"
+                  value={editingCarrier ? (editingCarrier.website || '') : newCarrier.website}
+                  onChange={(e) => editingCarrier
+                    ? setEditingCarrier({...editingCarrier, website: e.target.value})
+                    : setNewCarrier({...newCarrier, website: e.target.value})
+                  }
+                />
+              </div>
+
+              <div>
+                <Label>{t('tracking_url') || 'Tracking URL'}</Label>
+                <Input
+                  placeholder="https://track.carrier.com/?id={tracking_number}"
+                  value={editingCarrier ? (editingCarrier.tracking_url || '') : newCarrier.tracking_url}
+                  onChange={(e) => editingCarrier
+                    ? setEditingCarrier({...editingCarrier, tracking_url: e.target.value})
+                    : setNewCarrier({...newCarrier, tracking_url: e.target.value})
+                  }
+                />
+                <p className="text-xs text-slate-500 mt-1">{t('tracking_url_hint') || 'Use {tracking_number} as placeholder'}</p>
+              </div>
+
+              <div>
+                <Label>{t('notes') || 'Notes'}</Label>
+                <Input
+                  placeholder={t('notes_placeholder') || 'Additional notes...'}
+                  value={editingCarrier ? (editingCarrier.notes || '') : newCarrier.notes}
+                  onChange={(e) => editingCarrier
+                    ? setEditingCarrier({...editingCarrier, notes: e.target.value})
+                    : setNewCarrier({...newCarrier, notes: e.target.value})
+                  }
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" onClick={() => { setShowCarrierModal(false); setEditingCarrier(null); resetCarrierForm(); }} className="flex-1">
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={editingCarrier ? handleUpdateCarrier : handleCreateCarrier}
+                  className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  disabled={editingCarrier ? (!editingCarrier.code || !editingCarrier.name) : (!newCarrier.code || !newCarrier.name)}
+                >
+                  {editingCarrier ? (t('save_changes') || 'Save Changes') : (t('create') || 'Create')}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </div>

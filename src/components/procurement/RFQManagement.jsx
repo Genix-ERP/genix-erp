@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,8 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
+import { procurementService } from "@/api/services/procurement";
 
 export default function RFQManagement() {
   const { language } = useLanguage();
@@ -73,9 +75,32 @@ export default function RFQManagement() {
     title: "",
     description: "",
     deadline: "",
-    items: [{ name: "", quantity: 1, unit: "dona" }],
+    items: [{ name: "", quantity: 1, unit: "dona", product_id: "" }],
     suppliers_invited: [],
   });
+
+  // Products list for selection
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  // Loading state for RFQ details
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setProductsLoading(true);
+      try {
+        const data = await inventoryService.listProducts({ limit: 1000 });
+        setProducts(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Filter RFQs
   const filteredRFQs = useMemo(() => {
@@ -122,10 +147,24 @@ export default function RFQManagement() {
     setShowDetails(false);
   };
 
+  const handleViewDetails = async (rfq) => {
+    setSelectedRFQ(rfq); // Show basic data immediately
+    setShowDetails(true);
+    setDetailsLoading(true);
+    try {
+      const fullRFQ = await procurementService.getRFQ(rfq.id);
+      setSelectedRFQ(fullRFQ);
+    } catch (error) {
+      console.error('Failed to fetch RFQ details:', error);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   const addItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { name: "", quantity: 1, unit: "dona" }],
+      items: [...formData.items, { name: "", quantity: 1, unit: "dona", product_id: "" }],
     });
   };
 
@@ -137,12 +176,21 @@ export default function RFQManagement() {
   };
 
   const updateItem = (index, field, value) => {
-    setFormData({
-      ...formData,
-      items: formData.items.map((item, i) =>
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
         i === index ? { ...item, [field]: value } : item
       ),
-    });
+    }));
+  };
+
+  const updateItemMultiple = (index, updates) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, ...updates } : item
+      ),
+    }));
   };
 
   const toggleSupplier = (supplierId) => {
@@ -160,7 +208,7 @@ export default function RFQManagement() {
       title: "",
       description: "",
       deadline: "",
-      items: [{ name: "", quantity: 1, unit: "dona" }],
+      items: [{ name: "", quantity: 1, unit: "dona", product_id: "" }],
       suppliers_invited: [],
     });
   };
@@ -336,12 +384,12 @@ export default function RFQManagement() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {rfq.suppliers_invited?.length || 0} ta
+                          {rfq.invitation_count || rfq.suppliers_invited?.length || 0}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary">
-                          {rfq.responses?.length || 0} ta
+                          {rfq.response_count || rfq.responses?.length || 0}
                         </Badge>
                       </TableCell>
                       <TableCell>{getStatusBadge(rfq.status)}</TableCell>
@@ -350,10 +398,7 @@ export default function RFQManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => {
-                              setSelectedRFQ(rfq);
-                              setShowDetails(true);
-                            }}
+                            onClick={() => handleViewDetails(rfq)}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -436,12 +481,41 @@ export default function RFQManagement() {
               <div className="space-y-2">
                 {formData.items.map((item, index) => (
                   <div key={index} className="flex gap-2 items-center">
-                    <Input
-                      value={item.name}
-                      onChange={(e) => updateItem(index, "name", e.target.value)}
-                      placeholder={t('product_name') || "Mahsulot nomi"}
-                      className="flex-1"
-                    />
+                    <Select
+                      value={item.product_id || ""}
+                      onValueChange={(value) => {
+                        const selectedProduct = products.find(p => p.id === value);
+                        const updates = {
+                          product_id: value,
+                          name: selectedProduct?.name || "",
+                        };
+                        if (selectedProduct?.unit) {
+                          updates.unit = selectedProduct.unit;
+                        }
+                        updateItemMultiple(index, updates);
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder={t('select_product') || "Mahsulotni tanlang"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productsLoading ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {t('loading') || "Yuklanmoqda..."}
+                          </div>
+                        ) : products.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {t('no_products') || "Mahsulotlar topilmadi"}
+                          </div>
+                        ) : (
+                          products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name} {product.sku ? `(${product.sku})` : ""}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                     <Input
                       type="number"
                       value={item.quantity}
@@ -484,7 +558,7 @@ export default function RFQManagement() {
             <div className="space-y-3">
               <Label>{t('select_suppliers') || "Ta'minotchilarni tanlang"}</Label>
               <div className="border rounded-lg max-h-48 overflow-y-auto">
-                {suppliers.filter((s) => s.status === "active").map((supplier) => (
+                {suppliers.filter((s) => s.is_active !== false && s.status !== 'inactive').map((supplier) => (
                   <div
                     key={supplier.id}
                     className="flex items-center gap-3 p-3 hover:bg-slate-50 border-b last:border-b-0"
@@ -563,24 +637,34 @@ export default function RFQManagement() {
               <div>
                 <h4 className="font-medium mb-2">{t('products') || "Mahsulotlar"}</h4>
                 <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{t('product') || "Mahsulot"}</TableHead>
-                        <TableHead className="text-right">{t('quantity') || "Miqdori"}</TableHead>
-                        <TableHead>{t('unit') || "O'lchov"}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedRFQ.items?.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{item.name}</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell>{item.unit}</TableCell>
+                  {detailsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  ) : selectedRFQ.items?.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>{t('product') || "Mahsulot"}</TableHead>
+                          <TableHead className="text-right">{t('quantity') || "Miqdori"}</TableHead>
+                          <TableHead>{t('unit') || "O'lchov"}</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedRFQ.items?.map((item, index) => (
+                          <TableRow key={item.id || index}>
+                            <TableCell>{item.product_name || item.description || item.name}</TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell>{item.unit_name || item.unit}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-slate-500 py-4 text-center">
+                      {t('no_items') || "Mahsulotlar yo'q"}
+                    </p>
+                  )}
                 </div>
               </div>
 
