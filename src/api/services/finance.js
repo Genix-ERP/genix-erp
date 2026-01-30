@@ -375,6 +375,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async postPurchaseInvoice(id) {
+    const response = await apiClient.post(`/purchase-invoices/${id}/post`);
+    return response.data.data;
+  },
+
   // Fiscal Years
   async listFiscalYears(params = {}) {
     const response = await apiClient.get('/fiscal-years', { params });

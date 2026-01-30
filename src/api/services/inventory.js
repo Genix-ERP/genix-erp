@@ -151,6 +151,31 @@ export const inventoryService = {
     const response = await apiClient.get('/inventory/valuation');
     return response.data.data;
   },
+
+  // Carriers
+  async listCarriers(params = {}) {
+    const response = await apiClient.get('/carriers', { params });
+    return response.data.data;
+  },
+
+  async getCarrier(id) {
+    const response = await apiClient.get(`/carriers/${id}`);
+    return response.data.data;
+  },
+
+  async createCarrier(data) {
+    const response = await apiClient.post('/carriers', data);
+    return response.data.data;
+  },
+
+  async updateCarrier(id, data) {
+    const response = await apiClient.put(`/carriers/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteCarrier(id) {
+    await apiClient.delete(`/carriers/${id}`);
+  },
 };
 
 export default inventoryService;

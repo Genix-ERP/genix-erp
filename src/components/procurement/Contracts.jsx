@@ -26,6 +26,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   FileText,
@@ -67,8 +69,11 @@ export default function Contracts() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedContract, setSelectedContract] = useState(null);
   const [editingContract, setEditingContract] = useState(null);
+  const [contractToDelete, setContractToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     supplier_id: "",
@@ -130,24 +135,52 @@ export default function Contracts() {
 
   const handleEdit = (contract) => {
     setEditingContract(contract);
+    // Format dates to YYYY-MM-DD for date input
+    const formatDateForInput = (dateValue) => {
+      if (!dateValue) return "";
+      try {
+        const date = new Date(dateValue);
+        return date.toISOString().split('T')[0];
+      } catch {
+        return "";
+      }
+    };
     setFormData({
-      supplier_id: contract.supplier_id || "",
+      supplier_id: contract.supplier_id || contract.vendor_id || "",
       title: contract.title || "",
-      type: contract.type || "fixed",
-      start_date: contract.start_date || "",
-      end_date: contract.end_date || "",
+      type: contract.type || contract.contract_type || "fixed",
+      start_date: formatDateForInput(contract.start_date),
+      end_date: formatDateForInput(contract.end_date),
       value: contract.value?.toString() || "",
       currency: contract.currency || "UZS",
       terms: contract.terms || "",
-      auto_renew: contract.auto_renew || false,
+      auto_renew: contract.auto_renew ?? contract.auto_renewal ?? false,
     });
     setShowForm(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Haqiqatan ham bu shartnomani o'chirmoqchimisiz?")) {
-      await deleteContract(id);
+  const handleDeleteClick = (contract) => {
+    setContractToDelete(contract);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!contractToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteContract(contractToDelete.id);
+      setShowDeleteConfirm(false);
+      setContractToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete contract:', error);
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setContractToDelete(null);
   };
 
   const handleStatusChange = async (id, newStatus) => {
@@ -442,7 +475,7 @@ export default function Contracts() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                onClick={() => handleDelete(contract.id)}
+                                onClick={() => handleDeleteClick(contract)}
                                 className="text-red-600"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -481,7 +514,7 @@ export default function Contracts() {
                   </SelectTrigger>
                   <SelectContent>
                     {suppliers
-                      .filter((s) => s.status === "active")
+                      .filter((s) => s.is_active !== false && s.status !== 'inactive')
                       .map((supplier) => (
                         <SelectItem key={supplier.id} value={supplier.id}>
                           {supplier.name}
@@ -690,7 +723,7 @@ export default function Contracts() {
                     onClick={() => handleStatusChange(selectedContract.id, "active")}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Faollashtirish
+                    {t('activate') || "Faollashtirish"}
                   </Button>
                 </div>
               )}
@@ -701,12 +734,66 @@ export default function Contracts() {
                     className="flex-1"
                     onClick={() => handleStatusChange(selectedContract.id, "terminated")}
                   >
-                    Bekor qilish
+                    {t('terminate') || "Bekor qilish"}
                   </Button>
                 </div>
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('delete_contract') || "Shartnomani o'chirish"}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {t('delete_contract_confirm') || "Haqiqatan ham bu shartnomani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi."}
+            </DialogDescription>
+          </DialogHeader>
+          {contractToDelete && (
+            <div className="py-4 space-y-2">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">{t('contract_number') || "Shartnoma raqami"}</p>
+                <p className="font-medium">{contractToDelete.contract_number}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">{t('title') || "Sarlavha"}</p>
+                <p className="font-medium">{contractToDelete.title}</p>
+              </div>
+              {contractToDelete.supplier_name && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-sm text-slate-500">{t('supplier') || "Ta'minotchi"}</p>
+                  <p className="font-medium">{contractToDelete.supplier_name}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={handleCancelDelete}
+              disabled={isDeleting}
+            >
+              {t('cancel') || "Bekor qilish"}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
+              {t('delete') || "O'chirish"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

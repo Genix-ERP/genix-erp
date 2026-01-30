@@ -95,19 +95,55 @@ export function ProcurementProvider({ children }) {
         if (isBackendAvailable) {
           // Try to load from backend
           try {
-            const [suppliersData, posData, rfqsData, contractsData] = await Promise.all([
+            const [suppliersData, posData, rfqsData, contractsData, priceHistoryData] = await Promise.all([
               procurementService.listSuppliers().catch(() => null),
               procurementService.listOrders().catch(() => null),
               procurementService.listRFQs().catch(() => null),
               procurementService.listContracts().catch(() => null),
+              procurementService.listPriceHistoryGrouped().catch(() => null),
             ]);
 
             // Use backend data if available, else fall back to demo data
             setSuppliers(Array.isArray(suppliersData) && suppliersData.length > 0 ? suppliersData : (demoMode ? sampleSuppliers : []));
-            setPurchaseOrders(Array.isArray(posData) ? posData : []);
+            // Reverse status mapping: backend → frontend
+            const reverseStatusMap = {
+              'ordered': 'sent',
+              'approved': 'confirmed',
+              'pending_approval': 'pending_approval',
+              'draft': 'draft',
+              'partial': 'partial',
+              'received': 'received',
+              'cancelled': 'cancelled',
+            };
+            // Map backend PO fields to frontend format
+            const mappedPOs = Array.isArray(posData) ? posData.map(po => ({
+              ...po,
+              po_number: po.order_number,
+              supplier_id: po.vendor_id,
+              supplier_name: po.vendor_name,
+              expected_delivery_date: po.expected_date,
+              status: reverseStatusMap[po.status] || po.status,
+            })) : [];
+            setPurchaseOrders(mappedPOs);
             setRFQs(Array.isArray(rfqsData) && rfqsData.length > 0 ? rfqsData : (demoMode ? sampleRFQs : []));
-            setContracts(Array.isArray(contractsData) && contractsData.length > 0 ? contractsData : (demoMode ? sampleContracts : []));
-            setPriceHistory(demoMode ? samplePriceHistory : []);
+            // Map backend contract fields to frontend format
+            const mappedContracts = Array.isArray(contractsData) ? contractsData.map(contract => ({
+              ...contract,
+              supplier_id: contract.vendor_id,
+              supplier_name: contract.vendor_name,
+              type: contract.contract_type,
+              auto_renew: contract.auto_renewal,
+            })) : [];
+            setContracts(mappedContracts.length > 0 ? mappedContracts : (demoMode ? sampleContracts : []));
+            // Map backend price history to frontend format
+            const mappedPriceHistory = Array.isArray(priceHistoryData) ? priceHistoryData.map(item => ({
+              id: item.id,
+              product_name: item.product_name,
+              supplier_id: item.supplier_id,
+              supplier_name: item.supplier_name,
+              prices: item.prices || [],
+            })) : [];
+            setPriceHistory(mappedPriceHistory.length > 0 ? mappedPriceHistory : (demoMode ? samplePriceHistory : []));
           } catch (apiError) {
             console.warn('API call failed, falling back to localStorage:', apiError);
             loadFromLocalStorage(demoMode);
@@ -262,8 +298,41 @@ export function ProcurementProvider({ children }) {
     return suppliers.find(s => s.id === id);
   }, [suppliers]);
 
-  // RFQ operations (RFQs API to be implemented)
+  // RFQ operations
   const createRFQ = useCallback(async (rfqData) => {
+    if (backendAvailable) {
+      try {
+        // Transform frontend data to backend format
+        const backendPayload = {
+          title: rfqData.title || '',
+          description: rfqData.description || '',
+          deadline: rfqData.deadline || '',
+          notes: rfqData.notes || '',
+          items: (rfqData.items || []).filter(item => item.name || item.product_id).map(item => ({
+            product_id: item.product_id || '',
+            description: item.name || item.description || '',
+            quantity: parseFloat(item.quantity) || 1,
+            unit_id: item.unit_id || '',
+            notes: item.notes || '',
+          })),
+          vendor_ids: rfqData.suppliers_invited || [],
+        };
+
+        const newRFQ = await procurementService.createRFQ(backendPayload);
+        // Transform backend response to frontend format
+        const mappedRFQ = {
+          ...newRFQ,
+          suppliers_invited: rfqData.suppliers_invited || [],
+          responses: newRFQ.responses || [],
+        };
+        setRFQs(prev => [mappedRFQ, ...prev]);
+        return mappedRFQ;
+      } catch (error) {
+        console.error('Failed to create RFQ via API:', error);
+        throw error;
+      }
+    }
+    // Fallback to local only when backend is not available
     const newRFQ = {
       ...rfqData,
       id: Date.now().toString(),
@@ -274,17 +343,54 @@ export function ProcurementProvider({ children }) {
     };
     setRFQs(prev => [...prev, newRFQ]);
     return newRFQ;
-  }, [rfqs.length]);
+  }, [backendAvailable, rfqs.length]);
 
   const updateRFQ = useCallback(async (id, updates) => {
+    if (backendAvailable) {
+      try {
+        // For status changes like opening RFQ, use the appropriate endpoint
+        if (updates.status === 'open') {
+          await procurementService.openRFQ(id);
+        } else {
+          await procurementService.updateRFQ(id, updates);
+        }
+        setRFQs(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+        return { id, ...updates };
+      } catch (error) {
+        console.error('Failed to update RFQ via API:', error);
+        throw error;
+      }
+    }
     setRFQs(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  }, []);
+  }, [backendAvailable]);
 
   const deleteRFQ = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await procurementService.deleteRFQ(id);
+        setRFQs(prev => prev.filter(r => r.id !== id));
+        return;
+      } catch (error) {
+        console.error('Failed to delete RFQ via API:', error);
+        throw error;
+      }
+    }
     setRFQs(prev => prev.filter(r => r.id !== id));
-  }, []);
+  }, [backendAvailable]);
 
   const submitRFQResponse = useCallback(async (rfqId, response) => {
+    if (backendAvailable) {
+      try {
+        await procurementService.submitRFQResponse(rfqId, response);
+        // Refresh data to get updated responses
+        const rfqData = await procurementService.getRFQ(rfqId);
+        setRFQs(prev => prev.map(r => r.id === rfqId ? { ...r, ...rfqData } : r));
+        return;
+      } catch (error) {
+        console.error('Failed to submit RFQ response via API:', error);
+        throw error;
+      }
+    }
     setRFQs(prev => prev.map(r => {
       if (r.id === rfqId) {
         return {
@@ -298,34 +404,66 @@ export function ProcurementProvider({ children }) {
       }
       return r;
     }));
-  }, []);
+  }, [backendAvailable]);
 
-  const selectRFQWinner = useCallback(async (rfqId, supplierId) => {
+  const selectRFQWinner = useCallback(async (rfqId, responseId) => {
+    if (backendAvailable) {
+      try {
+        await procurementService.selectRFQWinner(rfqId, responseId);
+        // Refresh data to get updated RFQ status
+        const rfqData = await procurementService.getRFQ(rfqId);
+        setRFQs(prev => prev.map(r => r.id === rfqId ? { ...r, ...rfqData, status: 'closed' } : r));
+        return;
+      } catch (error) {
+        console.error('Failed to select RFQ winner via API:', error);
+        throw error;
+      }
+    }
     setRFQs(prev => prev.map(r => {
       if (r.id === rfqId) {
         return {
           ...r,
           status: 'closed',
-          winner_supplier_id: supplierId,
+          winner_supplier_id: responseId,
           responses: r.responses.map(resp => ({
             ...resp,
-            status: resp.supplier_id === supplierId ? 'accepted' : 'rejected',
+            status: resp.supplier_id === responseId ? 'accepted' : 'rejected',
           })),
         };
       }
       return r;
     }));
-  }, []);
+  }, [backendAvailable]);
 
   // Contract operations
   const createContract = useCallback(async (contractData) => {
     if (backendAvailable) {
       try {
-        const newContract = await procurementService.createContract(contractData);
-        setContracts(prev => [...prev, newContract]);
-        return newContract;
+        // Transform frontend data to backend format
+        const backendPayload = {
+          title: contractData.title,
+          vendor_id: contractData.supplier_id || contractData.vendor_id,
+          contract_type: contractData.type || contractData.contract_type || 'fixed',
+          start_date: contractData.start_date,
+          end_date: contractData.end_date,
+          value: parseFloat(contractData.value) || 0,
+          terms: contractData.terms || '',
+          auto_renewal: contractData.auto_renew || contractData.auto_renewal || false,
+        };
+        const newContract = await procurementService.createContract(backendPayload);
+        // Map backend response to frontend format
+        const mappedContract = {
+          ...newContract,
+          supplier_id: newContract.vendor_id,
+          supplier_name: newContract.vendor_name,
+          type: newContract.contract_type,
+          auto_renew: newContract.auto_renewal,
+        };
+        setContracts(prev => [...prev, mappedContract]);
+        return mappedContract;
       } catch (error) {
         console.error('Failed to create contract via API:', error);
+        throw error;
       }
     }
     // Fallback to local
@@ -343,11 +481,30 @@ export function ProcurementProvider({ children }) {
   const updateContract = useCallback(async (id, updates) => {
     if (backendAvailable) {
       try {
-        const updated = await procurementService.updateContract(id, updates);
-        setContracts(prev => prev.map(c => c.id === id ? updated : c));
-        return updated;
+        // Transform frontend updates to backend format
+        const backendUpdates = {};
+        if (updates.title) backendUpdates.title = updates.title;
+        if (updates.type || updates.contract_type) backendUpdates.contract_type = updates.type || updates.contract_type;
+        if (updates.end_date) backendUpdates.end_date = updates.end_date;
+        if (updates.value !== undefined) backendUpdates.value = parseFloat(updates.value);
+        if (updates.terms) backendUpdates.terms = updates.terms;
+        if (updates.auto_renew !== undefined || updates.auto_renewal !== undefined) {
+          backendUpdates.auto_renewal = updates.auto_renew ?? updates.auto_renewal;
+        }
+        if (updates.status) backendUpdates.status = updates.status;
+
+        await procurementService.updateContract(id, backendUpdates);
+        // Update local state with frontend field names
+        const frontendUpdates = {
+          ...updates,
+          type: updates.type || updates.contract_type,
+          auto_renew: updates.auto_renew ?? updates.auto_renewal,
+        };
+        setContracts(prev => prev.map(c => c.id === id ? { ...c, ...frontendUpdates } : c));
+        return { id, ...frontendUpdates };
       } catch (error) {
         console.error('Failed to update contract via API:', error);
+        throw error;
       }
     }
     setContracts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
@@ -364,8 +521,25 @@ export function ProcurementProvider({ children }) {
     setContracts(prev => prev.filter(c => c.id !== id));
   }, [backendAvailable]);
 
-  // Price history operations (to be implemented in backend)
-  const addPriceRecord = useCallback(async (productName, supplierId, price, currency = 'UZS') => {
+  // Price history operations
+  const addPriceRecord = useCallback(async (productName, supplierId, price, currency = 'UZS', productId = null) => {
+    if (backendAvailable && productId) {
+      try {
+        const newRecord = await procurementService.createPriceHistory({
+          product_id: productId,
+          vendor_id: supplierId,
+          unit_price: price,
+          currency: currency,
+        });
+        // Refresh the grouped price history data
+        await refreshPriceHistory();
+        return newRecord;
+      } catch (error) {
+        console.error('Failed to create price record via API:', error);
+        throw error;
+      }
+    }
+    // Fallback to local storage for demo mode or when no product_id
     const supplier = getSupplierById(supplierId);
     const existingProduct = priceHistory.find(
       p => p.product_name === productName && p.supplier_id === supplierId
@@ -398,7 +572,28 @@ export function ProcurementProvider({ children }) {
         }],
       }]);
     }
-  }, [priceHistory, getSupplierById]);
+  }, [backendAvailable, priceHistory, getSupplierById]);
+
+  // Refresh price history from backend
+  const refreshPriceHistory = useCallback(async () => {
+    if (!backendAvailable) return;
+    try {
+      const data = await procurementService.listPriceHistoryGrouped();
+      if (Array.isArray(data)) {
+        // Map to frontend format
+        const mappedHistory = data.map(item => ({
+          id: item.id,
+          product_name: item.product_name,
+          supplier_id: item.supplier_id,
+          supplier_name: item.supplier_name,
+          prices: item.prices || [],
+        }));
+        setPriceHistory(mappedHistory);
+      }
+    } catch (error) {
+      console.error('Failed to refresh price history:', error);
+    }
+  }, [backendAvailable]);
 
   const getProductPriceHistory = useCallback((productName) => {
     return priceHistory.filter(p => p.product_name === productName);
@@ -408,33 +603,128 @@ export function ProcurementProvider({ children }) {
   const createPurchaseOrder = useCallback(async (poData) => {
     if (backendAvailable) {
       try {
-        const newPO = await procurementService.createOrder(poData);
-        setPurchaseOrders(prev => [...prev, newPO]);
-        return newPO;
+        // Transform frontend data to backend format
+        // Filter out empty lines (where no product is selected)
+        const validLines = (poData.lines || []).filter(line =>
+          line.product_id || line.product_name || line.description
+        );
+
+        // Ensure we have at least one line with valid data
+        if (validLines.length === 0) {
+          throw new Error('At least one product line is required');
+        }
+
+        const backendPayload = {
+          order_number: poData.po_number || '',
+          vendor_id: poData.supplier_id || poData.vendor_id,
+          order_date: poData.order_date || new Date().toISOString().split('T')[0],
+          expected_date: poData.expected_delivery_date || poData.expected_date || '',
+          payment_terms: poData.payment_terms || 'net_30',
+          notes: poData.notes || '',
+          lines: validLines.map(line => ({
+            product_id: line.product_id || '',
+            description: line.product_name || line.description || 'Product',
+            quantity: parseFloat(line.quantity) || 1,
+            unit_price: parseFloat(line.unit_price) || 0,
+            unit_id: line.unit_id || '',
+            discount_amount: parseFloat(line.discount_amount) || 0,
+            tax_percent: parseFloat(line.tax_percent) || 0,
+            notes: line.notes || '',
+          })),
+        };
+
+        const newPO = await procurementService.createOrder(backendPayload);
+        // Transform backend response to frontend format
+        const mappedPO = {
+          ...newPO,
+          po_number: newPO.order_number,
+          supplier_id: newPO.vendor_id,
+          supplier_name: newPO.vendor_name,
+          expected_delivery_date: newPO.expected_date,
+        };
+        setPurchaseOrders(prev => [mappedPO, ...prev]);
+        return mappedPO;
       } catch (error) {
         console.error('Failed to create PO via API:', error);
+        throw error; // Re-throw to notify UI of failure
       }
     }
-    // Fallback to local
+    // Fallback to local only when backend is not available
     const newPO = {
       ...poData,
       id: Date.now().toString(),
-      order_number: `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
+      po_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
+      order_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
       status: 'draft',
       created_at: new Date().toISOString().split('T')[0],
     };
-    setPurchaseOrders(prev => [...prev, newPO]);
+    setPurchaseOrders(prev => [newPO, ...prev]);
     return newPO;
   }, [backendAvailable, purchaseOrders.length]);
 
   const updatePurchaseOrder = useCallback(async (id, updates) => {
     if (backendAvailable) {
       try {
-        const updated = await procurementService.updateOrder(id, updates);
-        setPurchaseOrders(prev => prev.map(po => po.id === id ? updated : po));
-        return updated;
+        // Transform frontend updates to backend format
+        // Backend expects: expected_date, payment_terms, notes, status, vendor_id, etc.
+        const backendUpdates = {};
+
+        // Handle expected date (accept both field names)
+        // Backend expects date in YYYY-MM-DD format (not ISO with time)
+        if (updates.expected_date) {
+          const dateStr = updates.expected_date;
+          backendUpdates.expected_date = typeof dateStr === 'string' && dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        } else if (updates.expected_delivery_date) {
+          const dateStr = updates.expected_delivery_date;
+          backendUpdates.expected_date = typeof dateStr === 'string' && dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+        }
+
+        if (updates.payment_terms !== undefined) {
+          // Backend expects payment_terms as string (e.g., "net_30", "30")
+          backendUpdates.payment_terms = String(updates.payment_terms);
+        }
+        if (updates.notes !== undefined) {
+          backendUpdates.notes = updates.notes;
+        }
+        if (updates.status) {
+          // Map frontend status values to backend status values
+          // Frontend: draft -> sent -> confirmed -> received
+          // Backend: draft -> pending_approval -> approved -> ordered -> partial -> received
+          const statusMap = {
+            'draft': 'draft',
+            'sent': 'ordered',          // Frontend 'sent' = Backend 'ordered' (order sent to vendor)
+            'confirmed': 'approved',     // Frontend 'confirmed' = Backend 'approved' (vendor confirmed)
+            'received': 'received',
+            'cancelled': 'cancelled',
+            'partial': 'partial',
+            // Also accept backend values directly
+            'pending_approval': 'pending_approval',
+            'approved': 'approved',
+            'ordered': 'ordered',
+          };
+          backendUpdates.status = statusMap[updates.status] || updates.status;
+        }
+        if (updates.vendor_id) {
+          backendUpdates.vendor_id = updates.vendor_id;
+        }
+        if (updates.vendor_reference !== undefined) {
+          backendUpdates.vendor_reference = updates.vendor_reference;
+        }
+
+        // Debug: log what we're sending
+        console.log('[ProcurementContext] Update PO - received updates:', updates);
+        console.log('[ProcurementContext] Update PO - sending to backend:', backendUpdates);
+
+        // Only call API if there are updates to send
+        if (Object.keys(backendUpdates).length > 0) {
+          await procurementService.updateOrder(id, backendUpdates);
+        }
+        // Backend returns just a success message, so update local state with the updates
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, ...updates } : po));
+        return { id, ...updates };
       } catch (error) {
         console.error('Failed to update PO via API:', error);
+        throw error;
       }
     }
     setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, ...updates } : po));
@@ -496,18 +786,32 @@ export function ProcurementProvider({ children }) {
   // Summary statistics
   const getSupplierStats = useCallback(() => {
     const activeSuppliers = suppliers.filter(s => s.status === 'active').length;
-    const totalSpent = suppliers.reduce((sum, s) => sum + (s.total_spent || 0), 0);
+
+    // Calculate total spent from purchase orders (only received/completed orders)
+    const totalSpent = purchaseOrders.reduce((sum, po) => {
+      // Include orders that are received, completed, or have partial delivery
+      if (['received', 'completed', 'partial', 'approved', 'ordered'].includes(po.status)) {
+        return sum + (po.total_amount || po.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Calculate average rating from suppliers
     const avgRating = suppliers.length > 0
       ? suppliers.reduce((sum, s) => sum + (s.rating || 0), 0) / suppliers.length
       : 0;
+
+    // Count total orders
+    const totalOrders = purchaseOrders.length;
 
     return {
       totalSuppliers: suppliers.length,
       activeSuppliers,
       totalSpent,
+      totalOrders,
       avgRating: Math.round(avgRating * 10) / 10,
     };
-  }, [suppliers]);
+  }, [suppliers, purchaseOrders]);
 
   // Refresh data from backend
   const refreshData = useCallback(async () => {
@@ -517,17 +821,49 @@ export function ProcurementProvider({ children }) {
       setBackendAvailable(isBackendAvailable);
 
       if (isBackendAvailable) {
-        const [suppliersData, posData, rfqsData, contractsData] = await Promise.all([
+        const [suppliersData, posData, rfqsData, contractsData, priceHistoryData] = await Promise.all([
           procurementService.listSuppliers().catch(() => null),
           procurementService.listOrders().catch(() => null),
           procurementService.listRFQs().catch(() => null),
           procurementService.listContracts().catch(() => null),
+          procurementService.listPriceHistoryGrouped().catch(() => null),
         ]);
 
         if (suppliersData) setSuppliers(suppliersData);
-        if (posData) setPurchaseOrders(posData);
+        if (posData) {
+          // Map backend PO fields to frontend format
+          const mappedPOs = posData.map(po => ({
+            ...po,
+            po_number: po.order_number,
+            supplier_id: po.vendor_id,
+            supplier_name: po.vendor_name,
+            expected_delivery_date: po.expected_date,
+          }));
+          setPurchaseOrders(mappedPOs);
+        }
         if (rfqsData) setRFQs(rfqsData);
-        if (contractsData) setContracts(contractsData);
+        if (contractsData) {
+          // Map backend contract fields to frontend format
+          const mappedContracts = contractsData.map(contract => ({
+            ...contract,
+            supplier_id: contract.vendor_id,
+            supplier_name: contract.vendor_name,
+            type: contract.contract_type,
+            auto_renew: contract.auto_renewal,
+          }));
+          setContracts(mappedContracts);
+        }
+        if (priceHistoryData) {
+          // Map backend price history to frontend format
+          const mappedPriceHistory = priceHistoryData.map(item => ({
+            id: item.id,
+            product_name: item.product_name,
+            supplier_id: item.supplier_id,
+            supplier_name: item.supplier_name,
+            prices: item.prices || [],
+          }));
+          setPriceHistory(mappedPriceHistory);
+        }
       }
     } catch (error) {
       console.error('Error refreshing data:', error);

@@ -124,7 +124,7 @@ const generateQRSVG = (data, size = 50) => {
 export default function PriceLabelPrinting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { products, items } = useInventory();
+  const { products, items, categories } = useInventory();
   const printRef = useRef(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -200,10 +200,16 @@ export default function PriceLabelPrinting() {
   // Get all products with inventory info
   const allProducts = products.map(product => {
     const inventory = items.find(item => item.product_id === product.id);
+    // Get category name from categories list (product.category might be an object or category_id)
+    const categoryName = typeof product.category === 'string'
+      ? product.category
+      : (product.category?.name || categories.find(c => c.id === product.category_id)?.name || '');
     return {
       ...product,
+      category: categoryName,
       current_stock: inventory?.current_stock || 0,
-      sale_price: product.sale_price || product.unit_price || 0,
+      // Use list_price (selling price) or fall back to other price fields
+      sale_price: product.list_price || product.sale_price || product.unit_price || product.cost_price || 0,
     };
   });
 

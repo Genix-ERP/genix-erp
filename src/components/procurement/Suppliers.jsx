@@ -68,6 +68,7 @@ export default function Suppliers() {
   const { t } = useTranslation(language);
   const {
     suppliers,
+    purchaseOrders,
     createSupplier,
     updateSupplier,
     deleteSupplier,
@@ -141,9 +142,29 @@ export default function Suppliers() {
     payment_terms: "net_30",
     currency: "UZS",
     categories: "",
+    status: "active",
   });
 
   const stats = getSupplierStats();
+
+  // Calculate order count and total spent per supplier from purchase orders
+  const supplierOrderStats = useMemo(() => {
+    const statsMap = {};
+    (purchaseOrders || []).forEach(po => {
+      const supplierId = po.vendor_id || po.supplier_id;
+      if (!supplierId) return;
+
+      if (!statsMap[supplierId]) {
+        statsMap[supplierId] = { orderCount: 0, totalSpent: 0 };
+      }
+      statsMap[supplierId].orderCount++;
+      // Only count spent for received/completed orders
+      if (['received', 'completed', 'partial', 'approved', 'ordered'].includes(po.status)) {
+        statsMap[supplierId].totalSpent += (po.total_amount || po.total || 0);
+      }
+    });
+    return statsMap;
+  }, [purchaseOrders]);
 
   // Filter suppliers
   const filteredSuppliers = useMemo(() => {
@@ -184,6 +205,7 @@ export default function Suppliers() {
       payment_terms: supplier.payment_terms || "net_30",
       currency: supplier.currency || "UZS",
       categories: (supplier.categories || []).join(", "),
+      status: supplier.status || "active",
     });
     setShowForm(true);
   };
@@ -222,6 +244,7 @@ export default function Suppliers() {
       payment_terms: "net_30",
       currency: "UZS",
       categories: "",
+      status: "active",
     });
   };
 
@@ -229,11 +252,13 @@ export default function Suppliers() {
     const styles = {
       active: "bg-green-100 text-green-800",
       inactive: "bg-gray-100 text-gray-800",
+      pending: "bg-yellow-100 text-yellow-800",
       blocked: "bg-red-100 text-red-800",
     };
     const labels = {
       active: t('active') || "Faol",
       inactive: t('inactive') || "Nofaol",
+      pending: t('pending') || "Kutilmoqda",
       blocked: t('blocked') || "Bloklangan",
     };
     return (
@@ -325,10 +350,11 @@ export default function Suppliers() {
               <div>
                 <p className="text-xs text-slate-500">{t('total_purchases') || "Jami xaridlar"}</p>
                 <p className="text-lg font-bold text-purple-600">
-                  {stats.totalSpent > 1000000
+                  ${stats.totalSpent > 1000000
                     ? `${(stats.totalSpent / 1000000).toFixed(1)}M`
                     : stats.totalSpent.toLocaleString()}
                 </p>
+                <p className="text-xs text-slate-400">{stats.totalOrders || 0} {t('orders') || 'orders'}</p>
               </div>
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-purple-600" />
@@ -442,10 +468,10 @@ export default function Suppliers() {
                         </button>
                       </TableCell>
                       <TableCell className="text-right">
-                        {supplier.total_orders || 0}
+                        {supplierOrderStats[supplier.id]?.orderCount || 0}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(supplier.total_spent, supplier.currency)}
+                        {formatCurrency(supplierOrderStats[supplier.id]?.totalSpent || 0, supplier.currency)}
                       </TableCell>
                       <TableCell>{getStatusBadge(supplier.status)}</TableCell>
                       <TableCell>
@@ -546,7 +572,7 @@ export default function Suppliers() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="space-y-2">
                 <LabelWithHelp htmlFor="tax_id" label={t('tax_id') || 'INN (STIR)'} helpText={t('help_supplier_tax_id')} />
                 <Input
@@ -588,6 +614,23 @@ export default function Suppliers() {
                     <SelectItem value="USD">USD (Dollar)</SelectItem>
                     <SelectItem value="EUR">EUR (Yevro)</SelectItem>
                     <SelectItem value="RUB">RUB (Rubl)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="status" label={t('status') || 'Status'} helpText={t('help_supplier_status') || 'Supplier status'} />
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">{t('active') || 'Active'}</SelectItem>
+                    <SelectItem value="inactive">{t('inactive') || 'Inactive'}</SelectItem>
+                    <SelectItem value="pending">{t('pending') || 'Pending'}</SelectItem>
+                    <SelectItem value="blocked">{t('blocked') || 'Blocked'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

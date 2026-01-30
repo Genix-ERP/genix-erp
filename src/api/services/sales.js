@@ -81,6 +81,37 @@ export const salesService = {
     const response = await apiClient.get('/reports/sales-summary', { params });
     return response.data.data;
   },
+
+  // Delivery Orders
+  async listDeliveryOrders(params = {}) {
+    const response = await apiClient.get('/sales/delivery-orders', { params });
+    return response.data;
+  },
+
+  async getDeliveryOrder(id) {
+    const response = await apiClient.get(`/sales/delivery-orders/${id}`);
+    return response.data.data;
+  },
+
+  async createDeliveryOrder(data) {
+    const response = await apiClient.post('/sales/delivery-orders', data);
+    return response.data.data;
+  },
+
+  async updateDeliveryOrder(id, data) {
+    const response = await apiClient.put(`/sales/delivery-orders/${id}`, data);
+    return response.data.data;
+  },
+
+  async validateDeliveryOrder(id) {
+    const response = await apiClient.post(`/sales/delivery-orders/${id}/validate`);
+    return response.data.data;
+  },
+
+  async cancelDeliveryOrder(id) {
+    const response = await apiClient.post(`/sales/delivery-orders/${id}/cancel`);
+    return response.data.data;
+  },
 };
 
 export default salesService;
