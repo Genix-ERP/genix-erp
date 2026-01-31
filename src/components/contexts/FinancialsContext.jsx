@@ -298,7 +298,7 @@ export function FinancialsProvider({ children }) {
           const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData] = await Promise.all([
             financeService.listJournalEntries(),
             salesService.listInvoices().catch(() => []),
-            financeService.listAccounts(),
+            financeService.listAccounts({ organization_id: activeCompany.id }),
             financeService.listPayments(),
             financeService.listTaxRates(),
             financeService.listAccountTypes().catch(() => []),
