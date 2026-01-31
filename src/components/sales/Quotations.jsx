@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +56,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
 
 export default function Quotations() {
   const { language } = useLanguage();
@@ -81,13 +82,29 @@ export default function Quotations() {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editMode, setEditMode] = useState(false);
 
+  // Products list for selection
+  const [products, setProducts] = useState([]);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const data = await inventoryService.listProducts({ limit: 1000 });
+        setProducts(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch products:', error);
+      }
+    };
+    fetchProducts();
+  }, []);
+
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
     contact_person: "",
     email: "",
     valid_until: "",
-    items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+    items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     discount_percent: 0,
     tax_percent: 12,
     notes: "",
@@ -115,7 +132,7 @@ export default function Quotations() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { product_name: "", quantity: 1, unit_price: 0 }],
+      items: [...formData.items, { product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     });
   };
 
@@ -126,6 +143,22 @@ export default function Quotations() {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
+
+    // If selecting a product from dropdown, auto-populate name and price
+    if (field === "product_id" && value) {
+      const selectedProduct = products.find(p => p.id === value);
+      if (selectedProduct) {
+        newItems[index] = {
+          ...newItems[index],
+          product_id: selectedProduct.id,
+          product_name: selectedProduct.name,
+          unit_price: selectedProduct.list_price || selectedProduct.cost_price || 0,
+        };
+        setFormData({ ...formData, items: newItems });
+        return;
+      }
+    }
+
     newItems[index][field] = field === "product_name" ? value : parseFloat(value) || 0;
     setFormData({ ...formData, items: newItems });
   };
@@ -180,7 +213,7 @@ export default function Quotations() {
       contact_person: "",
       email: "",
       valid_until: "",
-      items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+      items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_percent: 0,
       tax_percent: 12,
       notes: "",
@@ -195,7 +228,12 @@ export default function Quotations() {
       contact_person: quotation.contact_person || "",
       email: quotation.email || "",
       valid_until: quotation.valid_until || "",
-      items: quotation.items || [{ product_name: "", quantity: 1, unit_price: 0 }],
+      items: quotation.items?.map(item => ({
+        product_id: item.product_id || "",
+        product_name: item.product_name || "",
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price || 0,
+      })) || [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_percent: quotation.discount_percent || 0,
       tax_percent: quotation.tax_percent || 12,
       notes: quotation.notes || "",
@@ -481,11 +519,21 @@ export default function Quotations() {
                     {formData.items.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell>
-                          <Input
-                            value={item.product_name}
-                            onChange={(e) => handleItemChange(index, "product_name", e.target.value)}
-                            placeholder={t('product_name')}
-                          />
+                          <Select
+                            value={item.product_id}
+                            onValueChange={(value) => handleItemChange(index, "product_id", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('select_product')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Input

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import {
   FileText,
   BarChart3,
   GanttChartSquare,
+  Receipt,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import GanttChart from '@/components/projects/GanttChart';
@@ -54,6 +55,9 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
+import { projectsService } from '@/api/services/projects';
+import { hrService } from '@/api/services/hr';
+import { contactsService } from '@/api/services/contacts';
 
 export default function ProjectDetail() {
   const { projectId } = useParams();
@@ -75,6 +79,39 @@ export default function ProjectDetail() {
 
   const [editingTask, setEditingTask] = useState(null);
   const [editingMilestone, setEditingMilestone] = useState(null);
+
+  // Time Entry & Expense states
+  const [showTimeEntryDialog, setShowTimeEntryDialog] = useState(false);
+  const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  const [expenses, setExpenses] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
+  const [isLoadingTimeEntries, setIsLoadingTimeEntries] = useState(false);
+  const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
+  const [vendorsList, setVendorsList] = useState([]);
+
+  const [newTimeEntry, setNewTimeEntry] = useState({
+    employee_id: '',
+    employee_name: '',
+    date: new Date().toISOString().split('T')[0],
+    hours: '',
+    description: '',
+    billable: true,
+    hourly_rate: '',
+  });
+
+  const [newExpense, setNewExpense] = useState({
+    category: '',
+    description: '',
+    amount: '',
+    expense_date: new Date().toISOString().split('T')[0],
+    employee_id: '',
+    employee_name: '',
+    vendor_id: '',
+    vendor_name: '',
+    billable: true,
+    notes: '',
+  });
 
   const [newTask, setNewTask] = useState({
     title: '',
@@ -99,13 +136,48 @@ export default function ProjectDetail() {
     allocation_percent: 100,
   });
 
-  // Sample employees
-  const [employees] = useState([
-    { id: '1', name: 'John Doe' },
-    { id: '2', name: 'Jane Smith' },
-    { id: '3', name: 'Bob Johnson' },
-    { id: '4', name: 'Alice Williams' },
-  ]);
+  // Load employees from API
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const data = await hrService.listEmployees();
+        setEmployeesList(data?.items || data || []);
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+        setEmployeesList([]);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  // Load vendors (contacts with type 'vendor' or 'both')
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const data = await contactsService.list({ type: 'vendor' });
+        // Also get contacts with type 'both' (customer and vendor)
+        const bothData = await contactsService.list({ type: 'both' });
+        const allVendors = [...(data || []), ...(bothData || [])];
+        setVendorsList(allVendors);
+      } catch (error) {
+        console.error('Error fetching vendors:', error);
+        setVendorsList([]);
+      }
+    };
+    fetchVendors();
+  }, []);
+
+  // For backwards compatibility with task assignee
+  const employees = employeesList.map(emp => ({
+    id: emp.id,
+    name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.employee_number
+  }));
+
+  // Vendors list for dropdown
+  const vendors = vendorsList.map(v => ({
+    id: v.id,
+    name: v.name || v.company_name
+  }));
 
   // Load project data
   useEffect(() => {
@@ -118,113 +190,299 @@ export default function ProjectDetail() {
     }
   }, [projectId, projects]);
 
-  const loadProjectData = (id) => {
-    // Load from localStorage
-    const tasksKey = `genix_project_tasks_${id}`;
-    const milestonesKey = `genix_project_milestones_${id}`;
-    const teamKey = `genix_project_team_${id}`;
-    const timeEntriesKey = `genix_project_time_entries_${id}`;
-
-    const storedTasks = localStorage.getItem(tasksKey);
-    const storedMilestones = localStorage.getItem(milestonesKey);
-    const storedTeam = localStorage.getItem(teamKey);
-    const storedTimeEntries = localStorage.getItem(timeEntriesKey);
-
-    if (storedTasks) setTasks(JSON.parse(storedTasks));
-    if (storedMilestones) setMilestones(JSON.parse(storedMilestones));
-    if (storedTeam) setTeam(JSON.parse(storedTeam));
-    if (storedTimeEntries) setTimeEntries(JSON.parse(storedTimeEntries));
+  const loadProjectData = async (id) => {
+    // Load tasks from API
+    await loadTasks(id);
+    // Load milestones from API
+    await loadMilestones(id);
+    // Load team members from API
+    await loadTeamMembers(id);
+    // Load time entries from API
+    await loadTimeEntries(id);
+    // Load expenses from API
+    await loadExpenses(id);
   };
 
-  const saveData = (key, data) => {
-    localStorage.setItem(`genix_project_${key}_${projectId}`, JSON.stringify(data));
+  const loadTasks = async (id) => {
+    try {
+      const data = await projectsService.listProjectTasks(id);
+      setTasks(data || []);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      setTasks([]);
+    }
   };
 
-  const handleCreateTask = () => {
-    const task = {
-      ...newTask,
-      id: `TASK-${Date.now()}`,
-      project_id: projectId,
-      created_at: new Date().toISOString(),
-    };
-    const updatedTasks = [...tasks, task];
-    setTasks(updatedTasks);
-    saveData('tasks', updatedTasks);
-    setShowTaskDialog(false);
-    resetNewTask();
+  const loadMilestones = async (id) => {
+    try {
+      const data = await projectsService.listProjectMilestones(id);
+      setMilestones(data || []);
+    } catch (error) {
+      console.error('Error loading milestones:', error);
+      setMilestones([]);
+    }
   };
 
-  const handleUpdateTask = () => {
-    const updatedTasks = tasks.map(t => t.id === editingTask.id ? editingTask : t);
-    setTasks(updatedTasks);
-    saveData('tasks', updatedTasks);
-    setShowTaskDialog(false);
-    setEditingTask(null);
+  const loadTeamMembers = async (id) => {
+    setIsLoadingTeam(true);
+    try {
+      const data = await projectsService.listTeamMembers(id);
+      setTeam(data || []);
+    } catch (error) {
+      console.error('Error loading team members:', error);
+      setTeam([]);
+    } finally {
+      setIsLoadingTeam(false);
+    }
   };
 
-  const handleDeleteTask = (taskId) => {
+  const loadTimeEntries = async (id) => {
+    setIsLoadingTimeEntries(true);
+    try {
+      const data = await projectsService.listTimeEntries(id);
+      setTimeEntries(data || []);
+    } catch (error) {
+      console.error('Error loading time entries:', error);
+      setTimeEntries([]);
+    } finally {
+      setIsLoadingTimeEntries(false);
+    }
+  };
+
+  const loadExpenses = async (id) => {
+    setIsLoadingExpenses(true);
+    try {
+      const data = await projectsService.listProjectExpenses(id);
+      setExpenses(data || []);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+      setExpenses([]);
+    } finally {
+      setIsLoadingExpenses(false);
+    }
+  };
+
+  const handleCreateTask = async () => {
+    try {
+      await projectsService.createProjectTask(projectId, {
+        title: newTask.title,
+        description: newTask.description,
+        assignee_id: newTask.assignee || undefined,
+        assignee_name: newTask.assignee ? employees.find(e => e.id === newTask.assignee)?.name : undefined,
+        priority: newTask.priority,
+        status: newTask.status,
+        due_date: newTask.due_date || undefined,
+        estimated_hours: parseFloat(newTask.estimated_hours) || 0,
+      });
+      await loadTasks(projectId);
+      setShowTaskDialog(false);
+      resetNewTask();
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert(t('error_creating_task') || 'Error creating task');
+    }
+  };
+
+  const handleUpdateTask = async () => {
+    try {
+      const assigneeId = editingTask.assignee_id || editingTask.assignee;
+      await projectsService.updateProjectTask(projectId, editingTask.id, {
+        title: editingTask.title,
+        description: editingTask.description,
+        assignee_id: assigneeId || undefined,
+        assignee_name: assigneeId ? employees.find(e => e.id === assigneeId)?.name : undefined,
+        priority: editingTask.priority,
+        status: editingTask.status,
+        due_date: editingTask.due_date || undefined,
+        estimated_hours: parseFloat(editingTask.estimated_hours) || 0,
+      });
+      await loadTasks(projectId);
+      setShowTaskDialog(false);
+      setEditingTask(null);
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert(t('error_updating_task') || 'Error updating task');
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
     if (window.confirm(t('confirm_delete') || 'Are you sure?')) {
-      const updatedTasks = tasks.filter(t => t.id !== taskId);
-      setTasks(updatedTasks);
-      saveData('tasks', updatedTasks);
+      try {
+        await projectsService.deleteProjectTask(projectId, taskId);
+        await loadTasks(projectId);
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
     }
   };
 
-  const handleCreateMilestone = () => {
-    const milestone = {
-      ...newMilestone,
-      id: `MS-${Date.now()}`,
-      project_id: projectId,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    };
-    const updatedMilestones = [...milestones, milestone];
-    setMilestones(updatedMilestones);
-    saveData('milestones', updatedMilestones);
-    setShowMilestoneDialog(false);
-    resetNewMilestone();
+  const handleCreateMilestone = async () => {
+    try {
+      await projectsService.createProjectMilestone(projectId, {
+        title: newMilestone.title,
+        description: newMilestone.description,
+        due_date: newMilestone.due_date,
+      });
+      await loadMilestones(projectId);
+      setShowMilestoneDialog(false);
+      resetNewMilestone();
+    } catch (error) {
+      console.error('Error creating milestone:', error);
+      alert(t('error_creating_milestone') || 'Error creating milestone');
+    }
   };
 
-  const handleUpdateMilestone = () => {
-    const updatedMilestones = milestones.map(m =>
-      m.id === editingMilestone.id ? editingMilestone : m
-    );
-    setMilestones(updatedMilestones);
-    saveData('milestones', updatedMilestones);
-    setShowMilestoneDialog(false);
-    setEditingMilestone(null);
+  const handleUpdateMilestone = async () => {
+    try {
+      await projectsService.updateProjectMilestone(projectId, editingMilestone.id, {
+        title: editingMilestone.title,
+        description: editingMilestone.description,
+        due_date: editingMilestone.due_date,
+        status: editingMilestone.status,
+      });
+      await loadMilestones(projectId);
+      setShowMilestoneDialog(false);
+      setEditingMilestone(null);
+    } catch (error) {
+      console.error('Error updating milestone:', error);
+      alert(t('error_updating_milestone') || 'Error updating milestone');
+    }
   };
 
-  const handleCompleteMilestone = (milestoneId) => {
-    const updatedMilestones = milestones.map(m =>
-      m.id === milestoneId ? { ...m, status: 'completed', completed_date: new Date().toISOString() } : m
-    );
-    setMilestones(updatedMilestones);
-    saveData('milestones', updatedMilestones);
+  const handleCompleteMilestone = async (milestoneId) => {
+    try {
+      await projectsService.updateProjectMilestone(projectId, milestoneId, {
+        status: 'completed',
+      });
+      await loadMilestones(projectId);
+    } catch (error) {
+      console.error('Error completing milestone:', error);
+      alert(t('error_completing_milestone') || 'Error completing milestone');
+    }
   };
 
-  const handleAddTeamMember = () => {
-    const employee = employees.find(e => e.id === newTeamMember.employee_id);
-    const member = {
-      ...newTeamMember,
-      id: `TM-${Date.now()}`,
-      project_id: projectId,
-      employee_name: employee?.name || '',
-      added_at: new Date().toISOString(),
-    };
-    const updatedTeam = [...team, member];
-    setTeam(updatedTeam);
-    saveData('team', updatedTeam);
-    setShowTeamDialog(false);
-    resetNewTeamMember();
+  const handleDeleteMilestone = async (milestoneId) => {
+    if (window.confirm(t('confirm_delete') || 'Are you sure?')) {
+      try {
+        await projectsService.deleteProjectMilestone(projectId, milestoneId);
+        await loadMilestones(projectId);
+      } catch (error) {
+        console.error('Error deleting milestone:', error);
+      }
+    }
   };
 
-  const handleRemoveTeamMember = (memberId) => {
+  const handleAddTeamMember = async () => {
+    try {
+      const employee = employees.find(e => e.id === newTeamMember.employee_id);
+      await projectsService.addTeamMember(projectId, {
+        employee_id: newTeamMember.employee_id,
+        employee_name: employee?.name || '',
+        role: newTeamMember.role,
+        allocation_percent: newTeamMember.allocation_percent,
+      });
+      await loadTeamMembers(projectId);
+      setShowTeamDialog(false);
+      resetNewTeamMember();
+    } catch (error) {
+      console.error('Error adding team member:', error);
+      alert(t('error_adding_team_member') || 'Error adding team member');
+    }
+  };
+
+  const handleRemoveTeamMember = async (memberId) => {
     if (window.confirm(t('confirm_remove') || 'Remove this team member?')) {
-      const updatedTeam = team.filter(m => m.id !== memberId);
-      setTeam(updatedTeam);
-      saveData('team', updatedTeam);
+      try {
+        await projectsService.removeTeamMember(projectId, memberId);
+        await loadTeamMembers(projectId);
+      } catch (error) {
+        console.error('Error removing team member:', error);
+        alert(t('error_removing_team_member') || 'Error removing team member');
+      }
     }
+  };
+
+  // Time Entry Handlers
+  const handleCreateTimeEntry = async () => {
+    try {
+      await projectsService.createTimeEntry(projectId, {
+        employee_id: newTimeEntry.employee_id,
+        employee_name: newTimeEntry.employee_name,
+        date: newTimeEntry.date,
+        hours: parseFloat(newTimeEntry.hours) || 0,
+        description: newTimeEntry.description,
+        billable: newTimeEntry.billable,
+        hourly_rate: parseFloat(newTimeEntry.hourly_rate) || 0,
+      });
+      await loadTimeEntries(projectId);
+      setShowTimeEntryDialog(false);
+      resetNewTimeEntry();
+    } catch (error) {
+      console.error('Error creating time entry:', error);
+      alert(t('error_creating_time_entry') || 'Error creating time entry');
+    }
+  };
+
+  const resetNewTimeEntry = () => {
+    setNewTimeEntry({
+      employee_id: '',
+      employee_name: '',
+      date: new Date().toISOString().split('T')[0],
+      hours: '',
+      description: '',
+      billable: true,
+      hourly_rate: '',
+    });
+  };
+
+  // Expense Handlers
+  const handleCreateExpense = async () => {
+    try {
+      await projectsService.createProjectExpense(projectId, {
+        category: newExpense.category,
+        description: newExpense.description,
+        amount: parseFloat(newExpense.amount) || 0,
+        expense_date: newExpense.expense_date,
+        employee_id: newExpense.employee_id || undefined,
+        employee_name: newExpense.employee_name || undefined,
+        vendor_id: newExpense.vendor_id || undefined,
+        vendor_name: newExpense.vendor_name || undefined,
+        billable: newExpense.billable,
+        notes: newExpense.notes || undefined,
+      });
+      await loadExpenses(projectId);
+      setShowExpenseDialog(false);
+      resetNewExpense();
+    } catch (error) {
+      console.error('Error creating expense:', error);
+      alert(t('error_creating_expense') || 'Error creating expense');
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    if (window.confirm(t('confirm_delete') || 'Are you sure?')) {
+      try {
+        await projectsService.deleteProjectExpense(projectId, expenseId);
+        await loadExpenses(projectId);
+      } catch (error) {
+        console.error('Error deleting expense:', error);
+      }
+    }
+  };
+
+  const resetNewExpense = () => {
+    setNewExpense({
+      category: '',
+      description: '',
+      amount: '',
+      expense_date: new Date().toISOString().split('T')[0],
+      employee_id: '',
+      employee_name: '',
+      vendor_id: '',
+      vendor_name: '',
+      billable: true,
+      notes: '',
+    });
   };
 
   const resetNewTask = () => {
@@ -408,6 +666,14 @@ export default function ProjectDetail() {
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">{t('team') || 'Team'} ({team.length})</span>
             </TabsTrigger>
+            <TabsTrigger value="time" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('time') || 'Time'} ({timeEntries.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="expenses" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Receipt className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('expenses') || 'Expenses'} ({expenses.length})</span>
+            </TabsTrigger>
             <TabsTrigger value="overview" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">{t('overview') || 'Overview'}</span>
@@ -481,7 +747,7 @@ export default function ProjectDetail() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <User className="w-4 h-4" />
-                              {employees.find(e => e.id === task.assignee)?.name || t('unassigned') || 'Unassigned'}
+                              {task.assignee_name || employees.find(e => e.id === task.assignee_id)?.name || t('unassigned') || 'Unassigned'}
                             </div>
                           </TableCell>
                           <TableCell>{getPriorityBadge(task.priority)}</TableCell>
@@ -615,7 +881,11 @@ export default function ProjectDetail() {
                 </div>
               </CardHeader>
               <CardContent>
-                {team.length === 0 ? (
+                {isLoadingTeam ? (
+                  <div className="text-center py-12">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  </div>
+                ) : team.length === 0 ? (
                   <div className="text-center py-12">
                     <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">{t('no_team_members') || 'No team members yet'}</p>
@@ -685,6 +955,206 @@ export default function ProjectDetail() {
             />
           </TabsContent>
 
+          {/* Time Entries Tab */}
+          <TabsContent value="time" className="mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{t('time_entries') || 'Time Entries'}</CardTitle>
+                  {canCreate(MODULES.PROJECTS) && (
+                    <Button onClick={() => { resetNewTimeEntry(); setShowTimeEntryDialog(true); }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('log_time') || 'Log Time'}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Time Entry Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="text-center p-3 bg-blue-100 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {timeEntries.reduce((sum, e) => sum + (e.hours || 0), 0).toFixed(1)}h
+                    </div>
+                    <div className="text-xs text-blue-600">{t('total_hours') || 'Total Hours'}</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-100 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">
+                      {timeEntries.filter(e => e.billable).reduce((sum, e) => sum + (e.hours || 0), 0).toFixed(1)}h
+                    </div>
+                    <div className="text-xs text-green-600">{t('billable_hours') || 'Billable'}</div>
+                  </div>
+                  <div className="text-center p-3 bg-purple-100 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">
+                      ${timeEntries.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-purple-600">{t('billable_amount') || 'Billable Amount'}</div>
+                  </div>
+                </div>
+
+                {/* Time Entries Table */}
+                {isLoadingTimeEntries ? (
+                  <div className="text-center py-12">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  </div>
+                ) : timeEntries.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">{t('no_time_entries') || 'No time entries yet'}</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('date') || 'Date'}</TableHead>
+                        <TableHead>{t('employee') || 'Employee'}</TableHead>
+                        <TableHead>{t('hours') || 'Hours'}</TableHead>
+                        <TableHead>{t('description') || 'Description'}</TableHead>
+                        <TableHead>{t('billable') || 'Billable'}</TableHead>
+                        <TableHead className="text-right">{t('amount') || 'Amount'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {timeEntries.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            {entry.date && format(parseISO(entry.date), 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4" />
+                              {entry.employee_name || t('unknown') || 'Unknown'}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{entry.hours}h</Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate">
+                            {entry.description || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {entry.billable ? (
+                              <Badge className="bg-green-100 text-green-700">{t('yes') || 'Yes'}</Badge>
+                            ) : (
+                              <Badge variant="secondary">{t('no') || 'No'}</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {entry.amount ? `$${entry.amount.toLocaleString()}` : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Expenses Tab */}
+          <TabsContent value="expenses" className="mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{t('expenses') || 'Expenses'}</CardTitle>
+                  {canCreate(MODULES.PROJECTS) && (
+                    <Button onClick={() => { resetNewExpense(); setShowExpenseDialog(true); }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('add_expense') || 'Add Expense'}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Expense Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="text-center p-3 bg-red-100 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600">
+                      ${expenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-red-600">{t('total_expenses') || 'Total Expenses'}</div>
+                  </div>
+                  <div className="text-center p-3 bg-orange-100 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">
+                      ${expenses.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                    </div>
+                    <div className="text-xs text-orange-600">{t('billable_expenses') || 'Billable'}</div>
+                  </div>
+                  <div className="text-center p-3 bg-gray-100 rounded-lg">
+                    <div className="text-2xl font-bold text-gray-600">{expenses.length}</div>
+                    <div className="text-xs text-gray-600">{t('entries') || 'Entries'}</div>
+                  </div>
+                </div>
+
+                {/* Expenses Table */}
+                {isLoadingExpenses ? (
+                  <div className="text-center py-12">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  </div>
+                ) : expenses.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Receipt className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">{t('no_expenses') || 'No expenses yet'}</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('date') || 'Date'}</TableHead>
+                        <TableHead>{t('category') || 'Category'}</TableHead>
+                        <TableHead>{t('description') || 'Description'}</TableHead>
+                        <TableHead>{t('vendor') || 'Vendor'}</TableHead>
+                        <TableHead className="text-right">{t('amount') || 'Amount'}</TableHead>
+                        <TableHead>{t('status') || 'Status'}</TableHead>
+                        <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {expenses.map((expense) => (
+                        <TableRow key={expense.id}>
+                          <TableCell>
+                            {expense.expense_date && format(parseISO(expense.expense_date), 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{expense.category || t('general') || 'General'}</Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate">
+                            {expense.description}
+                          </TableCell>
+                          <TableCell>{expense.vendor_name || expense.employee_name || '-'}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            ${(expense.amount || 0).toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={
+                              expense.status === 'paid' ? 'bg-green-100 text-green-700' :
+                              expense.status === 'approved' ? 'bg-blue-100 text-blue-700' :
+                              expense.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }>
+                              {t(expense.status) || expense.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canDelete(MODULES.PROJECTS) && expense.status === 'pending' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteExpense(expense.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -699,7 +1169,7 @@ export default function ProjectDetail() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">{t('billing_type') || 'Billing Type'}</Label>
-                    <p className="font-medium">{project.billing_type}</p>
+                    <p className="font-medium">{t(project.billing_type) || project.billing_type}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">{t('priority') || 'Priority'}</Label>
@@ -792,10 +1262,10 @@ export default function ProjectDetail() {
                 <div>
                   <Label>{t('assignee') || 'Assignee'}</Label>
                   <Select
-                    value={editingTask?.assignee || newTask.assignee}
+                    value={editingTask?.assignee_id || editingTask?.assignee || newTask.assignee}
                     onValueChange={(value) => {
                       if (editingTask) {
-                        setEditingTask({ ...editingTask, assignee: value });
+                        setEditingTask({ ...editingTask, assignee_id: value, assignee: value });
                       } else {
                         setNewTask({ ...newTask, assignee: value });
                       }
@@ -1012,6 +1482,241 @@ export default function ProjectDetail() {
               </Button>
               <Button onClick={handleAddTeamMember}>
                 {t('add') || 'Add'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Time Entry Dialog */}
+        <Dialog open={showTimeEntryDialog} onOpenChange={setShowTimeEntryDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('log_time') || 'Log Time'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>{t('employee') || 'Employee'} *</Label>
+                <Select
+                  value={newTimeEntry.employee_id}
+                  onValueChange={(value) => {
+                    const emp = employees.find(e => e.id === value);
+                    setNewTimeEntry({
+                      ...newTimeEntry,
+                      employee_id: value,
+                      employee_name: emp?.name || ''
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_employee') || 'Select employee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('date') || 'Date'} *</Label>
+                  <Input
+                    type="date"
+                    value={newTimeEntry.date}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>{t('hours') || 'Hours'} *</Label>
+                  <Input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={newTimeEntry.hours}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, hours: e.target.value })}
+                    placeholder="0.0"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>{t('description') || 'Description'}</Label>
+                <Textarea
+                  value={newTimeEntry.description}
+                  onChange={(e) => setNewTimeEntry({ ...newTimeEntry, description: e.target.value })}
+                  placeholder={t('what_did_you_work_on') || 'What did you work on?'}
+                  rows={2}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('hourly_rate') || 'Hourly Rate'}</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newTimeEntry.hourly_rate}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, hourly_rate: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="billable"
+                    checked={newTimeEntry.billable}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, billable: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="billable">{t('billable') || 'Billable'}</Label>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowTimeEntryDialog(false)}>
+                {t('cancel') || 'Cancel'}
+              </Button>
+              <Button
+                onClick={handleCreateTimeEntry}
+                disabled={!newTimeEntry.employee_id || !newTimeEntry.hours || !newTimeEntry.date}
+              >
+                {t('log_time') || 'Log Time'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Expense Dialog */}
+        <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t('add_expense') || 'Add Expense'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('category') || 'Category'}</Label>
+                  <Select
+                    value={newExpense.category}
+                    onValueChange={(value) => setNewExpense({ ...newExpense, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_category') || 'Select category'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="travel">{t('travel') || 'Travel'}</SelectItem>
+                      <SelectItem value="materials">{t('materials') || 'Materials'}</SelectItem>
+                      <SelectItem value="equipment">{t('equipment') || 'Equipment'}</SelectItem>
+                      <SelectItem value="software">{t('software') || 'Software'}</SelectItem>
+                      <SelectItem value="services">{t('services') || 'Services'}</SelectItem>
+                      <SelectItem value="other">{t('other') || 'Other'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('date') || 'Date'} *</Label>
+                  <Input
+                    type="date"
+                    value={newExpense.expense_date}
+                    onChange={(e) => setNewExpense({ ...newExpense, expense_date: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>{t('description') || 'Description'} *</Label>
+                <Input
+                  value={newExpense.description}
+                  onChange={(e) => setNewExpense({ ...newExpense, description: e.target.value })}
+                  placeholder={t('expense_description') || 'What was this expense for?'}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('amount') || 'Amount'} *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newExpense.amount}
+                    onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label>{t('vendor') || 'Vendor'}</Label>
+                  <Select
+                    value={newExpense.vendor_id}
+                    onValueChange={(value) => {
+                      const vendor = vendors.find(v => v.id === value);
+                      setNewExpense({
+                        ...newExpense,
+                        vendor_id: value,
+                        vendor_name: vendor?.name || ''
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_vendor') || 'Select vendor'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.map((vendor) => (
+                        <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>{t('employee') || 'Employee'}</Label>
+                <Select
+                  value={newExpense.employee_id}
+                  onValueChange={(value) => {
+                    const emp = employees.find(e => e.id === value);
+                    setNewExpense({
+                      ...newExpense,
+                      employee_id: value,
+                      employee_name: emp?.name || ''
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_employee') || 'Select employee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{t('notes') || 'Notes'}</Label>
+                <Textarea
+                  value={newExpense.notes}
+                  onChange={(e) => setNewExpense({ ...newExpense, notes: e.target.value })}
+                  placeholder={t('additional_notes') || 'Additional notes'}
+                  rows={2}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="expense_billable"
+                  checked={newExpense.billable}
+                  onChange={(e) => setNewExpense({ ...newExpense, billable: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="expense_billable">{t('billable_to_client') || 'Billable to client'}</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowExpenseDialog(false)}>
+                {t('cancel') || 'Cancel'}
+              </Button>
+              <Button
+                onClick={handleCreateExpense}
+                disabled={!newExpense.description || !newExpense.amount || !newExpense.expense_date}
+              >
+                {t('add_expense') || 'Add Expense'}
               </Button>
             </DialogFooter>
           </DialogContent>
