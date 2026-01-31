@@ -6,29 +6,87 @@ export const procurementService = {
     const response = await apiClient.get('/contacts', {
       params: { ...params, type: 'vendor' }
     });
-    return response.data.data;
+    // Convert backend fields to frontend format
+    const suppliers = response.data.data || [];
+    return suppliers.map(supplier => ({
+      ...supplier,
+      payment_terms: this._paymentTermsToString(supplier.payment_terms),
+      categories: supplier.tags || [],
+      status: supplier.is_active ? 'active' : 'inactive',
+    }));
   },
 
   async getSupplier(id) {
     const response = await apiClient.get(`/contacts/${id}`);
-    return response.data.data;
+    const supplier = response.data.data;
+    return {
+      ...supplier,
+      payment_terms: this._paymentTermsToString(supplier.payment_terms),
+      categories: supplier.tags || [],
+      status: supplier.is_active ? 'active' : 'inactive',
+    };
+  },
+
+  // Helper to convert payment terms integer to string
+  _paymentTermsToString(days) {
+    if (days === 0) return 'prepaid';
+    if (days === 15) return 'net_15';
+    if (days === 30) return 'net_30';
+    if (days === 60) return 'net_60';
+    if (days === 90) return 'net_90';
+    return 'net_30'; // default
   },
 
   async createSupplier(data) {
     // Backend expects 'type' not 'contact_type', and 'name' is required
     // Backend requires 'code' with validation - generate if not provided
+    // Convert payment_terms string to integer days
+    const paymentTermsMap = {
+      'prepaid': 0,
+      'due_on_receipt': 0,
+      'net_15': 15,
+      'net_30': 30,
+      'net_60': 60,
+      'net_90': 90,
+    };
     const payload = {
       ...data,
       type: 'vendor',
       name: data.name,
       code: data.code || `VEN-${Date.now()}`,
+      payment_terms: paymentTermsMap[data.payment_terms] || parseInt(data.payment_terms) || 30,
+      tags: data.categories || data.tags || [],
+      is_active: data.status === 'active',
     };
+    // Remove frontend-only fields
+    delete payload.categories;
+    delete payload.currency;
+    delete payload.status;
     const response = await apiClient.post('/contacts', payload);
     return response.data.data;
   },
 
   async updateSupplier(id, data) {
-    const response = await apiClient.put(`/contacts/${id}`, data);
+    // Convert payment_terms string to integer days
+    const paymentTermsMap = {
+      'prepaid': 0,
+      'due_on_receipt': 0,
+      'net_15': 15,
+      'net_30': 30,
+      'net_60': 60,
+      'net_90': 90,
+    };
+    const payload = {
+      ...data,
+      payment_terms: paymentTermsMap[data.payment_terms] || parseInt(data.payment_terms) || 30,
+      tags: data.categories || data.tags || [],
+      is_active: data.status === 'active',
+    };
+    // Remove frontend-only fields
+    delete payload.categories;
+    delete payload.currency;
+    delete payload.status;
+    const response = await apiClient.put(`/contacts/${id}`, payload);
     return response.data.data;
   },
 
@@ -279,6 +337,31 @@ export const procurementService = {
   async cancelReturn(id) {
     const response = await apiClient.post(`/purchase-returns/${id}/cancel`);
     return response.data.data;
+  },
+
+  // Price History
+  async listPriceHistory(params = {}) {
+    const response = await apiClient.get('/price-history', { params });
+    return response.data.data;
+  },
+
+  async listPriceHistoryGrouped(params = {}) {
+    const response = await apiClient.get('/price-history', { params: { ...params, grouped: true } });
+    return response.data.data;
+  },
+
+  async getPriceHistory(id) {
+    const response = await apiClient.get(`/price-history/${id}`);
+    return response.data.data;
+  },
+
+  async createPriceHistory(data) {
+    const response = await apiClient.post('/price-history', data);
+    return response.data.data;
+  },
+
+  async deletePriceHistory(id) {
+    await apiClient.delete(`/price-history/${id}`);
   },
 };
 

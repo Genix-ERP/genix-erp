@@ -4,6 +4,7 @@ import { useAuth } from '@/components/contexts/AuthContext';
 import { useSubscription } from '@/components/contexts/SubscriptionContext';
 import apiClient from '@/api/client';
 import { SendEmail } from '@/api/integrations';
+import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import PermissionsManagement from '@/components/admin/PermissionsManagement';
 export default function AdminPanel() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { toast } = useToast();
   const { user: currentUser, isSiteAdmin } = useAuth();
   const {
     companyUsers,
@@ -185,17 +187,27 @@ export default function AdminPanel() {
     if (!selectedUser) return;
 
     try {
-      const result = deleteCompanyUser(selectedUser.id);
-      if (result.success) {
-        alert(`✅ Foydalanuvchi ${selectedUser.email} o'chirildi.`);
-        setShowDeleteModal(false);
-        setSelectedUser(null);
-      } else {
-        alert(`❌ Xatolik: ${result.message || 'O\'chirishda xatolik'}`);
-      }
+      // Call backend API to delete user
+      await apiClient.delete(`/admin/users/${selectedUser.id}`);
+
+      // Remove user from local state
+      setUsers(prev => prev.filter(u => u.id !== selectedUser.id));
+      setFilteredUsers(prev => prev.filter(u => u.id !== selectedUser.id));
+
+      toast({
+        title: t('success'),
+        description: t('user_deleted_successfully') || `${selectedUser.email} ${t('deleted')}`,
+      });
+
+      setShowDeleteModal(false);
+      setSelectedUser(null);
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert(`❌ Xatolik: ${error.message}`);
+      toast({
+        variant: "destructive",
+        title: t('error'),
+        description: error.response?.data?.error?.message || error.message || t('delete_failed'),
+      });
     }
   };
 
@@ -212,16 +224,27 @@ export default function AdminPanel() {
       });
 
       if (result.success) {
-        alert(`✅ Foydalanuvchi ${selectedUser.email} ${isBlocking ? 'bloklandi' : 'blokdan chiqarildi'}.`);
+        toast({
+          title: t('success'),
+          description: `${selectedUser.email} ${isBlocking ? t('user_blocked') : t('user_unblocked')}`,
+        });
         setShowBlockModal(false);
         setSelectedUser(null);
         setBlockData({ reason: '', notify_user: true });
       } else {
-        alert(`❌ Xatolik: ${result.message}`);
+        toast({
+          variant: "destructive",
+          title: t('error'),
+          description: result.message || t('operation_failed'),
+        });
       }
     } catch (error) {
       console.error('Error updating user status:', error);
-      alert(`❌ Xatolik: ${error.message}`);
+      toast({
+        variant: "destructive",
+        title: t('error'),
+        description: error.message || t('operation_failed'),
+      });
     }
   };
 

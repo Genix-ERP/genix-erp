@@ -1742,11 +1742,12 @@ export function InventoryProvider({ children }) {
   // Legacy compatibility - items mapped to products with stock info
   const items = products.map(p => {
     const stockItems = inventory.filter(i => i.product_id === p.id);
-    const totalStock = stockItems.reduce((sum, i) => sum + i.quantity, 0);
+    // Handle both backend (quantity_on_hand) and localStorage (quantity) field names
+    const totalStock = stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
     return {
       ...p,
       current_stock: totalStock,
-      status: totalStock === 0 ? 'out_of_stock' : totalStock <= p.min_stock_level ? 'low_stock' : 'active'
+      status: totalStock === 0 ? 'out_of_stock' : totalStock <= (p.min_stock_level || 0) ? 'low_stock' : 'active'
     };
   });
 

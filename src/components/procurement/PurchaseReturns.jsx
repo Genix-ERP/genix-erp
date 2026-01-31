@@ -27,6 +27,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { procurementService } from "@/api/services/procurement";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -52,7 +53,7 @@ const reasonLabels = {
 export default function PurchaseReturns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { orders, suppliers } = useProcurement();
+  const { purchaseOrders = [], suppliers } = useProcurement();
   const { canCreate } = usePermissions();
 
   const [returns, setReturns] = useState([]);
@@ -85,18 +86,24 @@ export default function PurchaseReturns() {
     credit_date: new Date().toISOString().split('T')[0],
   });
 
-  // Load from localStorage
+  const [loading, setLoading] = useState(false);
+
+  // Load returns from API
   useEffect(() => {
-    const stored = localStorage.getItem('demo_purchase_returns');
-    if (stored) {
-      setReturns(JSON.parse(stored));
-    }
+    loadReturns();
   }, []);
 
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('demo_purchase_returns', JSON.stringify(returns));
-  }, [returns]);
+  const loadReturns = async () => {
+    setLoading(true);
+    try {
+      const data = await procurementService.listReturns();
+      setReturns(data || []);
+    } catch (error) {
+      console.error('Failed to load purchase returns:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter returns
   useEffect(() => {
@@ -114,34 +121,66 @@ export default function PurchaseReturns() {
     setFilteredReturns(filtered);
   }, [returns, searchQuery, statusFilter]);
 
-  // Get receivable POs (completed or with goods received)
-  const returnablePOs = (orders || []).filter(po => po.status === 'completed' || po.status === 'partial' || po.status === 'received');
+  // Get receivable POs (received or confirmed - items that have been delivered can be returned)
+  const returnablePOs = purchaseOrders.filter(po =>
+    po.status === 'received' || po.status === 'confirmed' || po.status === 'partial'
+  );
 
-  const handleSelectPO = (poId) => {
-    if (!orders || !Array.isArray(orders)) return;
-    const po = orders.find(o => o.id === poId);
-    if (po) {
-      const supplier = suppliers?.find(s => s.id === po.supplier_id);
+  const handleSelectPO = async (poId) => {
+    if (!purchaseOrders || !Array.isArray(purchaseOrders)) return;
+
+    // First set basic info from the list
+    const poFromList = purchaseOrders.find(o => o.id === poId);
+    if (!poFromList) return;
+
+    // Fetch full PO details including lines from API
+    try {
+      const po = await procurementService.getOrder(poId);
+      const supplier = suppliers?.find(s => s.id === po.supplier_id || s.id === po.vendor_id);
+      // Backend uses 'lines', frontend may use 'items' - handle both
+      const poLines = po.lines || po.items || [];
+
       setNewReturn({
         ...newReturn,
         po_id: poId,
-        po_number: po.po_number,
-        supplier_id: po.supplier_id,
+        po_number: po.po_number || po.order_number,
+        supplier_id: po.supplier_id || po.vendor_id,
         supplier_name: po.vendor_name || po.supplier_name || supplier?.name,
-        lines: (po.items || []).map(item => ({
+        lines: poLines.map(item => ({
           product_id: item.product_id || item.id,
-          product_name: item.product_name || item.name,
+          product_name: item.product_name || item.description || item.name,
           original_quantity: item.quantity,
           return_quantity: 0,
           unit_price: item.price || item.unit_price || 0,
-          unit: item.unit || 'pcs',
+          unit: item.unit || item.unit_name || 'pcs',
+          return_reason: 'defective',
+        })),
+      });
+    } catch (error) {
+      console.error('Failed to fetch PO details:', error);
+      // Fallback to list data
+      const supplier = suppliers?.find(s => s.id === poFromList.supplier_id || s.id === poFromList.vendor_id);
+      const poLines = poFromList.lines || poFromList.items || [];
+      setNewReturn({
+        ...newReturn,
+        po_id: poId,
+        po_number: poFromList.po_number || poFromList.order_number,
+        supplier_id: poFromList.supplier_id || poFromList.vendor_id,
+        supplier_name: poFromList.vendor_name || poFromList.supplier_name || supplier?.name,
+        lines: poLines.map(item => ({
+          product_id: item.product_id || item.id,
+          product_name: item.product_name || item.description || item.name,
+          original_quantity: item.quantity,
+          return_quantity: 0,
+          unit_price: item.price || item.unit_price || 0,
+          unit: item.unit || item.unit_name || 'pcs',
           return_reason: 'defective',
         })),
       });
     }
   };
 
-  const handleCreateReturn = () => {
+  const handleCreateReturn = async () => {
     if (!newReturn.po_id) return;
 
     const validLines = newReturn.lines.filter(l => l.return_quantity > 0);
@@ -150,111 +189,148 @@ export default function PurchaseReturns() {
       return;
     }
 
-    const totalAmount = validLines.reduce((sum, line) => sum + (line.return_quantity * line.unit_price), 0);
+    try {
+      const payload = {
+        supplier_id: newReturn.supplier_id,
+        purchase_order_id: newReturn.po_id,
+        return_reason: newReturn.return_reason,
+        notes: newReturn.notes,
+        lines: validLines.map(line => ({
+          product_id: line.product_id,
+          product_name: line.product_name,
+          return_quantity: line.return_quantity,
+          unit: line.unit,
+          unit_price: line.unit_price,
+          return_reason: line.return_reason,
+        })),
+      };
 
-    const returnDoc = {
-      id: Date.now().toString(),
-      return_number: `RET-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(returns.length + 1).padStart(4, '0')}`,
-      ...newReturn,
-      lines: validLines,
-      return_date: new Date().toISOString().split('T')[0],
-      total_amount: totalAmount,
-      status: 'draft',
-      created_at: new Date().toISOString(),
-    };
-
-    setReturns(prev => [returnDoc, ...prev]);
-    setShowCreateModal(false);
-    setNewReturn({
-      po_id: '',
-      supplier_id: '',
-      return_reason: 'defective',
-      notes: '',
-      lines: [],
-    });
+      const created = await procurementService.createReturn(payload);
+      setReturns(prev => [created, ...prev]);
+      setShowCreateModal(false);
+      setNewReturn({
+        po_id: '',
+        supplier_id: '',
+        return_reason: 'defective',
+        notes: '',
+        lines: [],
+      });
+    } catch (error) {
+      console.error('Failed to create purchase return:', error);
+      alert(t('failed_to_create_return') || 'Failed to create return: ' + (error.response?.data?.message || error.message));
+    }
   };
 
-  const handleSubmitReturn = (ret) => {
-    setReturns(prev => prev.map(r =>
-      r.id === ret.id ? { ...r, status: 'pending_approval', submitted_at: new Date().toISOString() } : r
-    ));
+  const handleSubmitReturn = async (ret) => {
+    try {
+      const updated = await procurementService.submitReturn(ret.id);
+      setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
+    } catch (error) {
+      console.error('Failed to submit return:', error);
+      alert(t('failed_to_submit') || 'Failed to submit return');
+    }
   };
 
-  const handleApproveReturn = (ret) => {
-    setReturns(prev => prev.map(r =>
-      r.id === ret.id ? { ...r, status: 'approved', approved_at: new Date().toISOString() } : r
-    ));
+  const handleApproveReturn = async (ret) => {
+    try {
+      const updated = await procurementService.approveReturn(ret.id, {});
+      setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
+    } catch (error) {
+      console.error('Failed to approve return:', error);
+      alert(t('failed_to_approve') || 'Failed to approve return');
+    }
   };
 
-  const handleRejectReturn = (ret) => {
+  const handleRejectReturn = async (ret) => {
     const reason = prompt(t('enter_rejection_reason') || 'Enter rejection reason:');
     if (reason) {
-      setReturns(prev => prev.map(r =>
-        r.id === ret.id ? { ...r, status: 'rejected', rejection_reason: reason, rejected_at: new Date().toISOString() } : r
-      ));
+      try {
+        const updated = await procurementService.rejectReturn(ret.id, { reason });
+        setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
+      } catch (error) {
+        console.error('Failed to reject return:', error);
+        alert(t('failed_to_reject') || 'Failed to reject return');
+      }
     }
   };
 
-  const handleShipReturn = () => {
+  const handleShipReturn = async () => {
     if (!selectedReturn || !shipData.carrier) return;
 
-    setReturns(prev => prev.map(r =>
-      r.id === selectedReturn.id
-        ? { ...r, status: 'shipped', ...shipData, shipped_at: new Date().toISOString() }
-        : r
-    ));
-
-    setShowShipModal(false);
-    setSelectedReturn(null);
-    setShipData({
-      carrier: '',
-      tracking_number: '',
-      shipped_date: new Date().toISOString().split('T')[0],
-    });
-  };
-
-  const handleReceiveReturn = (ret) => {
-    setReturns(prev => prev.map(r =>
-      r.id === ret.id ? { ...r, status: 'received', received_at: new Date().toISOString() } : r
-    ));
-  };
-
-  const handleApplyCredit = () => {
-    if (!selectedReturn || !creditData.credit_note_number) return;
-
-    setReturns(prev => prev.map(r =>
-      r.id === selectedReturn.id
-        ? {
-          ...r,
-          status: 'credited',
-          credit_note_number: creditData.credit_note_number,
-          credit_amount: creditData.credit_amount || r.total_amount,
-          credit_date: creditData.credit_date,
-          credited_at: new Date().toISOString(),
-        }
-        : r
-    ));
-
-    setShowCreditModal(false);
-    setSelectedReturn(null);
-    setCreditData({
-      credit_note_number: '',
-      credit_amount: 0,
-      credit_date: new Date().toISOString().split('T')[0],
-    });
-  };
-
-  const handleCancelReturn = (ret) => {
-    if (confirm(t('confirm_cancel_return') || 'Are you sure you want to cancel this return?')) {
-      setReturns(prev => prev.map(r =>
-        r.id === ret.id ? { ...r, status: 'cancelled', cancelled_at: new Date().toISOString() } : r
-      ));
+    try {
+      const updated = await procurementService.shipReturn(selectedReturn.id, {
+        shipping_method: shipData.carrier,
+        tracking_number: shipData.tracking_number,
+        shipped_date: shipData.shipped_date,
+      });
+      setReturns(prev => prev.map(r => r.id === selectedReturn.id ? updated : r));
+      setShowShipModal(false);
+      setSelectedReturn(null);
+      setShipData({
+        carrier: '',
+        tracking_number: '',
+        shipped_date: new Date().toISOString().split('T')[0],
+      });
+    } catch (error) {
+      console.error('Failed to ship return:', error);
+      alert(t('failed_to_ship') || 'Failed to ship return: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleDeleteReturn = (ret) => {
+  const handleReceiveReturn = async (ret) => {
+    try {
+      const updated = await procurementService.receiveReturn(ret.id, {});
+      setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
+    } catch (error) {
+      console.error('Failed to receive return:', error);
+      alert(t('failed_to_receive') || 'Failed to mark return as received');
+    }
+  };
+
+  const handleApplyCredit = async () => {
+    if (!selectedReturn || !creditData.credit_note_number) return;
+
+    try {
+      const updated = await procurementService.applyCreditNote(selectedReturn.id, {
+        credit_note_number: creditData.credit_note_number,
+        credit_amount: creditData.credit_amount || selectedReturn.total_value,
+        credit_note_date: creditData.credit_date,
+      });
+      setReturns(prev => prev.map(r => r.id === selectedReturn.id ? updated : r));
+      setShowCreditModal(false);
+      setSelectedReturn(null);
+      setCreditData({
+        credit_note_number: '',
+        credit_amount: 0,
+        credit_date: new Date().toISOString().split('T')[0],
+      });
+    } catch (error) {
+      console.error('Failed to apply credit:', error);
+      alert(t('failed_to_apply_credit') || 'Failed to apply credit note');
+    }
+  };
+
+  const handleCancelReturn = async (ret) => {
+    if (confirm(t('confirm_cancel_return') || 'Are you sure you want to cancel this return?')) {
+      try {
+        const updated = await procurementService.cancelReturn(ret.id);
+        setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
+      } catch (error) {
+        console.error('Failed to cancel return:', error);
+        alert(t('failed_to_cancel') || 'Failed to cancel return');
+      }
+    }
+  };
+
+  const handleDeleteReturn = async (ret) => {
     if (confirm(t('confirm_delete_return') || 'Are you sure you want to delete this return?')) {
-      setReturns(prev => prev.filter(r => r.id !== ret.id));
+      try {
+        await procurementService.deleteReturn(ret.id);
+        setReturns(prev => prev.filter(r => r.id !== ret.id));
+      } catch (error) {
+        console.error('Failed to delete return:', error);
+        alert(t('failed_to_delete') || 'Failed to delete return');
+      }
     }
   };
 
@@ -333,7 +409,12 @@ export default function PurchaseReturns() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {filteredReturns.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <RotateCcw className="w-16 h-16 text-slate-300 mx-auto mb-4 animate-spin" />
+            <p className="text-slate-500">{t('loading') || 'Loading...'}</p>
+          </div>
+        ) : filteredReturns.length === 0 ? (
           <div className="text-center py-16">
             <RotateCcw className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_returns_yet') || 'No returns yet'}</p>
@@ -368,7 +449,7 @@ export default function PurchaseReturns() {
                       {ret.return_date ? format(new Date(ret.return_date), 'dd.MM.yyyy') : '-'}
                     </TableCell>
                     <TableCell>{getReasonLabel(ret.return_reason)}</TableCell>
-                    <TableCell className="font-semibold">{(ret.total_amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="font-semibold">{(ret.total_value || ret.total_amount || 0).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge className={statusColors[ret.status]}>{getStatusLabel(ret.status)}</Badge>
                     </TableCell>
@@ -408,7 +489,7 @@ export default function PurchaseReturns() {
                           </Button>
                         )}
                         {ret.status === 'received' && (
-                          <Button size="sm" variant="ghost" onClick={() => { setSelectedReturn(ret); setCreditData({ ...creditData, credit_amount: ret.total_amount }); setShowCreditModal(true); }} title={t('apply_credit') || 'Apply Credit'}>
+                          <Button size="sm" variant="ghost" onClick={() => { setSelectedReturn(ret); setCreditData({ ...creditData, credit_amount: ret.total_value || ret.total_amount }); setShowCreditModal(true); }} title={t('apply_credit') || 'Apply Credit'}>
                             <CreditCard className="w-4 h-4 text-emerald-500" />
                           </Button>
                         )}
@@ -569,11 +650,23 @@ export default function PurchaseReturns() {
 
             <div>
               <label className="text-sm font-medium mb-1 block">{t('carrier') || 'Carrier'} *</label>
-              <Input
-                value={shipData.carrier}
-                onChange={(e) => setShipData({ ...shipData, carrier: e.target.value })}
-                placeholder={t('carrier_name') || 'e.g., DHL, FedEx, UPS'}
-              />
+              <Select value={shipData.carrier} onValueChange={(v) => setShipData({ ...shipData, carrier: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_carrier') || 'Select Carrier'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DHL">DHL</SelectItem>
+                  <SelectItem value="FedEx">FedEx</SelectItem>
+                  <SelectItem value="UPS">UPS</SelectItem>
+                  <SelectItem value="USPS">USPS</SelectItem>
+                  <SelectItem value="TNT">TNT</SelectItem>
+                  <SelectItem value="DPD">DPD</SelectItem>
+                  <SelectItem value="Aramex">Aramex</SelectItem>
+                  <SelectItem value="Local Courier">{t('local_courier') || 'Local Courier'}</SelectItem>
+                  <SelectItem value="Self Delivery">{t('self_delivery') || 'Self Delivery'}</SelectItem>
+                  <SelectItem value="Other">{t('other') || 'Other'}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -699,7 +792,7 @@ export default function PurchaseReturns() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('total_amount') || 'Total Amount'}</p>
-                  <p className="font-bold text-lg">{(selectedReturn.total_amount || 0).toLocaleString()}</p>
+                  <p className="font-bold text-lg">{(selectedReturn.total_value || selectedReturn.total_amount || 0).toLocaleString()}</p>
                 </div>
               </div>
 

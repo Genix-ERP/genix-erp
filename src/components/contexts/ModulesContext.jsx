@@ -104,7 +104,14 @@ export function ModulesProvider({ children }) {
       setEmployees(empData?.items || empData || []);
       setPurchaseOrders(poData?.items || poData || []);
       setSalesOrders(soData?.items || soData || []);
-      setProjects(projectsData?.items || projectsData || []);
+      // Map backend project fields to frontend expected fields
+      const rawProjects = projectsData?.items || projectsData || [];
+      const mappedProjects = rawProjects.map(p => ({
+        ...p,
+        project_name: p.name || p.project_name,
+        progress_percentage: p.progress || p.progress_percentage || 0
+      }));
+      setProjects(mappedProjects);
       // Map backend contract fields to frontend expected fields
       const rawContracts = contractsData?.items || contractsData || [];
       const mappedContracts = rawContracts.map(c => ({
@@ -116,9 +123,47 @@ export function ModulesProvider({ children }) {
         auto_renew: c.auto_renewal || c.auto_renew || false,
       }));
       setContracts(mappedContracts);
-      setExpenses(expensesData?.items || expensesData || []);
-      setAssets(assetsData?.items || assetsData || []);
-      setPayrolls(payrollsData?.items || payrollsData || []);
+      // Map backend expense fields to frontend expected fields
+      // Backend returns: date (not expense_date), expense_number, category (not category_name)
+      const rawExpenses = expensesData?.items || expensesData || [];
+      const mappedExpenses = rawExpenses.map(e => ({
+        ...e,
+        claim_number: e.expense_number || e.claim_number,
+        expense_date: e.date || e.expense_date || e.claim_date, // Backend returns 'date'
+        claim_date: e.date || e.expense_date || e.claim_date,
+        category: e.category || e.category_name || 'other', // Backend returns 'category'
+      }));
+      setExpenses(mappedExpenses);
+      // Map backend asset fields to frontend expected fields
+      const rawAssets = assetsData?.items || assetsData || [];
+      const mappedAssets = rawAssets.map(a => ({
+        ...a,
+        asset_name: a.name || a.asset_name,
+        asset_code: a.code || a.asset_code,
+        asset_category: a.category_name || a.category || a.asset_category || 'equipment',
+        purchase_date: a.acquisition_date || a.purchase_date,
+        purchase_cost: a.acquisition_cost || a.purchase_cost || 0,
+        useful_life_years: a.useful_life_months ? Math.round(a.useful_life_months / 12) : (a.useful_life_years || 5),
+        salvage_value: a.salvage_value || 0,
+        current_value: a.current_value || a.acquisition_cost || a.purchase_cost || 0,
+      }));
+      setAssets(mappedAssets);
+      // Map backend payroll period fields to frontend expected fields
+      const rawPayrolls = payrollsData?.items || payrollsData || [];
+      const mappedPayrolls = rawPayrolls.map(p => ({
+        ...p,
+        payroll_number: p.period_code || p.payroll_number,
+        period_name: p.period_name,
+        employee_name: p.employee_name || (p.employee_count > 1 ? `${p.employee_count} employees` : p.period_name),
+        employee_count: p.employee_count || 0,
+        pay_period_start: p.start_date || p.pay_period_start,
+        pay_period_end: p.end_date || p.pay_period_end,
+        payment_date: p.pay_date || p.payment_date,
+        gross_pay: p.total_gross || p.gross_pay || 0,
+        net_pay: p.total_net || p.net_pay || 0,
+        deductions: p.total_deductions || p.deductions || 0,
+      }));
+      setPayrolls(mappedPayrolls);
 
     } catch (err) {
       console.error('Error loading module data:', err);
@@ -230,7 +275,9 @@ export function ModulesProvider({ children }) {
     if (result && result.data) {
       const mappedResult = {
         ...result.data,
-        project_name: result.data.name
+        project_name: result.data.name || result.data.project_name,
+        client_name: result.data.client_name || data.client_name,
+        progress_percentage: result.data.progress || 0
       };
       setProjects(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -248,13 +295,15 @@ export function ModulesProvider({ children }) {
       budget: data.budget,
       billing_type: data.billing_type,
       priority: data.priority,
-      status: data.status
+      status: data.status,
+      progress: data.progress_percentage !== undefined ? data.progress_percentage : data.progress
     };
     const result = await projectsService.updateProject(id, apiData);
     if (result && result.data) {
       const mappedResult = {
         ...result.data,
-        project_name: result.data.name
+        project_name: result.data.name || result.data.project_name,
+        progress_percentage: result.data.progress
       };
       setProjects(prev => prev.map(p => p.id === id ? mappedResult : p));
       return mappedResult;
@@ -357,13 +406,14 @@ export function ModulesProvider({ children }) {
   const createExpense = useCallback(async (data) => {
     const apiData = {
       date: data.expense_date || data.claim_date || data.date,
-      description: data.description,
+      description: data.description || 'Expense', // Default description if empty
       amount: data.amount || 0,
       tax_amount: data.tax_amount || 0,
       currency: data.currency || 'UZS',
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
+      category: data.category, // Send category name to backend
       payment_method: data.payment_method,
       reference: data.reference || data.claim_number,
       reimbursable: data.reimbursable || false,
@@ -374,8 +424,9 @@ export function ModulesProvider({ children }) {
       const mappedResult = {
         ...result,
         claim_number: result.expense_number,
-        claim_date: result.expense_date,
-        category: result.category_name
+        expense_date: result.date || result.expense_date,
+        claim_date: result.date || result.expense_date,
+        category: result.category || result.category_name || data.category || 'other',
       };
       setExpenses(prev => [mappedResult, ...prev]);
       return mappedResult;
@@ -393,6 +444,7 @@ export function ModulesProvider({ children }) {
       employee_name: data.employee_name,
       vendor_name: data.vendor_name,
       category_id: data.category_id,
+      category: data.category, // Send category name to backend
       payment_method: data.payment_method,
       reference: data.reference,
       reimbursable: data.reimbursable,
@@ -404,8 +456,9 @@ export function ModulesProvider({ children }) {
       const mappedResult = {
         ...result,
         claim_number: result.expense_number,
-        claim_date: result.expense_date,
-        category: result.category_name
+        expense_date: result.date || result.expense_date,
+        claim_date: result.date || result.expense_date,
+        category: result.category || result.category_name || data.category || 'other',
       };
       setExpenses(prev => prev.map(e => e.id === id ? mappedResult : e));
       return mappedResult;
@@ -428,8 +481,10 @@ export function ModulesProvider({ children }) {
   }, []);
 
   // Payroll CRUD (maps to payroll periods in backend) - API only
+  // Creates a payroll period and optionally adds an entry for the employee
   const createPayroll = useCallback(async (data) => {
-    const apiData = {
+    // First create the payroll period
+    const periodData = {
       period_code: data.payroll_number,
       period_name: data.period_name || `Payroll ${data.pay_period_start} - ${data.pay_period_end}`,
       start_date: data.pay_period_start,
@@ -437,17 +492,46 @@ export function ModulesProvider({ children }) {
       pay_date: data.payment_date,
       notes: data.notes
     };
-    const result = await hrService.createPayrollPeriod(apiData);
-    if (result && result.id) {
+    const periodResult = await hrService.createPayrollPeriod(periodData);
+
+    if (periodResult && periodResult.id) {
+      // If employee salary data is provided, create a payroll entry
+      if (data.employee_id && data.basic_salary > 0) {
+        try {
+          await hrService.createPayrollEntry(periodResult.id, {
+            employee_id: data.employee_id,
+            base_salary: data.basic_salary || 0,
+            overtime_hours: data.overtime_hours || 0,
+            overtime_amount: data.overtime_pay || 0,
+            bonus: data.bonuses || 0,
+            allowances: data.allowances || 0,
+            gross_salary: data.gross_pay || 0,
+            income_tax: data.tax_deduction || 0,
+            social_security: data.social_security || 0,
+            pension: 0,
+            other_deductions: data.other_deductions || 0,
+            total_deductions: data.total_deductions || 0,
+            net_salary: data.net_pay || 0,
+            payment_method: data.payment_method || 'bank_transfer',
+            status: 'calculated'
+          });
+        } catch (entryError) {
+          console.warn('Failed to create payroll entry:', entryError);
+        }
+      }
+
       const mappedResult = {
-        ...result,
-        payroll_number: result.period_code,
-        pay_period_start: result.start_date,
-        pay_period_end: result.end_date,
-        payment_date: result.pay_date,
-        gross_pay: result.total_gross,
-        total_deductions: result.total_deductions,
-        net_pay: result.total_net
+        ...periodResult,
+        payroll_number: periodResult.period_code,
+        period_name: periodResult.period_name,
+        employee_name: data.employee_name || periodResult.period_name, // Store employee name for display
+        pay_period_start: periodResult.start_date,
+        pay_period_end: periodResult.end_date,
+        payment_date: periodResult.pay_date,
+        gross_pay: data.gross_pay || periodResult.total_gross || 0,
+        total_deductions: data.total_deductions || periodResult.total_deductions || 0,
+        net_pay: data.net_pay || periodResult.total_net || 0,
+        employee_count: data.employee_id ? 1 : (periodResult.employee_count || 0)
       };
       setPayrolls(prev => [mappedResult, ...prev]);
       return mappedResult;

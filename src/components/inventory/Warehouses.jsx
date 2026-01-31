@@ -134,7 +134,7 @@ export default function Warehouses() {
     totalWarehouses: warehouses.length,
     activeWarehouses: warehouses.filter(w => w.is_active).length,
     totalLocations: warehouses.reduce((sum, w) => sum + (w.locations?.length || 0), 0),
-    totalStock: inventory.reduce((sum, i) => sum + (i.quantity || 0), 0)
+    totalStock: inventory.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0)
   };
 
   useEffect(() => {
@@ -158,7 +158,7 @@ export default function Warehouses() {
   const getWarehouseStockCount = (warehouseId) => {
     return inventory
       .filter(i => i.warehouse_id === warehouseId)
-      .reduce((sum, i) => sum + (i.quantity || 0), 0);
+      .reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   const resetForm = () => {

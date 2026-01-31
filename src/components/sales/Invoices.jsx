@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { inventoryService } from "@/api/services/inventory";
 
 export default function Invoices() {
   const { language } = useLanguage();
@@ -64,6 +65,7 @@ export default function Invoices() {
 
   const {
     invoices,
+    getInvoice,
     createInvoice,
     updateInvoice,
     deleteInvoice,
@@ -74,8 +76,22 @@ export default function Invoices() {
   const { customers } = useCustomers();
   const { canCreate } = usePermissions();
 
+  const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Load products on mount
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await inventoryService.listProducts();
+        setProducts(data || []);
+      } catch (error) {
+        console.error('Failed to load products:', error);
+      }
+    };
+    loadProducts();
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -89,7 +105,7 @@ export default function Invoices() {
     customer_name: "",
     invoice_date: new Date().toISOString().split("T")[0],
     due_date: "",
-    items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+    items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     discount_amount: 0,
     tax_percent: 12,
     notes: "",
@@ -113,16 +129,24 @@ export default function Invoices() {
   }, [invoices, searchQuery, statusFilter]);
 
   const stats = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const total = invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const paid = invoices
       .filter((inv) => inv.payment_status === "paid")
       .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
     const outstanding = invoices
       .filter((inv) => inv.payment_status !== "paid")
-      .reduce((sum, inv) => sum + (inv.balance || 0), 0);
+      .reduce((sum, inv) => sum + (inv.balance || inv.amount_due || 0), 0);
     const overdue = invoices
-      .filter((inv) => inv.payment_status !== "paid" && new Date(inv.due_date) < new Date())
-      .reduce((sum, inv) => sum + (inv.balance || 0), 0);
+      .filter((inv) => {
+        if (inv.payment_status === "paid") return false;
+        const dueDate = new Date(inv.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate < today; // Only overdue if BEFORE today
+      })
+      .reduce((sum, inv) => sum + (inv.balance || inv.amount_due || 0), 0);
     return { total, paid, outstanding, overdue };
   }, [invoices]);
 
@@ -140,7 +164,7 @@ export default function Invoices() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { product_name: "", quantity: 1, unit_price: 0 }],
+      items: [...formData.items, { product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     });
   };
 
@@ -151,8 +175,22 @@ export default function Invoices() {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
-    newItems[index][field] = field === "product_name" ? value : parseFloat(value) || 0;
+    newItems[index][field] = field === "product_name" || field === "product_id" ? value : parseFloat(value) || 0;
     setFormData({ ...formData, items: newItems });
+  };
+
+  const handleProductSelect = (index, productId) => {
+    const product = products.find((p) => p.id === productId);
+    if (product) {
+      const newItems = [...formData.items];
+      newItems[index] = {
+        ...newItems[index],
+        product_id: productId,
+        product_name: product.name,
+        unit_price: product.list_price || product.price || 0,
+      };
+      setFormData({ ...formData, items: newItems });
+    }
   };
 
   const handleCustomerSelect = (customerId) => {
@@ -173,21 +211,26 @@ export default function Invoices() {
       formData.tax_percent
     );
 
+    // Backend expects 'lines' not 'items', and 'description' is required
     const data = {
-      ...formData,
-      items: formData.items.map((item) => ({
-        ...item,
-        total: item.quantity * item.unit_price,
+      customer_id: formData.customer_id,
+      invoice_date: formData.invoice_date,
+      due_date: formData.due_date,
+      notes: formData.notes,
+      lines: formData.items.map((item) => ({
+        product_id: item.product_id,
+        description: item.product_name || "Product",
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_amount: 0,
       })),
-      subtotal,
-      tax_amount: taxAmount,
-      total_amount: total,
     };
 
     if (editMode && selectedInvoice) {
       await updateInvoice(selectedInvoice.id, data);
     } else {
-      await createInvoice(data);
+      // Pass customer_name so it appears immediately in the list
+      await createInvoice(data, formData.customer_name);
     }
     resetForm();
   };
@@ -201,32 +244,70 @@ export default function Invoices() {
       customer_name: "",
       invoice_date: new Date().toISOString().split("T")[0],
       due_date: "",
-      items: [{ product_name: "", quantity: 1, unit_price: 0 }],
+      items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_amount: 0,
       tax_percent: 12,
       notes: "",
     });
   };
 
-  const handleEdit = (invoice) => {
-    setSelectedInvoice(invoice);
-    setFormData({
-      customer_id: invoice.customer_id || "",
-      customer_name: invoice.customer_name || "",
-      invoice_date: invoice.invoice_date || "",
-      due_date: invoice.due_date || "",
-      items: invoice.items || [{ product_name: "", quantity: 1, unit_price: 0 }],
-      discount_amount: invoice.discount_amount || 0,
-      tax_percent: invoice.tax_percent || 12,
-      notes: invoice.notes || "",
-    });
-    setEditMode(true);
-    setShowForm(true);
+  const handleEdit = async (invoice) => {
+    try {
+      // Fetch full invoice details with lines
+      const fullInvoice = await getInvoice(invoice.id);
+      setSelectedInvoice(fullInvoice);
+
+      // Convert lines to items format for the form
+      const items = (fullInvoice.lines || fullInvoice.items || []).map(line => ({
+        product_id: line.product_id || "",
+        product_name: line.description || line.product_name || "",
+        quantity: line.quantity || 1,
+        unit_price: line.unit_price || 0,
+      }));
+
+      setFormData({
+        customer_id: fullInvoice.customer_id || "",
+        customer_name: fullInvoice.customer_name || "",
+        invoice_date: fullInvoice.invoice_date || "",
+        due_date: fullInvoice.due_date || "",
+        items: items.length > 0 ? items : [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
+        discount_amount: fullInvoice.discount_amount || 0,
+        tax_percent: fullInvoice.tax_percent || 12,
+        notes: fullInvoice.notes || "",
+      });
+      setEditMode(true);
+      setShowForm(true);
+    } catch (error) {
+      console.error('Failed to fetch invoice for editing:', error);
+      // Fallback to list data
+      setSelectedInvoice(invoice);
+      setFormData({
+        customer_id: invoice.customer_id || "",
+        customer_name: invoice.customer_name || "",
+        invoice_date: invoice.invoice_date || "",
+        due_date: invoice.due_date || "",
+        items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
+        discount_amount: invoice.discount_amount || 0,
+        tax_percent: invoice.tax_percent || 12,
+        notes: invoice.notes || "",
+      });
+      setEditMode(true);
+      setShowForm(true);
+    }
   };
 
-  const handleView = (invoice) => {
-    setSelectedInvoice(invoice);
-    setShowDetails(true);
+  const handleView = async (invoice) => {
+    try {
+      // Fetch full invoice details with lines
+      const fullInvoice = await getInvoice(invoice.id);
+      setSelectedInvoice(fullInvoice);
+      setShowDetails(true);
+    } catch (error) {
+      console.error('Failed to fetch invoice details:', error);
+      // Fallback to list data if fetch fails
+      setSelectedInvoice(invoice);
+      setShowDetails(true);
+    }
   };
 
   const handleSend = async (invoice) => {
@@ -286,7 +367,13 @@ export default function Invoices() {
     if (invoice.payment_status === "paid") {
       return getStatusBadge("paid");
     }
-    if (new Date(invoice.due_date) < new Date()) {
+    // Only mark as overdue if due date is BEFORE today (not including today)
+    const dueDate = new Date(invoice.due_date);
+    const today = new Date();
+    // Set both to start of day for accurate comparison
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    if (dueDate < today) {
       return getStatusBadge("overdue");
     }
     return getStatusBadge(invoice.payment_status);
@@ -480,10 +567,10 @@ export default function Invoices() {
                         <TableCell className="text-right">
                           <span
                             className={`font-medium ${
-                              invoice.balance > 0 ? "text-red-600" : "text-green-600"
+                              (invoice.balance || invoice.amount_due || 0) > 0 ? "text-red-600" : "text-green-600"
                             }`}
                           >
-                            {formatCurrency(invoice.balance)}
+                            {formatCurrency(invoice.balance || invoice.amount_due || 0)}
                           </span>
                         </TableCell>
                         <TableCell>{getPaymentStatusBadge(invoice)}</TableCell>
@@ -617,13 +704,21 @@ export default function Invoices() {
                     {formData.items.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell>
-                          <Input
-                            value={item.product_name}
-                            onChange={(e) =>
-                              handleItemChange(index, "product_name", e.target.value)
-                            }
-                            placeholder={t('product_name')}
-                          />
+                          <Select
+                            value={item.product_id}
+                            onValueChange={(value) => handleProductSelect(index, value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('select_product')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Input
@@ -911,15 +1006,15 @@ export default function Invoices() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedInvoice.items?.map((item, index) => (
+                    {(selectedInvoice.lines || selectedInvoice.items || []).map((line, index) => (
                       <TableRow key={index}>
-                        <TableCell>{item.product_name}</TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell>{line.description || line.product_name}</TableCell>
+                        <TableCell className="text-center">{line.quantity}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.unit_price)}
+                          {formatCurrency(line.unit_price)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.total)}
+                          {formatCurrency(line.line_total || line.total)}
                         </TableCell>
                       </TableRow>
                     ))}
