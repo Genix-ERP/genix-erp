@@ -34,7 +34,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import InventoryForm from "@/components/inventory/InventoryForm";
-import InventoryInsights from "@/components/inventory/InventoryInsights";
 import COGSCalculator from "@/components/inventory/COGSCalculator";
 import StockMovementTracker from "@/components/inventory/StockMovementTracker";
 import CompliancePanel from "@/components/inventory/CompliancePanel";
@@ -54,7 +53,6 @@ import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
-import { analyzeInventory } from "@/api/services/aiAnalytics";
 
 export default function Inventory() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -78,7 +76,6 @@ export default function Inventory() {
   const [costingFilter, setCostingFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [insights, setInsights] = useState(null);
   const [compliance, setCompliance] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -92,66 +89,6 @@ export default function Inventory() {
 
   // Get summary from context
   const summary = getInventorySummary();
-
-  // Generate AI-powered insights based on current data
-  // Note: t is not in deps to avoid infinite loop (it's a new function each render)
-  const generateInsights = useCallback(() => {
-    // For empty inventory, show getting started tips
-    if (items.length === 0) {
-      setInsights([
-        {
-          title: t('welcome_to_inventory') || 'Welcome to Inventory',
-          description: t('start_by_adding_products') || 'Start by adding your first products to the inventory system.',
-          recommendation: t('go_to_products_tab') || 'Go to Products tab and click "Add Product"',
-          financial_impact: t('track_inventory_value') || 'Track your inventory value',
-          priority: 'info',
-          action_required: t('get_started') || 'Get Started'
-        },
-        {
-          title: t('setup_warehouses') || 'Set Up Warehouses',
-          description: t('configure_storage_locations') || 'Configure your storage locations and warehouse structure.',
-          recommendation: t('create_warehouse') || 'Create your first warehouse',
-          financial_impact: t('organize_inventory') || 'Organize inventory efficiently',
-          priority: 'info',
-          action_required: t('configure') || 'Configure'
-        },
-        {
-          title: t('best_practices') || 'Inventory Best Practices',
-          description: t('fifo_recommended') || 'FIFO (First In, First Out) is recommended for most businesses.',
-          recommendation: t('learn_costing_methods') || 'Learn about costing methods',
-          financial_impact: t('compliance_ready') || 'Stay IFRS compliant',
-          priority: 'info',
-          action_required: t('learn_more') || 'Learn More'
-        }
-      ]);
-      return;
-    }
-
-    const analysis = analyzeInventory(items, stockMovements, language);
-
-    // Convert AI analytics insights to the expected format
-    const aiInsights = analysis.insights.map(insight => ({
-      title: insight.title,
-      description: insight.description,
-      recommendation: insight.items ? `${t('items')}: ${insight.items.slice(0, 3).join(', ')}${insight.items.length > 3 ? '...' : ''}` : t('review_and_take_action'),
-      financial_impact: insight.metric || t('see_details'),
-      priority: insight.priority,
-      action_required: insight.type === 'warning' || insight.type === 'negative' ? t('immediate_action_required') : t('monitor_regularly')
-    }));
-
-    // Add recommendations as insights
-    const recInsights = analysis.recommendations.map(rec => ({
-      title: rec.action,
-      description: rec.description,
-      recommendation: rec.action,
-      financial_impact: `${t('impact')}: ${rec.impact}`,
-      priority: rec.impact === 'high' ? 'high' : 'medium',
-      action_required: rec.action
-    }));
-
-    setInsights([...aiInsights, ...recInsights].slice(0, 6));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, stockMovements, language]);
 
   // Generate static compliance check
   // Note: t is not in deps to avoid infinite loop (it's a new function each render)
@@ -235,11 +172,10 @@ export default function Inventory() {
   }, [items, searchQuery, categoryFilter, statusFilter, costingFilter]);
 
   useEffect(() => {
-    // Always generate compliance and insights - even for empty inventory
+    // Always generate compliance - even for empty inventory
     // This ensures new tenants see helpful information
-    generateInsights();
     checkCompliance();
-  }, [items, generateInsights, checkCompliance]);
+  }, [items, checkCompliance]);
 
   useEffect(() => {
     filterItems();
@@ -277,19 +213,27 @@ export default function Inventory() {
   };
 
   const calculateMetrics = () => {
-    const totalValue = items.reduce((sum, item) => sum + (item.current_stock * (item.unit_cost || item.cost_price || 0)), 0);
-    const lowStockItems = items.filter(item => item.current_stock <= (item.reorder_level || item.min_stock_level || 10));
+    const totalValue = items.reduce((sum, item) => {
+      const stock = parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0;
+      const cost = parseFloat(item.cost_price) || parseFloat(item.unit_cost) || parseFloat(item.price) || 0;
+      return sum + (stock * cost);
+    }, 0);
+    const lowStockItems = items.filter(item => {
+      const stock = parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0;
+      const reorderLevel = parseFloat(item.reorder_level) || parseFloat(item.min_stock_level) || 10;
+      return stock > 0 && stock <= reorderLevel;
+    });
     const deadStockItems = items.filter(item => item.status === 'dead_stock');
     const expiringItems = items.filter(item =>
       item.expiration_date && new Date(item.expiration_date) < new Date(Date.now() + 30*24*60*60*1000)
     );
 
     return {
-      totalValue,
+      totalValue: isNaN(totalValue) ? 0 : totalValue,
       lowStockCount: lowStockItems.length,
       deadStockCount: deadStockItems.length,
       expiringCount: expiringItems.length,
-      totalItems: items.reduce((sum, item) => sum + item.current_stock, 0),
+      totalItems: items.reduce((sum, item) => sum + (parseFloat(item.current_stock) || parseFloat(item.quantity_on_hand) || parseFloat(item.quantity) || 0), 0),
       totalSKUs: items.length,
       fifoItems: items.filter(item => item.costing_method === 'fifo').length,
       wacItems: items.filter(item => item.costing_method === 'weighted_average').length,
@@ -427,51 +371,59 @@ export default function Inventory() {
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="mt-6 space-y-6">
             {/* Metrics Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
+                <CardContent className="p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">{t('total_value')}</p>
-                      <p className="text-lg font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
+                      <p className="text-sm text-slate-500 mb-1">{t('total_value')}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
                     </div>
-                    <TrendingUp className="w-6 h-6 text-green-600" />
+                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
+                <CardContent className="p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">{t('low_stock')}</p>
-                      <p className="text-lg font-bold text-orange-600">{metrics.lowStockCount}</p>
+                      <p className="text-sm text-slate-500 mb-1">{t('low_stock')}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-orange-600">{metrics.lowStockCount}</p>
                     </div>
-                    <AlertTriangle className="w-6 h-6 text-orange-600" />
+                    <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+                      <AlertTriangle className="w-6 h-6 text-orange-600" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
+                <CardContent className="p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">{t('products')}</p>
-                      <p className="text-lg font-bold text-blue-600">{products?.length || 0}</p>
+                      <p className="text-sm text-slate-500 mb-1">{t('products')}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-blue-600">{products?.length || 0}</p>
                     </div>
-                    <Package className="w-6 h-6 text-blue-600" />
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                      <Package className="w-6 h-6 text-blue-600" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardContent className="p-4">
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
+                <CardContent className="p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">{t('warehouses')}</p>
-                      <p className="text-lg font-bold text-purple-600">{warehouses?.length || 0}</p>
+                      <p className="text-sm text-slate-500 mb-1">{t('warehouses')}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-purple-600">{warehouses?.length || 0}</p>
                     </div>
-                    <Warehouse className="w-6 h-6 text-purple-600" />
+                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                      <Warehouse className="w-6 h-6 text-purple-600" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -480,9 +432,6 @@ export default function Inventory() {
 
             {/* Compliance Panel */}
             {compliance && <CompliancePanel compliance={compliance} />}
-
-            {/* AI Insights */}
-            {insights && <InventoryInsights insights={insights} />}
           </TabsContent>
 
           {/* Products Tab */}

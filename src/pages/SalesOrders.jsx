@@ -65,7 +65,9 @@ export default function SalesOrders() {
     isLoading: salesLoading,
     confirmSalesOrder,
     createInvoiceFromOrder,
-    refreshData: refreshSalesData
+    refreshData: refreshSalesData,
+    applyDiscount,
+    useDiscountCode,
   } = useSales();
 
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -205,8 +207,16 @@ export default function SalesOrders() {
     tax_percent: 0,
     tax_amount: 0,
     shipping_cost: 0,
-    total_amount: 0
+    total_amount: 0,
+    discount_code: '',
+    discount_id: '',
+    discount_name: '',
+    discount_type: '',
+    discount_value: 0,
+    max_discount_amount: null,
   });
+  const [discountCodeInput, setDiscountCodeInput] = useState('');
+  const [discountValidation, setDiscountValidation] = useState({ valid: false, message: '' });
   const [editingOrder, setEditingOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -353,12 +363,95 @@ export default function SalesOrders() {
     setOrder({ ...order, lines: newLines });
   };
 
+  // Calculate discount amount based on subtotal and discount settings
+  const calculateDiscountAmount = (subtotal, discount) => {
+    if (!discount) return 0;
+
+    let discountAmount = 0;
+    if (discount.discount_type === 'percentage') {
+      discountAmount = (subtotal * discount.discount_value) / 100;
+    } else {
+      discountAmount = discount.discount_value;
+    }
+
+    // Apply max discount cap
+    if (discount.max_discount_amount && discountAmount > discount.max_discount_amount) {
+      discountAmount = discount.max_discount_amount;
+    }
+
+    // Don't discount more than the subtotal
+    if (discountAmount > subtotal) {
+      discountAmount = subtotal;
+    }
+
+    return discountAmount;
+  };
+
+  // Handle applying discount code
+  const handleApplyDiscount = () => {
+    if (!discountCodeInput.trim()) {
+      setDiscountValidation({ valid: false, message: t('enter_discount_code') || 'Please enter a discount code' });
+      return;
+    }
+
+    const subtotal = calculateOrderTotals(newOrder.lines);
+    const result = applyDiscount(discountCodeInput.trim(), subtotal, false);
+
+    if (result.valid) {
+      // Store the discount details, not just the calculated amount
+      setNewOrder({
+        ...newOrder,
+        discount_code: discountCodeInput.trim(),
+        discount_id: result.discount.id,
+        discount_name: result.discount.name,
+        discount_type: result.discount.discount_type,
+        discount_value: result.discount.discount_value,
+        max_discount_amount: result.discount.max_discount_amount || null,
+      });
+      setDiscountValidation({ valid: true, message: result.message });
+    } else {
+      setDiscountValidation({ valid: false, message: t(result.messageKey) || 'Invalid discount code' });
+      setNewOrder({
+        ...newOrder,
+        discount_code: '',
+        discount_id: '',
+        discount_name: '',
+        discount_type: '',
+        discount_value: 0,
+        max_discount_amount: null,
+      });
+    }
+  };
+
+  // Handle removing discount
+  const handleRemoveDiscount = () => {
+    setNewOrder({
+      ...newOrder,
+      discount_code: '',
+      discount_id: '',
+      discount_name: '',
+      discount_type: '',
+      discount_value: 0,
+      max_discount_amount: null,
+    });
+    setDiscountCodeInput('');
+    setDiscountValidation({ valid: false, message: '' });
+  };
+
   const handleCreateOrder = async () => {
     const subtotal = calculateOrderTotals(newOrder.lines);
     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
     const taxAmount = subtotal * (taxPercent / 100);
     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
-    const total = subtotal + taxAmount + shippingCost;
+
+    // Calculate discount dynamically based on current subtotal
+    const discountAmount = newOrder.discount_id ? calculateDiscountAmount(subtotal, {
+      discount_type: newOrder.discount_type,
+      discount_value: newOrder.discount_value,
+      max_discount_amount: newOrder.max_discount_amount,
+    }) : 0;
+
+    const total = subtotal + taxAmount + shippingCost - discountAmount;
 
     // Filter and format lines - only include lines with valid product_id
     const validLines = newOrder.lines
@@ -391,6 +484,8 @@ export default function SalesOrders() {
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
       shipping_cost: shippingCost,
+      discount_amount: discountAmount,
+      discount_code: newOrder.discount_code || undefined,
       total_amount: total,
       status: 'draft',
       payment_status: 'unpaid',
@@ -400,9 +495,26 @@ export default function SalesOrders() {
     console.log('Creating sales order with data:', orderData);
 
     try {
-      await createSalesOrder(orderData);
+      const createdOrder = await createSalesOrder(orderData);
+
+      // Record discount usage if discount was applied
+      if (newOrder.discount_id && discountAmount > 0) {
+        try {
+          await useDiscountCode(
+            newOrder.discount_id,
+            newOrder.customer_id || null,
+            createdOrder?.id || null,
+            discountAmount
+          );
+        } catch (discountError) {
+          console.error('Error recording discount usage:', discountError);
+        }
+      }
+
       setShowCreateModal(false);
       resetOrderForm();
+      setDiscountCodeInput('');
+      setDiscountValidation({ valid: false, message: '' });
       addAuditLog('create', 'new', orderData.order_number || `SO-${Date.now()}`);
     } catch (error) {
       console.error('Error creating sales order:', error);
@@ -489,10 +601,18 @@ export default function SalesOrders() {
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
       tax_percent: 0,
+      discount_code: '',
+      discount_id: '',
+      discount_name: '',
+      discount_type: '',
+      discount_value: 0,
+      max_discount_amount: null,
       tax_amount: 0,
       shipping_cost: 0,
       total_amount: 0
     });
+    setDiscountCodeInput('');
+    setDiscountValidation({ valid: false, message: '' });
     setIsDeliveryDateManual(false);
   };
 
@@ -1375,6 +1495,53 @@ export default function SalesOrders() {
                 </div>
               </div>
 
+              {/* Discount Code */}
+              <div className="border-t pt-4">
+                <Label>{t('discount_code') || 'Discount Code'}</Label>
+                <div className="flex gap-2 mt-1">
+                  {!newOrder.discount_id ? (
+                    <>
+                      <Input
+                        placeholder={t('enter_code') || 'Enter discount code'}
+                        value={discountCodeInput}
+                        onChange={(e) => setDiscountCodeInput(e.target.value.toUpperCase())}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleApplyDiscount}
+                        disabled={!discountCodeInput.trim()}
+                      >
+                        {t('apply') || 'Apply'}
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between w-full p-2 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-green-600" />
+                        <span className="font-medium text-green-700">{newOrder.discount_code}</span>
+                        <span className="text-green-600">- {newOrder.discount_name}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveDiscount}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {discountValidation.message && !newOrder.discount_id && (
+                  <p className={`text-sm mt-1 ${discountValidation.valid ? 'text-green-600' : 'text-red-600'}`}>
+                    {discountValidation.message}
+                  </p>
+                )}
+              </div>
+
               {/* Totals */}
               <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                 <div className="space-y-2">
@@ -1383,13 +1550,24 @@ export default function SalesOrders() {
                     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
                     const taxAmount = subtotal * (taxPercent / 100);
                     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
-                    const total = subtotal + taxAmount + shippingCost;
+                    const discountAmount = newOrder.discount_id ? calculateDiscountAmount(subtotal, {
+                      discount_type: newOrder.discount_type,
+                      discount_value: newOrder.discount_value,
+                      max_discount_amount: newOrder.max_discount_amount,
+                    }) : 0;
+                    const total = subtotal + taxAmount + shippingCost - discountAmount;
                     return (
                       <>
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-600">{t('subtotal')}:</span>
                           <span className="font-medium">{formatCurrency(subtotal)}</span>
                         </div>
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between text-sm text-green-600">
+                            <span>{t('discount')} ({newOrder.discount_code}):</span>
+                            <span className="font-medium">-{formatCurrency(discountAmount)}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-600">{t('tax')}:</span>
                           <span className="font-medium">{formatCurrency(taxAmount)}</span>

@@ -182,6 +182,41 @@ export const salesService = {
     const response = await apiClient.post(`/sales-returns/${id}/refund`, data);
     return response.data.data;
   },
+
+  // Discounts
+  async listDiscounts(params = {}) {
+    const response = await apiClient.get('/discounts', { params });
+    return response.data.data;
+  },
+
+  async getDiscount(id) {
+    const response = await apiClient.get(`/discounts/${id}`);
+    return response.data.data;
+  },
+
+  async createDiscount(data) {
+    const response = await apiClient.post('/discounts', data);
+    return response.data.data;
+  },
+
+  async updateDiscount(id, data) {
+    const response = await apiClient.put(`/discounts/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteDiscount(id) {
+    await apiClient.delete(`/discounts/${id}`);
+  },
+
+  async validateDiscountCode(data) {
+    const response = await apiClient.post('/discounts/validate', data);
+    return response.data.data;
+  },
+
+  async useDiscountCode(id, data) {
+    const response = await apiClient.post(`/discounts/${id}/use`, data);
+    return response.data.data;
+  },
 };
 
 export default salesService;

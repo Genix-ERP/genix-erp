@@ -83,10 +83,10 @@ export default function Discounts() {
   const [formData, setFormData] = useState({
     code: "",
     name: "",
-    type: "percentage",
-    value: 0,
+    discount_type: "percentage",
+    discount_value: 0,
     min_order_amount: 0,
-    max_discount: 0,
+    max_discount_amount: null,
     valid_from: new Date().toISOString().split("T")[0],
     valid_until: "",
     usage_limit: null,
@@ -152,10 +152,10 @@ export default function Discounts() {
     setFormData({
       code: "",
       name: "",
-      type: "percentage",
-      value: 0,
+      discount_type: "percentage",
+      discount_value: 0,
       min_order_amount: 0,
-      max_discount: 0,
+      max_discount_amount: null,
       valid_from: new Date().toISOString().split("T")[0],
       valid_until: "",
       usage_limit: null,
@@ -168,10 +168,10 @@ export default function Discounts() {
     setFormData({
       code: discount.code || "",
       name: discount.name || "",
-      type: discount.type || "percentage",
-      value: discount.value || 0,
+      discount_type: discount.discount_type || "percentage",
+      discount_value: discount.discount_value || 0,
       min_order_amount: discount.min_order_amount || 0,
-      max_discount: discount.max_discount || 0,
+      max_discount_amount: discount.max_discount_amount || null,
       valid_from: discount.valid_from || "",
       valid_until: discount.valid_until || "",
       usage_limit: discount.usage_limit || null,
@@ -437,12 +437,12 @@ export default function Discounts() {
                         <TableCell>
                           <span className="font-medium">{discount.name}</span>
                         </TableCell>
-                        <TableCell>{getTypeBadge(discount.type)}</TableCell>
+                        <TableCell>{getTypeBadge(discount.discount_type)}</TableCell>
                         <TableCell>
                           <span className="font-semibold">
-                            {discount.type === "percentage"
-                              ? `${discount.value}%`
-                              : formatCurrency(discount.value)}
+                            {discount.discount_type === "percentage"
+                              ? `${discount.discount_value}%`
+                              : formatCurrency(discount.discount_value)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -567,15 +567,15 @@ export default function Discounts() {
               <div className="space-y-2">
                 <Label>{t('type')}</Label>
                 <Select
-                  value={formData.type}
-                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                  value={formData.discount_type}
+                  onValueChange={(value) => setFormData({ ...formData, discount_type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="percentage">{t('percentage')} (%)</SelectItem>
-                    <SelectItem value="fixed">{t('fixed_amount')}</SelectItem>
+                    <SelectItem value="fixed_amount">{t('fixed_amount')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -584,9 +584,9 @@ export default function Discounts() {
                 <Input
                   type="number"
                   min="0"
-                  value={formData.value}
+                  value={formData.discount_value}
                   onChange={(e) =>
-                    setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })
+                    setFormData({ ...formData, discount_value: parseFloat(e.target.value) || 0 })
                   }
                 />
               </div>
@@ -612,11 +612,11 @@ export default function Discounts() {
                 <Input
                   type="number"
                   min="0"
-                  value={formData.max_discount}
+                  value={formData.max_discount_amount || ''}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      max_discount: parseFloat(e.target.value) || 0,
+                      max_discount_amount: e.target.value ? parseFloat(e.target.value) : null,
                     })
                   }
                 />
@@ -811,15 +811,15 @@ export default function Discounts() {
                 <div>
                   <span className="text-slate-500">{t('type')}:</span>
                   <p className="font-medium mt-1">
-                    {getTypeBadge(selectedDiscount.type)}
+                    {getTypeBadge(selectedDiscount.discount_type)}
                   </p>
                 </div>
                 <div>
                   <span className="text-slate-500">{t('value')}:</span>
                   <p className="font-semibold text-lg mt-1">
-                    {selectedDiscount.type === "percentage"
-                      ? `${selectedDiscount.value}%`
-                      : formatCurrency(selectedDiscount.value)}
+                    {selectedDiscount.discount_type === "percentage"
+                      ? `${selectedDiscount.discount_value}%`
+                      : formatCurrency(selectedDiscount.discount_value)}
                   </p>
                 </div>
               </div>
@@ -834,8 +834,8 @@ export default function Discounts() {
                 <div>
                   <span className="text-slate-500">{t('max_discount')}:</span>
                   <p className="font-medium">
-                    {selectedDiscount.max_discount > 0
-                      ? formatCurrency(selectedDiscount.max_discount)
+                    {selectedDiscount.max_discount_amount > 0
+                      ? formatCurrency(selectedDiscount.max_discount_amount)
                       : t('unlimited')}
                   </p>
                 </div>
