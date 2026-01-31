@@ -297,6 +297,18 @@ export default function Customers() {
                       <SelectItem value="services">{t('services')}</SelectItem>
                     </SelectContent>
                   </Select>
+                  {canCreate(MODULES.CUSTOMERS) && (
+                    <Button
+                      onClick={() => {
+                        setEditingCustomer(null);
+                        setShowForm(true);
+                      }}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      {t('add_customer') || t('add')}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

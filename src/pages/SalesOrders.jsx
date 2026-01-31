@@ -30,6 +30,7 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
 import { inventoryService } from '@/api/services/inventory';
+import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -226,6 +227,9 @@ export default function SalesOrders() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
 
+  // Product variants
+  const [productVariants, setProductVariants] = useState({}); // { productId: variants[] }
+
   // Warehouses list for selection
   const [warehouses, setWarehouses] = useState([]);
 
@@ -334,6 +338,17 @@ export default function SalesOrders() {
     }
   };
 
+  // Fetch variants for a product
+  const fetchProductVariants = useCallback(async (productId) => {
+    if (!productId || productVariants[productId]) return;
+    try {
+      const response = await apiClient.get('/product-variants', { params: { product_id: productId } });
+      setProductVariants(prev => ({ ...prev, [productId]: response.data?.data || [] }));
+    } catch (error) {
+      console.error('Failed to fetch variants:', error);
+    }
+  }, [productVariants]);
+
   const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
     const newLines = [...order.lines];
     newLines[index] = { ...newLines[index], [field]: value };
@@ -348,8 +363,15 @@ export default function SalesOrders() {
           product_id: selectedProduct.id,
           unit_price: selectedProduct.list_price || selectedProduct.cost_price || 0,
           lead_time_days: selectedProduct.lead_time_days || 0,
-          product: selectedProduct
+          product: selectedProduct,
+          variant_id: null, // Reset variant when product changes
+          variant_name: null
         };
+
+        // Fetch variants if product has variants
+        if (selectedProduct.has_variants) {
+          fetchProductVariants(selectedProduct.id);
+        }
 
         // Recalculate delivery date if not manually set
         if (!isManualDelivery) {
@@ -357,6 +379,21 @@ export default function SalesOrders() {
           setOrder({ ...order, lines: newLines, delivery_date: newDeliveryDate });
           return;
         }
+      }
+    }
+
+    // If changing variant selection
+    if (field === 'variant_id' && value) {
+      const productId = newLines[index].product_id;
+      const variants = productVariants[productId] || [];
+      const selectedVariant = variants.find(v => v.id === value);
+      if (selectedVariant) {
+        newLines[index] = {
+          ...newLines[index],
+          variant_id: selectedVariant.id,
+          variant_name: selectedVariant.variant_name,
+          unit_price: selectedVariant.list_price || newLines[index].unit_price
+        };
       }
     }
 
@@ -1415,61 +1452,91 @@ export default function SalesOrders() {
                   </Button>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {newOrder.lines.map((line, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
-                      <div className="col-span-4">
-                        <Select
-                          value={line.product_id || ''}
-                          onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('select_product')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                  {newOrder.lines.map((line, index) => {
+                    const selectedProduct = products.find(p => p.id === line.product_id);
+                    const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                    return (
+                    <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
+                      <div className="grid grid-cols-12 gap-2 items-start">
+                        <div className={hasVariants ? "col-span-3" : "col-span-4"}>
+                          <Select
+                            value={line.product_id || ''}
+                            onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('select_product')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {hasVariants && (
+                          <div className="col-span-2">
+                            <Select
+                              value={line.variant_id || ''}
+                              onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'variant_id', value, isDeliveryDateManual)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('select_variant') || 'Variant'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {productVariants[line.product_id]?.map((variant) => (
+                                  <SelectItem key={variant.id} value={variant.id}>
+                                    {variant.variant_name || variant.display_name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            placeholder={t('quantity')}
+                            value={line.quantity}
+                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            placeholder={t('price')}
+                            value={line.unit_price}
+                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
+                          />
+                        </div>
+                        <div className={hasVariants ? "col-span-2" : "col-span-3"}>
+                          <Input
+                            placeholder={t('description')}
+                            value={line.description}
+                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value, isDeliveryDateManual)}
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveLine(newOrder, setNewOrder, index, isDeliveryDateManual)}
+                            disabled={newOrder.lines.length === 1}
+                            className="text-red-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          placeholder={t('quantity')}
-                          value={line.quantity}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          placeholder={t('price')}
-                          value={line.unit_price}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <Input
-                          placeholder={t('description')}
-                          value={line.description}
-                          onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value, isDeliveryDateManual)}
-                        />
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleRemoveLine(newOrder, setNewOrder, index, isDeliveryDateManual)}
-                          disabled={newOrder.lines.length === 1}
-                          className="text-red-600"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      {line.variant_name && (
+                        <div className="text-xs text-slate-500 pl-1">
+                          {t('variant')}: {line.variant_name}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
