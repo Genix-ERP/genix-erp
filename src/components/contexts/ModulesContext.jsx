@@ -134,8 +134,36 @@ export function ModulesProvider({ children }) {
         category: e.category || e.category_name || 'other', // Backend returns 'category'
       }));
       setExpenses(mappedExpenses);
-      setAssets(assetsData?.items || assetsData || []);
-      setPayrolls(payrollsData?.items || payrollsData || []);
+      // Map backend asset fields to frontend expected fields
+      const rawAssets = assetsData?.items || assetsData || [];
+      const mappedAssets = rawAssets.map(a => ({
+        ...a,
+        asset_name: a.name || a.asset_name,
+        asset_code: a.code || a.asset_code,
+        asset_category: a.category_name || a.category || a.asset_category || 'equipment',
+        purchase_date: a.acquisition_date || a.purchase_date,
+        purchase_cost: a.acquisition_cost || a.purchase_cost || 0,
+        useful_life_years: a.useful_life_months ? Math.round(a.useful_life_months / 12) : (a.useful_life_years || 5),
+        salvage_value: a.salvage_value || 0,
+        current_value: a.current_value || a.acquisition_cost || a.purchase_cost || 0,
+      }));
+      setAssets(mappedAssets);
+      // Map backend payroll period fields to frontend expected fields
+      const rawPayrolls = payrollsData?.items || payrollsData || [];
+      const mappedPayrolls = rawPayrolls.map(p => ({
+        ...p,
+        payroll_number: p.period_code || p.payroll_number,
+        period_name: p.period_name,
+        employee_name: p.employee_name || (p.employee_count > 1 ? `${p.employee_count} employees` : p.period_name),
+        employee_count: p.employee_count || 0,
+        pay_period_start: p.start_date || p.pay_period_start,
+        pay_period_end: p.end_date || p.pay_period_end,
+        payment_date: p.pay_date || p.payment_date,
+        gross_pay: p.total_gross || p.gross_pay || 0,
+        net_pay: p.total_net || p.net_pay || 0,
+        deductions: p.total_deductions || p.deductions || 0,
+      }));
+      setPayrolls(mappedPayrolls);
 
     } catch (err) {
       console.error('Error loading module data:', err);
@@ -453,8 +481,10 @@ export function ModulesProvider({ children }) {
   }, []);
 
   // Payroll CRUD (maps to payroll periods in backend) - API only
+  // Creates a payroll period and optionally adds an entry for the employee
   const createPayroll = useCallback(async (data) => {
-    const apiData = {
+    // First create the payroll period
+    const periodData = {
       period_code: data.payroll_number,
       period_name: data.period_name || `Payroll ${data.pay_period_start} - ${data.pay_period_end}`,
       start_date: data.pay_period_start,
@@ -462,17 +492,46 @@ export function ModulesProvider({ children }) {
       pay_date: data.payment_date,
       notes: data.notes
     };
-    const result = await hrService.createPayrollPeriod(apiData);
-    if (result && result.id) {
+    const periodResult = await hrService.createPayrollPeriod(periodData);
+
+    if (periodResult && periodResult.id) {
+      // If employee salary data is provided, create a payroll entry
+      if (data.employee_id && data.basic_salary > 0) {
+        try {
+          await hrService.createPayrollEntry(periodResult.id, {
+            employee_id: data.employee_id,
+            base_salary: data.basic_salary || 0,
+            overtime_hours: data.overtime_hours || 0,
+            overtime_amount: data.overtime_pay || 0,
+            bonus: data.bonuses || 0,
+            allowances: data.allowances || 0,
+            gross_salary: data.gross_pay || 0,
+            income_tax: data.tax_deduction || 0,
+            social_security: data.social_security || 0,
+            pension: 0,
+            other_deductions: data.other_deductions || 0,
+            total_deductions: data.total_deductions || 0,
+            net_salary: data.net_pay || 0,
+            payment_method: data.payment_method || 'bank_transfer',
+            status: 'calculated'
+          });
+        } catch (entryError) {
+          console.warn('Failed to create payroll entry:', entryError);
+        }
+      }
+
       const mappedResult = {
-        ...result,
-        payroll_number: result.period_code,
-        pay_period_start: result.start_date,
-        pay_period_end: result.end_date,
-        payment_date: result.pay_date,
-        gross_pay: result.total_gross,
-        total_deductions: result.total_deductions,
-        net_pay: result.total_net
+        ...periodResult,
+        payroll_number: periodResult.period_code,
+        period_name: periodResult.period_name,
+        employee_name: data.employee_name || periodResult.period_name, // Store employee name for display
+        pay_period_start: periodResult.start_date,
+        pay_period_end: periodResult.end_date,
+        payment_date: periodResult.pay_date,
+        gross_pay: data.gross_pay || periodResult.total_gross || 0,
+        total_deductions: data.total_deductions || periodResult.total_deductions || 0,
+        net_pay: data.net_pay || periodResult.total_net || 0,
+        employee_count: data.employee_id ? 1 : (periodResult.employee_count || 0)
       };
       setPayrolls(prev => [mappedResult, ...prev]);
       return mappedResult;

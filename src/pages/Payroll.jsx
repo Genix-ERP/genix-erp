@@ -36,6 +36,7 @@ export default function Payroll() {
 
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
+    employee_id: '',
     employee_name: '',
     pay_period_start: '',
     pay_period_end: '',
@@ -120,6 +121,7 @@ export default function Payroll() {
 
     setNewPayroll({
       payroll_number: '',
+      employee_id: '',
       employee_name: '',
       pay_period_start: '',
       pay_period_end: '',
@@ -450,17 +452,7 @@ export default function Payroll() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder={t('all_employees')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all_employees')}</SelectItem>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.full_name}>{emp.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+{/* Employee filter removed - showing payroll periods, not individual entries */}
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
@@ -507,7 +499,7 @@ export default function Payroll() {
                       {filteredPayrolls.map((payroll) => (
                         <TableRow key={payroll.id} className="hover:bg-slate-50">
                           <TableCell className="font-mono text-sm">{payroll.payroll_number}</TableCell>
-                          <TableCell className="font-medium">{payroll.employee_name}</TableCell>
+                          <TableCell className="font-medium">{payroll.employee_name || payroll.period_name}</TableCell>
                           <TableCell className="text-sm">
                             {payroll.pay_period_start && payroll.pay_period_end ?
                               `${format(new Date(payroll.pay_period_start), 'dd.MM')} - ${format(new Date(payroll.pay_period_end), 'dd.MM')}`
@@ -600,8 +592,9 @@ export default function Payroll() {
                     const selectedEmployee = employees.find(emp => emp.full_name === value);
                     setNewPayroll({
                       ...newPayroll,
+                      employee_id: selectedEmployee?.id,
                       employee_name: value,
-                      basic_salary: selectedEmployee?.salary || 0
+                      basic_salary: selectedEmployee?.salary || selectedEmployee?.base_salary || 0
                     });
                   }}>
                     <SelectTrigger>

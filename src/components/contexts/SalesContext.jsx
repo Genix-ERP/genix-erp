@@ -50,16 +50,18 @@ export function SalesProvider({ children }) {
     setIsLoading(true);
     setError(null);
     try {
-      const [quotationsData, ordersData, invoicesData, returnsData] = await Promise.all([
+      const [quotationsData, ordersData, invoicesData, returnsData, discountsData] = await Promise.all([
         salesService.listQuotations(),
         salesService.listOrders(),
         salesService.listInvoices(),
         salesService.listReturns(),
+        salesService.listDiscounts(),
       ]);
       setQuotations(quotationsData || []);
       setSalesOrders(ordersData || []);
       setInvoices(invoicesData || []);
       setReturns(returnsData || []);
+      setDiscounts(discountsData || []);
     } catch (err) {
       console.error('Error loading sales data:', err);
       setError(err.message);
@@ -67,6 +69,7 @@ export function SalesProvider({ children }) {
       setSalesOrders([]);
       setInvoices([]);
       setReturns([]);
+      setDiscounts([]);
     } finally {
       setIsLoading(false);
     }
@@ -214,25 +217,36 @@ export function SalesProvider({ children }) {
     return processed;
   }, []);
 
-  // Discount CRUD (discounts API to be implemented)
+  // Discount CRUD - using backend API
   const createDiscount = useCallback(async (data) => {
-    const newDiscount = {
-      ...data,
-      id: Date.now().toString(),
-      used_count: 0,
-      status: 'active',
-      created_at: new Date().toISOString().split('T')[0],
-    };
+    const newDiscount = await salesService.createDiscount(data);
     setDiscounts(prev => [...prev, newDiscount]);
     return newDiscount;
   }, []);
 
   const updateDiscount = useCallback(async (id, updates) => {
-    setDiscounts(prev => prev.map(d => d.id === id ? { ...d, ...updates } : d));
+    const updated = await salesService.updateDiscount(id, updates);
+    setDiscounts(prev => prev.map(d => d.id === id ? updated : d));
+    return updated;
   }, []);
 
   const deleteDiscount = useCallback(async (id) => {
+    await salesService.deleteDiscount(id);
     setDiscounts(prev => prev.filter(d => d.id !== id));
+  }, []);
+
+  const validateDiscountCode = useCallback(async (code, orderAmount, customerId, isNewCustomer = false) => {
+    try {
+      const result = await salesService.validateDiscountCode({
+        code,
+        order_amount: orderAmount,
+        customer_id: customerId,
+        is_new_customer: isNewCustomer,
+      });
+      return result;
+    } catch (err) {
+      return { valid: false, message: err.response?.data?.message || 'Invalid discount code' };
+    }
   }, []);
 
   const applyDiscount = useCallback((code, orderAmount, isNewCustomer = false) => {
@@ -253,19 +267,19 @@ export function SalesProvider({ children }) {
       return { valid: false, messageKey: 'discount_limit_reached' };
     }
 
-    if (discount.applies_to === 'new_customers' && !isNewCustomer) {
+    if (discount.new_customers_only && !isNewCustomer) {
       return { valid: false, messageKey: 'new_customers_only' };
     }
 
     let discountAmount = 0;
-    if (discount.type === 'percentage') {
-      discountAmount = (orderAmount * discount.value) / 100;
+    if (discount.discount_type === 'percentage') {
+      discountAmount = (orderAmount * discount.discount_value) / 100;
     } else {
-      discountAmount = discount.value;
+      discountAmount = discount.discount_value;
     }
 
-    if (discount.max_discount && discountAmount > discount.max_discount) {
-      discountAmount = discount.max_discount;
+    if (discount.max_discount_amount && discountAmount > discount.max_discount_amount) {
+      discountAmount = discount.max_discount_amount;
     }
 
     return {
@@ -276,12 +290,21 @@ export function SalesProvider({ children }) {
     };
   }, [discounts]);
 
-  const useDiscountCode = useCallback(async (code) => {
-    const discount = discounts.find(d => d.code === code);
-    if (discount) {
-      updateDiscount(discount.id, { used_count: (discount.used_count || 0) + 1 });
+  const useDiscountCode = useCallback(async (discountId, customerId, salesOrderId, amountDiscounted) => {
+    try {
+      await salesService.useDiscountCode(discountId, {
+        customer_id: customerId,
+        sales_order_id: salesOrderId,
+        amount_discounted: amountDiscounted,
+      });
+      // Update local state
+      setDiscounts(prev => prev.map(d =>
+        d.id === discountId ? { ...d, used_count: (d.used_count || 0) + 1 } : d
+      ));
+    } catch (err) {
+      console.error('Failed to record discount usage:', err);
     }
-  }, [discounts, updateDiscount]);
+  }, []);
 
   // Analytics
   const getSalesAnalytics = useCallback(() => {
@@ -459,6 +482,7 @@ export function SalesProvider({ children }) {
     updateDiscount,
     deleteDiscount,
     applyDiscount,
+    validateDiscountCode,
     useDiscountCode,
 
     // Analytics
