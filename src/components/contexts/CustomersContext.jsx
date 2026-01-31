@@ -184,21 +184,34 @@ export function CustomersProvider({ children }) {
             }
           } else {
             // Map backend response to frontend format
-            const mappedCustomers = customerContacts.map(c => ({
-              id: c.id,
-              company_name: c.name || '',
-              contact_name: c.legal_name || '',
-              email: c.email || '',
-              phone: c.phone || '',
-              industry: c.industry || (c.tags && c.tags[0]) || 'other',
-              status: (c.tags && c.tags.find(t => ['prospect', 'active', 'inactive', 'churned'].includes(t))) || (c.is_active ? 'active' : 'inactive'),
-              annual_revenue: c.annual_revenue || 0,
-              employee_count: c.employee_count || 0,
-              monthly_value: c.monthly_value || 0,
-              subscription_tier: c.subscription_tier || 'freemium',
-              address: c.billing_address || {},
-              created_date: c.created_at || new Date().toISOString()
-            }));
+            const mappedCustomers = customerContacts.map(c => {
+              // Extract CRM fields from custom_fields if available
+              const customFields = c.custom_fields || {};
+              // Map billing_address (backend uses street1/postal_code, frontend uses street/zip)
+              const billingAddr = c.billing_address || {};
+              const address = {
+                street: billingAddr.street1 || billingAddr.street || '',
+                city: billingAddr.city || '',
+                state: billingAddr.state || '',
+                zip: billingAddr.postal_code || billingAddr.zip || '',
+                country: billingAddr.country || ''
+              };
+              return {
+                id: c.id,
+                company_name: c.name || '',
+                contact_name: c.legal_name || '',
+                email: c.email || '',
+                phone: c.phone || '',
+                industry: c.industry || (c.tags && c.tags[0]) || 'other',
+                status: customFields.status || (c.tags && c.tags.find(t => ['prospect', 'active', 'inactive', 'churned'].includes(t))) || (c.is_active ? 'active' : 'inactive'),
+                annual_revenue: customFields.annual_revenue || c.annual_revenue || 0,
+                employee_count: customFields.employee_count || c.employee_count || 0,
+                monthly_value: customFields.monthly_value || c.monthly_value || 0,
+                subscription_tier: customFields.subscription_tier || c.subscription_tier || 'freemium',
+                address: address,
+                created_date: c.created_at || new Date().toISOString()
+              };
+            });
             setCustomers(mappedCustomers);
           }
 
@@ -308,15 +321,20 @@ export function CustomersProvider({ children }) {
     const storageKey = getStorageKey(STORAGE_KEY, companyId);
 
     // Map frontend fields to backend expected format
+    // Generate a unique code for the customer
+    const customerName = customerData.company_name || customerData.name || 'CUST';
+    const code = customerData.code || `CUST-${customerName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+
     const backendData = {
       type: 'customer',
-      name: customerData.company_name || customerData.name || '',
+      code: code,
+      name: customerName,
       legal_name: customerData.contact_name || '',
       email: customerData.email || '',
       phone: customerData.phone || '',
       industry: customerData.industry || '',
       billing_address: customerData.address ? {
-        street: customerData.address.street || '',
+        street1: customerData.address.street || '',
         city: customerData.address.city || '',
         state: customerData.address.state || '',
         postal_code: customerData.address.zip || '',
@@ -324,6 +342,14 @@ export function CustomersProvider({ children }) {
       } : null,
       notes: customerData.notes || '',
       tags: customerData.status ? [customerData.status] : [],
+      // Store additional CRM fields in custom_fields
+      custom_fields: {
+        annual_revenue: customerData.annual_revenue || 0,
+        employee_count: customerData.employee_count || 0,
+        monthly_value: customerData.monthly_value || 0,
+        subscription_tier: customerData.subscription_tier || 'freemium',
+        status: customerData.status || 'prospect'
+      }
     };
 
     try {
@@ -373,12 +399,24 @@ export function CustomersProvider({ children }) {
         if (customerData.industry !== undefined) backendData.industry = customerData.industry;
         if (customerData.address !== undefined) {
           backendData.billing_address = {
-            street: customerData.address.street || '',
+            street1: customerData.address.street || '',
             city: customerData.address.city || '',
             state: customerData.address.state || '',
             postal_code: customerData.address.zip || '',
             country: customerData.address.country || ''
           };
+        }
+
+        // Store CRM fields in custom_fields
+        const customFields = {};
+        if (customerData.annual_revenue !== undefined) customFields.annual_revenue = customerData.annual_revenue;
+        if (customerData.employee_count !== undefined) customFields.employee_count = customerData.employee_count;
+        if (customerData.monthly_value !== undefined) customFields.monthly_value = customerData.monthly_value;
+        if (customerData.subscription_tier !== undefined) customFields.subscription_tier = customerData.subscription_tier;
+        if (customerData.status !== undefined) customFields.status = customerData.status;
+
+        if (Object.keys(customFields).length > 0) {
+          backendData.custom_fields = customFields;
         }
 
         await contactsService.update(id, backendData);

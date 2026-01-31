@@ -27,6 +27,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import LotTracking from "./LotTracking";
 import PriceLabelPrinting from "./PriceLabelPrinting";
+import ProductVariants from "./ProductVariants";
 
 // Import universal ERP components
 import {
@@ -729,6 +730,13 @@ export default function Products() {
             <Printer className="w-4 h-4" />
             {t('labels')}
           </TabsTrigger>
+          <TabsTrigger
+            value="variants"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Layers className="w-4 h-4" />
+            {t('variants')}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1173,6 +1181,11 @@ export default function Products() {
         {/* Labels Tab */}
         <TabsContent value="labels" className="mt-0">
           <PriceLabelPrinting />
+        </TabsContent>
+
+        {/* Variants Tab */}
+        <TabsContent value="variants" className="mt-0">
+          <ProductVariants />
         </TabsContent>
       </Tabs>
 
