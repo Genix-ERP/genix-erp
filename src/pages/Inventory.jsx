@@ -18,7 +18,6 @@ import {
   Target,
   Zap,
   Warehouse,
-  ArrowRightLeft,
   LayoutDashboard,
   Box,
   ShoppingCart,
@@ -27,7 +26,8 @@ import {
   Bell,
   Trash2,
   Settings2,
-  MapPin
+  MapPin,
+  RefreshCw
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,13 +42,15 @@ import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
 import InventoryManagement from "@/components/inventory/InventoryManagement";
 import StockCounting from "@/components/inventory/StockCounting";
-import StockTransfers from "@/components/inventory/StockTransfers";
+// StockTransfers is now integrated into InventoryManagement component
 // BOM moved to Manufacturing module - it's a manufacturing concept, not inventory
 import InventoryValuation from "@/components/inventory/InventoryValuation";
 import ReorderRules from "@/components/inventory/ReorderRules";
+import Replenishment from "@/components/inventory/Replenishment";
 import ScrapManagement from "@/components/inventory/ScrapManagement";
 import OperationTypes from "@/components/inventory/OperationTypes";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
+import Packages from "@/components/inventory/Packages";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -301,15 +303,6 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="transfers"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('transfers') || "Ko'chirishlar"}</span>
-              <span className="sm:hidden">{t('transfers') || "Ko'chirish"}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="cogs"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
@@ -360,11 +353,27 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
+              value="replenishment"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('replenishment') || 'Replenishment'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
               value="scrap"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('scrap') || 'Scrap'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="packages"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Package className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('packages') || 'Packages'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -459,11 +468,6 @@ export default function Inventory() {
             <InventoryManagement />
           </TabsContent>
 
-          {/* Transfers Tab */}
-          <TabsContent value="transfers" className="mt-6">
-            <StockTransfers />
-          </TabsContent>
-
           {/* COGS Tab */}
           <TabsContent value="cogs" className="mt-6">
             <COGSCalculator items={items} movements={stockMovements} />
@@ -533,9 +537,19 @@ export default function Inventory() {
             <ReorderRules />
           </TabsContent>
 
+          {/* Replenishment Tab */}
+          <TabsContent value="replenishment" className="mt-6">
+            <Replenishment />
+          </TabsContent>
+
           {/* Scrap Management Tab */}
           <TabsContent value="scrap" className="mt-6">
             <ScrapManagement />
+          </TabsContent>
+
+          {/* Packages Tab */}
+          <TabsContent value="packages" className="mt-6">
+            <Packages />
           </TabsContent>
         </Tabs>
 

@@ -101,6 +101,8 @@ export default function StockMovementTracker({ movements, items }) {
     const colors = {
       inbound: "bg-green-100 text-green-800",
       outbound: "bg-red-100 text-red-800",
+      issue: "bg-red-100 text-red-800",
+      return: "bg-green-100 text-green-800",
       adjustment: "bg-yellow-100 text-yellow-800",
       transfer: "bg-blue-100 text-blue-800",
       expiry_write_off: "bg-purple-100 text-purple-800"
@@ -361,7 +363,7 @@ export default function StockMovementTracker({ movements, items }) {
                           <div className="flex items-center gap-2">
                             <MovementIcon className="w-4 h-4" />
                             <Badge className={getMovementColor(movementType)}>
-                              {(movement.transaction_type || movement.movement_type || 'unknown').replace('_', ' ').toUpperCase()}
+                              {t(movement.transaction_type || movement.movement_type || 'unknown') || (movement.transaction_type || movement.movement_type || 'unknown').replace('_', ' ')}
                             </Badge>
                           </div>
                         </TableCell>
