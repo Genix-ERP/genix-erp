@@ -176,6 +176,109 @@ export const inventoryService = {
   async deleteCarrier(id) {
     await apiClient.delete(`/carriers/${id}`);
   },
+
+  // =====================================================
+  // PRODUCT PACKAGINGS (Odoo-style - 6-pack, 12-pack, etc.)
+  // =====================================================
+
+  async listProductPackagings(params = {}) {
+    const response = await apiClient.get('/product-packagings', { params });
+    return response.data.data;
+  },
+
+  async listProductPackagingsByProduct(productId) {
+    const response = await apiClient.get(`/products/${productId}/packagings`);
+    return response.data.data;
+  },
+
+  async getProductPackaging(id) {
+    const response = await apiClient.get(`/product-packagings/${id}`);
+    return response.data.data;
+  },
+
+  async createProductPackaging(data) {
+    const response = await apiClient.post('/product-packagings', data);
+    return response.data.data;
+  },
+
+  async createProductPackagingForProduct(productId, data) {
+    const response = await apiClient.post(`/products/${productId}/packagings`, data);
+    return response.data.data;
+  },
+
+  async updateProductPackaging(id, data) {
+    const response = await apiClient.put(`/product-packagings/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteProductPackaging(id) {
+    await apiClient.delete(`/product-packagings/${id}`);
+  },
+
+  // =====================================================
+  // PACKAGE TYPES (box sizes, pallets, containers)
+  // =====================================================
+
+  async listPackageTypes(params = {}) {
+    const response = await apiClient.get('/package-types', { params });
+    return response.data.data;
+  },
+
+  async getPackageType(id) {
+    const response = await apiClient.get(`/package-types/${id}`);
+    return response.data.data;
+  },
+
+  async createPackageType(data) {
+    const response = await apiClient.post('/package-types', data);
+    return response.data.data;
+  },
+
+  async updatePackageType(id, data) {
+    const response = await apiClient.put(`/package-types/${id}`, data);
+    return response.data.data;
+  },
+
+  async deletePackageType(id) {
+    await apiClient.delete(`/package-types/${id}`);
+  },
+
+  // =====================================================
+  // PACKAGES (physical packages in warehouse)
+  // =====================================================
+
+  async listPackages(params = {}) {
+    const response = await apiClient.get('/packages', { params });
+    return response.data.data;
+  },
+
+  async getPackage(id) {
+    const response = await apiClient.get(`/packages/${id}`);
+    return response.data.data;
+  },
+
+  async createPackage(data = {}) {
+    const response = await apiClient.post('/packages', data);
+    return response.data.data;
+  },
+
+  async updatePackage(id, data) {
+    const response = await apiClient.put(`/packages/${id}`, data);
+    return response.data.data;
+  },
+
+  async deletePackage(id) {
+    await apiClient.delete(`/packages/${id}`);
+  },
+
+  async addPackageContent(packageId, data) {
+    const response = await apiClient.post(`/packages/${packageId}/contents`, data);
+    return response.data.data;
+  },
+
+  async removePackageContent(packageId, contentId) {
+    await apiClient.delete(`/packages/${packageId}/contents/${contentId}`);
+  },
 };
 
 export default inventoryService;

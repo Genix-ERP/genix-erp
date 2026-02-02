@@ -630,6 +630,8 @@ export function ProcurementProvider({ children }) {
             discount_amount: parseFloat(line.discount_amount) || 0,
             tax_percent: parseFloat(line.tax_percent) || 0,
             notes: line.notes || '',
+            packaging_id: line.packaging_id || undefined,
+            packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
           })),
         };
 

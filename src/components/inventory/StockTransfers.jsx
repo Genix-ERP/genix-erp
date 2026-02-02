@@ -300,8 +300,8 @@ export default function StockTransfers() {
       {/* Filters */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col lg:flex-row gap-4 items-end">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
                 placeholder={t('search_transfers') || "Ko'chirishlarni qidirish..."}
@@ -310,44 +310,46 @@ export default function StockTransfers() {
                 className="pl-10"
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500">{t('from') || "Dan"}</span>
-              <Select value={sourceWarehouseFilter} onValueChange={setSourceWarehouseFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder={t('source_warehouse') || "Manba ombori"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
-                  {warehouses.filter(w => w.is_active).map(warehouse => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500">{t('from') || "dan"}</span>
+                <Select value={sourceWarehouseFilter} onValueChange={setSourceWarehouseFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t('source_warehouse') || "Manba ombori"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
+                    {warehouses.filter(w => w.is_active).map(warehouse => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-slate-500">{t('to') || "ga"}</span>
+                <Select value={destWarehouseFilter} onValueChange={setDestWarehouseFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t('destination_warehouse') || "Manzil ombori"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
+                    {warehouses.filter(w => w.is_active).map(warehouse => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(searchQuery || sourceWarehouseFilter !== "all" || destWarehouseFilter !== "all") && (
+                <Button variant="outline" onClick={resetFilters} className="h-10">
+                  <Filter className="w-4 h-4 mr-2" />
+                  {t('reset') || "Tozalash"}
+                </Button>
+              )}
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500">{t('to') || "Ga"}</span>
-              <Select value={destWarehouseFilter} onValueChange={setDestWarehouseFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder={t('destination_warehouse') || "Manzil ombori"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_warehouses') || "Barcha omborlar"}</SelectItem>
-                  {warehouses.filter(w => w.is_active).map(warehouse => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                  </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(searchQuery || sourceWarehouseFilter !== "all" || destWarehouseFilter !== "all") && (
-              <Button variant="outline" onClick={resetFilters}>
-                <Filter className="w-4 h-4 mr-2" />
-                {t('reset') || "Tozalash"}
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>

@@ -95,6 +95,9 @@ export default function Procurement() {
   // Product variants
   const [productVariants, setProductVariants] = useState({}); // { productId: variants[] }
 
+  // Product packagings (e.g., 6-pack, case of 24)
+  const [productPackagings, setProductPackagings] = useState({}); // { productId: packagings[] }
+
   // Track if delivery date was manually set
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
   const [isEditDeliveryDateManual, setIsEditDeliveryDateManual] = useState(false);
@@ -223,6 +226,19 @@ export default function Procurement() {
     }
   }, [productVariants]);
 
+  // Fetch packagings for a product (e.g., 6-pack, case of 24)
+  const fetchProductPackagings = useCallback(async (productId) => {
+    if (!productId || productPackagings[productId]) return;
+    try {
+      const response = await apiClient.get(`/products/${productId}/packagings`);
+      // Only show packagings available for purchase
+      const packagings = (response.data?.data || []).filter(p => p.purchase !== false);
+      setProductPackagings(prev => ({ ...prev, [productId]: packagings }));
+    } catch (error) {
+      console.error('Failed to fetch packagings:', error);
+    }
+  }, [productPackagings]);
+
   const handleLineChange = (index, field, value) => {
     const newLines = [...newPO.lines];
     newLines[index] = { ...newLines[index], [field]: value };
@@ -239,13 +255,20 @@ export default function Procurement() {
           lead_time_days: selectedProduct.lead_time_days || 0,
           product: selectedProduct,
           variant_id: null, // Reset variant when product changes
-          variant_name: null
+          variant_name: null,
+          packaging_id: null, // Reset packaging when product changes
+          packaging_qty: null,
+          packaging_name: null,
+          packaging_unit_qty: null
         };
 
         // Fetch variants if product has variants
         if (selectedProduct.has_variants) {
           fetchProductVariants(selectedProduct.id);
         }
+
+        // Always fetch packagings for the product
+        fetchProductPackagings(selectedProduct.id);
 
         // Recalculate delivery date if not manually set
         if (!isDeliveryDateManual) {
@@ -269,6 +292,47 @@ export default function Procurement() {
           unit_price: selectedVariant.cost_price || newLines[index].unit_price
         };
       }
+    }
+
+    // If changing packaging selection
+    if (field === 'packaging_id') {
+      const productId = newLines[index].product_id;
+      if (value && value !== 'none') {
+        const packagings = productPackagings[productId] || [];
+        const selectedPackaging = packagings.find(p => p.id === value);
+        if (selectedPackaging) {
+          // Auto-calculate quantity based on packaging
+          const packagingQty = newLines[index].packaging_qty || 1;
+          newLines[index] = {
+            ...newLines[index],
+            packaging_id: selectedPackaging.id,
+            packaging_name: selectedPackaging.name,
+            packaging_unit_qty: selectedPackaging.qty,
+            packaging_qty: packagingQty,
+            quantity: packagingQty * selectedPackaging.qty // Auto-calculate total quantity
+          };
+        }
+      } else {
+        // Clear packaging fields if "None" selected
+        newLines[index] = {
+          ...newLines[index],
+          packaging_id: null,
+          packaging_name: null,
+          packaging_unit_qty: null,
+          packaging_qty: null
+        };
+      }
+    }
+
+    // If changing packaging quantity
+    if (field === 'packaging_qty' && newLines[index].packaging_id) {
+      const packagingQty = parseFloat(value) || 1;
+      const packagingUnitQty = newLines[index].packaging_unit_qty || 1;
+      newLines[index] = {
+        ...newLines[index],
+        packaging_qty: packagingQty,
+        quantity: packagingQty * packagingUnitQty // Auto-calculate total quantity
+      };
     }
 
     setNewPO({ ...newPO, lines: newLines, total_amount: calculateOrderTotal(newLines) });
@@ -981,6 +1045,7 @@ export default function Procurement() {
                   {newPO.lines.map((line, index) => {
                     const selectedProduct = products.find(p => p.id === line.product_id);
                     const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                    const hasPackagings = productPackagings[line.product_id]?.length > 0;
                     return (
                     <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
                       <div className="grid grid-cols-12 gap-2 items-start">
@@ -1048,6 +1113,46 @@ export default function Procurement() {
                           </Button>
                         </div>
                       </div>
+                      {/* Packaging selector row */}
+                      {hasPackagings && (
+                        <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
+                          <span className="text-xs text-slate-500 whitespace-nowrap">{t('packaging') || 'Packaging'}:</span>
+                          <Select
+                            value={line.packaging_id || 'none'}
+                            onValueChange={(value) => handleLineChange(index, 'packaging_id', value === 'none' ? null : value)}
+                          >
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder={t('packaging') || 'Packaging'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">{t('none') || 'None (units)'}</SelectItem>
+                              {productPackagings[line.product_id]?.map((pkg) => (
+                                <SelectItem key={pkg.id} value={pkg.id}>
+                                  {pkg.name} ({pkg.qty} {t('units') || 'units'})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {line.packaging_id ? (
+                            <>
+                              <span className="text-xs text-slate-500">×</span>
+                              <Input
+                                type="number"
+                                min="1"
+                                className="h-8 w-16 text-xs"
+                                value={line.packaging_qty || 1}
+                                onChange={(e) => handleLineChange(index, 'packaging_qty', e.target.value)}
+                              />
+                              <span
+                                className="text-xs text-indigo-600 font-medium"
+                                title={`${line.packaging_qty || 1} × ${line.packaging_unit_qty || 1} = ${line.quantity}`}
+                              >
+                                = {line.quantity} {t('units') || 'units'}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
                       {line.variant_name && (
                         <div className="text-xs text-slate-500 pl-1">
                           {t('variant')}: {line.variant_name}

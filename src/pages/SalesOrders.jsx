@@ -230,6 +230,9 @@ export default function SalesOrders() {
   // Product variants
   const [productVariants, setProductVariants] = useState({}); // { productId: variants[] }
 
+  // Product packagings (e.g., 6-pack, case of 24)
+  const [productPackagings, setProductPackagings] = useState({}); // { productId: packagings[] }
+
   // Warehouses list for selection
   const [warehouses, setWarehouses] = useState([]);
 
@@ -349,6 +352,19 @@ export default function SalesOrders() {
     }
   }, [productVariants]);
 
+  // Fetch packagings for a product (e.g., 6-pack, case of 24)
+  const fetchProductPackagings = useCallback(async (productId) => {
+    if (!productId || productPackagings[productId]) return;
+    try {
+      const data = await inventoryService.listProductPackagingsByProduct(productId);
+      // Only show packagings available for sales
+      const salesPackagings = (Array.isArray(data) ? data : []).filter(p => p.sales);
+      setProductPackagings(prev => ({ ...prev, [productId]: salesPackagings }));
+    } catch (error) {
+      console.error('Failed to fetch packagings:', error);
+    }
+  }, [productPackagings]);
+
   const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
     const newLines = [...order.lines];
     newLines[index] = { ...newLines[index], [field]: value };
@@ -365,13 +381,20 @@ export default function SalesOrders() {
           lead_time_days: selectedProduct.lead_time_days || 0,
           product: selectedProduct,
           variant_id: null, // Reset variant when product changes
-          variant_name: null
+          variant_name: null,
+          packaging_id: null, // Reset packaging when product changes
+          packaging_qty: null,
+          packaging_name: null,
+          packaging_unit_qty: null
         };
 
         // Fetch variants if product has variants
         if (selectedProduct.has_variants) {
           fetchProductVariants(selectedProduct.id);
         }
+
+        // Always fetch packagings for the product
+        fetchProductPackagings(selectedProduct.id);
 
         // Recalculate delivery date if not manually set
         if (!isManualDelivery) {
@@ -395,6 +418,47 @@ export default function SalesOrders() {
           unit_price: selectedVariant.list_price || newLines[index].unit_price
         };
       }
+    }
+
+    // If changing packaging selection
+    if (field === 'packaging_id') {
+      if (value) {
+        const productId = newLines[index].product_id;
+        const packagings = productPackagings[productId] || [];
+        const selectedPackaging = packagings.find(p => p.id === value);
+        if (selectedPackaging) {
+          // Auto-calculate quantity based on packaging
+          const packagingQty = newLines[index].packaging_qty || 1;
+          newLines[index] = {
+            ...newLines[index],
+            packaging_id: selectedPackaging.id,
+            packaging_name: selectedPackaging.name,
+            packaging_unit_qty: selectedPackaging.qty,
+            packaging_qty: packagingQty,
+            quantity: packagingQty * selectedPackaging.qty // Auto-calculate total quantity
+          };
+        }
+      } else {
+        // Clear packaging fields if "None" selected
+        newLines[index] = {
+          ...newLines[index],
+          packaging_id: null,
+          packaging_name: null,
+          packaging_unit_qty: null,
+          packaging_qty: null
+        };
+      }
+    }
+
+    // If changing packaging quantity
+    if (field === 'packaging_qty' && newLines[index].packaging_id) {
+      const packagingQty = parseFloat(value) || 1;
+      const packagingUnitQty = newLines[index].packaging_unit_qty || 1;
+      newLines[index] = {
+        ...newLines[index],
+        packaging_qty: packagingQty,
+        quantity: packagingQty * packagingUnitQty // Auto-calculate total quantity
+      };
     }
 
     setOrder({ ...order, lines: newLines });
@@ -498,6 +562,8 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        packaging_id: line.packaging_id || undefined,
+        packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));
 
     // Check if customer_id is a valid UUID (backend requires UUID format)
@@ -576,6 +642,8 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        packaging_id: line.packaging_id || undefined,
+        packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));
 
     // Check if customer_id is a valid UUID
@@ -1451,14 +1519,15 @@ export default function SalesOrders() {
                     <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                   </Button>
                 </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   {newOrder.lines.map((line, index) => {
                     const selectedProduct = products.find(p => p.id === line.product_id);
                     const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                    const hasPackagings = productPackagings[line.product_id]?.length > 0;
                     return (
                     <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
                       <div className="grid grid-cols-12 gap-2 items-start">
-                        <div className={hasVariants ? "col-span-3" : "col-span-4"}>
+                        <div className="col-span-3">
                           <Select
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
@@ -1494,14 +1563,58 @@ export default function SalesOrders() {
                             </Select>
                           </div>
                         )}
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('quantity')}
-                            value={line.quantity}
-                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
-                          />
-                        </div>
+                        {hasPackagings && (
+                          <div className="col-span-2">
+                            <Select
+                              value={line.packaging_id || 'none'}
+                              onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'packaging_id', value === 'none' ? null : value, isDeliveryDateManual)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('packaging') || 'Packaging'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none') || 'None (units)'}</SelectItem>
+                                {productPackagings[line.product_id]?.map((pkg) => (
+                                  <SelectItem key={pkg.id} value={pkg.id}>
+                                    {pkg.name} ({pkg.qty} {t('units') || 'units'})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        {line.packaging_id ? (
+                          <>
+                            <div className="col-span-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                placeholder={t('packs') || 'Packs'}
+                                value={line.packaging_qty || 1}
+                                onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'packaging_qty', e.target.value, isDeliveryDateManual)}
+                              />
+                            </div>
+                            <div className="col-span-1">
+                              <Input
+                                type="number"
+                                placeholder={t('total_qty') || 'Total'}
+                                value={line.quantity}
+                                disabled
+                                className="bg-slate-100"
+                                title={`${line.packaging_qty || 1} × ${line.packaging_unit_qty || 1} = ${line.quantity}`}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                            <Input
+                              type="number"
+                              placeholder={t('quantity')}
+                              value={line.quantity}
+                              onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
+                            />
+                          </div>
+                        )}
                         <div className="col-span-2">
                           <Input
                             type="number"
@@ -1510,7 +1623,7 @@ export default function SalesOrders() {
                             onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
                           />
                         </div>
-                        <div className={hasVariants ? "col-span-2" : "col-span-3"}>
+                        <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
                           <Input
                             placeholder={t('description')}
                             value={line.description}
@@ -1987,62 +2100,137 @@ export default function SalesOrders() {
                       <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                     </Button>
                   </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {editingOrder.lines.map((line, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
-                        <div className="col-span-4">
-                          <Select
-                            value={line.product_id || ''}
-                            onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={line.product_name || t('select_product')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {editingOrder.lines.map((line, index) => {
+                      const selectedProduct = products.find(p => p.id === line.product_id);
+                      const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                      const hasPackagings = productPackagings[line.product_id]?.length > 0;
+                      return (
+                      <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
+                        <div className="grid grid-cols-12 gap-2 items-start">
+                          <div className="col-span-3">
+                            <Select
+                              value={line.product_id || ''}
+                              onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={line.product_name || t('select_product')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {products.map((product) => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {hasVariants && (
+                            <div className="col-span-2">
+                              <Select
+                                value={line.variant_id || ''}
+                                onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'variant_id', value, isEditDeliveryDateManual)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t('select_variant') || 'Variant'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {productVariants[line.product_id]?.map((variant) => (
+                                    <SelectItem key={variant.id} value={variant.id}>
+                                      {variant.variant_name || variant.display_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {hasPackagings && (
+                            <div className="col-span-2">
+                              <Select
+                                value={line.packaging_id || 'none'}
+                                onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_id', value === 'none' ? null : value, isEditDeliveryDateManual)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t('packaging') || 'Packaging'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t('none') || 'None (units)'}</SelectItem>
+                                  {productPackagings[line.product_id]?.map((pkg) => (
+                                    <SelectItem key={pkg.id} value={pkg.id}>
+                                      {pkg.name} ({pkg.qty} {t('units') || 'units'})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {line.packaging_id ? (
+                            <>
+                              <div className="col-span-1">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  placeholder={t('packs') || 'Packs'}
+                                  value={line.packaging_qty || 1}
+                                  onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_qty', e.target.value, isEditDeliveryDateManual)}
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <Input
+                                  type="number"
+                                  placeholder={t('total_qty') || 'Total'}
+                                  value={line.quantity}
+                                  disabled
+                                  className="bg-slate-100"
+                                  title={`${line.packaging_qty || 1} × ${line.packaging_unit_qty || 1} = ${line.quantity}`}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                              <Input
+                                type="number"
+                                placeholder={t('quantity')}
+                                value={line.quantity}
+                                onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
+                              />
+                            </div>
+                          )}
+                          <div className="col-span-2">
+                            <Input
+                              type="number"
+                              placeholder={t('price')}
+                              value={line.unit_price}
+                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
+                            />
+                          </div>
+                          <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
+                            <Input
+                              placeholder={t('description')}
+                              value={line.description || ''}
+                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
+                              disabled={editingOrder.lines.length === 1}
+                              className="text-red-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('quantity')}
-                            value={line.quantity}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('price')}
-                            value={line.unit_price}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <Input
-                            placeholder={t('description')}
-                            value={line.description || ''}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-1 flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
-                            disabled={editingOrder.lines.length === 1}
-                            className="text-red-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        {line.packaging_name && (
+                          <div className="text-xs text-slate-500 pl-1">
+                            {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
