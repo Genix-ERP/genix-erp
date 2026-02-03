@@ -40,6 +40,8 @@ import {
   Trash2,
   Award,
   CalendarDays,
+  ShoppingCart,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -85,6 +87,9 @@ export default function RFQManagement() {
 
   // Loading state for RFQ details
   const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Loading state for converting RFQ to PO
+  const [convertingToPO, setConvertingToPO] = useState(false);
 
   // Fetch products on component mount
   useEffect(() => {
@@ -145,6 +150,32 @@ export default function RFQManagement() {
   const handleSelectWinner = async (rfqId, supplierId) => {
     await selectRFQWinner(rfqId, supplierId);
     setShowDetails(false);
+  };
+
+  const handleConvertToPO = async (rfqId) => {
+    if (!window.confirm(t('confirm_convert_to_po') || "Bu RFQni buyurtmaga aylantirishni xohlaysizmi?")) {
+      return;
+    }
+
+    setConvertingToPO(true);
+    try {
+      const result = await procurementService.convertRFQToPO(rfqId);
+      alert(
+        (t('po_created_success') || "Buyurtma muvaffaqiyatli yaratildi!") +
+        `\n\n${t('order_number') || "Buyurtma raqami"}: ${result.order_number}\n` +
+        `${t('vendor') || "Ta'minotchi"}: ${result.vendor_name}\n` +
+        `${t('total') || "Jami"}: ${result.total_amount?.toLocaleString()}`
+      );
+      setShowDetails(false);
+    } catch (error) {
+      console.error('Failed to convert RFQ to PO:', error);
+      alert(
+        (t('po_creation_failed') || "Buyurtma yaratishda xatolik yuz berdi") +
+        (error.response?.data?.error ? `:\n${error.response.data.error}` : '')
+      );
+    } finally {
+      setConvertingToPO(false);
+    }
   };
 
   const handleViewDetails = async (rfq) => {
@@ -410,6 +441,17 @@ export default function RFQManagement() {
                               title={t('send') || "Yuborish"}
                             >
                               <Send className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {rfq.status === "closed" && (rfq.winner_id || rfq.winner_supplier_id) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleConvertToPO(rfq.id)}
+                              title={t('convert_to_po') || "Buyurtmaga aylantirish"}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <ShoppingCart className="w-4 h-4" />
                             </Button>
                           )}
                           {(rfq.status === "draft" || rfq.status === "open") && (
@@ -738,15 +780,39 @@ export default function RFQManagement() {
                 )}
               </div>
 
-              {/* Winner info */}
+              {/* Winner info and Convert to PO */}
               {selectedRFQ.winner_supplier_id && (
                 <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2">
-                    <Award className="w-5 h-5 text-green-600" />
-                    <span className="font-medium text-green-800">
-                      {t('winner') || "G'olib"}: {getSupplierName(selectedRFQ.winner_supplier_id)}
-                    </span>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                      <Award className="w-5 h-5 text-green-600" />
+                      <span className="font-medium text-green-800">
+                        {t('winner') || "G'olib"}: {getSupplierName(selectedRFQ.winner_supplier_id)}
+                      </span>
+                    </div>
+                    {selectedRFQ.status === 'closed' && (
+                      <Button
+                        onClick={() => handleConvertToPO(selectedRFQ.id)}
+                        disabled={convertingToPO}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                      >
+                        {convertingToPO ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {t('creating') || "Yaratilmoqda..."}
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingCart className="w-4 h-4 mr-2" />
+                            {t('convert_to_po') || "Buyurtmaga aylantirish"}
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
+                  <p className="text-sm text-green-700 mt-2">
+                    {t('rfq_closed_convert_hint') || "Bu RFQ yopilgan. Tanlangan ta'minotchi bilan buyurtma yaratishingiz mumkin."}
+                  </p>
                 </div>
               )}
             </div>

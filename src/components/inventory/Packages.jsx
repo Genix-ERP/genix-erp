@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, Package, Pencil, Trash2, Box, Eye, MapPin, Scale, Calendar, Layers
 } from "lucide-react";
@@ -15,7 +14,6 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { inventoryService } from "@/api/services/inventory";
-import PackageTypes from "./PackageTypes";
 
 export default function Packages() {
   const { language } = useLanguage();
@@ -197,33 +195,9 @@ export default function Packages() {
     setShowDeleteModal(true);
   };
 
-  // State for active sub-tab
-  const [activeSubTab, setActiveSubTab] = useState('packages');
-
   return (
     <div className="space-y-4">
-      {/* Sub-tabs for Packages and Package Types */}
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="bg-slate-100 p-1 rounded-lg">
-          <TabsTrigger
-            value="packages"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
-          >
-            <Package className="w-4 h-4" />
-            {t('packages') || 'Packages'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="package-types"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
-          >
-            <Box className="w-4 h-4" />
-            {t('package_types') || 'Package Types'}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Packages Content */}
-        <TabsContent value="packages" className="mt-4">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardHeader className="border-b border-slate-200/60">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <CardTitle className="flex items-center gap-2">
@@ -603,14 +577,7 @@ export default function Packages() {
           </div>
         </DialogContent>
       </Dialog>
-          </Card>
-        </TabsContent>
-
-        {/* Package Types Content */}
-        <TabsContent value="package-types" className="mt-4">
-          <PackageTypes />
-        </TabsContent>
-      </Tabs>
+      </Card>
     </div>
   );
 }
