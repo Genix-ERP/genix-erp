@@ -70,10 +70,10 @@ import { useToast } from "@/components/ui/use-toast";
 import apiClient from "@/api/client";
 
 const Replenishment = () => {
-  const { currentLanguage } = useLanguage();
-  const t = useTranslation(currentLanguage);
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { products, warehouses } = useInventory();
-  const { hasPermission } = usePermissions();
+  const { canCreate, MODULES } = usePermissions();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -90,7 +90,7 @@ const Replenishment = () => {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const canRunReplenishment = hasPermission("purchase", "order", "create");
+  const canRunReplenishment = canCreate(MODULES.PROCUREMENT);
 
   // Load replenishment preview
   const loadPreview = useCallback(async () => {
@@ -105,14 +105,15 @@ const Replenishment = () => {
     } catch (error) {
       console.error("Failed to load replenishment preview:", error);
       toast({
-        title: t("error") || "Error",
-        description: t("failed_to_load_replenishment") || "Failed to load replenishment data",
+        title: "Error",
+        description: "Failed to load replenishment data",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadPreview();

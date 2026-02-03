@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClipboardCheck, Building, FileText, Clock } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ClipboardCheck, Building, FileText, Clock, Shield, CheckCircle2, ArrowRight, Users } from 'lucide-react';
+import ProcurementRules from '@/components/procurement/ProcurementRules';
+import ApprovalWorkflows from '@/components/procurement/ApprovalWorkflows';
+import { procurementService } from '@/api/services/procurement';
 
 const PAYMENT_TERMS = [
   'Immediate',
@@ -22,6 +28,29 @@ export default function PurchaseSettings() {
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const purchase = settings.purchase || {};
+
+  const [showRulesDialog, setShowRulesDialog] = useState(false);
+  const [showWorkflowsDialog, setShowWorkflowsDialog] = useState(false);
+  const [ruleStats, setRuleStats] = useState({ total: 0, active: 0 });
+  const [users, setUsers] = useState([]);
+
+  // Load rule stats
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const rules = await procurementService.listProcurementRules();
+        if (rules) {
+          setRuleStats({
+            total: rules.length,
+            active: rules.filter(r => r.is_active).length
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load rule stats:', error);
+      }
+    };
+    loadStats();
+  }, [showRulesDialog]); // Reload when dialog closes
 
   return (
     <div className="space-y-4">
@@ -188,6 +217,91 @@ export default function PurchaseSettings() {
           onChange={(checked) => updateSetting('purchase.blanket_orders.enabled', checked)}
         />
       </SettingsSection>
+
+      {/* Procurement Rules Engine */}
+      <SettingsSection
+        title={t('procurement_rules') || 'Procurement Rules'}
+        description={t('procurement_rules_desc') || 'Configure approval rules, auto-approval thresholds, and routing'}
+        icon={Shield}
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-blue-500" />
+                <span className="font-medium">{t('configured_rules') || 'Configured Rules'}</span>
+              </div>
+              <Badge variant="secondary">{ruleStats.total} {t('total') || 'total'}</Badge>
+              <Badge variant="default">{ruleStats.active} {t('active') || 'active'}</Badge>
+            </div>
+            <Button onClick={() => setShowRulesDialog(true)}>
+              {t('manage_rules') || 'Manage Rules'}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-purple-500" />
+                <span className="font-medium">{t('my_approvals') || 'My Pending Approvals'}</span>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setShowWorkflowsDialog(true)}>
+              {t('view_approvals') || 'View Approvals'}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-medium">{t('auto_approve') || 'Auto-Approve'}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('auto_approve_desc') || 'Automatically approve orders below threshold'}
+              </p>
+            </div>
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <ArrowRight className="h-4 w-4 text-purple-500" />
+                <span className="text-sm font-medium">{t('multi_level_routing') || 'Multi-Level Routing'}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('multi_level_routing_desc') || 'Route to different approvers based on amount'}
+              </p>
+            </div>
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="h-4 w-4 text-orange-500" />
+                <span className="text-sm font-medium">{t('vendor_control') || 'Vendor Control'}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('vendor_control_desc') || 'Enforce vendor approval requirements'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Procurement Rules Dialog */}
+      <Dialog open={showRulesDialog} onOpenChange={setShowRulesDialog}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('procurement_rules') || 'Procurement Rules'}</DialogTitle>
+          </DialogHeader>
+          <ProcurementRules users={users} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Workflows Dialog */}
+      <Dialog open={showWorkflowsDialog} onOpenChange={setShowWorkflowsDialog}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('my_approvals') || 'My Pending Approvals'}</DialogTitle>
+          </DialogHeader>
+          <ApprovalWorkflows />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
