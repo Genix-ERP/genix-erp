@@ -1,0 +1,901 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  FileText,
+  Calculator,
+  CheckCircle,
+  Clock,
+  Plus,
+  MoreVertical,
+  Eye,
+  Trash2,
+  Download,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Calendar,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
+import { taxReportsService } from '@/api/services/taxReports';
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('uz-UZ', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount || 0) + ' UZS';
+};
+
+export default function TaxReports() {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isLoading, setIsLoading] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const [periods, setPeriods] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
+
+  // Date filters
+  const now = new Date();
+  const [startDate, setStartDate] = useState(format(startOfMonth(now), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(endOfMonth(now), 'yyyy-MM-dd'));
+  const [periodTypeFilter, setPeriodTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState(now.getFullYear().toString());
+
+  // Modals
+  const [showCreatePeriod, setShowCreatePeriod] = useState(false);
+  const [showPeriodDetails, setShowPeriodDetails] = useState(false);
+  const [showFileDialog, setShowFileDialog] = useState(false);
+
+  // Form data
+  const [newPeriod, setNewPeriod] = useState({
+    name: '',
+    period_type: 'monthly',
+    start_date: format(startOfMonth(now), 'yyyy-MM-dd'),
+    end_date: format(endOfMonth(now), 'yyyy-MM-dd'),
+    notes: '',
+  });
+
+  const [fileData, setFileData] = useState({
+    filing_reference: '',
+    notes: '',
+  });
+
+  // Load data
+  useEffect(() => {
+    loadSummary();
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    loadPeriods();
+  }, [periodTypeFilter, statusFilter, yearFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'transactions') {
+      loadTransactions();
+    }
+  }, [activeTab, startDate, endDate]);
+
+  const loadSummary = async () => {
+    try {
+      setIsLoading(true);
+      const data = await taxReportsService.getSummary(startDate, endDate);
+      setSummary(data);
+    } catch (error) {
+      console.error('Failed to load tax summary:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadPeriods = async () => {
+    try {
+      const params = {};
+      if (periodTypeFilter !== 'all') params.period_type = periodTypeFilter;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (yearFilter) params.year = yearFilter;
+      const data = await taxReportsService.listPeriods(params);
+      setPeriods(data || []);
+    } catch (error) {
+      console.error('Failed to load tax periods:', error);
+    }
+  };
+
+  const loadTransactions = async () => {
+    try {
+      setIsLoading(true);
+      const data = await taxReportsService.getTransactions(startDate, endDate);
+      setTransactions(data || []);
+    } catch (error) {
+      console.error('Failed to load transactions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreatePeriod = async () => {
+    try {
+      setIsLoading(true);
+      await taxReportsService.createPeriod(newPeriod);
+      setShowCreatePeriod(false);
+      setNewPeriod({
+        name: '',
+        period_type: 'monthly',
+        start_date: format(startOfMonth(now), 'yyyy-MM-dd'),
+        end_date: format(endOfMonth(now), 'yyyy-MM-dd'),
+        notes: '',
+      });
+      loadPeriods();
+    } catch (error) {
+      console.error('Failed to create period:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCalculateReport = async (periodId) => {
+    try {
+      setIsLoading(true);
+      await taxReportsService.calculateReport(periodId);
+      loadPeriods();
+      if (selectedPeriod?.id === periodId) {
+        const data = await taxReportsService.getPeriod(periodId);
+        setSelectedPeriod(data);
+      }
+    } catch (error) {
+      console.error('Failed to calculate report:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileReport = async () => {
+    if (!selectedPeriod) return;
+    try {
+      setIsLoading(true);
+      await taxReportsService.fileReport(selectedPeriod.period.id, fileData);
+      setShowFileDialog(false);
+      setShowPeriodDetails(false);
+      setFileData({ filing_reference: '', notes: '' });
+      loadPeriods();
+    } catch (error) {
+      console.error('Failed to file report:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeletePeriod = async (periodId) => {
+    if (!confirm(t('confirm_delete') || 'Are you sure you want to delete this report?')) return;
+    try {
+      await taxReportsService.deletePeriod(periodId);
+      loadPeriods();
+    } catch (error) {
+      console.error('Failed to delete period:', error);
+    }
+  };
+
+  const handleViewPeriod = async (period) => {
+    try {
+      setIsLoading(true);
+      const data = await taxReportsService.getPeriod(period.id);
+      setSelectedPeriod(data);
+      setShowPeriodDetails(true);
+    } catch (error) {
+      console.error('Failed to load period details:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Quick date range setters
+  const setQuickRange = (type) => {
+    const today = new Date();
+    let start, end;
+
+    switch (type) {
+      case 'this_month':
+        start = startOfMonth(today);
+        end = endOfMonth(today);
+        break;
+      case 'last_month':
+        const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        start = startOfMonth(lastMonth);
+        end = endOfMonth(lastMonth);
+        break;
+      case 'this_quarter':
+        start = startOfQuarter(today);
+        end = endOfQuarter(today);
+        break;
+      case 'this_year':
+        start = startOfYear(today);
+        end = endOfYear(today);
+        break;
+      default:
+        return;
+    }
+
+    setStartDate(format(start, 'yyyy-MM-dd'));
+    setEndDate(format(end, 'yyyy-MM-dd'));
+  };
+
+  // Update period dates based on type
+  const updatePeriodDates = (type) => {
+    const today = new Date();
+    let start, end, name;
+
+    switch (type) {
+      case 'monthly':
+        start = startOfMonth(today);
+        end = endOfMonth(today);
+        name = format(today, 'MMMM yyyy') + ' Tax Report';
+        break;
+      case 'quarterly':
+        start = startOfQuarter(today);
+        end = endOfQuarter(today);
+        const quarter = Math.ceil((today.getMonth() + 1) / 3);
+        name = `Q${quarter} ${today.getFullYear()} Tax Report`;
+        break;
+      case 'yearly':
+        start = startOfYear(today);
+        end = endOfYear(today);
+        name = `${today.getFullYear()} Annual Tax Report`;
+        break;
+      default:
+        return;
+    }
+
+    setNewPeriod(prev => ({
+      ...prev,
+      period_type: type,
+      start_date: format(start, 'yyyy-MM-dd'),
+      end_date: format(end, 'yyyy-MM-dd'),
+      name,
+    }));
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      draft: 'bg-slate-100 text-slate-700',
+      calculated: 'bg-blue-100 text-blue-700',
+      submitted: 'bg-yellow-100 text-yellow-700',
+      filed: 'bg-green-100 text-green-700',
+    };
+    return <Badge className={styles[status] || styles.draft}>{t(status) || status}</Badge>;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{t('output_vat') || 'Output VAT (Sales)'}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(summary?.sales?.total_tax || 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {summary?.sales?.transaction_count || 0} {t('transactions') || 'transactions'}
+                </p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{t('input_vat') || 'Input VAT (Purchases)'}</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {formatCurrency(summary?.purchases?.total_tax || 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {summary?.purchases?.transaction_count || 0} {t('transactions') || 'transactions'}
+                </p>
+              </div>
+              <TrendingDown className="w-8 h-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{t('net_tax_liability') || 'Net Tax Liability'}</p>
+                <p className={`text-2xl font-bold ${(summary?.net_tax_liability || 0) >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                  {formatCurrency(Math.abs(summary?.net_tax_liability || 0))}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {(summary?.net_tax_liability || 0) >= 0 ? (t('to_pay') || 'To Pay') : (t('refundable') || 'Refundable')}
+                </p>
+              </div>
+              <DollarSign className="w-8 h-8 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{t('reports') || 'Reports'}</p>
+                <p className="text-2xl font-bold">
+                  {summary?.reports?.filed_count || 0}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {summary?.reports?.pending_count || 0} {t('pending') || 'pending'}
+                </p>
+              </div>
+              <FileText className="w-8 h-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex justify-between items-center mb-4">
+          <TabsList>
+            <TabsTrigger value="overview">{t('overview') || 'Overview'}</TabsTrigger>
+            <TabsTrigger value="periods">{t('report_periods') || 'Report Periods'}</TabsTrigger>
+            <TabsTrigger value="transactions">{t('transactions') || 'Transactions'}</TabsTrigger>
+          </TabsList>
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setQuickRange('this_month')}>
+              {t('this_month') || 'This Month'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickRange('this_quarter')}>
+              {t('this_quarter') || 'This Quarter'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { loadSummary(); loadPeriods(); }}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Date Range Filter */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  {t('period_filter') || 'Period Filter'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('start_date') || 'Start Date'}</Label>
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('end_date') || 'End Date'}</Label>
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button onClick={loadSummary} className="w-full">
+                  <Calculator className="w-4 h-4 mr-2" />
+                  {t('calculate') || 'Calculate'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Tax Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{t('tax_breakdown') || 'Tax Breakdown'}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span>{t('total_sales') || 'Total Sales'}</span>
+                    <span className="font-medium">{formatCurrency(summary?.sales?.total_amount || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span>{t('sales_tax_collected') || 'Sales Tax Collected'}</span>
+                    <span className="font-medium text-green-600">+ {formatCurrency(summary?.sales?.total_tax || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span>{t('total_purchases') || 'Total Purchases'}</span>
+                    <span className="font-medium">{formatCurrency(summary?.purchases?.total_amount || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span>{t('purchase_tax_paid') || 'Purchase Tax Paid'}</span>
+                    <span className="font-medium text-red-600">- {formatCurrency(summary?.purchases?.total_tax || 0)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 bg-slate-50 px-2 rounded">
+                    <span className="font-semibold">{t('net_tax_liability') || 'Net Tax Liability'}</span>
+                    <span className={`font-bold ${(summary?.net_tax_liability || 0) >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                      {formatCurrency(summary?.net_tax_liability || 0)}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Report Periods Tab */}
+        <TabsContent value="periods">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>{t('tax_report_periods') || 'Tax Report Periods'}</CardTitle>
+                <Button onClick={() => setShowCreatePeriod(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_period') || 'New Period'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Filters */}
+              <div className="flex gap-4 mb-4">
+                <Select value={periodTypeFilter} onValueChange={setPeriodTypeFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder={t('period_type') || 'Period Type'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                    <SelectItem value="monthly">{t('monthly') || 'Monthly'}</SelectItem>
+                    <SelectItem value="quarterly">{t('quarterly') || 'Quarterly'}</SelectItem>
+                    <SelectItem value="yearly">{t('yearly') || 'Yearly'}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder={t('status') || 'Status'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all') || 'All'}</SelectItem>
+                    <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                    <SelectItem value="calculated">{t('calculated') || 'Calculated'}</SelectItem>
+                    <SelectItem value="filed">{t('filed') || 'Filed'}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={yearFilter} onValueChange={setYearFilter}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder={t('year') || 'Year'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[0, 1, 2, 3, 4].map(i => {
+                      const year = now.getFullYear() - i;
+                      return <SelectItem key={year} value={year.toString()}>{year}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+
+                <Button variant="outline" onClick={loadPeriods}>
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Periods Table */}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('name') || 'Name'}</TableHead>
+                    <TableHead>{t('period') || 'Period'}</TableHead>
+                    <TableHead>{t('type') || 'Type'}</TableHead>
+                    <TableHead className="text-right">{t('sales_tax') || 'Sales Tax'}</TableHead>
+                    <TableHead className="text-right">{t('purchase_tax') || 'Purchase Tax'}</TableHead>
+                    <TableHead className="text-right">{t('net_liability') || 'Net Liability'}</TableHead>
+                    <TableHead>{t('status') || 'Status'}</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {periods.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        {t('no_periods') || 'No tax report periods found'}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    periods.map((period) => (
+                      <TableRow key={period.id}>
+                        <TableCell className="font-medium">{period.name}</TableCell>
+                        <TableCell>
+                          {period.start_date} - {period.end_date}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{t(period.period_type) || period.period_type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {formatCurrency(period.total_sales_tax)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {formatCurrency(period.total_purchase_tax)}
+                        </TableCell>
+                        <TableCell className={`text-right font-medium ${period.net_tax_liability >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                          {formatCurrency(period.net_tax_liability)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(period.status)}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleViewPeriod(period)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                {t('view_details') || 'View Details'}
+                              </DropdownMenuItem>
+                              {period.status !== 'filed' && (
+                                <DropdownMenuItem onClick={() => handleCalculateReport(period.id)}>
+                                  <Calculator className="w-4 h-4 mr-2" />
+                                  {t('calculate') || 'Calculate'}
+                                </DropdownMenuItem>
+                              )}
+                              {period.status !== 'filed' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleDeletePeriod(period.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  {t('delete') || 'Delete'}
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Transactions Tab */}
+        <TabsContent value="transactions">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>{t('tax_transactions') || 'Tax Transactions'}</CardTitle>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-40"
+                  />
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-40"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('date') || 'Date'}</TableHead>
+                    <TableHead>{t('type') || 'Type'}</TableHead>
+                    <TableHead>{t('number') || 'Number'}</TableHead>
+                    <TableHead>{t('party') || 'Party'}</TableHead>
+                    <TableHead>{t('tax_rate') || 'Tax Rate'}</TableHead>
+                    <TableHead className="text-right">{t('taxable_amount') || 'Taxable Amount'}</TableHead>
+                    <TableHead className="text-right">{t('tax_amount') || 'Tax Amount'}</TableHead>
+                    <TableHead className="text-right">{t('total') || 'Total'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        {t('no_transactions') || 'No transactions found'}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((tx) => (
+                      <TableRow key={tx.id}>
+                        <TableCell>{tx.transaction_date}</TableCell>
+                        <TableCell>
+                          <Badge variant={tx.transaction_type === 'sales_invoice' ? 'default' : 'secondary'}>
+                            {tx.transaction_type === 'sales_invoice' ? (t('sale') || 'Sale') : (t('purchase') || 'Purchase')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">{tx.transaction_number}</TableCell>
+                        <TableCell>{tx.party_name}</TableCell>
+                        <TableCell>
+                          {tx.tax_name} ({tx.tax_rate}%)
+                        </TableCell>
+                        <TableCell className="text-right">{formatCurrency(tx.taxable_amount)}</TableCell>
+                        <TableCell className={`text-right ${tx.transaction_type === 'sales_invoice' ? 'text-green-600' : 'text-red-600'}`}>
+                          {tx.transaction_type === 'sales_invoice' ? '+' : '-'}{formatCurrency(tx.tax_amount)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(tx.total_amount)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Create Period Dialog */}
+      <Dialog open={showCreatePeriod} onOpenChange={setShowCreatePeriod}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('create_tax_period') || 'Create Tax Report Period'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{t('period_type') || 'Period Type'}</Label>
+              <Select
+                value={newPeriod.period_type}
+                onValueChange={(v) => updatePeriodDates(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">{t('monthly') || 'Monthly'}</SelectItem>
+                  <SelectItem value="quarterly">{t('quarterly') || 'Quarterly'}</SelectItem>
+                  <SelectItem value="yearly">{t('yearly') || 'Yearly'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('name') || 'Name'}</Label>
+              <Input
+                value={newPeriod.name}
+                onChange={(e) => setNewPeriod({ ...newPeriod, name: e.target.value })}
+                placeholder={t('report_name') || 'Report name'}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('start_date') || 'Start Date'}</Label>
+                <Input
+                  type="date"
+                  value={newPeriod.start_date}
+                  onChange={(e) => setNewPeriod({ ...newPeriod, start_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>{t('end_date') || 'End Date'}</Label>
+                <Input
+                  type="date"
+                  value={newPeriod.end_date}
+                  onChange={(e) => setNewPeriod({ ...newPeriod, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>{t('notes') || 'Notes'}</Label>
+              <Textarea
+                value={newPeriod.notes}
+                onChange={(e) => setNewPeriod({ ...newPeriod, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreatePeriod(false)}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button onClick={handleCreatePeriod} disabled={!newPeriod.name || isLoading}>
+              {t('create') || 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Period Details Dialog */}
+      <Dialog open={showPeriodDetails} onOpenChange={setShowPeriodDetails}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedPeriod?.period?.name}</DialogTitle>
+          </DialogHeader>
+          {selectedPeriod && (
+            <div className="space-y-6">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">{t('sales_tax') || 'Sales Tax'}</p>
+                    <p className="text-xl font-bold text-green-600">
+                      {formatCurrency(selectedPeriod.period.total_sales_tax)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">{t('purchase_tax') || 'Purchase Tax'}</p>
+                    <p className="text-xl font-bold text-red-600">
+                      {formatCurrency(selectedPeriod.period.total_purchase_tax)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">{t('net_liability') || 'Net Liability'}</p>
+                    <p className={`text-xl font-bold ${selectedPeriod.period.net_tax_liability >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                      {formatCurrency(selectedPeriod.period.net_tax_liability)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Lines breakdown */}
+              {selectedPeriod.lines && selectedPeriod.lines.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">{t('breakdown_by_tax') || 'Breakdown by Tax Rate'}</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('tax_rate') || 'Tax Rate'}</TableHead>
+                        <TableHead>{t('type') || 'Type'}</TableHead>
+                        <TableHead className="text-right">{t('taxable_amount') || 'Taxable'}</TableHead>
+                        <TableHead className="text-right">{t('tax_amount') || 'Tax'}</TableHead>
+                        <TableHead className="text-right">{t('count') || 'Count'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedPeriod.lines.map((line) => (
+                        <TableRow key={line.id}>
+                          <TableCell>{line.tax_name} ({line.tax_rate}%)</TableCell>
+                          <TableCell>
+                            <Badge variant={line.transaction_type === 'sales' ? 'default' : 'secondary'}>
+                              {t(line.transaction_type) || line.transaction_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(line.taxable_amount)}</TableCell>
+                          <TableCell className={`text-right ${line.transaction_type === 'sales' ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(line.tax_amount)}
+                          </TableCell>
+                          <TableCell className="text-right">{line.transaction_count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Status and actions */}
+              <div className="flex justify-between items-center pt-4 border-t">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{t('status') || 'Status'}:</span>
+                  {getStatusBadge(selectedPeriod.period.status)}
+                </div>
+                <div className="flex gap-2">
+                  {selectedPeriod.period.status !== 'filed' && (
+                    <>
+                      <Button variant="outline" onClick={() => handleCalculateReport(selectedPeriod.period.id)}>
+                        <Calculator className="w-4 h-4 mr-2" />
+                        {t('recalculate') || 'Recalculate'}
+                      </Button>
+                      {selectedPeriod.period.status === 'calculated' && (
+                        <Button onClick={() => setShowFileDialog(true)}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          {t('file_report') || 'File Report'}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* File Report Dialog */}
+      <Dialog open={showFileDialog} onOpenChange={setShowFileDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('file_tax_report') || 'File Tax Report'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-yellow-50 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-yellow-800">{t('filing_warning') || 'Warning'}</p>
+                <p className="text-sm text-yellow-700">
+                  {t('filing_warning_text') || 'Once filed, this report cannot be modified or deleted.'}
+                </p>
+              </div>
+            </div>
+            <div>
+              <Label>{t('filing_reference') || 'Filing Reference'}</Label>
+              <Input
+                value={fileData.filing_reference}
+                onChange={(e) => setFileData({ ...fileData, filing_reference: e.target.value })}
+                placeholder={t('filing_reference_placeholder') || 'e.g., Tax office reference number'}
+              />
+            </div>
+            <div>
+              <Label>{t('notes') || 'Notes'}</Label>
+              <Textarea
+                value={fileData.notes}
+                onChange={(e) => setFileData({ ...fileData, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFileDialog(false)}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button onClick={handleFileReport} disabled={isLoading}>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              {t('confirm_file') || 'Confirm & File'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
