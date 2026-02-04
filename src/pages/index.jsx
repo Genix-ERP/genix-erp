@@ -30,6 +30,7 @@ import LeaveManagement from "./LeaveManagement";
 import Attendance from "./Attendance";
 import EmployeeContracts from "./EmployeeContracts";
 import Cargo from "./Cargo";
+import POS from "./POS";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
@@ -194,6 +195,7 @@ function PagesContent() {
                 <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
                 <Route path="projects/:projectId" element={<ModuleRoute moduleId="projects"><ProjectDetail /></ModuleRoute>} />
                 <Route path="salesorders" element={<ModuleRoute moduleId="sales_orders"><SalesOrders /></ModuleRoute>} />
+                <Route path="pos" element={<ModuleRoute moduleId="sales_orders"><POS /></ModuleRoute>} />
                 <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
                 <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />

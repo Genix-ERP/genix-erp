@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, ArrowRightLeft, TrendingUp, TrendingDown,
   Warehouse, RotateCcw, Filter, Calendar, AlertCircle, CheckCircle,
-  ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle
+  ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle, BarChart3, Activity
 } from "lucide-react";
 import {
   Tooltip,
@@ -103,6 +103,41 @@ export default function InventoryManagement() {
     totalProducts: rawSummary?.totalProducts || 0,
     lowStockCount: rawSummary?.lowStockCount || 0
   };
+
+  // Analytics stats for stock movements
+  const analyticsStats = useMemo(() => {
+    const calculateTotalValue = (movements) => {
+      return movements.reduce((sum, movement) => {
+        const value = movement.total_cost || movement.total_value || (Math.abs(movement.quantity || 0) * (movement.unit_cost || 0));
+        return sum + value;
+      }, 0);
+    };
+
+    const getMovementType = (movement) => {
+      const type = movement.transaction_type || movement.movement_type;
+      if (type === 'receipt') return 'inbound';
+      if (type === 'issue') return 'outbound';
+      return type || 'unknown';
+    };
+
+    const inbound = stockMovements.filter(m => {
+      const type = getMovementType(m);
+      return type === 'inbound' || type === 'receipt' || (m.quantity > 0 && type !== 'transfer');
+    });
+    const outbound = stockMovements.filter(m => {
+      const type = getMovementType(m);
+      return type === 'outbound' || type === 'issue' || (m.quantity < 0 && type !== 'transfer');
+    });
+
+    return {
+      totalMovements: stockMovements.length,
+      inboundCount: inbound.length,
+      outboundCount: outbound.length,
+      inboundValue: calculateTotalValue(inbound),
+      outboundValue: calculateTotalValue(outbound),
+      netValue: calculateTotalValue(inbound) - calculateTotalValue(outbound)
+    };
+  }, [stockMovements]);
 
   // Filter inventory items - only show items with valid products and warehouses
   const filteredInventory = inventory.filter(item => {
@@ -357,6 +392,9 @@ export default function InventoryManagement() {
                 <TabsTrigger value="stock" className="data-[state=active]:bg-white">
                   <Package className="w-4 h-4 mr-2" /> {t('stock_levels')}
                 </TabsTrigger>
+                <TabsTrigger value="analytics" className="data-[state=active]:bg-white">
+                  <BarChart3 className="w-4 h-4 mr-2" /> {t('analytics')}
+                </TabsTrigger>
                 <TabsTrigger value="movements" className="data-[state=active]:bg-white">
                   <History className="w-4 h-4 mr-2" /> {t('movements')}
                 </TabsTrigger>
@@ -472,6 +510,96 @@ export default function InventoryManagement() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </TabsContent>
+
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="mt-0">
+            <CardContent className="p-6">
+              {/* Movement Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-500">{t('total_movements')}</p>
+                        <p className="text-2xl font-bold text-slate-900">{analyticsStats.totalMovements}</p>
+                      </div>
+                      <Activity className="w-6 h-6 text-[var(--genix-blue)]" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-500">{t('inbound_value')}</p>
+                        <p className="text-2xl font-bold text-green-600">${analyticsStats.inboundValue.toLocaleString()}</p>
+                      </div>
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-500">{t('outbound_value')}</p>
+                        <p className="text-2xl font-bold text-red-600">${analyticsStats.outboundValue.toLocaleString()}</p>
+                      </div>
+                      <TrendingDown className="w-6 h-6 text-red-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-500">{t('net_movement')}</p>
+                        <p className={`text-2xl font-bold ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ${analyticsStats.netValue.toLocaleString()}
+                        </p>
+                      </div>
+                      <ArrowRightLeft className={`w-6 h-6 ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* ABC Analysis */}
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg">{t('abc_analysis')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">
+                        {products.filter(p => p.abc_classification === 'A').length}
+                      </div>
+                      <div className="text-sm text-slate-600">{t('a_items')}</div>
+                      <div className="text-xs text-slate-500">{t('high')}</div>
+                    </div>
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {products.filter(p => p.abc_classification === 'B').length}
+                      </div>
+                      <div className="text-sm text-slate-600">{t('b_items')}</div>
+                      <div className="text-xs text-slate-500">{t('medium')}</div>
+                    </div>
+                    <div className="text-center p-4 bg-slate-50 rounded-lg">
+                      <div className="text-2xl font-bold text-slate-600">
+                        {products.filter(p => p.abc_classification === 'C' || !p.abc_classification).length}
+                      </div>
+                      <div className="text-sm text-slate-600">{t('c_items')}</div>
+                      <div className="text-xs text-slate-500">{t('low')}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </CardContent>
           </TabsContent>
 

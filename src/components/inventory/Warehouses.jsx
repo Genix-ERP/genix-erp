@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, Warehouse, Pencil, Trash2, Eye, MapPin, Phone,
   Mail, User, ChevronRight, ChevronDown, AlertCircle, CheckCircle,
   Building2, Package, LayoutGrid, Truck, PackageCheck, RotateCcw,
-  ClipboardCheck, Barcode, Box, Layers, HelpCircle
+  ClipboardCheck, Barcode, Box, Layers, HelpCircle, ArrowLeftRight, Trash
 } from "lucide-react";
 import {
   Tooltip,
@@ -24,6 +25,9 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import InventoryManagement from "./InventoryManagement";
+import StockCounting from "./StockCounting";
+import ScrapManagement from "./ScrapManagement";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 // Note: TooltipProvider should be at a higher level, not per-component
@@ -65,6 +69,7 @@ export default function Warehouses() {
     isLoading
   } = useInventory();
 
+  const [activeSubTab, setActiveSubTab] = useState('warehouses');
   const [filteredWarehouses, setFilteredWarehouses] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedWarehouse, setExpandedWarehouse] = useState(null);
@@ -347,8 +352,31 @@ export default function Warehouses() {
   return (
     <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Sub-tabs for Warehouses, Stock Management, Stocktake, and Scrap */}
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
+        <TabsList className="w-fit bg-slate-100/80 p-1 rounded-lg flex-wrap">
+          <TabsTrigger value="warehouses" className="data-[state=active]:bg-white">
+            <Warehouse className="w-4 h-4 mr-2" />
+            {t('warehouses') || 'Warehouses'}
+          </TabsTrigger>
+          <TabsTrigger value="stock-management" className="data-[state=active]:bg-white">
+            <ArrowLeftRight className="w-4 h-4 mr-2" />
+            {t('stock_management') || 'Stock Management'}
+          </TabsTrigger>
+          <TabsTrigger value="stocktake" className="data-[state=active]:bg-white">
+            <ClipboardCheck className="w-4 h-4 mr-2" />
+            {t('stocktake') || 'Stocktake'}
+          </TabsTrigger>
+          <TabsTrigger value="scrap" className="data-[state=active]:bg-white">
+            <Trash className="w-4 h-4 mr-2" />
+            {t('scrap') || 'Scrap'}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Warehouses Tab */}
+        <TabsContent value="warehouses" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -651,6 +679,23 @@ export default function Warehouses() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Stock Management Tab */}
+        <TabsContent value="stock-management" className="mt-4">
+          <InventoryManagement />
+        </TabsContent>
+
+        {/* Stocktake Tab */}
+        <TabsContent value="stocktake" className="mt-4">
+          <StockCounting />
+        </TabsContent>
+
+        {/* Scrap Tab */}
+        <TabsContent value="scrap" className="mt-4">
+          <ScrapManagement />
+        </TabsContent>
+      </Tabs>
 
       {/* Create/Edit Warehouse Modal */}
       <Dialog open={showCreateModal || showEditModal} onOpenChange={(open) => {

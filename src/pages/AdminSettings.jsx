@@ -104,21 +104,21 @@ export default function AdminSettings() {
     }
   }, [isLoading, user, canManageSettings, navigate]);
 
-  // Sync URL parameter when active section changes
+  // Handle URL tab parameter changes (e.g., from navigation links)
+  const tabFromUrl = searchParams.get('tab');
   useEffect(() => {
-    const currentTab = searchParams.get('tab');
-    if (currentTab !== activeSection) {
-      setSearchParams({ tab: activeSection });
-    }
-  }, [activeSection, searchParams, setSearchParams]);
-
-  // Sync active section when URL parameter changes
-  useEffect(() => {
-    const tabFromUrl = searchParams.get('tab');
     if (tabFromUrl && tabFromUrl !== activeSection) {
       setActiveSection(tabFromUrl);
     }
-  }, [searchParams]);
+  }, [tabFromUrl]); // Only react to URL tab changes
+
+  // Sync URL when activeSection changes from UI clicks
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    if (currentTab !== activeSection) {
+      setSearchParams({ tab: activeSection }, { replace: true });
+    }
+  }, [activeSection]); // Only depend on activeSection
 
   // Reset active section if it becomes unavailable
   useEffect(() => {

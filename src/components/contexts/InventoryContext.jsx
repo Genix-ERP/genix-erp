@@ -1403,15 +1403,23 @@ export function InventoryProvider({ children }) {
     return newCount;
   }, [stockCounts, inventory, activeCompany]);
 
-  const updateStockCountLine = useCallback(async (countId, productId, countedQty, reason) => {
+  const updateStockCountLine = useCallback(async (countId, productId, countedQty, reason, systemQtyOverride) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
     const updated = stockCounts.map(sc => {
       if (sc.id === countId) {
         const updatedLines = sc.lines.map(line => {
           if (line.product_id === productId) {
-            const variance = countedQty - line.system_qty;
-            return { ...line, counted_qty: countedQty, variance, variance_reason: reason || null };
+            // Use provided systemQty or fall back to line's system_qty or 0
+            const systemQty = systemQtyOverride ?? line.system_qty ?? 0;
+            const variance = countedQty - systemQty;
+            return {
+              ...line,
+              counted_qty: countedQty,
+              variance,
+              variance_reason: reason || null,
+              system_qty: systemQty // Ensure system_qty is persisted
+            };
           }
           return line;
         });

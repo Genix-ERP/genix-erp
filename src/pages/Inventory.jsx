@@ -12,41 +12,33 @@ import {
   TrendingUp,
   Filter,
   Download,
-  BarChart3,
-  Calculator,
   Clock,
-  Target,
   Zap,
   Warehouse,
-  ArrowRightLeft,
   LayoutDashboard,
   Box,
   ShoppingCart,
   ClipboardList,
   DollarSign,
-  Bell,
-  Trash2,
   Settings2,
-  MapPin
+  MapPin,
+  CalendarClock
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import InventoryForm from "@/components/inventory/InventoryForm";
-import COGSCalculator from "@/components/inventory/COGSCalculator";
-import StockMovementTracker from "@/components/inventory/StockMovementTracker";
 import CompliancePanel from "@/components/inventory/CompliancePanel";
-import ReorderOptimizer from "@/components/inventory/ReorderOptimizer";
+// COGSCalculator is now integrated into Products component
 import Products from "@/components/inventory/Products";
 import Warehouses from "@/components/inventory/Warehouses";
-import InventoryManagement from "@/components/inventory/InventoryManagement";
-import StockCounting from "@/components/inventory/StockCounting";
-import StockTransfers from "@/components/inventory/StockTransfers";
+// StockCounting and ScrapManagement are now integrated into Warehouses component
+// InventoryManagement (Stock Management) is now integrated into Warehouses component
 // BOM moved to Manufacturing module - it's a manufacturing concept, not inventory
 import InventoryValuation from "@/components/inventory/InventoryValuation";
-import ReorderRules from "@/components/inventory/ReorderRules";
-import ScrapManagement from "@/components/inventory/ScrapManagement";
+import Planning from "@/components/inventory/Planning";
+// ReorderRules and Replenishment are now integrated into Planning component
 import OperationTypes from "@/components/inventory/OperationTypes";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 
@@ -292,57 +284,6 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="stock"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Box className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('stock_management')}</span>
-              <span className="sm:hidden">{t('stock')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="transfers"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('transfers') || "Ko'chirishlar"}</span>
-              <span className="sm:hidden">{t('transfers') || "Ko'chirish"}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="cogs"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Calculator className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('cogs')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="reorder"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Target className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('reorder')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="analytics"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('analytics')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="counting"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('stocktake')}</span>
-              <span className="sm:hidden">{t('stocktake')}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="valuation"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
@@ -351,20 +292,11 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="reorder-rules"
+              value="planning"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
-              <Bell className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('reorder_rules') || 'Reorder Rules'}</span>
-              <span className="sm:hidden">{t('rules') || 'Rules'}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="scrap"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('scrap') || 'Scrap'}</span>
+              <CalendarClock className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('planning') || 'Planning'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -454,88 +386,14 @@ export default function Inventory() {
             <WarehouseLocations />
           </TabsContent>
 
-          {/* Stock Management Tab */}
-          <TabsContent value="stock" className="mt-6">
-            <InventoryManagement />
-          </TabsContent>
-
-          {/* Transfers Tab */}
-          <TabsContent value="transfers" className="mt-6">
-            <StockTransfers />
-          </TabsContent>
-
-          {/* COGS Tab */}
-          <TabsContent value="cogs" className="mt-6">
-            <COGSCalculator items={items} movements={stockMovements} />
-          </TabsContent>
-
-          {/* Reorder Tab */}
-          <TabsContent value="reorder" className="mt-6">
-            <ReorderOptimizer items={items} movements={stockMovements} />
-          </TabsContent>
-
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="mt-6">
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Stock Movements - takes 2 columns on xl screens */}
-              <div className="xl:col-span-2">
-                <StockMovementTracker movements={stockMovements} items={items} />
-              </div>
-
-              {/* ABC Analysis - takes 1 column on xl screens */}
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg h-fit">
-                <CardHeader>
-                  <CardTitle>{t('abc_analysis')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">
-                          {items.filter(i => i.abc_classification === 'A').length}
-                        </div>
-                        <div className="text-sm text-slate-600">{t('a_items')}</div>
-                        <div className="text-xs text-slate-500">{t('high')}</div>
-                      </div>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {items.filter(i => i.abc_classification === 'B').length}
-                        </div>
-                        <div className="text-sm text-slate-600">{t('b_items')}</div>
-                        <div className="text-xs text-slate-500">{t('medium')}</div>
-                      </div>
-                      <div className="text-center p-4 bg-slate-50 rounded-lg">
-                        <div className="text-2xl font-bold text-slate-600">
-                          {items.filter(i => i.abc_classification === 'C' || !i.abc_classification).length}
-                        </div>
-                        <div className="text-sm text-slate-600">{t('c_items')}</div>
-                        <div className="text-xs text-slate-500">{t('low')}</div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Stock Counting Tab */}
-          <TabsContent value="counting" className="mt-6">
-            <StockCounting />
-          </TabsContent>
-
           {/* Inventory Valuation Tab */}
           <TabsContent value="valuation" className="mt-6">
             <InventoryValuation />
           </TabsContent>
 
-          {/* Reorder Rules Tab */}
-          <TabsContent value="reorder-rules" className="mt-6">
-            <ReorderRules />
-          </TabsContent>
-
-          {/* Scrap Management Tab */}
-          <TabsContent value="scrap" className="mt-6">
-            <ScrapManagement />
+          {/* Planning Tab (Reorder Rules + Replenishment) */}
+          <TabsContent value="planning" className="mt-6">
+            <Planning />
           </TabsContent>
         </Tabs>
 

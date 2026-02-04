@@ -198,10 +198,36 @@ export default function StockCounting() {
 
   const handleUpdateLine = async (productId, countedQty, reason) => {
     if (!selectedCount) return;
-    await updateStockCountLine(selectedCount.id, productId, parseInt(countedQty) || 0, reason);
-    // Refresh selected count
-    const updated = stockCounts.find(sc => sc.id === selectedCount.id);
-    setSelectedCount(updated);
+
+    // Get current system_qty for variance calculation
+    const line = selectedCount.lines?.find(l => l.product_id === productId);
+    const inventoryItem = inventory.find(i =>
+      i.product_id === productId &&
+      i.warehouse_id === selectedCount.warehouse_id
+    );
+    const systemQty = line?.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
+    const parsedCountedQty = parseInt(countedQty) || 0;
+    const variance = parsedCountedQty - systemQty;
+
+    // Update the line locally immediately for better UX
+    const updatedLines = selectedCount.lines.map(l => {
+      if (l.product_id === productId) {
+        return {
+          ...l,
+          counted_qty: parsedCountedQty,
+          variance: variance,
+          variance_reason: reason || null,
+          system_qty: systemQty // Ensure system_qty is stored
+        };
+      }
+      return l;
+    });
+
+    const updatedCount = { ...selectedCount, lines: updatedLines, status: 'in_progress' };
+    setSelectedCount(updatedCount);
+
+    // Also persist to context/storage
+    await updateStockCountLine(selectedCount.id, productId, parsedCountedQty, reason, systemQty);
   };
 
   const handleComplete = async () => {
@@ -516,6 +542,12 @@ export default function StockCounting() {
                       {selectedCount.lines?.map((line) => {
                         const product = products.find(p => p.id === line.product_id);
                         const isEditable = selectedCount.status !== 'completed' && selectedCount.status !== 'cancelled';
+                        // Get system_qty from line, or fall back to current inventory
+                        const inventoryItem = inventory.find(i =>
+                          i.product_id === line.product_id &&
+                          i.warehouse_id === selectedCount.warehouse_id
+                        );
+                        const systemQty = line.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
 
                         return (
                           <TableRow key={line.product_id} className="hover:bg-slate-50">
@@ -525,7 +557,7 @@ export default function StockCounting() {
                                 <span className="font-medium">{product?.name || t('unknown')}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center font-semibold">{line.system_qty}</TableCell>
+                            <TableCell className="text-center font-semibold">{systemQty}</TableCell>
                             <TableCell className="text-center">
                               {isEditable ? (
                                 <Input

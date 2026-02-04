@@ -226,6 +226,13 @@ function LayoutContent({ children, currentPageName }) {
       badge: null,
       moduleId: 'sales_orders'
     },
+    'pos': {
+      title: 'Point of Sale',
+      url: createPageUrl("POS"),
+      icon: ShoppingCart,
+      badge: null,
+      moduleId: 'sales_orders'
+    },
     'assets': {
       title: t("assets"),
       url: createPageUrl("Assets"),
@@ -310,12 +317,19 @@ function LayoutContent({ children, currentPageName }) {
 
     // Add installed app modules - only if user has permission to access
     Object.keys(appNavigationMap).forEach(appId => {
+      // Skip POS here, we'll add it separately after sales_orders
+      if (appId === 'pos') return;
+
       const appConfig = appNavigationMap[appId];
       // Check if app is installed AND user has permission to access the module
       // Admins, site admins, and owners always have access
       const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
       if (isAppInstalled(appId) && hasAccess) {
         dynamicItems.push(appConfig);
+        // POS temporarily hidden - uncomment when ready
+        // if (appId === 'sales_orders' && appNavigationMap['pos']) {
+        //   dynamicItems.push(appNavigationMap['pos']);
+        // }
       }
     });
 
