@@ -36,13 +36,12 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 
 // Import sales components
-import Quotations from '@/components/sales/Quotations';
+import QuotationsSection from '@/components/sales/QuotationsSection';
 import Invoices from '@/components/sales/Invoices';
 import Discounts from '@/components/sales/Discounts';
 import DeliveryOrders from '@/components/sales/DeliveryOrders';
 import Orders from '@/components/sales/Orders';
 import Dropshipping from '@/components/sales/Dropshipping';
-import Pricelists from '@/components/sales/Pricelists';
 
 // Import universal ERP components
 import {
@@ -964,10 +963,6 @@ export default function SalesOrders() {
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dropshipping') || 'Dropshipping'}</span>
             </TabsTrigger>
-            <TabsTrigger value="pricelists" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <Tag className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('pricelists') || 'Pricelists'}</span>
-            </TabsTrigger>
           </TabsList>
 
           {/* Dashboard Tab - Stats */}
@@ -1113,9 +1108,9 @@ export default function SalesOrders() {
             />
           </TabsContent>
 
-          {/* Quotations Tab */}
+          {/* Quotations Tab (with Pricelists and Templates sub-tabs) */}
           <TabsContent value="quotations">
-            <Quotations />
+            <QuotationsSection />
           </TabsContent>
 
           {/* Invoices Tab */}
@@ -1208,11 +1203,6 @@ export default function SalesOrders() {
           {/* Dropshipping Tab */}
           <TabsContent value="dropshipping">
             <Dropshipping />
-          </TabsContent>
-
-          {/* Pricelists Tab */}
-          <TabsContent value="pricelists">
-            <Pricelists />
           </TabsContent>
         </Tabs>
 

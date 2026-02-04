@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, Percent, Pencil, Trash2, CheckCircle, XCircle,
-  Calculator, ShoppingCart, Package, AlertCircle
+  Calculator, ShoppingCart, Package, AlertCircle, Receipt
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import TaxReports from "./TaxReports";
 
 export default function TaxRates() {
   const { language } = useLanguage();
@@ -178,8 +180,27 @@ export default function TaxRates() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Tabs defaultValue="rates" className="w-full">
+        <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200/60 shadow-sm">
+          <TabsTrigger
+            value="rates"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Percent className="w-4 h-4" />
+            {t('tax_rates') || 'Tax Rates'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Receipt className="w-4 h-4" />
+            {t('tax_reports') || 'Tax Reports'}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="rates" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -730,6 +751,12 @@ export default function TaxRates() {
           </div>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-4">
+          <TaxReports />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

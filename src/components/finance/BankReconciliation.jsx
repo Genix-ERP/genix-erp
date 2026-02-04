@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
-  MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown
+  MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
+  Calendar, Target
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -17,6 +18,10 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import CashRegister from "./CashRegister";
+import CurrencyManagement from "./CurrencyManagement";
+import FiscalPeriods from "./FiscalPeriods";
+import BudgetManagement from "./BudgetManagement";
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -171,8 +176,48 @@ export default function BankReconciliation() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <Tabs defaultValue="bank" className="w-full">
+        <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200/60 shadow-sm">
+          <TabsTrigger
+            value="bank"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Landmark className="w-4 h-4" />
+            {t('bank_accounts') || 'Bank Accounts'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="cash"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Wallet className="w-4 h-4" />
+            {t('cash_register') || 'Cash Register'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="currency"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Globe className="w-4 h-4" />
+            {t('currency') || 'Currency'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="fiscal"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Calendar className="w-4 h-4" />
+            {t('fiscal_periods') || 'Fiscal Periods'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="budgets"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Target className="w-4 h-4" />
+            {t('budgets') || 'Budgets'}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="bank" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -655,6 +700,24 @@ export default function BankReconciliation() {
           </div>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="cash" className="mt-4">
+          <CashRegister />
+        </TabsContent>
+
+        <TabsContent value="currency" className="mt-4">
+          <CurrencyManagement />
+        </TabsContent>
+
+        <TabsContent value="fiscal" className="mt-4">
+          <FiscalPeriods />
+        </TabsContent>
+
+        <TabsContent value="budgets" className="mt-4">
+          <BudgetManagement />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
