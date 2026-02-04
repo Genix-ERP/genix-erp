@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { LabelWithHelp } from "@/components/ui/field-help";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTranslation } from "@/components/utils/translations";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import {
@@ -45,6 +46,9 @@ import {
   Award,
   Upload,
   Download,
+  BarChart3,
+  Tag,
+  Receipt,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -62,6 +66,9 @@ import {
 } from "@/components/shared";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import SupplierPerformance from "./SupplierPerformance";
+import VendorPricelist from "./VendorPricelist";
+import VendorBills from "./VendorBills";
 
 export default function Suppliers() {
   const { language } = useLanguage();
@@ -78,6 +85,7 @@ export default function Suppliers() {
   } = useProcurement();
   const { canCreate } = usePermissions();
 
+  const [activeTab, setActiveTab] = useState("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
@@ -300,8 +308,31 @@ export default function Suppliers() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Tabs for List, Performance, Pricelist, and Bills */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-fit bg-slate-100/80 p-1 rounded-lg flex-wrap">
+          <TabsTrigger value="list" className="data-[state=active]:bg-white">
+            <Building2 className="w-4 h-4 mr-2" />
+            {t('list') || 'List'}
+          </TabsTrigger>
+          <TabsTrigger value="performance" className="data-[state=active]:bg-white">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            {t('performance') || 'Performance'}
+          </TabsTrigger>
+          <TabsTrigger value="pricelist" className="data-[state=active]:bg-white">
+            <Tag className="w-4 h-4 mr-2" />
+            {t('pricelist') || 'Pricelist'}
+          </TabsTrigger>
+          <TabsTrigger value="bills" className="data-[state=active]:bg-white">
+            <Receipt className="w-4 h-4 mr-2" />
+            {t('bills') || 'Bills'}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* List Tab */}
+        <TabsContent value="list" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -508,6 +539,23 @@ export default function Suppliers() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Performance Tab */}
+        <TabsContent value="performance" className="mt-4">
+          <SupplierPerformance />
+        </TabsContent>
+
+        {/* Pricelist Tab */}
+        <TabsContent value="pricelist" className="mt-4">
+          <VendorPricelist />
+        </TabsContent>
+
+        {/* Bills Tab */}
+        <TabsContent value="bills" className="mt-4">
+          <VendorBills />
+        </TabsContent>
+      </Tabs>
 
       {/* Add/Edit Form Modal */}
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>

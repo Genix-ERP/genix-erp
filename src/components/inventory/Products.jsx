@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
-  Tag, Barcode, Box, Filter, MoreHorizontal, AlertCircle,
+  Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck
+  Layers, Printer, HelpCircle, Truck, Calculator
 } from "lucide-react";
 import {
   Tooltip,
@@ -28,6 +28,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import LotTracking from "./LotTracking";
 import PriceLabelPrinting from "./PriceLabelPrinting";
 import ProductVariants from "./ProductVariants";
+import Packages from "./Packages";
+import PackageTypes from "./PackageTypes";
+import COGSCalculator from "./COGSCalculator";
 
 // Import universal ERP components
 import {
@@ -67,6 +70,8 @@ export default function Products() {
     products,
     categories,
     inventory,
+    items,
+    stockMovements,
     createProduct,
     updateProduct,
     deleteProduct,
@@ -737,6 +742,27 @@ export default function Products() {
             <Layers className="w-4 h-4" />
             {t('variants')}
           </TabsTrigger>
+          <TabsTrigger
+            value="packages"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Boxes className="w-4 h-4" />
+            {t('packages')}
+          </TabsTrigger>
+          <TabsTrigger
+            value="package-types"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Box className="w-4 h-4" />
+            {t('package_types') || 'Package Types'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="cogs"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Calculator className="w-4 h-4" />
+            {t('cogs') || 'COGS'}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1186,6 +1212,21 @@ export default function Products() {
         {/* Variants Tab */}
         <TabsContent value="variants" className="mt-0">
           <ProductVariants />
+        </TabsContent>
+
+        {/* Packages Tab */}
+        <TabsContent value="packages" className="mt-0">
+          <Packages />
+        </TabsContent>
+
+        {/* Package Types Tab */}
+        <TabsContent value="package-types" className="mt-0">
+          <PackageTypes />
+        </TabsContent>
+
+        {/* COGS Tab */}
+        <TabsContent value="cogs" className="mt-0">
+          <COGSCalculator items={items} movements={stockMovements} />
         </TabsContent>
       </Tabs>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,34 +35,70 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useProcurement } from '@/components/contexts/ProcurementContext';
 
 export default function SupplierPerformance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { suppliers: contextSuppliers, purchaseOrders } = useProcurement();
 
-  const [suppliers, setSuppliers] = useState([]);
-  const [filteredSuppliers, setFilteredSuppliers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [performanceFilter, setPerformanceFilter] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('30'); // days
 
-  // Load supplier performance data
-  useEffect(() => {
-    const stored = localStorage.getItem('genix_supplier_performance');
-    if (stored) {
-      const performanceData = JSON.parse(stored);
-      setSuppliers(performanceData);
-      setFilteredSuppliers(performanceData);
-    }
-  }, []);
+  // Calculate performance metrics for each supplier based on purchase orders
+  const suppliers = useMemo(() => {
+    return contextSuppliers.map(supplier => {
+      // Get orders for this supplier
+      const supplierOrders = purchaseOrders.filter(po =>
+        po.supplier_id === supplier.id ||
+        po.vendor_name?.toLowerCase() === supplier.name?.toLowerCase()
+      );
+
+      const totalOrders = supplierOrders.length;
+      const receivedOrders = supplierOrders.filter(po => po.status === 'received');
+      const onTimeDeliveries = receivedOrders.filter(po => {
+        if (!po.expected_delivery_date || !po.received_date) return true; // Assume on-time if no dates
+        return new Date(po.received_date) <= new Date(po.expected_delivery_date);
+      }).length;
+
+      const onTimeRate = totalOrders > 0 ? (onTimeDeliveries / Math.max(receivedOrders.length, 1)) * 100 : 100;
+      const totalSpend = supplierOrders.reduce((sum, po) => sum + (po.total_amount || 0), 0);
+
+      // Use supplier's existing rating or default
+      const rating = supplier.rating || supplier.overall_rating || 4.0;
+      const qualityScore = supplier.quality_score || (rating / 5) * 100;
+      const defectRate = supplier.defect_rate || 100 - qualityScore;
+
+      // Calculate overall performance score
+      const performanceScore = Math.round((onTimeRate * 0.4) + (qualityScore * 0.4) + (rating * 4));
+
+      return {
+        id: supplier.id,
+        vendor_name: supplier.name,
+        rating: rating,
+        performance_score: Math.min(performanceScore, 100),
+        on_time_rate: onTimeRate,
+        on_time_deliveries: onTimeDeliveries,
+        total_orders: totalOrders,
+        quality_score: qualityScore,
+        defect_rate: defectRate,
+        total_spend: totalSpend,
+        avg_lead_time: supplier.lead_time_days || supplier.avg_lead_time || 7,
+        issues: supplier.open_issues || 0,
+        returns: supplier.returns_count || 0,
+        trend: performanceScore >= 80 ? 'up' : 'down'
+      };
+    });
+  }, [contextSuppliers, purchaseOrders]);
 
   // Filter suppliers
-  useEffect(() => {
+  const filteredSuppliers = useMemo(() => {
     let filtered = suppliers;
 
     if (searchTerm) {
       filtered = filtered.filter(supplier =>
-        supplier.vendor_name.toLowerCase().includes(searchTerm.toLowerCase())
+        supplier.vendor_name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -78,7 +114,7 @@ export default function SupplierPerformance() {
       }
     }
 
-    setFilteredSuppliers(filtered);
+    return filtered;
   }, [suppliers, searchTerm, performanceFilter]);
 
   const getPerformanceBadge = (score) => {

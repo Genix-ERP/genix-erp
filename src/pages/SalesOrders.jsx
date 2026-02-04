@@ -38,9 +38,10 @@ import { usePermissions } from "@/hooks/usePermissions";
 // Import sales components
 import Quotations from '@/components/sales/Quotations';
 import Invoices from '@/components/sales/Invoices';
-import Returns from '@/components/sales/Returns';
 import Discounts from '@/components/sales/Discounts';
 import DeliveryOrders from '@/components/sales/DeliveryOrders';
+import Orders from '@/components/sales/Orders';
+import Dropshipping from '@/components/sales/Dropshipping';
 
 // Import universal ERP components
 import {
@@ -230,6 +231,9 @@ export default function SalesOrders() {
   // Product variants
   const [productVariants, setProductVariants] = useState({}); // { productId: variants[] }
 
+  // Product packagings (e.g., 6-pack, case of 24)
+  const [productPackagings, setProductPackagings] = useState({}); // { productId: packagings[] }
+
   // Warehouses list for selection
   const [warehouses, setWarehouses] = useState([]);
 
@@ -349,6 +353,19 @@ export default function SalesOrders() {
     }
   }, [productVariants]);
 
+  // Fetch packagings for a product (e.g., 6-pack, case of 24)
+  const fetchProductPackagings = useCallback(async (productId) => {
+    if (!productId || productPackagings[productId]) return;
+    try {
+      const data = await inventoryService.listProductPackagingsByProduct(productId);
+      // Only show packagings available for sales
+      const salesPackagings = (Array.isArray(data) ? data : []).filter(p => p.sales);
+      setProductPackagings(prev => ({ ...prev, [productId]: salesPackagings }));
+    } catch (error) {
+      console.error('Failed to fetch packagings:', error);
+    }
+  }, [productPackagings]);
+
   const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
     const newLines = [...order.lines];
     newLines[index] = { ...newLines[index], [field]: value };
@@ -365,13 +382,20 @@ export default function SalesOrders() {
           lead_time_days: selectedProduct.lead_time_days || 0,
           product: selectedProduct,
           variant_id: null, // Reset variant when product changes
-          variant_name: null
+          variant_name: null,
+          packaging_id: null, // Reset packaging when product changes
+          packaging_qty: null,
+          packaging_name: null,
+          packaging_unit_qty: null
         };
 
         // Fetch variants if product has variants
         if (selectedProduct.has_variants) {
           fetchProductVariants(selectedProduct.id);
         }
+
+        // Always fetch packagings for the product
+        fetchProductPackagings(selectedProduct.id);
 
         // Recalculate delivery date if not manually set
         if (!isManualDelivery) {
@@ -395,6 +419,47 @@ export default function SalesOrders() {
           unit_price: selectedVariant.list_price || newLines[index].unit_price
         };
       }
+    }
+
+    // If changing packaging selection
+    if (field === 'packaging_id') {
+      if (value) {
+        const productId = newLines[index].product_id;
+        const packagings = productPackagings[productId] || [];
+        const selectedPackaging = packagings.find(p => p.id === value);
+        if (selectedPackaging) {
+          // Auto-calculate quantity based on packaging
+          const packagingQty = newLines[index].packaging_qty || 1;
+          newLines[index] = {
+            ...newLines[index],
+            packaging_id: selectedPackaging.id,
+            packaging_name: selectedPackaging.name,
+            packaging_unit_qty: selectedPackaging.qty,
+            packaging_qty: packagingQty,
+            quantity: packagingQty * selectedPackaging.qty // Auto-calculate total quantity
+          };
+        }
+      } else {
+        // Clear packaging fields if "None" selected
+        newLines[index] = {
+          ...newLines[index],
+          packaging_id: null,
+          packaging_name: null,
+          packaging_unit_qty: null,
+          packaging_qty: null
+        };
+      }
+    }
+
+    // If changing packaging quantity
+    if (field === 'packaging_qty' && newLines[index].packaging_id) {
+      const packagingQty = parseFloat(value) || 1;
+      const packagingUnitQty = newLines[index].packaging_unit_qty || 1;
+      newLines[index] = {
+        ...newLines[index],
+        packaging_qty: packagingQty,
+        quantity: packagingQty * packagingUnitQty // Auto-calculate total quantity
+      };
     }
 
     setOrder({ ...order, lines: newLines });
@@ -498,6 +563,8 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        packaging_id: line.packaging_id || undefined,
+        packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));
 
     // Check if customer_id is a valid UUID (backend requires UUID format)
@@ -576,6 +643,8 @@ export default function SalesOrders() {
         description: line.description || line.product_name || '',
         quantity: parseFloat(line.quantity) || 1,
         unit_price: parseFloat(line.unit_price) || 0,
+        packaging_id: line.packaging_id || undefined,
+        packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
       }));
 
     // Check if customer_id is a valid UUID
@@ -875,13 +944,6 @@ export default function SalesOrders() {
                 <Badge className="ml-2 bg-yellow-100 text-yellow-800">{tabCounts.invoices}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="returns" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('returns')}</span>
-              {tabCounts.returns > 0 && (
-                <Badge className="ml-2 bg-red-100 text-red-800">{tabCounts.returns}</Badge>
-              )}
-            </TabsTrigger>
             <TabsTrigger value="discounts" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">{t('discounts')}</span>
@@ -897,9 +959,9 @@ export default function SalesOrders() {
               <Building2 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('carriers') || 'Carriers'}</span>
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('analytics')}</span>
+            <TabsTrigger value="dropshipping" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Package className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('dropshipping') || 'Dropshipping'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1015,173 +1077,35 @@ export default function SalesOrders() {
 
           {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-6">
-
-            {/* Orders Table */}
-            <Card className="bg-white/80 backdrop-blur-sm">
-                <CardHeader className="border-b">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <CardTitle className="text-lg">{t('orders')}</CardTitle>
-                    <div className="flex gap-2 flex-wrap">
-                      <ImportExportButtons
-                        onImport={() => setShowImportModal(true)}
-                        onExport={() => setShowExportModal(true)}
-                      />
-                      <Button variant="outline" size="sm" onClick={() => setShowBatchPrint(true)} disabled={filteredOrders.length === 0}>
-                        <Printer className="w-4 h-4 mr-1" />
-                        {t('print')}
-                      </Button>
-                      {canCreate(MODULES.SALES) && (
-                        <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
-                          <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-3 mt-4">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input
-                        placeholder={t('search') + '...'}
-                        className="pl-9"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-[150px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{t('all')}</SelectItem>
-                        <SelectItem value="quotation">{t('quotation')}</SelectItem>
-                        <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
-                        <SelectItem value="processing">{t('processing')}</SelectItem>
-                        <SelectItem value="shipped">{t('shipped')}</SelectItem>
-                        <SelectItem value="delivered">{t('delivered')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {ordersLoading ? (
-                    <div className="flex items-center justify-center py-16">
-                      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                  ) : filteredOrders.length === 0 ? (
-                    <div className="text-center py-16">
-                      <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                      <p className="text-slate-500">{t('no_orders_found')}</p>
-                      {canCreate(MODULES.SALES) && (
-                        <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('create_first_order')}</Button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-slate-50">
-                            <TableHead>{t('order_number')}</TableHead>
-                            <TableHead>{t('customer')}</TableHead>
-                            <TableHead>{t('date')}</TableHead>
-                            <TableHead>{t('amount')}</TableHead>
-                            <TableHead>{t('status')}</TableHead>
-                            <TableHead>{t('actions')}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredOrders.map((order) => (
-                            <TableRow key={order.id} className="hover:bg-slate-50">
-                              <TableCell className="font-mono text-sm">
-                                <div className="flex items-center gap-2">
-                                  {order.order_number}
-                                  {orderHasReturns(order.id) && (
-                                    <MessageSquareWarning className="w-4 h-4 text-red-500" title={t('has_returns') || 'Has Returns'} />
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="font-medium">{order.customer_name}</TableCell>
-                              <TableCell className="text-sm">
-                                {order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}
-                              </TableCell>
-                              <TableCell className="font-semibold">{formatCurrency(order.total_amount)}</TableCell>
-                              <TableCell>
-                                <Badge className={getStatusColor(order.status)}>{t(order.status)}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1 flex-wrap">
-                                  {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'confirmed')} title={t('confirm')}>
-                                      <CheckCircle className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  {canUpdate(MODULES.SALES) && order.status === 'confirmed' && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'processing')} title={t('to_processing')}>
-                                      <Package className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  {canUpdate(MODULES.SALES) && order.status === 'processing' && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleUpdateStatus(order.id, 'shipped')} title={t('ship')}>
-                                      <Truck className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order.id) && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
-                                      <Receipt className="w-4 h-4 text-green-600" />
-                                    </Button>
-                                  )}
-                                  <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)} title={t('view')}>
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => handlePrintOrder(order)} title={t('print')}>
-                                    <Printer className="w-4 h-4" />
-                                  </Button>
-                                  {canUpdate(MODULES.SALES) && (order.status === 'draft' || order.status === 'quotation') && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={async () => {
-                                        try {
-                                          // Fetch full order details including lines
-                                          const fullOrder = await salesService.getOrder(order.id);
-                                          setEditingOrder({
-                                            ...fullOrder,
-                                            delivery_date: fullOrder.expected_date || fullOrder.delivery_date || '',
-                                            shipping_cost: fullOrder.shipping_amount || fullOrder.shipping_cost || 0,
-                                            lines: fullOrder.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]
-                                          });
-                                        } catch (error) {
-                                          console.error('Failed to fetch order details:', error);
-                                          // Fallback to list data
-                                          setEditingOrder({...order, lines: order.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]});
-                                        }
-                                        setShowEditModal(true);
-                                      }}
-                                      title={t('edit')}
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  {canDelete(MODULES.SALES) && order.status !== 'cancelled' && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-red-600 hover:text-red-700"
-                                      onClick={() => { setOrderToDelete(order); setShowDeleteDialog(true); }}
-                                      title={t('delete')}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <Orders
+              onCreateOrder={() => setShowCreateModal(true)}
+              onEditOrder={async (order) => {
+                try {
+                  const fullOrder = await salesService.getOrder(order.id);
+                  setEditingOrder({
+                    ...fullOrder,
+                    delivery_date: fullOrder.expected_date || fullOrder.delivery_date || '',
+                    shipping_cost: fullOrder.shipping_amount || fullOrder.shipping_cost || 0,
+                    lines: fullOrder.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]
+                  });
+                } catch (error) {
+                  console.error('Failed to fetch order details:', error);
+                  setEditingOrder({...order, lines: order.lines || [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '' }]});
+                }
+                setShowEditModal(true);
+              }}
+              onViewOrder={handleViewOrder}
+              onPrintOrder={handlePrintOrder}
+              onUpdateStatus={handleUpdateStatus}
+              onCreateInvoice={handleCreateInvoice}
+              onDeleteOrder={handleDeleteOrder}
+              showImportModal={showImportModal}
+              setShowImportModal={setShowImportModal}
+              showExportModal={showExportModal}
+              setShowExportModal={setShowExportModal}
+              showBatchPrint={showBatchPrint}
+              setShowBatchPrint={setShowBatchPrint}
+            />
           </TabsContent>
 
           {/* Quotations Tab */}
@@ -1192,11 +1116,6 @@ export default function SalesOrders() {
           {/* Invoices Tab */}
           <TabsContent value="invoices">
             <Invoices />
-          </TabsContent>
-
-          {/* Returns Tab */}
-          <TabsContent value="returns">
-            <Returns />
           </TabsContent>
 
           {/* Discounts Tab */}
@@ -1281,60 +1200,9 @@ export default function SalesOrders() {
             </Card>
           </TabsContent>
 
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Revenue Chart */}
-              <Card className="bg-white/80 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-green-600" />
-                    {t('monthly_revenue')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              {/* Sales Metrics */}
-              <Card className="bg-white/80 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
-                    {t('sales_metrics')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('average_order_value')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.avgOrderValue)}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('total_orders')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.totalOrders}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('returns')}</p>
-                      <p className="text-2xl font-bold text-slate-900">{metrics.totalReturns}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-sm text-slate-600">{t('unpaid_invoices')}</p>
-                      <p className="text-2xl font-bold text-red-600">{metrics.unpaidInvoices}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          {/* Dropshipping Tab */}
+          <TabsContent value="dropshipping">
+            <Dropshipping />
           </TabsContent>
         </Tabs>
 
@@ -1451,14 +1319,15 @@ export default function SalesOrders() {
                     <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                   </Button>
                 </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   {newOrder.lines.map((line, index) => {
                     const selectedProduct = products.find(p => p.id === line.product_id);
                     const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                    const hasPackagings = productPackagings[line.product_id]?.length > 0;
                     return (
                     <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
                       <div className="grid grid-cols-12 gap-2 items-start">
-                        <div className={hasVariants ? "col-span-3" : "col-span-4"}>
+                        <div className="col-span-3">
                           <Select
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
@@ -1494,14 +1363,58 @@ export default function SalesOrders() {
                             </Select>
                           </div>
                         )}
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('quantity')}
-                            value={line.quantity}
-                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
-                          />
-                        </div>
+                        {hasPackagings && (
+                          <div className="col-span-2">
+                            <Select
+                              value={line.packaging_id || 'none'}
+                              onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'packaging_id', value === 'none' ? null : value, isDeliveryDateManual)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('packaging') || 'Packaging'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none') || 'None (units)'}</SelectItem>
+                                {productPackagings[line.product_id]?.map((pkg) => (
+                                  <SelectItem key={pkg.id} value={pkg.id}>
+                                    {pkg.name} ({pkg.qty} {t('units') || 'units'})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        {line.packaging_id ? (
+                          <>
+                            <div className="col-span-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                placeholder={t('packs') || 'Packs'}
+                                value={line.packaging_qty || 1}
+                                onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'packaging_qty', e.target.value, isDeliveryDateManual)}
+                              />
+                            </div>
+                            <div className="col-span-1">
+                              <Input
+                                type="number"
+                                placeholder={t('total_qty') || 'Total'}
+                                value={line.quantity}
+                                disabled
+                                className="bg-slate-100"
+                                title={`${line.packaging_qty || 1} × ${line.packaging_unit_qty || 1} = ${line.quantity}`}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                            <Input
+                              type="number"
+                              placeholder={t('quantity')}
+                              value={line.quantity}
+                              onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
+                            />
+                          </div>
+                        )}
                         <div className="col-span-2">
                           <Input
                             type="number"
@@ -1510,7 +1423,7 @@ export default function SalesOrders() {
                             onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
                           />
                         </div>
-                        <div className={hasVariants ? "col-span-2" : "col-span-3"}>
+                        <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
                           <Input
                             placeholder={t('description')}
                             value={line.description}
@@ -1987,62 +1900,137 @@ export default function SalesOrders() {
                       <Plus className="w-4 h-4 mr-1" /> {t('add_line')}
                     </Button>
                   </div>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {editingOrder.lines.map((line, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 items-start bg-slate-50 p-3 rounded">
-                        <div className="col-span-4">
-                          <Select
-                            value={line.product_id || ''}
-                            onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={line.product_name || t('select_product')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {editingOrder.lines.map((line, index) => {
+                      const selectedProduct = products.find(p => p.id === line.product_id);
+                      const hasVariants = selectedProduct?.has_variants && productVariants[line.product_id]?.length > 0;
+                      const hasPackagings = productPackagings[line.product_id]?.length > 0;
+                      return (
+                      <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
+                        <div className="grid grid-cols-12 gap-2 items-start">
+                          <div className="col-span-3">
+                            <Select
+                              value={line.product_id || ''}
+                              onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={line.product_name || t('select_product')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {products.map((product) => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {hasVariants && (
+                            <div className="col-span-2">
+                              <Select
+                                value={line.variant_id || ''}
+                                onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'variant_id', value, isEditDeliveryDateManual)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t('select_variant') || 'Variant'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {productVariants[line.product_id]?.map((variant) => (
+                                    <SelectItem key={variant.id} value={variant.id}>
+                                      {variant.variant_name || variant.display_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {hasPackagings && (
+                            <div className="col-span-2">
+                              <Select
+                                value={line.packaging_id || 'none'}
+                                onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_id', value === 'none' ? null : value, isEditDeliveryDateManual)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t('packaging') || 'Packaging'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t('none') || 'None (units)'}</SelectItem>
+                                  {productPackagings[line.product_id]?.map((pkg) => (
+                                    <SelectItem key={pkg.id} value={pkg.id}>
+                                      {pkg.name} ({pkg.qty} {t('units') || 'units'})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {line.packaging_id ? (
+                            <>
+                              <div className="col-span-1">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  placeholder={t('packs') || 'Packs'}
+                                  value={line.packaging_qty || 1}
+                                  onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_qty', e.target.value, isEditDeliveryDateManual)}
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <Input
+                                  type="number"
+                                  placeholder={t('total_qty') || 'Total'}
+                                  value={line.quantity}
+                                  disabled
+                                  className="bg-slate-100"
+                                  title={`${line.packaging_qty || 1} × ${line.packaging_unit_qty || 1} = ${line.quantity}`}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                              <Input
+                                type="number"
+                                placeholder={t('quantity')}
+                                value={line.quantity}
+                                onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
+                              />
+                            </div>
+                          )}
+                          <div className="col-span-2">
+                            <Input
+                              type="number"
+                              placeholder={t('price')}
+                              value={line.unit_price}
+                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
+                            />
+                          </div>
+                          <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
+                            <Input
+                              placeholder={t('description')}
+                              value={line.description || ''}
+                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
+                              disabled={editingOrder.lines.length === 1}
+                              className="text-red-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('quantity')}
-                            value={line.quantity}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <Input
-                            type="number"
-                            placeholder={t('price')}
-                            value={line.unit_price}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          <Input
-                            placeholder={t('description')}
-                            value={line.description || ''}
-                            onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-1 flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
-                            disabled={editingOrder.lines.length === 1}
-                            className="text-red-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        {line.packaging_name && (
+                          <div className="text-xs text-slate-500 pl-1">
+                            {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 

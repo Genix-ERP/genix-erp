@@ -169,6 +169,11 @@ export const procurementService = {
     return response.data.data;
   },
 
+  async convertRFQToPO(rfqId) {
+    const response = await apiClient.post(`/rfqs/${rfqId}/convert-to-po`);
+    return response.data.data;
+  },
+
   // Contracts
   async listContracts(params = {}) {
     const response = await apiClient.get('/contracts', { params });
@@ -284,6 +289,48 @@ export const procurementService = {
     return response.data.data;
   },
 
+  async getGRForLandedCost(id) {
+    const response = await apiClient.get(`/goods-receipts/${id}/landed-cost-data`);
+    return response.data.data;
+  },
+
+  // Landed Costs
+  async listLandedCosts(params = {}) {
+    const response = await apiClient.get('/landed-costs', { params });
+    return response.data.data;
+  },
+
+  async getLandedCost(id) {
+    const response = await apiClient.get(`/landed-costs/${id}`);
+    return response.data.data;
+  },
+
+  async createLandedCost(data) {
+    const response = await apiClient.post('/landed-costs', data);
+    return response.data.data;
+  },
+
+  async validateLandedCost(id) {
+    const response = await apiClient.post(`/landed-costs/${id}/validate`);
+    return response.data.data;
+  },
+
+  async cancelLandedCost(id) {
+    const response = await apiClient.post(`/landed-costs/${id}/cancel`);
+    return response.data.data;
+  },
+
+  // Landed Cost Types
+  async listLandedCostTypes() {
+    const response = await apiClient.get('/landed-cost-types');
+    return response.data.data;
+  },
+
+  async createLandedCostType(data) {
+    const response = await apiClient.post('/landed-cost-types', data);
+    return response.data.data;
+  },
+
   // Purchase Returns
   async listReturns(params = {}) {
     const response = await apiClient.get('/purchase-returns', { params });
@@ -362,6 +409,157 @@ export const procurementService = {
 
   async deletePriceHistory(id) {
     await apiClient.delete(`/price-history/${id}`);
+  },
+
+  // Vendor Prices (pricelist)
+  async listVendorPrices(params = {}) {
+    const response = await apiClient.get('/vendor-prices', { params });
+    return response.data.data;
+  },
+
+  async getVendorPrice(id) {
+    const response = await apiClient.get(`/vendor-prices/${id}`);
+    return response.data.data;
+  },
+
+  async createVendorPrice(data) {
+    const response = await apiClient.post('/vendor-prices', data);
+    return response.data.data;
+  },
+
+  async updateVendorPrice(id, data) {
+    const response = await apiClient.put(`/vendor-prices/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteVendorPrice(id) {
+    await apiClient.delete(`/vendor-prices/${id}`);
+  },
+
+  // Lookup vendor price for a specific vendor+product combination
+  async lookupVendorPrice(vendorId, productId) {
+    try {
+      const response = await apiClient.get('/vendor-prices/lookup', {
+        params: { vendor_id: vendorId, product_id: productId }
+      });
+      return response.data.data;
+    } catch (error) {
+      // Return null if no price found (404)
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  // Blanket Orders (Standing Orders / Call-off Contracts)
+  async listBlanketOrders(params = {}) {
+    const response = await apiClient.get('/blanket-orders', { params });
+    return response.data.data;
+  },
+
+  async getBlanketOrder(id) {
+    const response = await apiClient.get(`/blanket-orders/${id}`);
+    return response.data.data;
+  },
+
+  async createBlanketOrder(data) {
+    const response = await apiClient.post('/blanket-orders', data);
+    return response.data.data;
+  },
+
+  async updateBlanketOrder(id, data) {
+    const response = await apiClient.put(`/blanket-orders/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteBlanketOrder(id) {
+    await apiClient.delete(`/blanket-orders/${id}`);
+  },
+
+  async activateBlanketOrder(id) {
+    const response = await apiClient.post(`/blanket-orders/${id}/activate`);
+    return response.data.data;
+  },
+
+  // Blanket Order Releases (Call-offs)
+  async listBlanketOrderReleases(blanketOrderId) {
+    const response = await apiClient.get(`/blanket-orders/${blanketOrderId}/releases`);
+    return response.data.data;
+  },
+
+  async createBlanketOrderRelease(blanketOrderId, data) {
+    const response = await apiClient.post(`/blanket-orders/${blanketOrderId}/releases`, data);
+    return response.data.data;
+  },
+
+  async confirmBlanketOrderRelease(blanketOrderId, releaseId) {
+    const response = await apiClient.post(`/blanket-orders/${blanketOrderId}/releases/${releaseId}/confirm`);
+    return response.data.data;
+  },
+
+  async cancelBlanketOrderRelease(blanketOrderId, releaseId) {
+    const response = await apiClient.post(`/blanket-orders/${blanketOrderId}/releases/${releaseId}/cancel`);
+    return response.data.data;
+  },
+
+  // Procurement Rules
+  async listProcurementRules(params = {}) {
+    const response = await apiClient.get('/procurement-rules', { params });
+    return response.data.data;
+  },
+
+  async getProcurementRule(id) {
+    const response = await apiClient.get(`/procurement-rules/${id}`);
+    return response.data.data;
+  },
+
+  async createProcurementRule(data) {
+    const response = await apiClient.post('/procurement-rules', data);
+    return response.data.data;
+  },
+
+  async updateProcurementRule(id, data) {
+    const response = await apiClient.put(`/procurement-rules/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteProcurementRule(id) {
+    await apiClient.delete(`/procurement-rules/${id}`);
+  },
+
+  // Approval Workflows
+  async getMyPendingApprovals(params = {}) {
+    const response = await apiClient.get('/approval-workflows/my-approvals', { params });
+    return response.data.data;
+  },
+
+  async getWorkflowByDocument(documentType, documentId) {
+    const response = await apiClient.get('/approval-workflows/by-document', {
+      params: { document_type: documentType, document_id: documentId }
+    });
+    return response.data.data;
+  },
+
+  async getApprovalWorkflow(id) {
+    const response = await apiClient.get(`/approval-workflows/${id}`);
+    return response.data.data;
+  },
+
+  async approveWorkflowStep(workflowId, comments = '') {
+    const response = await apiClient.post(`/approval-workflows/${workflowId}/approve`, { comments });
+    return response.data.data;
+  },
+
+  async rejectWorkflowStep(workflowId, comments) {
+    const response = await apiClient.post(`/approval-workflows/${workflowId}/reject`, { comments });
+    return response.data.data;
+  },
+
+  // Submit PO for approval (with rule evaluation)
+  async submitPOForApproval(orderId) {
+    const response = await apiClient.post(`/purchase-orders/${orderId}/submit`);
+    return response.data.data;
   },
 };
 
