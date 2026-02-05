@@ -108,10 +108,30 @@ export const financeService = {
     return response.data.data;
   },
 
-  // Journals (accounting journals like GEN, SAL, PUR)
+  // Journals (accounting journals like GEN, SAL, PUR, MISC)
   async listJournals() {
     const response = await apiClient.get('/journals');
     return response.data.data;
+  },
+
+  async getJournal(id) {
+    const response = await apiClient.get(`/journals/${id}`);
+    return response.data.data;
+  },
+
+  async createJournal(data) {
+    const response = await apiClient.post('/journals', data);
+    return response.data.data;
+  },
+
+  async updateJournal(id, data) {
+    const response = await apiClient.put(`/journals/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteJournal(id) {
+    const response = await apiClient.delete(`/journals/${id}`);
+    return response.data;
   },
 
   // Journal Entries
@@ -377,6 +397,16 @@ export const financeService = {
 
   async postPurchaseInvoice(id) {
     const response = await apiClient.post(`/purchase-invoices/${id}/post`);
+    return response.data.data;
+  },
+
+  async createDebitNote(invoiceId, data) {
+    const response = await apiClient.post(`/purchase-invoices/${invoiceId}/debit-note`, data);
+    return response.data.data;
+  },
+
+  async confirmDebitNote(debitNoteId) {
+    const response = await apiClient.post(`/purchase-invoices/${debitNoteId}/confirm-debit-note`);
     return response.data.data;
   },
 

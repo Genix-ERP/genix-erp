@@ -106,6 +106,16 @@ export const salesService = {
     return response.data.data;
   },
 
+  async createCreditNote(invoiceId, data) {
+    const response = await apiClient.post(`/sales-invoices/${invoiceId}/credit-note`, data);
+    return response.data.data;
+  },
+
+  async confirmCreditNote(creditNoteId) {
+    const response = await apiClient.post(`/sales-invoices/${creditNoteId}/confirm-credit-note`);
+    return response.data.data;
+  },
+
   // Reports
   async getSalesSummary(params = {}) {
     const response = await apiClient.get('/reports/sales-summary', { params });

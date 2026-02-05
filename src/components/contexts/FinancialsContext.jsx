@@ -171,6 +171,7 @@ export function FinancialsProvider({ children }) {
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [accountTypes, setAccountTypes] = useState([]);
+  const [journals, setJournals] = useState([]);
   const [payments, setPayments] = useState([]);
   const [taxRates, setTaxRates] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -295,12 +296,12 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData] = await Promise.all([
-            financeService.listJournalEntries(),
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData] = await Promise.all([
+            financeService.listJournalEntries().catch(() => []),
             salesService.listInvoices().catch(() => []),
-            financeService.listAccounts({ organization_id: activeCompany.id }),
-            financeService.listPayments(),
-            financeService.listTaxRates(),
+            financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
+            financeService.listPayments().catch(() => []),
+            financeService.listTaxRates().catch(() => []),
             financeService.listAccountTypes().catch(() => []),
             financeService.listPurchaseInvoices().catch(() => ({ data: [] })),
             financeService.listBankAccounts().catch(() => []),
@@ -311,7 +312,8 @@ export function FinancialsProvider({ children }) {
             financeService.listFiscalPeriods().catch(() => []),
             financeService.listBudgets().catch(() => []),
             financeService.listBudgetLines().catch(() => []),
-            financeService.listFixedAssets().catch(() => [])
+            financeService.listFixedAssets().catch(() => []),
+            financeService.listJournals().catch(() => [])
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -336,11 +338,12 @@ export function FinancialsProvider({ children }) {
           setPayments(mappedPayments);
           setTaxRates(taxRatesData || []);
           setAccountTypes(accountTypesData || []);
+          setJournals(journalsData || []);
           // Map backend vendor bills to frontend format
-          const rawBills = vendorBillsData?.data || vendorBillsData || [];
+          const rawBills = Array.isArray(vendorBillsData?.data) ? vendorBillsData.data : Array.isArray(vendorBillsData) ? vendorBillsData : [];
           const mappedBills = rawBills.map(b => ({
             ...b,
-            invoice_type: 'vendor_bill',
+            invoice_type: b.invoice_type || 'invoice',
             partner_id: b.vendor_id || b.partner_id,
             partner_name: b.vendor_name || b.partner_name || '',
           }));
@@ -558,6 +561,39 @@ export function FinancialsProvider({ children }) {
       setTaxRates(prev => prev.filter(t => t.id !== id));
     } catch (err) {
       console.error('API error deleting tax rate:', err);
+      throw err;
+    }
+  }, []);
+
+  // ==================== JOURNALS CRUD ====================
+  const createJournal = useCallback(async (journalData) => {
+    try {
+      const newJournal = await financeService.createJournal(journalData);
+      setJournals(prev => [newJournal, ...prev]);
+      return newJournal;
+    } catch (err) {
+      console.error('API error creating journal:', err);
+      throw err;
+    }
+  }, []);
+
+  const updateJournal = useCallback(async (id, journalData) => {
+    try {
+      const updated = await financeService.updateJournal(id, journalData);
+      setJournals(prev => prev.map(j => j.id === id ? { ...j, ...updated } : j));
+      return updated;
+    } catch (err) {
+      console.error('API error updating journal:', err);
+      throw err;
+    }
+  }, []);
+
+  const deleteJournal = useCallback(async (id) => {
+    try {
+      await financeService.deleteJournal(id);
+      setJournals(prev => prev.filter(j => j.id !== id));
+    } catch (err) {
+      console.error('API error deleting journal:', err);
       throw err;
     }
   }, []);
@@ -1369,6 +1405,7 @@ export function FinancialsProvider({ children }) {
       accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
       payments, createPayment, confirmPayment,
       taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
+      journals, createJournal, updateJournal, deleteJournal,
       // Bank Accounts & Transactions
       bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
       bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,

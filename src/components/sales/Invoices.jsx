@@ -49,6 +49,8 @@ import {
   CreditCard,
   Banknote,
   AlertTriangle,
+  FileText,
+  RotateCcw,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -58,6 +60,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
+import { salesService } from "@/api/services/sales";
 
 export default function Invoices() {
   const { language } = useLanguage();
@@ -79,6 +82,7 @@ export default function Invoices() {
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   // Load products on mount
   useEffect(() => {
@@ -99,6 +103,10 @@ export default function Invoices() {
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [editMode, setEditMode] = useState(false);
+  const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
+  const [creditNoteReason, setCreditNoteReason] = useState("");
+  const [creditNoteInvoice, setCreditNoteInvoice] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     customer_id: "",
@@ -124,9 +132,11 @@ export default function Invoices() {
         inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus =
         statusFilter === "all" || inv.payment_status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const invType = inv.invoice_type || "invoice";
+      const matchesType = typeFilter === "all" || invType === typeFilter;
+      return matchesSearch && matchesStatus && matchesType;
     });
-  }, [invoices, searchQuery, statusFilter]);
+  }, [invoices, searchQuery, statusFilter, typeFilter]);
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -363,6 +373,40 @@ export default function Invoices() {
     return <Badge className={variant.color}>{variant.label}</Badge>;
   };
 
+  const handleCreateCreditNote = (invoice) => {
+    setCreditNoteInvoice(invoice);
+    setCreditNoteReason("");
+    setShowCreditNoteModal(true);
+  };
+
+  const handleCreditNoteSubmit = async () => {
+    if (!creditNoteInvoice || !creditNoteReason.trim()) return;
+    setIsSaving(true);
+    try {
+      await salesService.createCreditNote(creditNoteInvoice.id, {
+        reason: creditNoteReason,
+      });
+      setShowCreditNoteModal(false);
+      setCreditNoteInvoice(null);
+      setCreditNoteReason("");
+      // Refresh invoices list
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to create credit note:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmCreditNote = async (creditNoteId) => {
+    try {
+      await salesService.confirmCreditNote(creditNoteId);
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to confirm credit note:", error);
+    }
+  };
+
   const getPaymentStatusBadge = (invoice) => {
     if (invoice.payment_status === "paid") {
       return getStatusBadge("paid");
@@ -491,6 +535,16 @@ export default function Invoices() {
             className="pl-10"
           />
         </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder={t("type")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("all")}</SelectItem>
+            <SelectItem value="invoice">{t("invoices")}</SelectItem>
+            <SelectItem value="credit_note">{t("credit_notes")}</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder={t("status")} />
@@ -537,8 +591,15 @@ export default function Invoices() {
                       <TableRow key={invoice.id} className="hover:bg-slate-50">
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Receipt className="w-4 h-4 text-slate-400" />
+                            {invoice.invoice_type === "credit_note" ? (
+                              <RotateCcw className="w-4 h-4 text-red-500" />
+                            ) : (
+                              <Receipt className="w-4 h-4 text-slate-400" />
+                            )}
                             <span className="font-medium">{invoice.invoice_number}</span>
+                            {invoice.invoice_type === "credit_note" && (
+                              <Badge className="bg-red-100 text-red-700 text-xs">{t("credit_note")}</Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -586,22 +647,38 @@ export default function Invoices() {
                                 <Eye className="w-4 h-4 mr-2" />
                                 {t('view')}
                               </DropdownMenuItem>
-                              {invoice.payment_status !== "paid" && (
+                              {invoice.payment_status !== "paid" && (invoice.invoice_type || "invoice") === "invoice" && (
                                 <DropdownMenuItem onClick={() => handlePayment(invoice)}>
                                   <DollarSign className="w-4 h-4 mr-2" />
                                   {t('make_payment')}
                                 </DropdownMenuItem>
                               )}
+                              {(invoice.invoice_type || "invoice") === "invoice" && invoice.status !== "draft" && invoice.status !== "cancelled" && (
+                                <DropdownMenuItem onClick={() => handleCreateCreditNote(invoice)}>
+                                  <RotateCcw className="w-4 h-4 mr-2 text-red-500" />
+                                  {t('create_credit_note')}
+                                </DropdownMenuItem>
+                              )}
+                              {invoice.invoice_type === "credit_note" && invoice.status === "draft" && (
+                                <DropdownMenuItem onClick={() => handleConfirmCreditNote(invoice.id)}>
+                                  <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
+                                  {t('confirm_credit_note')}
+                                </DropdownMenuItem>
+                              )}
                               {invoice.status === "draft" && (
                                 <>
-                                  <DropdownMenuItem onClick={() => handleEdit(invoice)}>
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    {t('edit')}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleSend(invoice)}>
-                                    <Send className="w-4 h-4 mr-2" />
-                                    {t('send')}
-                                  </DropdownMenuItem>
+                                  {(invoice.invoice_type || "invoice") === "invoice" && (
+                                    <DropdownMenuItem onClick={() => handleEdit(invoice)}>
+                                      <Pencil className="w-4 h-4 mr-2" />
+                                      {t('edit')}
+                                    </DropdownMenuItem>
+                                  )}
+                                  {(invoice.invoice_type || "invoice") === "invoice" && (
+                                    <DropdownMenuItem onClick={() => handleSend(invoice)}>
+                                      <Send className="w-4 h-4 mr-2" />
+                                      {t('send')}
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem
                                     onClick={() => handleDelete(invoice)}
                                     className="text-red-600"
@@ -1064,6 +1141,60 @@ export default function Invoices() {
                   <p className="text-sm text-yellow-800">{selectedInvoice.notes}</p>
                 </div>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Note Modal */}
+      <Dialog open={showCreditNoteModal} onOpenChange={setShowCreditNoteModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-red-500" />
+              {t('create_credit_note')}
+            </DialogTitle>
+          </DialogHeader>
+          {creditNoteInvoice && (
+            <div className="space-y-4 py-2">
+              <div className="bg-slate-50 p-3 rounded-lg space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('invoice_number')}:</span>
+                  <span className="font-medium">{creditNoteInvoice.invoice_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('customer')}:</span>
+                  <span className="font-medium">{creditNoteInvoice.customer_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('amount')}:</span>
+                  <span className="font-semibold">{formatCurrency(creditNoteInvoice.total_amount)}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('credit_note_reason')} *</Label>
+                <Textarea
+                  value={creditNoteReason}
+                  onChange={(e) => setCreditNoteReason(e.target.value)}
+                  placeholder={t('credit_note_reason_placeholder') || "Enter reason for credit note..."}
+                  rows={3}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                {t('credit_note_description') || "A full credit note will be created for the total invoice amount. You can confirm it later to post the GL entries."}
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowCreditNoteModal(false)}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleCreditNoteSubmit}
+                  disabled={!creditNoteReason.trim() || isSaving}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {isSaving ? t('creating') || "Creating..." : t('create_credit_note')}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
