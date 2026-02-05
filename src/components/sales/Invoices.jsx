@@ -61,10 +61,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
+import { useCompany } from "@/components/contexts/CompanyContext";
 
 export default function Invoices() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { activeCompany } = useCompany();
 
   const {
     invoices,
@@ -224,6 +226,7 @@ export default function Invoices() {
     // Backend expects 'lines' not 'items', and 'description' is required
     const data = {
       customer_id: formData.customer_id,
+      organization_id: activeCompany?.id,
       invoice_date: formData.invoice_date,
       due_date: formData.due_date,
       notes: formData.notes,
@@ -321,7 +324,13 @@ export default function Invoices() {
   };
 
   const handleSend = async (invoice) => {
-    await updateInvoice(invoice.id, { status: "sent" });
+    try {
+      await salesService.sendInvoice(invoice.id);
+      // Refresh the invoice list
+      await getInvoice(invoice.id);
+    } catch (err) {
+      console.error("Failed to send invoice:", err);
+    }
   };
 
   const handlePayment = (invoice) => {

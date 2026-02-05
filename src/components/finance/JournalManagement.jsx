@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const JOURNAL_TYPES = [
@@ -38,6 +39,7 @@ export default function JournalManagement() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { activeCompany } = useCompany();
 
   const [filteredJournals, setFilteredJournals] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,7 +94,7 @@ export default function JournalManagement() {
   const handleCreate = async () => {
     setIsSaving(true);
     try {
-      await createJournal(formData);
+      await createJournal({ ...formData, organization_id: activeCompany?.id });
       resetForm();
       setShowCreateModal(false);
     } catch (error) {

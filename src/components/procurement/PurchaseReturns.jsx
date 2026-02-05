@@ -28,6 +28,7 @@ import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { procurementService } from "@/api/services/procurement";
+import { useCompany } from "@/components/contexts/CompanyContext";
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -52,6 +53,7 @@ const reasonLabels = {
 
 export default function PurchaseReturns() {
   const { language } = useLanguage();
+  const { activeCompany } = useCompany();
   const { t } = useTranslation(language);
   const { purchaseOrders = [], suppliers } = useProcurement();
   const { canCreate } = usePermissions();
@@ -192,6 +194,7 @@ export default function PurchaseReturns() {
     try {
       const payload = {
         supplier_id: newReturn.supplier_id,
+        organization_id: activeCompany?.id,
         purchase_order_id: newReturn.po_id,
         return_reason: newReturn.return_reason,
         notes: newReturn.notes,
