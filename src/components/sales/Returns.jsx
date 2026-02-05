@@ -53,10 +53,12 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCompany } from "@/components/contexts/CompanyContext";
 
 export default function Returns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { activeCompany } = useCompany();
   const {
     returns,
     salesOrders,
@@ -178,6 +180,7 @@ export default function Returns() {
 
     const data = {
       ...formData,
+      organization_id: activeCompany?.id,
       items: formData.items.map((item) => ({
         ...item,
         total: item.quantity * item.unit_price,
