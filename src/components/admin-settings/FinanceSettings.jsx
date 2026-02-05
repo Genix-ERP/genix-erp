@@ -5,7 +5,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, FileText, Percent, Coins, Landmark, BookOpen } from 'lucide-react';
+import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock } from 'lucide-react';
 
 // Arrays are defined inside component to use translations
 
@@ -316,6 +316,37 @@ export default function FinanceSettings() {
             onChange={(checked) => updateSetting('finance.journal.require_approval', checked)}
           />
         </div>
+      </SettingsSection>
+
+      {/* Lock Dates */}
+      <SettingsSection
+        title={t('lock_dates')}
+        description={t('lock_dates_desc')}
+        icon={Lock}
+      >
+        <SettingsToggle
+          label={t('enable_lock_date')}
+          description={t('enable_lock_date_desc')}
+          checked={finance.lock_date?.enabled ?? false}
+          onChange={(checked) => {
+            updateSetting('finance.lock_date.enabled', checked);
+            if (!checked) {
+              updateSetting('finance.lock_date.date', null);
+            }
+          }}
+        />
+
+        {finance.lock_date?.enabled && (
+          <SettingsRow className="mt-4">
+            <SettingsField label={t('lock_date')} description={t('lock_date_field_desc')}>
+              <Input
+                type="date"
+                value={finance.lock_date?.date || ''}
+                onChange={(e) => updateSetting('finance.lock_date.date', e.target.value || null)}
+              />
+            </SettingsField>
+          </SettingsRow>
+        )}
       </SettingsSection>
     </div>
   );

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, History, Repeat, Eye, Building2, Loader2 } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, History, Repeat, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -15,6 +15,9 @@ import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { contactsService, aiService } from '@/api/services';
+import { financeService } from '@/api/services/finance';
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // Import universal ERP components
 import {
@@ -60,6 +63,10 @@ export default function AccountsPayable() {
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
+  const [debitNoteBill, setDebitNoteBill] = useState(null);
+  const [debitNoteReason, setDebitNoteReason] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -201,6 +208,10 @@ export default function AccountsPayable() {
       filtered = filtered.filter(b => b.status === statusFilter);
     }
 
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(b => (b.invoice_type || 'invoice') === typeFilter);
+    }
+
     if (searchQuery) {
       filtered = filtered.filter(b =>
         b.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -209,7 +220,7 @@ export default function AccountsPayable() {
     }
 
     setFilteredBills(filtered);
-  }, [vendorBills, searchQuery, statusFilter]);
+  }, [vendorBills, searchQuery, statusFilter, typeFilter]);
 
   const handleCreateBill = async () => {
     setIsSaving(true);
@@ -347,6 +358,39 @@ export default function AccountsPayable() {
     return colors[status] || colors.pending;
   };
 
+  const handleCreateDebitNote = (bill) => {
+    setDebitNoteBill(bill);
+    setDebitNoteReason('');
+    setShowDebitNoteModal(true);
+  };
+
+  const handleDebitNoteSubmit = async () => {
+    if (!debitNoteBill || !debitNoteReason.trim()) return;
+    setIsSaving(true);
+    try {
+      await financeService.createDebitNote(debitNoteBill.id, {
+        reason: debitNoteReason,
+      });
+      setShowDebitNoteModal(false);
+      setDebitNoteBill(null);
+      setDebitNoteReason('');
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to create debit note:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmDebitNote = async (debitNoteId) => {
+    try {
+      await financeService.confirmDebitNote(debitNoteId);
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to confirm debit note:', error);
+    }
+  };
+
   // Calculate metrics
   const metrics = {
     totalPayable: vendorBills.reduce((sum, b) => sum + (b.amount_due || 0), 0),
@@ -467,6 +511,16 @@ export default function AccountsPayable() {
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectValue placeholder={t('type')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all')}</SelectItem>
+                      <SelectItem value="invoice">{t('bills') || 'Bills'}</SelectItem>
+                      <SelectItem value="debit_note">{t('debit_notes')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue placeholder={t('filter_by_status') || 'Filter by status'} />
@@ -519,7 +573,13 @@ export default function AccountsPayable() {
                     <TableRow key={bill.id} className="hover:bg-slate-50">
                       <TableCell className="font-mono text-sm">
                         <div className="flex items-center gap-2">
+                          {bill.invoice_type === 'debit_note' && (
+                            <RotateCcw className="w-4 h-4 text-orange-500" />
+                          )}
                           {bill.invoice_number}
+                          {bill.invoice_type === 'debit_note' && (
+                            <Badge className="bg-orange-100 text-orange-700 text-xs">{t('debit_note')}</Badge>
+                          )}
                           {bill.ai_extracted && (
                             <Badge variant="outline" className="bg-purple-50 text-purple-700 text-xs">
                               <Brain className="w-3 h-3 mr-1" />
@@ -574,9 +634,19 @@ export default function AccountsPayable() {
                               </Button>
                             </>
                           )}
-                          {(bill.status === 'confirmed' || bill.status === 'posted') && (
+                          {(bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
                             <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)} title={t('pay') || 'Record Payment'}>
                               <DollarSign className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(bill.invoice_type || 'invoice') === 'invoice' && bill.status !== 'draft' && bill.status !== 'cancelled' && (
+                            <Button size="sm" variant="ghost" onClick={() => handleCreateDebitNote(bill)} title={t('create_debit_note')} className="text-orange-600 hover:text-orange-700">
+                              <RotateCcw className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {bill.invoice_type === 'debit_note' && bill.status === 'draft' && (
+                            <Button size="sm" variant="ghost" onClick={() => handleConfirmDebitNote(bill.id)} title={t('confirm_debit_note')} className="text-green-600 hover:text-green-700">
+                              <CheckCircle className="w-4 h-4" />
                             </Button>
                           )}
                         </div>
@@ -958,13 +1028,67 @@ export default function AccountsPayable() {
         entityName={t('invoice') || 'Invoice'}
       />
 
+      {/* Debit Note Modal */}
+      <Dialog open={showDebitNoteModal} onOpenChange={setShowDebitNoteModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-orange-500" />
+              {t('create_debit_note')}
+            </DialogTitle>
+          </DialogHeader>
+          {debitNoteBill && (
+            <div className="space-y-4 py-2">
+              <div className="bg-slate-50 p-3 rounded-lg space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('invoice_number')}:</span>
+                  <span className="font-medium">{debitNoteBill.invoice_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('vendor')}:</span>
+                  <span className="font-medium">{debitNoteBill.partner_name || debitNoteBill.vendor_name || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{t('amount')}:</span>
+                  <span className="font-semibold">${(debitNoteBill.total_amount || 0).toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('debit_note_reason') || 'Reason'} *</Label>
+                <Textarea
+                  value={debitNoteReason}
+                  onChange={(e) => setDebitNoteReason(e.target.value)}
+                  placeholder={t('debit_note_reason_placeholder') || 'Enter reason for debit note...'}
+                  rows={3}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                {t('debit_note_description') || 'A full debit note will be created for the total bill amount. Confirm it later to post GL entries and reduce vendor balance.'}
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowDebitNoteModal(false)}>
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={handleDebitNoteSubmit}
+                  disabled={!debitNoteReason.trim() || isSaving}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  {isSaving ? t('creating') || 'Creating...' : t('create_debit_note')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Bill Detail Modal */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <FileText className="w-5 h-5 text-[var(--genix-purple)]" />
-              {t('bill_details') || 'Bill Details'}
+              {selectedBill?.invoice_type === 'debit_note' ? (t('debit_note_details') || 'Debit Note Details') : (t('bill_details') || 'Bill Details')}
             </DialogTitle>
           </DialogHeader>
           {selectedBill && (
@@ -1054,9 +1178,16 @@ export default function AccountsPayable() {
               <div className="p-3 bg-slate-50 rounded-lg">
                 <p className="text-xs text-slate-500 mb-1">{t('three_way_match')}</p>
                 <Badge className={getMatchStatusColor(selectedBill.three_way_match_status || 'not_applicable')}>
-                  {t(selectedBill.three_way_match_status) || selectedBill.three_way_match_status || 'N/A'}
+                  {t(selectedBill.three_way_match_status || 'not_applicable') || selectedBill.three_way_match_status || 'N/A'}
                 </Badge>
               </div>
+
+              {selectedBill.invoice_type === 'debit_note' && selectedBill.reason && (
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('reason')}</p>
+                  <p className="text-sm text-orange-700">{selectedBill.reason}</p>
+                </div>
+              )}
 
               {selectedBill.notes && (
                 <div className="p-3 bg-slate-50 rounded-lg">
