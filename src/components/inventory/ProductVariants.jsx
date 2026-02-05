@@ -161,7 +161,11 @@ export default function ProductVariants() {
   const handleAddValue = async () => {
     if (!selectedAttribute) return;
     try {
-      await apiClient.post(`/product-attributes/${selectedAttribute.id}/values`, newValue);
+      const payload = {
+        ...newValue,
+        price_extra: newValue.price_extra ? parseFloat(newValue.price_extra) : 0,
+      };
+      await apiClient.post(`/product-attributes/${selectedAttribute.id}/values`, payload);
       toast({ title: t('success'), description: t('value_added') });
       setShowValueModal(false);
       setNewValue({ name: '', code: '', html_color: '', price_extra: '' });

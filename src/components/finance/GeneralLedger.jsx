@@ -14,7 +14,6 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { financeService } from "@/api/services";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -24,6 +23,7 @@ export default function GeneralLedger() {
     createJournalEntry,
     getJournalLines,
     accounts,
+    journals,
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
@@ -34,7 +34,6 @@ export default function GeneralLedger() {
   const [selectedJournalLines, setSelectedJournalLines] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [journals, setJournals] = useState([]);
 
   const [newEntry, setNewEntry] = useState({
     journal_id: '',
@@ -46,19 +45,6 @@ export default function GeneralLedger() {
       { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
     ]
   });
-
-  // Fetch journals on component mount
-  useEffect(() => {
-    const fetchJournals = async () => {
-      try {
-        const data = await financeService.listJournals();
-        setJournals(data || []);
-      } catch (err) {
-        console.error('Failed to fetch journals:', err);
-      }
-    };
-    fetchJournals();
-  }, []);
 
   useEffect(() => {
     setFilteredEntries(journalEntries);

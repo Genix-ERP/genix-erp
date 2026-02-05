@@ -245,6 +245,10 @@ export const DEFAULT_ADMIN_SETTINGS = {
     journal: {
       auto_post_entries: false,
       require_approval: true
+    },
+    lock_date: {
+      date: null,
+      enabled: false
     }
   },
 
