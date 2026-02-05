@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, Landmark, ChevronRight, ChevronDown, Edit2, Trash2, DollarSign, TrendingUp, TrendingDown, Scale, Banknote, CreditCard, Building2, Wallet, Receipt, FileText, PiggyBank, Coins, AlertTriangle, ListTree, BookOpen } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +14,8 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import GeneralLedger from "./GeneralLedger";
+import FinancialReports from "./FinancialReports";
 
 const getAccountTypes = (t) => [
   { value: 'asset', label: t('asset') || 'Asset', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
@@ -349,8 +352,34 @@ export default function ChartOfAccounts() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <Tabs defaultValue="coa" className="w-full">
+        <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200/60 shadow-sm">
+          <TabsTrigger
+            value="coa"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <ListTree className="w-4 h-4" />
+            {t('chart_of_accounts') || 'Chart of Accounts'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="ledger"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <BookOpen className="w-4 h-4" />
+            {t('general_ledger') || 'General Ledger'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <FileText className="w-4 h-4" />
+            {t('reports') || 'Reports'}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="coa" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {accountTypes.map(type => {
           const Icon = type.icon;
           return (
@@ -830,6 +859,16 @@ export default function ChartOfAccounts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="ledger" className="mt-4">
+          <GeneralLedger />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-4">
+          <FinancialReports />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
