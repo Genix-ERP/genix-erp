@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Layers, Pencil, Trash2, Package, Palette,
-  RefreshCw, ChevronDown, ChevronRight, Settings, Barcode, DollarSign
+  RefreshCw, ChevronDown, ChevronRight, Settings, Barcode, DollarSign, Eye, PackagePlus
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,10 +38,30 @@ export default function ProductVariants() {
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showConfigureModal, setShowConfigureModal] = useState(false);
+  const [showVariantDetailsModal, setShowVariantDetailsModal] = useState(false);
+  const [showEditVariantModal, setShowEditVariantModal] = useState(false);
+  const [showAttributeDetailsModal, setShowAttributeDetailsModal] = useState(false);
+  const [showEditAttributeModal, setShowEditAttributeModal] = useState(false);
+  const [showProductConfigDetailsModal, setShowProductConfigDetailsModal] = useState(false);
+  const [showAdjustStockModal, setShowAdjustStockModal] = useState(false);
 
   const [selectedAttribute, setSelectedAttribute] = useState(null);
+  const [editAttributeData, setEditAttributeData] = useState({
+    name: '',
+    code: '',
+    display_type: 'select',
+    create_variant: true
+  });
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [productAttributes, setProductAttributes] = useState([]);
+  const [editVariantData, setEditVariantData] = useState({
+    sku: '',
+    barcode: '',
+    cost_price: '',
+    list_price: '',
+    is_active: true
+  });
 
   // Form states
   const [newAttribute, setNewAttribute] = useState({
@@ -50,7 +71,14 @@ export default function ProductVariants() {
     create_variant: true,
     values: []
   });
-  const [newValue, setNewValue] = useState({ name: '', code: '', html_color: '' });
+  const [newValue, setNewValue] = useState({ name: '', code: '', html_color: '', price_extra: '' });
+  const [warehouses, setWarehouses] = useState([]);
+  const [stockAdjustment, setStockAdjustment] = useState({
+    warehouse_id: '',
+    quantity: '',
+    reason: 'initial_stock',
+    notes: ''
+  });
   const [newVariant, setNewVariant] = useState({
     product_id: '',
     sku: '',
@@ -93,10 +121,20 @@ export default function ProductVariants() {
     }
   }, []);
 
+  const loadWarehouses = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/warehouses');
+      setWarehouses(response.data?.data || []);
+    } catch (error) {
+      console.error('Failed to load warehouses:', error);
+    }
+  }, []);
+
   useEffect(() => {
     loadAttributes();
     loadVariants();
-  }, [loadAttributes, loadVariants]);
+    loadWarehouses();
+  }, [loadAttributes, loadVariants, loadWarehouses]);
 
   // Filter variants
   const filteredVariants = variants.filter(v => {
@@ -126,7 +164,7 @@ export default function ProductVariants() {
       await apiClient.post(`/product-attributes/${selectedAttribute.id}/values`, newValue);
       toast({ title: t('success'), description: t('value_added') });
       setShowValueModal(false);
-      setNewValue({ name: '', code: '', html_color: '' });
+      setNewValue({ name: '', code: '', html_color: '', price_extra: '' });
       loadAttributes();
     } catch (error) {
       toast({ title: t('error'), description: error.message, variant: 'destructive' });
@@ -159,6 +197,12 @@ export default function ProductVariants() {
     setSelectedProduct(product);
     loadProductAttributes(product.id);
     setShowConfigureModal(true);
+  };
+
+  const handleViewProductConfig = (product) => {
+    setSelectedProduct(product);
+    loadProductAttributes(product.id);
+    setShowProductConfigDetailsModal(true);
   };
 
   const handleAddAttributeToProduct = async (attributeId, valueIds) => {
@@ -201,6 +245,101 @@ export default function ProductVariants() {
       loadVariants();
     } catch (error) {
       toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleViewVariant = (variant) => {
+    setSelectedVariant(variant);
+    setShowVariantDetailsModal(true);
+  };
+
+  const handleOpenEditVariant = (variant) => {
+    setSelectedVariant(variant);
+    setEditVariantData({
+      sku: variant.sku || '',
+      barcode: variant.barcode || '',
+      cost_price: variant.cost_price || '',
+      list_price: variant.list_price || '',
+      is_active: variant.is_active !== false
+    });
+    setShowVariantDetailsModal(false);
+    setShowEditVariantModal(true);
+  };
+
+  const handleUpdateVariant = async () => {
+    if (!selectedVariant) return;
+    try {
+      await apiClient.put(`/product-variants/${selectedVariant.id}`, editVariantData);
+      toast({ title: t('success'), description: t('variant_updated') });
+      setShowEditVariantModal(false);
+      setSelectedVariant(null);
+      loadVariants();
+    } catch (error) {
+      toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleViewAttribute = (attr) => {
+    setSelectedAttribute(attr);
+    setShowAttributeDetailsModal(true);
+  };
+
+  const handleOpenEditAttribute = (attr) => {
+    setSelectedAttribute(attr);
+    setEditAttributeData({
+      name: attr.name || '',
+      code: attr.code || '',
+      display_type: attr.display_type || 'select',
+      create_variant: attr.create_variant !== false
+    });
+    setShowAttributeDetailsModal(false);
+    setShowEditAttributeModal(true);
+  };
+
+  const handleUpdateAttribute = async () => {
+    if (!selectedAttribute) return;
+    try {
+      await apiClient.put(`/product-attributes/${selectedAttribute.id}`, editAttributeData);
+      toast({ title: t('success'), description: t('attribute_updated') });
+      setShowEditAttributeModal(false);
+      setSelectedAttribute(null);
+      loadAttributes();
+    } catch (error) {
+      toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleOpenAdjustStock = (variant) => {
+    setSelectedVariant(variant);
+    setStockAdjustment({
+      warehouse_id: warehouses.length > 0 ? warehouses[0].id : '',
+      quantity: '',
+      reason: 'initial_stock',
+      notes: ''
+    });
+    setShowAdjustStockModal(true);
+  };
+
+  const handleAdjustStock = async () => {
+    if (!selectedVariant || !stockAdjustment.warehouse_id || !stockAdjustment.quantity) {
+      toast({ title: t('error'), description: t('fill_required_fields'), variant: 'destructive' });
+      return;
+    }
+    try {
+      await apiClient.post('/inventory/adjust', {
+        product_id: selectedVariant.product_id,
+        variant_id: selectedVariant.id,
+        warehouse_id: stockAdjustment.warehouse_id,
+        quantity: parseFloat(stockAdjustment.quantity),
+        reason: stockAdjustment.reason,
+        notes: stockAdjustment.notes
+      });
+      toast({ title: t('success'), description: t('stock_adjusted') });
+      setShowAdjustStockModal(false);
+      setSelectedVariant(null);
+      loadVariants();
+    } catch (error) {
+      toast({ title: t('error'), description: error.response?.data?.message || error.message, variant: 'destructive' });
     }
   };
 
@@ -363,9 +502,17 @@ export default function ProductVariants() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleOpenAdjustStock(variant)} title={t('adjust_stock')}>
+                              <PackagePlus className="w-4 h-4 text-green-500" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleViewVariant(variant)}>
+                              <Eye className="w-4 h-4 text-blue-500" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -396,6 +543,13 @@ export default function ProductVariants() {
                       {attr.code && <p className="text-xs text-slate-500">{attr.code}</p>}
                     </div>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewAttribute(attr)}
+                      >
+                        <Eye className="w-4 h-4 text-blue-500" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -494,6 +648,13 @@ export default function ProductVariants() {
                         <TableCell>{productVariantCount}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewProductConfig(product)}
+                            >
+                              <Eye className="w-4 h-4 text-blue-500" />
+                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
@@ -625,6 +786,17 @@ export default function ProductVariants() {
                 </div>
               </div>
             )}
+            <div>
+              <label className="text-sm font-medium">{t('price_extra')}</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={newValue.price_extra}
+                onChange={(e) => setNewValue({ ...newValue, price_extra: e.target.value })}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-slate-500 mt-1">{t('price_extra_hint')}</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowValueModal(false)}>{t('cancel')}</Button>
@@ -641,26 +813,68 @@ export default function ProductVariants() {
             <DialogDescription>{t('select_attributes_and_values')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            {/* Current product attributes */}
+            {/* Current product attributes with option to add new values */}
             {productAttributes.length > 0 && (
               <div className="mb-4">
                 <h4 className="font-medium mb-2">{t('current_attributes')}</h4>
-                {productAttributes.map(pa => (
-                  <div key={pa.pta_id} className="p-3 bg-slate-50 rounded-lg mb-2">
-                    <div className="font-medium">{pa.attribute_name}</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {pa.values?.map(v => (
-                        <Badge key={v.ptav_id} variant="outline" className="text-xs">
-                          {v.html_color && (
-                            <span className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: v.html_color }} />
-                          )}
-                          {v.value_name}
-                          {v.price_extra > 0 && ` (+$${v.price_extra})`}
-                        </Badge>
-                      ))}
+                {productAttributes.map(pa => {
+                  // Find the full attribute to check for new values
+                  const fullAttr = attributes.find(a => a.id === pa.attribute_id);
+                  // Get IDs of values already configured for this product
+                  const configuredValueIds = (pa.values || []).map(v => v.value_id);
+                  // Find values that exist in the attribute but aren't configured for this product
+                  const missingValues = fullAttr?.values?.filter(v => !configuredValueIds.includes(v.id)) || [];
+
+                  return (
+                    <div key={pa.pta_id} className="p-3 bg-slate-50 rounded-lg mb-2">
+                      <div className="font-medium">{pa.attribute_name}</div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {pa.values?.map(v => (
+                          <Badge key={v.ptav_id} variant="outline" className="text-xs">
+                            {v.html_color && (
+                              <span className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: v.html_color }} />
+                            )}
+                            {v.value_name}
+                            {v.price_extra > 0 && ` (+$${v.price_extra})`}
+                          </Badge>
+                        ))}
+                      </div>
+                      {/* Show option to add missing values */}
+                      {missingValues.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-xs text-slate-500 mb-1">{t('add_new_values')}:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {missingValues.map(val => (
+                              <Button
+                                key={val.id}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-6"
+                                onClick={() => handleAddAttributeToProduct(pa.attribute_id, [val.id])}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                {val.html_color && (
+                                  <span className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: val.html_color }} />
+                                )}
+                                {val.name}
+                              </Button>
+                            ))}
+                            {missingValues.length > 1 && (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="text-xs h-6 p-0"
+                                onClick={() => handleAddAttributeToProduct(pa.attribute_id, missingValues.map(v => v.id))}
+                              >
+                                {t('add_all_new')}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -738,6 +952,497 @@ export default function ProductVariants() {
             <Button onClick={handleGenerateVariants}>
               <RefreshCw className="w-4 h-4 mr-2" />
               {t('generate')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Variant Details Modal */}
+      <Dialog open={showVariantDetailsModal} onOpenChange={setShowVariantDetailsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('variant_details')}</DialogTitle>
+            <DialogDescription>
+              {selectedVariant?.product_name} - {selectedVariant?.variant_name || selectedVariant?.display_name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedVariant && (
+            <div className="space-y-4 py-4">
+              {/* Product Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('product')}</label>
+                  <p className="font-medium">{selectedVariant.product_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('status')}</label>
+                  <div>
+                    <Badge className={selectedVariant.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}>
+                      {selectedVariant.is_active ? t('active') : t('inactive')}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Variant Attributes */}
+              {selectedVariant.attributes && selectedVariant.attributes.length > 0 && (
+                <div>
+                  <label className="text-sm text-slate-500">{t('attributes')}</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {selectedVariant.attributes.map((attr, i) => (
+                      <Badge key={i} variant="outline" className="text-sm">
+                        {attr.html_color && (
+                          <span
+                            className="w-3 h-3 rounded-full mr-1 inline-block"
+                            style={{ backgroundColor: attr.html_color }}
+                          />
+                        )}
+                        <span className="text-slate-500 mr-1">{attr.attribute_name}:</span>
+                        {attr.value_name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SKU & Barcode */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('sku')}</label>
+                  <p className="font-medium">{selectedVariant.sku || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('barcode')}</label>
+                  <p className="font-medium">{selectedVariant.barcode || '-'}</p>
+                </div>
+              </div>
+
+              {/* Prices */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('cost_price')}</label>
+                  <p className="font-medium text-lg">
+                    {selectedVariant.cost_price ? `$${Number(selectedVariant.cost_price).toFixed(2)}` : '-'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('list_price')}</label>
+                  <p className="font-medium text-lg text-green-600">
+                    {selectedVariant.list_price ? `$${Number(selectedVariant.list_price).toFixed(2)}` : '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stock */}
+              <div>
+                <label className="text-sm text-slate-500">{t('stock_quantity')}</label>
+                <p className="font-medium text-lg">{selectedVariant.stock_quantity || 0}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVariantDetailsModal(false)}>
+              {t('close')}
+            </Button>
+            <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              {t('edit_variant')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Variant Modal */}
+      <Dialog open={showEditVariantModal} onOpenChange={setShowEditVariantModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('edit_variant')}</DialogTitle>
+            <DialogDescription>
+              {selectedVariant?.product_name} - {selectedVariant?.variant_name || selectedVariant?.display_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium">{t('sku')}</label>
+              <Input
+                value={editVariantData.sku}
+                onChange={(e) => setEditVariantData({ ...editVariantData, sku: e.target.value })}
+                placeholder={t('enter_sku')}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('barcode')}</label>
+              <Input
+                value={editVariantData.barcode}
+                onChange={(e) => setEditVariantData({ ...editVariantData, barcode: e.target.value })}
+                placeholder={t('enter_barcode')}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('cost_price')}</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editVariantData.cost_price}
+                onChange={(e) => setEditVariantData({ ...editVariantData, cost_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('list_price')}</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editVariantData.list_price}
+                onChange={(e) => setEditVariantData({ ...editVariantData, list_price: e.target.value })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">{t('is_active')}</label>
+              <Switch
+                checked={editVariantData.is_active}
+                onCheckedChange={(v) => setEditVariantData({ ...editVariantData, is_active: v })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditVariantModal(false)}>
+              {t('cancel')}
+            </Button>
+            <Button onClick={handleUpdateVariant}>
+              {t('save_changes')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attribute Details Modal */}
+      <Dialog open={showAttributeDetailsModal} onOpenChange={setShowAttributeDetailsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('attribute_details')}</DialogTitle>
+            <DialogDescription>
+              {selectedAttribute?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAttribute && (
+            <div className="space-y-4 py-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('name')}</label>
+                  <p className="font-medium">{selectedAttribute.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('code')}</label>
+                  <p className="font-medium">{selectedAttribute.code || '-'}</p>
+                </div>
+              </div>
+
+              {/* Display Type & Create Variant */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('display_type')}</label>
+                  <p className="font-medium capitalize">{selectedAttribute.display_type || 'select'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('create_variants')}</label>
+                  <div>
+                    <Badge className={selectedAttribute.create_variant !== false ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}>
+                      {selectedAttribute.create_variant !== false ? t('yes') : t('no')}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Values */}
+              <div>
+                <label className="text-sm text-slate-500">{t('values')} ({selectedAttribute.values?.length || 0})</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedAttribute.values?.map(val => (
+                    <Badge key={val.id} variant="outline" className="text-sm py-1 px-2">
+                      {val.html_color && (
+                        <span
+                          className="w-3 h-3 rounded-full mr-2 inline-block"
+                          style={{ backgroundColor: val.html_color }}
+                        />
+                      )}
+                      {val.name}
+                      {val.code && <span className="text-slate-400 ml-1">({val.code})</span>}
+                      {val.price_extra > 0 && (
+                        <span className="text-green-600 ml-1">(+${Number(val.price_extra).toFixed(2)})</span>
+                      )}
+                    </Badge>
+                  ))}
+                  {(!selectedAttribute.values || selectedAttribute.values.length === 0) && (
+                    <span className="text-slate-400">{t('no_values')}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAttributeDetailsModal(false)}>
+              {t('close')}
+            </Button>
+            <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              {t('edit_attribute')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Attribute Modal */}
+      <Dialog open={showEditAttributeModal} onOpenChange={setShowEditAttributeModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('edit_attribute')}</DialogTitle>
+            <DialogDescription>
+              {selectedAttribute?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium">{t('name')} *</label>
+              <Input
+                value={editAttributeData.name}
+                onChange={(e) => setEditAttributeData({ ...editAttributeData, name: e.target.value })}
+                placeholder={t('attribute_name_placeholder')}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('code')}</label>
+              <Input
+                value={editAttributeData.code}
+                onChange={(e) => setEditAttributeData({ ...editAttributeData, code: e.target.value })}
+                placeholder={t('attribute_code_placeholder')}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('display_type')}</label>
+              <Select
+                value={editAttributeData.display_type}
+                onValueChange={(v) => setEditAttributeData({ ...editAttributeData, display_type: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="select">{t('dropdown')}</SelectItem>
+                  <SelectItem value="radio">{t('radio_buttons')}</SelectItem>
+                  <SelectItem value="color">{t('color_picker')}</SelectItem>
+                  <SelectItem value="pills">{t('pills')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">{t('create_variants')}</label>
+              <Switch
+                checked={editAttributeData.create_variant}
+                onCheckedChange={(v) => setEditAttributeData({ ...editAttributeData, create_variant: v })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditAttributeModal(false)}>
+              {t('cancel')}
+            </Button>
+            <Button onClick={handleUpdateAttribute} disabled={!editAttributeData.name}>
+              {t('save_changes')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Configuration Details Modal */}
+      <Dialog open={showProductConfigDetailsModal} onOpenChange={setShowProductConfigDetailsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('product_configuration')}</DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedProduct && (
+            <div className="space-y-4 py-4">
+              {/* Product Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('product')}</label>
+                  <p className="font-medium">{selectedProduct.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('has_variants')}</label>
+                  <div>
+                    <Badge className={selectedProduct.has_variants ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}>
+                      {selectedProduct.has_variants ? t('yes') : t('no')}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Product Type & Variant Count */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('type')}</label>
+                  <p className="font-medium capitalize">{selectedProduct.type || 'product'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('variant_count')}</label>
+                  <p className="font-medium">{variants.filter(v => v.product_id === selectedProduct.id).length}</p>
+                </div>
+              </div>
+
+              {/* Base Price */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-500">{t('cost_price')}</label>
+                  <p className="font-medium">{selectedProduct.cost_price ? `$${Number(selectedProduct.cost_price).toFixed(2)}` : '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">{t('list_price')}</label>
+                  <p className="font-medium text-green-600">{selectedProduct.list_price ? `$${Number(selectedProduct.list_price).toFixed(2)}` : '-'}</p>
+                </div>
+              </div>
+
+              {/* Configured Attributes */}
+              <div>
+                <label className="text-sm text-slate-500">{t('configured_attributes')} ({productAttributes.length})</label>
+                {productAttributes.length > 0 ? (
+                  <div className="space-y-3 mt-2">
+                    {productAttributes.map(pa => {
+                      // Find the full attribute to check for new values
+                      const fullAttr = attributes.find(a => a.id === pa.attribute_id);
+                      // Get IDs of values already configured for this product
+                      const configuredValueIds = (pa.values || []).map(v => v.value_id);
+                      // Find values that exist in the attribute but aren't configured for this product
+                      const missingValues = fullAttr?.values?.filter(v => !configuredValueIds.includes(v.id)) || [];
+
+                      return (
+                        <div key={pa.pta_id} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="font-medium text-sm">{pa.attribute_name}</div>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {pa.values?.map(v => (
+                              <Badge key={v.ptav_id} variant="outline" className="text-xs">
+                                {v.html_color && (
+                                  <span className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: v.html_color }} />
+                                )}
+                                {v.value_name}
+                                {v.price_extra > 0 && (
+                                  <span className="text-green-600 ml-1">(+${Number(v.price_extra).toFixed(2)})</span>
+                                )}
+                              </Badge>
+                            ))}
+                          </div>
+                          {/* Show missing values that can be added */}
+                          {missingValues.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                              <p className="text-xs text-amber-600">{t('new_values_available')}: {missingValues.map(v => v.name).join(', ')}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-sm mt-2">{t('no_attributes_configured')}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProductConfigDetailsModal(false)}>
+              {t('close')}
+            </Button>
+            <Button onClick={() => {
+              setShowProductConfigDetailsModal(false);
+              handleConfigureProduct(selectedProduct);
+            }}>
+              <Settings className="w-4 h-4 mr-2" />
+              {t('edit_configuration')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Stock Modal */}
+      <Dialog open={showAdjustStockModal} onOpenChange={setShowAdjustStockModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('adjust_stock')}</DialogTitle>
+            <DialogDescription>
+              {selectedVariant?.display_name || selectedVariant?.variant_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <div className="text-sm text-slate-500">{t('current_stock')}</div>
+              <div className="text-2xl font-bold">{selectedVariant?.stock_quantity || 0}</div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('warehouse')} *</label>
+              <Select
+                value={stockAdjustment.warehouse_id}
+                onValueChange={(v) => setStockAdjustment({ ...stockAdjustment, warehouse_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_warehouse')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('quantity')} *</label>
+              <Input
+                type="number"
+                value={stockAdjustment.quantity}
+                onChange={(e) => setStockAdjustment({ ...stockAdjustment, quantity: e.target.value })}
+                placeholder={t('enter_quantity_hint')}
+              />
+              <p className="text-xs text-slate-500 mt-1">{t('quantity_adjustment_hint')}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('reason')} *</label>
+              <Select
+                value={stockAdjustment.reason}
+                onValueChange={(v) => setStockAdjustment({ ...stockAdjustment, reason: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="initial_stock">{t('initial_stock')}</SelectItem>
+                  <SelectItem value="received">{t('received')}</SelectItem>
+                  <SelectItem value="adjustment">{t('adjustment')}</SelectItem>
+                  <SelectItem value="damaged">{t('damaged')}</SelectItem>
+                  <SelectItem value="lost">{t('lost')}</SelectItem>
+                  <SelectItem value="returned">{t('returned')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('notes')}</label>
+              <Textarea
+                value={stockAdjustment.notes}
+                onChange={(e) => setStockAdjustment({ ...stockAdjustment, notes: e.target.value })}
+                placeholder={t('optional_notes')}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdjustStockModal(false)}>
+              {t('cancel')}
+            </Button>
+            <Button onClick={handleAdjustStock} disabled={!stockAdjustment.warehouse_id || !stockAdjustment.quantity}>
+              <PackagePlus className="w-4 h-4 mr-2" />
+              {t('adjust_stock')}
             </Button>
           </DialogFooter>
         </DialogContent>
