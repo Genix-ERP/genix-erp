@@ -174,8 +174,8 @@ export function SalesProvider({ children }) {
     setInvoices(prev => prev.filter(inv => inv.id !== id));
   }, []);
 
-  const recordPayment = useCallback(async (invoiceId, amount, _method, date) => {
-    const result = await salesService.recordPayment(invoiceId, { amount, payment_date: date });
+  const recordPayment = useCallback(async (invoiceId, amount, method, date) => {
+    const result = await salesService.recordPayment(invoiceId, { amount, payment_method: method || 'bank_transfer', payment_date: date });
     // Merge result with existing invoice to preserve fields like customer_name
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...result } : inv));
     return result;
