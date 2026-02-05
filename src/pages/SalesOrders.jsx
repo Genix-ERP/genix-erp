@@ -52,10 +52,12 @@ import {
   BatchPrintModal,
   useAuditTrail,
 } from '@/components/shared';
+import { useCompany } from '@/components/contexts/CompanyContext';
 
 export default function SalesOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
@@ -576,6 +578,7 @@ export default function SalesOrders() {
 
     const orderData = {
       order_number: newOrder.order_number || '',
+      organization_id: activeCompany?.id,
       customer_name: newOrder.customer_name,
       // Only send customer_id if it's a valid UUID, otherwise backend will use customer_name
       ...(isValidUUID(newOrder.customer_id) && { customer_id: newOrder.customer_id }),

@@ -16,6 +16,7 @@ import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useEmployeePermissions } from '@/components/contexts/EmployeePermissionsContext';
 import { contactsService, aiService } from '@/api/services';
 import { financeService } from '@/api/services/finance';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -49,6 +50,7 @@ const getDateLocale = (lang) => {
 export default function AccountsPayable() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { activeCompany } = useCompany();
   const dateLocale = getDateLocale(language);
   const {
     vendorBills,
@@ -231,6 +233,7 @@ export default function AccountsPayable() {
       const billData = {
         partner_id: newBill.partner_id, // UUID of the vendor
         vendor_id: newBill.partner_id,  // Backend expects vendor_id
+        organization_id: activeCompany?.id,
         partner_name: selectedVendor?.name || selectedVendor?.company_name || '',
         invoice_date: newBill.invoice_date,
         due_date: newBill.due_date,
@@ -297,6 +300,7 @@ export default function AccountsPayable() {
     for (const row of data) {
       const billData = {
         partner_id: row.partner_id,
+        organization_id: activeCompany?.id,
         invoice_date: row.invoice_date,
         due_date: row.due_date,
         subtotal: parseFloat(row.subtotal) || 0,
