@@ -9,7 +9,10 @@ import {
   Percent,
   Landmark,
   Building2,
-  Bell
+  Bell,
+  RefreshCw,
+  Receipt,
+  FileText
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -21,6 +24,8 @@ import Payments from "@/components/finance/Payments";
 import TaxRates from "@/components/finance/TaxRates";
 import BankReconciliation from "@/components/finance/BankReconciliation";
 import FixedAssets from "@/components/finance/FixedAssets";
+import RecurringJournalEntries from "@/components/finance/RecurringJournalEntries";
+import FinancialReports from "@/components/finance/FinancialReports";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -62,29 +67,12 @@ export default function Financials() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="payables"
+              value="ap-ar"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
             >
-              <ArrowDownCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('payables_ap')}</span>
-              <span className="sm:hidden">AP</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="receivables"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
-            >
-              <ArrowUpCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('receivables_ar')}</span>
-              <span className="sm:hidden">AR</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="followups"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('followups') || 'Follow-ups'}</span>
+              <Receipt className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('ap_ar') || 'AP & AR'}</span>
+              <span className="sm:hidden">AP/AR</span>
             </TabsTrigger>
 
             <TabsTrigger
@@ -112,6 +100,22 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('fixed_assets') || 'Fixed Assets'}</span>
               <span className="sm:hidden">FA</span>
             </TabsTrigger>
+
+            <TabsTrigger
+              value="recurring"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('recurring') || 'Recurring'}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="reports"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('reports') || 'Reports'}</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -123,14 +127,41 @@ export default function Financials() {
           <TabsContent value="payments" className="mt-6">
             <Payments />
           </TabsContent>
-          <TabsContent value="payables" className="mt-6">
-            <AccountsPayable />
-          </TabsContent>
-          <TabsContent value="receivables" className="mt-6">
-            <AccountsReceivable />
-          </TabsContent>
-          <TabsContent value="followups" className="mt-6">
-            <CustomerFollowups />
+          <TabsContent value="ap-ar" className="mt-6">
+            <Tabs defaultValue="payables" className="w-full">
+              <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
+                <TabsTrigger
+                  value="payables"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <ArrowDownCircle className="w-4 h-4" />
+                  {t('payables_ap')}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="receivables"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <ArrowUpCircle className="w-4 h-4" />
+                  {t('receivables_ar')}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="followups"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <Bell className="w-4 h-4" />
+                  {t('followups') || 'Follow-ups'}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="payables">
+                <AccountsPayable />
+              </TabsContent>
+              <TabsContent value="receivables">
+                <AccountsReceivable />
+              </TabsContent>
+              <TabsContent value="followups">
+                <CustomerFollowups />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
           <TabsContent value="taxes" className="mt-6">
             <TaxRates />
@@ -140,6 +171,12 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="assets" className="mt-6">
             <FixedAssets />
+          </TabsContent>
+          <TabsContent value="recurring" className="mt-6">
+            <RecurringJournalEntries />
+          </TabsContent>
+          <TabsContent value="reports" className="mt-6">
+            <FinancialReports />
           </TabsContent>
         </Tabs>
       </div>

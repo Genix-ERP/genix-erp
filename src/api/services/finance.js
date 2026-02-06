@@ -47,6 +47,36 @@ export const financeService = {
     return response.data.data;
   },
 
+  // Bank Reconciliation
+  async listBankReconciliations(bankAccountId) {
+    const response = await apiClient.get(`/bank-accounts/${bankAccountId}/reconciliations`);
+    return response.data.data;
+  },
+
+  async createBankReconciliation(bankAccountId, data) {
+    const response = await apiClient.post(`/bank-accounts/${bankAccountId}/reconciliations`, data);
+    return response.data.data;
+  },
+
+  async getBankReconciliation(bankAccountId, reconciliationId) {
+    const response = await apiClient.get(`/bank-accounts/${bankAccountId}/reconciliations/${reconciliationId}`);
+    return response.data.data;
+  },
+
+  async updateBankReconciliation(bankAccountId, reconciliationId, data) {
+    const response = await apiClient.put(`/bank-accounts/${bankAccountId}/reconciliations/${reconciliationId}`, data);
+    return response.data.data;
+  },
+
+  async completeBankReconciliation(bankAccountId, reconciliationId) {
+    const response = await apiClient.post(`/bank-accounts/${bankAccountId}/reconciliations/${reconciliationId}/complete`);
+    return response.data.data;
+  },
+
+  async deleteBankReconciliation(bankAccountId, reconciliationId) {
+    await apiClient.delete(`/bank-accounts/${bankAccountId}/reconciliations/${reconciliationId}`);
+  },
+
   // Cash Transactions (Kassa)
   async listCashTransactions(params = {}) {
     const response = await apiClient.get('/cash-transactions', { params });
@@ -519,6 +549,41 @@ export const financeService = {
 
   async deleteBudgetLine(id) {
     await apiClient.delete(`/budget-lines/${id}`);
+  },
+
+  // Recurring Journal Entries
+  async listRecurringJournals(params = {}) {
+    const response = await apiClient.get('/recurring-journals', { params });
+    return response.data.data;
+  },
+
+  async getRecurringJournal(id) {
+    const response = await apiClient.get(`/recurring-journals/${id}`);
+    return response.data.data;
+  },
+
+  async createRecurringJournal(data) {
+    const response = await apiClient.post('/recurring-journals', data);
+    return response.data.data;
+  },
+
+  async updateRecurringJournal(id, data) {
+    const response = await apiClient.put(`/recurring-journals/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteRecurringJournal(id) {
+    await apiClient.delete(`/recurring-journals/${id}`);
+  },
+
+  async generateRecurringEntry(id) {
+    const response = await apiClient.post(`/recurring-journals/${id}/generate`);
+    return response.data.data;
+  },
+
+  async getPendingRecurringEntries() {
+    const response = await apiClient.get('/recurring-journals/pending');
+    return response.data.data;
   },
 };
 
