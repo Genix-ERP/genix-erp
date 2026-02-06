@@ -1,46 +1,62 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Download, TrendingUp, DollarSign, BarChart3, Brain, Loader2 } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  FileText, Download, Loader2, CheckCircle2, AlertTriangle,
+  ChevronDown, ChevronRight, Users, Building2, DollarSign,
+  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight
+} from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
-import { useFinancials } from '@/components/contexts/FinancialsContext';
+import financeService from '@/api/services/finance';
+
+// Helper to format currency
+const formatCurrency = (amount, decimals = 2) => {
+  if (amount === null || amount === undefined) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  }).format(amount);
+};
 
 // Helper to get date range for period filter
-const getDateRangeForPeriod = (period) => {
+const getDateParams = (period) => {
   const now = new Date();
-  let startDate, endDate;
+  let periodFrom, periodTo;
+  const asOfDate = now.toISOString().split('T')[0];
 
   switch (period) {
     case 'current_month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      periodFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      periodTo = asOfDate;
       break;
     case 'quarter':
       const currentQuarter = Math.floor(now.getMonth() / 3);
-      startDate = new Date(now.getFullYear(), currentQuarter * 3, 1);
-      endDate = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
+      periodFrom = new Date(now.getFullYear(), currentQuarter * 3, 1).toISOString().split('T')[0];
+      periodTo = asOfDate;
       break;
     case 'year':
-      startDate = new Date(now.getFullYear(), 0, 1);
-      endDate = new Date(now.getFullYear(), 11, 31);
+      periodFrom = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+      periodTo = asOfDate;
       break;
     default:
-      startDate = new Date(0);
-      endDate = new Date();
+      periodFrom = '2020-01-01';
+      periodTo = asOfDate;
   }
 
-  return { startDate, endDate };
+  return { as_of_date: asOfDate, period_from: periodFrom, period_to: periodTo };
 };
 
 // Get period label for display
 const getPeriodLabel = (period, language) => {
   const now = new Date();
-
   switch (period) {
     case 'current_month':
       return now.toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US', { month: 'long', year: 'numeric' });
@@ -57,233 +73,70 @@ const getPeriodLabel = (period, language) => {
 export default function FinancialReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { financialTransactions, isLoading } = useFinancials();
   const reportRef = useRef(null);
 
   const [period, setPeriod] = useState('current_month');
-  const [aiInsights, setAiInsights] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Filter transactions by period
-  const filteredTransactions = useMemo(() => {
-    if (!financialTransactions || financialTransactions.length === 0) return [];
+  // Report data states
+  const [trialBalance, setTrialBalance] = useState(null);
+  const [agingReceivables, setAgingReceivables] = useState(null);
+  const [agingPayables, setAgingPayables] = useState(null);
+  const [cashFlow, setCashFlow] = useState(null);
 
-    const { startDate, endDate } = getDateRangeForPeriod(period);
+  // Expanded rows for aging reports
+  const [expandedCustomers, setExpandedCustomers] = useState({});
+  const [expandedVendors, setExpandedVendors] = useState({});
 
-    return financialTransactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      return transactionDate >= startDate && transactionDate <= endDate;
-    });
-  }, [financialTransactions, period]);
-
+  // Fetch all reports when period changes
   useEffect(() => {
-    if (filteredTransactions.length > 0) {
-      generateAIInsights();
-    }
-  }, [filteredTransactions, language]);
+    fetchReports();
+  }, [period]);
 
-  const generateAIInsights = () => {
-    const totalRevenue = filteredTransactions.filter(t => t.transaction_type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-    const totalExpenses = filteredTransactions.filter(t => t.transaction_type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
-    const netProfit = totalRevenue - totalExpenses;
-    const margin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100) : 0;
-
-    let healthScore = 75;
-    let healthStatus = language === 'uz' ? 'Yaxshi' : 'Good';
-
-    if (margin > 30) {
-      healthScore = 90;
-      healthStatus = language === 'uz' ? 'A\'lo' : 'Excellent';
-    } else if (margin > 15) {
-      healthScore = 75;
-      healthStatus = language === 'uz' ? 'Yaxshi' : 'Good';
-    } else if (margin > 0) {
-      healthScore = 55;
-      healthStatus = language === 'uz' ? 'O\'rtacha' : 'Fair';
-    } else {
-      healthScore = 30;
-      healthStatus = language === 'uz' ? 'E\'tibor kerak' : 'Needs Attention';
-    }
-
-    // Localized insights
-    const insights = language === 'uz' ? {
-      key_insights: [
-        `Sof foyda marjasi ${margin.toFixed(1)}%`,
-        `Umumiy daromad: $${totalRevenue.toLocaleString()}`,
-        `Mavjud resurslar bilan samarali ishlayapti`
-      ],
-      risks: [
-        'Mavsumiy o\'zgarishlar uchun pul oqimini kuzating',
-        'Katta xarajat toifalarini ko\'rib chiqing',
-        'Debitorlik qarzlarini kuzatib boring'
-      ],
-      recommendations: [
-        'Takroriy to\'lovlarni avtomatlashtirishni ko\'rib chiqing',
-        'Yetkazib beruvchi to\'lov shartlarini optimallashtiring',
-        'Xarajatlarni tasdiqlash jarayonini joriy eting'
-      ]
-    } : {
-      key_insights: [
-        `Net profit margin is ${margin.toFixed(1)}%`,
-        `Total revenue: $${totalRevenue.toLocaleString()}`,
-        `Operating efficiently with current resources`
-      ],
-      risks: [
-        'Monitor cash flow for seasonal variations',
-        'Review large expense categories',
-        'Track accounts receivable aging'
-      ],
-      recommendations: [
-        'Consider automating recurring payments',
-        'Optimize vendor payment terms',
-        'Implement expense approval workflows'
-      ]
-    };
-
-    setAiInsights({
-      health_score: healthScore,
-      health_status: healthStatus,
-      ...insights
-    });
-  };
-
-  // Export to PDF using print
-  const handleExportPDF = async () => {
-    setIsExporting(true);
+  const fetchReports = async () => {
+    setIsLoading(true);
+    const params = getDateParams(period);
 
     try {
-      const pl = getProfitLoss();
-      const bs = getBalanceSheet();
+      const [tb, ar, ap, cf] = await Promise.all([
+        financeService.getTrialBalance(params).catch(() => null),
+        financeService.getAgingReceivables(params).catch(() => null),
+        financeService.getAgingPayables(params).catch(() => null),
+        financeService.getCashFlow(params).catch(() => null)
+      ]);
+
+      setTrialBalance(tb);
+      setAgingReceivables(ar);
+      setAgingPayables(ap);
+      setCashFlow(cf);
+    } catch (error) {
+      console.error('Failed to fetch reports:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Toggle expanded state for aging reports
+  const toggleCustomer = (id) => {
+    setExpandedCustomers(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleVendor = (id) => {
+    setExpandedVendors(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Export to PDF
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
       const periodLabel = getPeriodLabel(period, language);
-
-      // Create a printable HTML document
-      const printContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${language === 'uz' ? 'Moliyaviy Hisobot' : 'Financial Report'} - ${periodLabel}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; color: #1a1a1a; }
-            h1 { color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; }
-            h2 { color: #334155; margin-top: 30px; }
-            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-            .period { background: #f1f5f9; padding: 8px 16px; border-radius: 6px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-            th { background: #f8fafc; font-weight: 600; }
-            .amount { text-align: right; font-family: monospace; }
-            .positive { color: #16a34a; }
-            .negative { color: #dc2626; }
-            .total-row { background: #f1f5f9; font-weight: bold; }
-            .section { margin-bottom: 40px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-            .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; }
-            @media print { body { padding: 20px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${language === 'uz' ? 'Moliyaviy Hisobot' : 'Financial Report'}</h1>
-            <div class="period">${periodLabel}</div>
-          </div>
-
-          <div class="section">
-            <h2>${language === 'uz' ? 'Foyda va Zarar Hisoboti' : 'Profit & Loss Statement'}</h2>
-            <table>
-              <tr>
-                <th>${language === 'uz' ? 'Tushum' : 'Revenue'}</th>
-                <td class="amount positive">$${pl.revenue.toLocaleString()}</td>
-              </tr>
-              <tr>
-                <td style="padding-left: 20px;">${language === 'uz' ? 'Sotilgan mahsulot tannarxi' : 'Cost of Goods Sold'}</td>
-                <td class="amount negative">-$${pl.cogs.toLocaleString()}</td>
-              </tr>
-              <tr class="total-row">
-                <th>${language === 'uz' ? 'Yalpi foyda' : 'Gross Profit'}</th>
-                <td class="amount">$${pl.grossProfit.toLocaleString()} (${pl.grossMargin.toFixed(1)}%)</td>
-              </tr>
-              <tr>
-                <td style="padding-left: 20px;">${language === 'uz' ? 'Operatsion xarajatlar' : 'Operating Expenses'}</td>
-                <td class="amount negative">-$${pl.operatingExpenses.toLocaleString()}</td>
-              </tr>
-              <tr class="total-row">
-                <th>${language === 'uz' ? 'Sof daromad' : 'Net Income'}</th>
-                <td class="amount ${pl.netIncome >= 0 ? 'positive' : 'negative'}">$${pl.netIncome.toLocaleString()} (${pl.netMargin.toFixed(1)}%)</td>
-              </tr>
-            </table>
-          </div>
-
-          <div class="section">
-            <h2>${language === 'uz' ? 'Balans hisoboti' : 'Balance Sheet'}</h2>
-            <div class="grid">
-              <div>
-                <h3>${language === 'uz' ? 'Aktivlar' : 'Assets'}</h3>
-                <table>
-                  <tr>
-                    <td>${language === 'uz' ? 'Joriy aktivlar' : 'Current Assets'}</td>
-                    <td class="amount">$${bs.currentAssets.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td>${language === 'uz' ? 'Asosiy vositalar' : 'Fixed Assets'}</td>
-                    <td class="amount">$${bs.fixedAssets.toLocaleString()}</td>
-                  </tr>
-                  <tr class="total-row">
-                    <th>${language === 'uz' ? 'Jami aktivlar' : 'Total Assets'}</th>
-                    <td class="amount">$${bs.totalAssets.toLocaleString()}</td>
-                  </tr>
-                </table>
-              </div>
-              <div>
-                <h3>${language === 'uz' ? 'Majburiyatlar va Kapital' : 'Liabilities & Equity'}</h3>
-                <table>
-                  <tr>
-                    <td>${language === 'uz' ? 'Joriy majburiyatlar' : 'Current Liabilities'}</td>
-                    <td class="amount">$${bs.currentLiabilities.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td>${language === 'uz' ? 'Kapital' : 'Equity'}</td>
-                    <td class="amount">$${bs.equity.toLocaleString()}</td>
-                  </tr>
-                  <tr class="total-row">
-                    <th>${language === 'uz' ? 'Jami' : 'Total'}</th>
-                    <td class="amount">$${bs.totalAssets.toLocaleString()}</td>
-                  </tr>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="section">
-            <h2>${language === 'uz' ? 'Asosiy ko\'rsatkichlar' : 'Key Ratios'}</h2>
-            <table>
-              <tr>
-                <td>${language === 'uz' ? 'Joriy koeffitsient' : 'Current Ratio'}</td>
-                <td class="amount">${bs.currentRatio.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>${language === 'uz' ? 'Qarz/Kapital nisbati' : 'Debt-to-Equity'}</td>
-                <td class="amount">${bs.debtToEquity.toFixed(2)}</td>
-              </tr>
-            </table>
-          </div>
-
-          <div class="footer">
-            ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US', {
-              year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            })} | Genix ERP
-          </div>
-        </body>
-        </html>
-      `;
-
-      // Open print dialog
+      const printContent = generatePrintContent(periodLabel);
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(printContent);
         printWindow.document.close();
         printWindow.focus();
-
-        // Wait for content to load then print
         setTimeout(() => {
           printWindow.print();
           printWindow.close();
@@ -296,116 +149,95 @@ export default function FinancialReports() {
     }
   };
 
-  // Profit & Loss Statement - now uses filtered transactions
-  const getProfitLoss = () => {
-    const revenue = filteredTransactions
-      .filter(t => t.transaction_type === 'income')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+  const generatePrintContent = (periodLabel) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${language === 'uz' ? 'Moliyaviy Hisobot' : 'Financial Report'} - ${periodLabel}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #1a1a1a; }
+          h1 { color: #1e3a8a; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; }
+          h2 { color: #334155; margin-top: 30px; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+          th { background: #f8fafc; font-weight: 600; }
+          .amount { text-align: right; font-family: monospace; }
+          .positive { color: #16a34a; }
+          .negative { color: #dc2626; }
+          .total-row { background: #f1f5f9; font-weight: bold; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <h1>${language === 'uz' ? 'Moliyaviy Hisobotlar' : 'Financial Reports'}</h1>
+        <p>${periodLabel}</p>
 
-    const expensesByCategory = {};
-    filteredTransactions
-      .filter(t => t.transaction_type === 'expense')
-      .forEach(t => {
-        expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + (t.amount || 0);
-      });
+        ${trialBalance ? `
+        <h2>${language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}</h2>
+        <table>
+          <tr><th>Account</th><th class="amount">Debit</th><th class="amount">Credit</th></tr>
+          ${trialBalance.accounts?.map(a => `
+            <tr>
+              <td>${a.account_code} - ${a.account_name}</td>
+              <td class="amount">${formatCurrency(a.debit_balance)}</td>
+              <td class="amount">${formatCurrency(a.credit_balance)}</td>
+            </tr>
+          `).join('') || ''}
+          <tr class="total-row">
+            <td><strong>Total</strong></td>
+            <td class="amount"><strong>${formatCurrency(trialBalance.total_debit)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(trialBalance.total_credit)}</strong></td>
+          </tr>
+        </table>
+        ` : ''}
 
-    const cogs = (expensesByCategory.operations || 0) + (expensesByCategory.equipment || 0);
-    const grossProfit = revenue - cogs;
-    const operatingExpenses = (expensesByCategory.marketing || 0) +
-                             (expensesByCategory.payroll || 0) +
-                             (expensesByCategory.rent || 0) +
-                             (expensesByCategory.utilities || 0) +
-                             (expensesByCategory.software || 0);
-    const netIncome = grossProfit - operatingExpenses;
+        ${agingReceivables ? `
+        <h2>${language === 'uz' ? 'Debitorlik qarzi eskirishi' : 'Aged Receivables'}</h2>
+        <table>
+          <tr><th>Customer</th><th class="amount">Current</th><th class="amount">1-30</th><th class="amount">31-60</th><th class="amount">61-90</th><th class="amount">90+</th><th class="amount">Total</th></tr>
+          ${agingReceivables.contacts?.map(c => `
+            <tr>
+              <td>${c.contact_name}</td>
+              <td class="amount">${formatCurrency(c.current)}</td>
+              <td class="amount">${formatCurrency(c.days_1_to_30)}</td>
+              <td class="amount">${formatCurrency(c.days_31_to_60)}</td>
+              <td class="amount">${formatCurrency(c.days_61_to_90)}</td>
+              <td class="amount">${formatCurrency(c.over_90_days)}</td>
+              <td class="amount">${formatCurrency(c.total_amount)}</td>
+            </tr>
+          `).join('') || ''}
+          <tr class="total-row">
+            <td><strong>Total</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.current_total)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.days_1_to_30)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.days_31_to_60)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.days_61_to_90)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.over_90_days)}</strong></td>
+            <td class="amount"><strong>${formatCurrency(agingReceivables.total_amount)}</strong></td>
+          </tr>
+        </table>
+        ` : ''}
 
-    return {
-      revenue,
-      cogs,
-      grossProfit,
-      grossMargin: revenue > 0 ? (grossProfit / revenue * 100) : 0,
-      operatingExpenses,
-      netIncome,
-      netMargin: revenue > 0 ? (netIncome / revenue * 100) : 0
+        <div class="footer">
+          ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Genix ERP
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  // Category color helper
+  const getCategoryColor = (category) => {
+    const colors = {
+      asset: 'bg-blue-100 text-blue-800',
+      liability: 'bg-red-100 text-red-800',
+      equity: 'bg-purple-100 text-purple-800',
+      revenue: 'bg-green-100 text-green-800',
+      expense: 'bg-orange-100 text-orange-800'
     };
+    return colors[category] || 'bg-gray-100 text-gray-800';
   };
-
-  // Balance Sheet (Simplified) - now uses filtered transactions
-  const getBalanceSheet = () => {
-    const totalRevenue = filteredTransactions
-      .filter(t => t.transaction_type === 'income')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    const totalExpenses = filteredTransactions
-      .filter(t => t.transaction_type === 'expense')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    const cash = totalRevenue - totalExpenses;
-    const currentAssets = cash * 1.3;
-    const fixedAssets = totalExpenses * 0.2;
-    const totalAssets = currentAssets + fixedAssets;
-
-    const currentLiabilities = totalExpenses * 0.15;
-    const equity = totalAssets - currentLiabilities;
-
-    return {
-      currentAssets,
-      fixedAssets,
-      totalAssets,
-      currentLiabilities,
-      totalLiabilities: currentLiabilities,
-      equity,
-      currentRatio: currentLiabilities > 0 ? (currentAssets / currentLiabilities) : 0,
-      debtToEquity: equity > 0 ? (currentLiabilities / equity) : 0
-    };
-  };
-
-  // Cash Flow Trends - now uses filtered transactions
-  const getCashFlowData = () => {
-    const monthlyData = {};
-
-    filteredTransactions.forEach(t => {
-      const month = new Date(t.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      if (!monthlyData[month]) {
-        monthlyData[month] = { month, inflow: 0, outflow: 0 };
-      }
-
-      if (t.transaction_type === 'income') {
-        monthlyData[month].inflow += t.amount;
-      } else if (t.transaction_type === 'expense') {
-        monthlyData[month].outflow += t.amount;
-      }
-    });
-
-    return Object.values(monthlyData).slice(-6);
-  };
-
-  // Revenue & Profitability Trends - now uses filtered transactions
-  const getRevenueData = () => {
-    const monthlyData = {};
-
-    filteredTransactions.forEach(t => {
-      const month = new Date(t.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      if (!monthlyData[month]) {
-        monthlyData[month] = { month, revenue: 0, expenses: 0 };
-      }
-
-      if (t.transaction_type === 'income') {
-        monthlyData[month].revenue += t.amount;
-      } else if (t.transaction_type === 'expense') {
-        monthlyData[month].expenses += t.amount;
-      }
-    });
-
-    return Object.values(monthlyData).slice(-6).map(d => ({
-      ...d,
-      profit: d.revenue - d.expenses
-    }));
-  };
-
-  const pl = getProfitLoss();
-  const bs = getBalanceSheet();
-  const cashFlowData = getCashFlowData();
-  const revenueData = getRevenueData();
 
   return (
     <div className="space-y-6" ref={reportRef}>
@@ -413,12 +245,16 @@ export default function FinancialReports() {
       {/* Header */}
       <Card className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white shadow-xl">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <FileText className="w-8 h-8" />
               <div>
-                <CardTitle className="text-2xl">{language === 'uz' ? 'Moliyaviy Hisobotlar' : 'Financial Reports'}</CardTitle>
-                <p className="text-sm text-white/80 mt-1">IFRS & GAAP Compliant</p>
+                <CardTitle className="text-2xl">
+                  {language === 'uz' ? 'Moliyaviy Hisobotlar' : 'Financial Reports'}
+                </CardTitle>
+                <p className="text-sm text-white/80 mt-1">
+                  {language === 'uz' ? 'Sinov balansi, Eskirish, Pul oqimi' : 'Trial Balance, Aging, Cash Flow'}
+                </p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -444,7 +280,7 @@ export default function FinancialReports() {
                 ) : (
                   <Download className="w-4 h-4 mr-2" />
                 )}
-                {t('export_pdf')}
+                {t('export_pdf') || 'Export PDF'}
               </Button>
             </div>
           </div>
@@ -454,231 +290,487 @@ export default function FinancialReports() {
       {/* Period Info */}
       <div className="flex items-center gap-2 text-sm text-slate-600">
         <Badge variant="outline">{getPeriodLabel(period, language)}</Badge>
-        <span>•</span>
-        <span>{filteredTransactions.length} {language === 'uz' ? 'tranzaksiya' : 'transactions'}</span>
+        {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
       </div>
 
-      {/* AI Financial Health */}
-      {aiInsights && (
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-purple-600" />
-              {language === 'uz' ? 'AI Moliyaviy Salomatlik Tahlili' : 'AI Financial Health Analysis'}
-              <Badge className={
-                aiInsights.health_score >= 80 ? 'bg-green-100 text-green-800' :
-                aiInsights.health_score >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }>
-                {language === 'uz' ? 'Ball' : 'Score'}: {aiInsights.health_score}/100 - {aiInsights.health_status}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                  {language === 'uz' ? 'Asosiy tushunchalar' : 'Key Insights'}
-                </h4>
-                <ul className="space-y-1">
-                  {aiInsights.key_insights?.map((insight, i) => (
-                    <li key={i} className="text-sm text-blue-700">• {insight}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="p-4 bg-orange-50 rounded-lg">
-                <h4 className="text-sm font-semibold text-orange-900 mb-2">
-                  {language === 'uz' ? 'Xavf omillari' : 'Risk Factors'}
-                </h4>
-                <ul className="space-y-1">
-                  {aiInsights.risks?.map((risk, i) => (
-                    <li key={i} className="text-sm text-orange-700">• {risk}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="p-4 bg-green-50 rounded-lg">
-                <h4 className="text-sm font-semibold text-green-900 mb-2">
-                  {language === 'uz' ? 'Tavsiyalar' : 'Recommendations'}
-                </h4>
-                <ul className="space-y-1">
-                  {aiInsights.recommendations?.map((rec, i) => (
-                    <li key={i} className="text-sm text-green-700">• {rec}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Reports Tabs */}
-      <Tabs defaultValue="pnl" className="w-full">
+      <Tabs defaultValue="trial-balance" className="w-full">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
-          <TabsTrigger value="pnl">{t('profit_loss')}</TabsTrigger>
-          <TabsTrigger value="balance">{t('balance_sheet')}</TabsTrigger>
-          <TabsTrigger value="cashflow">{t('cash_flow')}</TabsTrigger>
-          <TabsTrigger value="analytics">{t('analytics')}</TabsTrigger>
+          <TabsTrigger value="trial-balance">
+            {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
+          </TabsTrigger>
+          <TabsTrigger value="aged-receivables">
+            {language === 'uz' ? 'Debitorlik' : 'Aged AR'}
+          </TabsTrigger>
+          <TabsTrigger value="aged-payables">
+            {language === 'uz' ? 'Kreditorlik' : 'Aged AP'}
+          </TabsTrigger>
+          <TabsTrigger value="cash-flow">
+            {language === 'uz' ? 'Pul Oqimi' : 'Cash Flow'}
+          </TabsTrigger>
         </TabsList>
 
-        {/* Profit & Loss */}
-        <TabsContent value="pnl">
+        {/* Trial Balance Tab */}
+        <TabsContent value="trial-balance">
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>{t('profit_loss_statement')}</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>{language === 'uz' ? 'Sinov Balansi Hisoboti' : 'Trial Balance Report'}</CardTitle>
+                {trialBalance && (
+                  <Badge className={trialBalance.is_balanced ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                    {trialBalance.is_balanced ? (
+                      <><CheckCircle2 className="w-4 h-4 mr-1" /> {language === 'uz' ? 'Balans' : 'Balanced'}</>
+                    ) : (
+                      <><AlertTriangle className="w-4 h-4 mr-1" /> {language === 'uz' ? 'Farq bor' : 'Out of Balance'}</>
+                    )}
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center py-3 border-b">
-                  <span className="font-semibold text-lg">{t('revenue')}</span>
-                  <span className="font-bold text-xl text-green-600">${pl.revenue.toLocaleString()}</span>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
                 </div>
-                <div className="flex justify-between items-center py-2 pl-4">
-                  <span className="text-slate-600">{t('cost_of_goods_sold')}</span>
-                  <span className="text-red-600">-${pl.cogs.toLocaleString()}</span>
+              ) : trialBalance?.accounts?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-24">{language === 'uz' ? 'Kod' : 'Code'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Hisob nomi' : 'Account Name'}</TableHead>
+                        <TableHead className="w-28">{language === 'uz' ? 'Turi' : 'Category'}</TableHead>
+                        <TableHead className="text-right w-36">{language === 'uz' ? 'Debet' : 'Debit'}</TableHead>
+                        <TableHead className="text-right w-36">{language === 'uz' ? 'Kredit' : 'Credit'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trialBalance.accounts.map((account, idx) => (
+                        <TableRow key={account.account_id || idx}>
+                          <TableCell className="font-mono text-sm">{account.account_code}</TableCell>
+                          <TableCell>{account.account_name}</TableCell>
+                          <TableCell>
+                            <Badge className={getCategoryColor(account.category)} variant="secondary">
+                              {account.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {account.debit_balance > 0 ? formatCurrency(account.debit_balance) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {account.credit_balance > 0 ? formatCurrency(account.credit_balance) : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {/* Totals Row */}
+                      <TableRow className="bg-slate-100 font-bold">
+                        <TableCell colSpan={3} className="text-right">
+                          {language === 'uz' ? 'Jami' : 'Total'}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-lg">
+                          {formatCurrency(trialBalance.total_debit)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-lg">
+                          {formatCurrency(trialBalance.total_credit)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
                 </div>
-                <div className="flex justify-between items-center py-3 border-y bg-slate-50 px-4">
-                  <span className="font-semibold">{t('gross_profit')}</span>
-                  <div className="text-right">
-                    <p className="font-bold text-lg">${pl.grossProfit.toLocaleString()}</p>
-                    <p className="text-xs text-slate-500">{pl.grossMargin.toFixed(1)}% {language === 'uz' ? 'marja' : 'margin'}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center py-2 pl-4">
-                  <span className="text-slate-600">{t('operating_expenses')}</span>
-                  <span className="text-red-600">-${pl.operatingExpenses.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center py-4 border-t-2 bg-blue-50 px-4 rounded-lg">
-                  <span className="font-bold text-lg">{t('net_income')}</span>
-                  <div className="text-right">
-                    <p className="font-bold text-2xl text-blue-600">${pl.netIncome.toLocaleString()}</p>
-                    <p className="text-sm text-blue-700">{pl.netMargin.toFixed(1)}% {language === 'uz' ? 'marja' : 'margin'}</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Balance Sheet */}
-        <TabsContent value="balance">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle>{t('balance_sheet')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <h3 className="font-bold text-lg text-slate-900 border-b pb-2">{t('assets')}</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between py-2">
-                      <span className="text-slate-600">{t('current_assets')}</span>
-                      <span className="font-semibold">${bs.currentAssets.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-slate-600">{t('fixed_assets')}</span>
-                      <span className="font-semibold">${bs.fixedAssets.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between py-3 border-t bg-slate-50 px-3 rounded">
-                      <span className="font-bold">{language === 'uz' ? 'Jami aktivlar' : 'Total Assets'}</span>
-                      <span className="font-bold text-lg">${bs.totalAssets.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-bold text-lg text-slate-900 border-b pb-2">{t('liabilities')} & {t('equity')}</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between py-2">
-                      <span className="text-slate-600">{t('current_liabilities')}</span>
-                      <span className="font-semibold">${bs.currentLiabilities.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-slate-600">{t('equity')}</span>
-                      <span className="font-semibold">${bs.equity.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between py-3 border-t bg-slate-50 px-3 rounded">
-                      <span className="font-bold">{t('total_liabilities_equity')}</span>
-                      <span className="font-bold text-lg">${bs.totalAssets.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-semibold text-blue-900 mb-3">{t('key_ratios')}</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-blue-700">{t('current_ratio')}</p>
-                    <p className="text-2xl font-bold text-blue-900">{bs.currentRatio.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-blue-700">{t('debt_to_equity')}</p>
-                    <p className="text-2xl font-bold text-blue-900">{bs.debtToEquity.toFixed(2)}</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Cash Flow */}
-        <TabsContent value="cashflow">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle>{t('cash_flow_statement')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cashFlowData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={cashFlowData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="month" stroke="#64748b" />
-                    <YAxis stroke="#64748b" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="inflow" fill="#10b981" name={language === 'uz' ? 'Kirim' : 'Cash Inflow'} radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="outflow" fill="#ef4444" name={language === 'uz' ? 'Chiqim' : 'Cash Outflow'} radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
               ) : (
-                <div className="h-[350px] flex items-center justify-center text-slate-500">
-                  {t('no_data')}
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Analytics */}
-        <TabsContent value="analytics">
+        {/* Aged Receivables Tab */}
+        <TabsContent value="aged-receivables">
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>{t('revenue_profitability_trends')}</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                {language === 'uz' ? 'Debitorlik Qarzi Eskirishi' : 'Aged Receivables Report'}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="month" stroke="#64748b" />
-                    <YAxis stroke="#64748b" />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={3} name={language === 'uz' ? 'Daromad' : 'Revenue'} />
-                    <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={3} name={language === 'uz' ? 'Xarajatlar' : 'Expenses'} />
-                    <Line type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={3} name={language === 'uz' ? 'Foyda' : 'Profit'} />
-                  </LineChart>
-                </ResponsiveContainer>
+              {/* Summary Cards */}
+              {agingReceivables && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase">{language === 'uz' ? 'Jami' : 'Total'}</p>
+                    <p className="text-xl font-bold text-slate-900">{formatCurrency(agingReceivables.total_amount)}</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <p className="text-xs text-green-600 uppercase">{language === 'uz' ? 'Joriy' : 'Current'}</p>
+                    <p className="text-xl font-bold text-green-700">{formatCurrency(agingReceivables.current_total)}</p>
+                  </div>
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-xs text-yellow-600 uppercase">1-30 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-yellow-700">{formatCurrency(agingReceivables.days_1_to_30)}</p>
+                  </div>
+                  <div className="p-4 bg-orange-50 rounded-lg">
+                    <p className="text-xs text-orange-600 uppercase">31-60 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-orange-700">{formatCurrency(agingReceivables.days_31_to_60)}</p>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-lg">
+                    <p className="text-xs text-red-600 uppercase">61-90 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-red-700">{formatCurrency(agingReceivables.days_61_to_90)}</p>
+                  </div>
+                  <div className="p-4 bg-red-100 rounded-lg">
+                    <p className="text-xs text-red-700 uppercase">90+ {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-red-800">{formatCurrency(agingReceivables.over_90_days)}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Customer Table */}
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : agingReceivables?.contacts?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>{language === 'uz' ? 'Mijoz' : 'Customer'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy' : 'Current'}</TableHead>
+                        <TableHead className="text-right">1-30</TableHead>
+                        <TableHead className="text-right">31-60</TableHead>
+                        <TableHead className="text-right">61-90</TableHead>
+                        <TableHead className="text-right">90+</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Jami' : 'Total'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {agingReceivables.contacts.map((contact) => (
+                        <React.Fragment key={contact.contact_id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-slate-50"
+                            onClick={() => toggleCustomer(contact.contact_id)}
+                          >
+                            <TableCell>
+                              {expandedCustomers[contact.contact_id] ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium">{contact.contact_name}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">
+                              {contact.current > 0 ? formatCurrency(contact.current) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-yellow-600">
+                              {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-orange-600">
+                              {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-red-600">
+                              {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-red-700">
+                              {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold">
+                              {formatCurrency(contact.total_amount)}
+                            </TableCell>
+                          </TableRow>
+                          {/* Expanded Invoice Details */}
+                          {expandedCustomers[contact.contact_id] && contact.invoices?.map((inv) => (
+                            <TableRow key={inv.invoice_id} className="bg-slate-50/50">
+                              <TableCell></TableCell>
+                              <TableCell className="text-sm text-slate-600 pl-8">
+                                {inv.invoice_number} - Due: {inv.due_date}
+                                {inv.days_overdue > 0 && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    {inv.days_overdue} {language === 'uz' ? 'kun' : 'days'}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell colSpan={5}></TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {formatCurrency(inv.amount_due)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <div className="h-[350px] flex items-center justify-center text-slate-500">
-                  {t('no_data')}
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'To\'lanmagan hisob-fakturalar yo\'q' : 'No outstanding invoices'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aged Payables Tab */}
+        <TabsContent value="aged-payables">
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                {language === 'uz' ? 'Kreditorlik Qarzi Eskirishi' : 'Aged Payables Report'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Summary Cards */}
+              {agingPayables && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase">{language === 'uz' ? 'Jami' : 'Total'}</p>
+                    <p className="text-xl font-bold text-slate-900">{formatCurrency(agingPayables.total_amount)}</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <p className="text-xs text-green-600 uppercase">{language === 'uz' ? 'Joriy' : 'Current'}</p>
+                    <p className="text-xl font-bold text-green-700">{formatCurrency(agingPayables.current_total)}</p>
+                  </div>
+                  <div className="p-4 bg-yellow-50 rounded-lg">
+                    <p className="text-xs text-yellow-600 uppercase">1-30 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-yellow-700">{formatCurrency(agingPayables.days_1_to_30)}</p>
+                  </div>
+                  <div className="p-4 bg-orange-50 rounded-lg">
+                    <p className="text-xs text-orange-600 uppercase">31-60 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-orange-700">{formatCurrency(agingPayables.days_31_to_60)}</p>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-lg">
+                    <p className="text-xs text-red-600 uppercase">61-90 {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-red-700">{formatCurrency(agingPayables.days_61_to_90)}</p>
+                  </div>
+                  <div className="p-4 bg-red-100 rounded-lg">
+                    <p className="text-xs text-red-700 uppercase">90+ {language === 'uz' ? 'kun' : 'days'}</p>
+                    <p className="text-xl font-bold text-red-800">{formatCurrency(agingPayables.over_90_days)}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor Table */}
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : agingPayables?.contacts?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>{language === 'uz' ? 'Yetkazib beruvchi' : 'Vendor'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy' : 'Current'}</TableHead>
+                        <TableHead className="text-right">1-30</TableHead>
+                        <TableHead className="text-right">31-60</TableHead>
+                        <TableHead className="text-right">61-90</TableHead>
+                        <TableHead className="text-right">90+</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Jami' : 'Total'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {agingPayables.contacts.map((contact) => (
+                        <React.Fragment key={contact.contact_id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-slate-50"
+                            onClick={() => toggleVendor(contact.contact_id)}
+                          >
+                            <TableCell>
+                              {expandedVendors[contact.contact_id] ? (
+                                <ChevronDown className="w-4 h-4" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4" />
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium">{contact.contact_name}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">
+                              {contact.current > 0 ? formatCurrency(contact.current) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-yellow-600">
+                              {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-orange-600">
+                              {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-red-600">
+                              {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-red-700">
+                              {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold">
+                              {formatCurrency(contact.total_amount)}
+                            </TableCell>
+                          </TableRow>
+                          {/* Expanded Bill Details */}
+                          {expandedVendors[contact.contact_id] && contact.invoices?.map((inv) => (
+                            <TableRow key={inv.invoice_id} className="bg-slate-50/50">
+                              <TableCell></TableCell>
+                              <TableCell className="text-sm text-slate-600 pl-8">
+                                {inv.invoice_number} - Due: {inv.due_date}
+                                {inv.days_overdue > 0 && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    {inv.days_overdue} {language === 'uz' ? 'kun' : 'days'}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell colSpan={5}></TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {formatCurrency(inv.amount_due)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'To\'lanmagan hisob-fakturalar yo\'q' : 'No outstanding bills'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Cash Flow Tab */}
+        <TabsContent value="cash-flow">
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                {language === 'uz' ? 'Pul Oqimi Hisoboti' : 'Cash Flow Statement'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : cashFlow ? (
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-blue-600 uppercase">
+                        {language === 'uz' ? 'Boshlang\'ich balans' : 'Opening Balance'}
+                      </p>
+                      <p className="text-xl font-bold text-blue-700">{formatCurrency(cashFlow.opening_cash_balance)}</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <p className="text-xs text-green-600 uppercase">
+                        {language === 'uz' ? 'Yakuniy balans' : 'Closing Balance'}
+                      </p>
+                      <p className="text-xl font-bold text-green-700">{formatCurrency(cashFlow.closing_cash_balance)}</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${(cashFlow.net_cash_change || 0) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                      <p className={`text-xs uppercase ${(cashFlow.net_cash_change || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {language === 'uz' ? 'Sof o\'zgarish' : 'Net Change'}
+                      </p>
+                      <p className={`text-xl font-bold flex items-center gap-1 ${(cashFlow.net_cash_change || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        {(cashFlow.net_cash_change || 0) >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+                        {formatCurrency(Math.abs(cashFlow.net_cash_change || 0))}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-500 uppercase">
+                        {language === 'uz' ? 'Davr' : 'Period'}
+                      </p>
+                      <p className="text-sm font-medium text-slate-700">
+                        {cashFlow.period_from} - {cashFlow.period_to}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Activities Sections */}
+                  <div className="space-y-4">
+                    {/* Operating Activities */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-slate-900">
+                          {language === 'uz' ? 'Operatsion faoliyat' : 'Operating Activities'}
+                        </h3>
+                        <span className={`font-bold ${cashFlow.operating_activities?.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(cashFlow.operating_activities?.total || 0)}
+                        </span>
+                      </div>
+                      {cashFlow.operating_activities?.items?.length > 0 ? (
+                        <div className="space-y-2">
+                          {cashFlow.operating_activities.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span className="text-slate-600">{item.description}</span>
+                              <span className="font-mono">{formatCurrency(item.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
+                      )}
+                    </div>
+
+                    {/* Investing Activities */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-slate-900">
+                          {language === 'uz' ? 'Investitsiya faoliyati' : 'Investing Activities'}
+                        </h3>
+                        <span className={`font-bold ${cashFlow.investing_activities?.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(cashFlow.investing_activities?.total || 0)}
+                        </span>
+                      </div>
+                      {cashFlow.investing_activities?.items?.length > 0 ? (
+                        <div className="space-y-2">
+                          {cashFlow.investing_activities.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span className="text-slate-600">{item.description}</span>
+                              <span className="font-mono">{formatCurrency(item.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
+                      )}
+                    </div>
+
+                    {/* Financing Activities */}
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-slate-900">
+                          {language === 'uz' ? 'Moliyaviy faoliyat' : 'Financing Activities'}
+                        </h3>
+                        <span className={`font-bold ${cashFlow.financing_activities?.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(cashFlow.financing_activities?.total || 0)}
+                        </span>
+                      </div>
+                      {cashFlow.financing_activities?.items?.length > 0 ? (
+                        <div className="space-y-2">
+                          {cashFlow.financing_activities.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span className="text-slate-600">{item.description}</span>
+                              <span className="font-mono">{formatCurrency(item.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
     </div>
   );
 }
