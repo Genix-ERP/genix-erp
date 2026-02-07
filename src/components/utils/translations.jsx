@@ -3399,6 +3399,7 @@ export const translations = {
     // Delivery Orders Module
     "deliveries": "Deliveries",
     "new_delivery": "New Delivery",
+    "new_delivery_order": "New Delivery Order",
     "no_deliveries_yet": "No delivery orders yet",
     "deliveries_auto_created": "Delivery orders are auto-created when sales orders are confirmed",
     "do_number": "DO #",
@@ -8592,6 +8593,7 @@ export const translations = {
     // Delivery Orders Module (Uzbek)
     "deliveries": "Yetkazib berish",
     "new_delivery": "Yangi yetkazib berish",
+    "new_delivery_order": "Yangi yetkazib berish buyurtmasi",
     "no_deliveries_yet": "Yetkazib berish buyurtmalari yo'q",
     "deliveries_auto_created": "Sotuv buyurtmalari tasdiqlanganda yetkazib berish buyurtmalari avtomatik yaratiladi",
     "do_number": "Yetkazib berish №",
@@ -13544,6 +13546,7 @@ export const translations = {
     // Delivery Orders Module (Russian)
     "deliveries": "Доставки",
     "new_delivery": "Новая доставка",
+    "new_delivery_order": "Новый заказ на доставку",
     "no_deliveries_yet": "Нет заказов на доставку",
     "deliveries_auto_created": "Заказы на доставку создаются автоматически при подтверждении заказов на продажу",
     "do_number": "Доставка №",

@@ -53,6 +53,12 @@ apiClient.interceptors.request.use(
     if (tenantId) {
       config.headers['X-Tenant-ID'] = tenantId;
     }
+    // Add organization header if available
+    const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
+    const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
+    if (organizationId) {
+      config.headers['X-Organization-ID'] = organizationId;
+    }
     return config;
   },
   (error) => Promise.reject(error)

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useCompany } from '@/components/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +70,11 @@ export default function EquipmentMaintenance() {
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
   const { canCreate, canDelete } = usePermissions();
+  const { activeCompany } = useCompany();
+
+  const orgId = activeCompany?.id || 'default';
+  const equipmentKey = `genix_equipment_${orgId}`;
+  const tasksKey = `genix_maintenance_tasks_${orgId}`;
 
   // Get date-fns locale based on language
   const getDateLocale = () => {
@@ -145,15 +151,15 @@ export default function EquipmentMaintenance() {
 
   // Load data from localStorage
   useEffect(() => {
-    const storedEquipment = localStorage.getItem('genix_equipment');
-    const storedTasks = localStorage.getItem('genix_maintenance_tasks');
+    const storedEquipment = localStorage.getItem(equipmentKey);
+    const storedTasks = localStorage.getItem(tasksKey);
 
     if (storedEquipment) {
       setEquipment(JSON.parse(storedEquipment));
     } else {
       const sample = generateSampleEquipment();
       setEquipment(sample);
-      localStorage.setItem('genix_equipment', JSON.stringify(sample));
+      localStorage.setItem(equipmentKey, JSON.stringify(sample));
     }
 
     if (storedTasks) {
@@ -161,22 +167,22 @@ export default function EquipmentMaintenance() {
     } else {
       const sample = generateSampleTasks();
       setMaintenanceTasks(sample);
-      localStorage.setItem('genix_maintenance_tasks', JSON.stringify(sample));
+      localStorage.setItem(tasksKey, JSON.stringify(sample));
     }
-  }, []);
+  }, [equipmentKey, tasksKey]);
 
   // Save to localStorage
   useEffect(() => {
     if (equipment.length > 0) {
-      localStorage.setItem('genix_equipment', JSON.stringify(equipment));
+      localStorage.setItem(equipmentKey, JSON.stringify(equipment));
     }
-  }, [equipment]);
+  }, [equipment, equipmentKey]);
 
   useEffect(() => {
     if (maintenanceTasks.length > 0) {
-      localStorage.setItem('genix_maintenance_tasks', JSON.stringify(maintenanceTasks));
+      localStorage.setItem(tasksKey, JSON.stringify(maintenanceTasks));
     }
-  }, [maintenanceTasks]);
+  }, [maintenanceTasks, tasksKey]);
 
   // Generate sample data
   const generateSampleEquipment = () => {
