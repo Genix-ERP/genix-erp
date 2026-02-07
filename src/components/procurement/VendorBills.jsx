@@ -504,8 +504,8 @@ export default function VendorBills() {
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.bill_number}</TableCell>
                       <TableCell>{bill.vendor_name}</TableCell>
-                      <TableCell>{format(parseISO(bill.bill_date), 'MMM dd, yyyy')}</TableCell>
-                      <TableCell>{format(parseISO(bill.due_date), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{bill.bill_date ? format(parseISO(bill.bill_date), 'MMM dd, yyyy') : '-'}</TableCell>
+                      <TableCell>{bill.due_date ? format(parseISO(bill.due_date), 'MMM dd, yyyy') : '-'}</TableCell>
                       <TableCell>
                         {bill.purchase_order_id && (
                           <Badge variant="outline" className="flex items-center gap-1 w-fit">
@@ -894,11 +894,11 @@ export default function VendorBills() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('bill_date') || 'Bill Date'}</Label>
-                  <p>{format(parseISO(selectedBill.bill_date), 'MMM dd, yyyy')}</p>
+                  <p>{selectedBill.bill_date ? format(parseISO(selectedBill.bill_date), 'MMM dd, yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('due_date') || 'Due Date'}</Label>
-                  <p>{format(parseISO(selectedBill.due_date), 'MMM dd, yyyy')}</p>
+                  <p>{selectedBill.due_date ? format(parseISO(selectedBill.due_date), 'MMM dd, yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('status') || 'Status'}</Label>
