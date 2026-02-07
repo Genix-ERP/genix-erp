@@ -159,7 +159,7 @@ export default function Procurement() {
   }, []);
 
   // AI Analysis
-  const procurementAnalysis = useMemo(() => analyzeProcurement(purchaseOrders), [purchaseOrders]);
+  const procurementAnalysis = useMemo(() => analyzeProcurement(purchaseOrders, suppliers, language), [purchaseOrders, suppliers, language]);
 
   const [newPO, setNewPO] = useState({
     po_number: '',
@@ -675,7 +675,7 @@ export default function Procurement() {
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Brain className="w-5 h-5 text-indigo-600" />
                     {t('ai_analysis') || 'AI Analysis'}
-                    <Badge className="bg-indigo-100 text-indigo-700 text-xs">Live</Badge>
+                    <Badge className="bg-indigo-100 text-indigo-700 text-xs">{t('live')}</Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -730,8 +730,8 @@ export default function Procurement() {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
                         <YAxis fontSize={12} />
-                        <Tooltip formatter={(value) => value.toLocaleString()} />
-                        <Bar dataKey="value" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                        <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, t('amount') || 'Amount']} />
+                        <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>

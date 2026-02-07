@@ -1211,7 +1211,7 @@ export default function SalesOrders() {
 
         {/* Create Order Modal */}
         <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) resetOrderForm(); }}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('create_new_order')}</DialogTitle>
             </DialogHeader>
@@ -1409,16 +1409,16 @@ export default function SalesOrders() {
                             </div>
                           </>
                         ) : (
-                          <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                          <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
                             <Input
                               type="number"
-                              placeholder={t('quantity')}
+                              placeholder={t('qty')}
                               value={line.quantity}
                               onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
                             />
                           </div>
                         )}
-                        <div className="col-span-2">
+                        <div className={line.packaging_id ? "col-span-1" : "col-span-2"}>
                           <Input
                             type="number"
                             placeholder={t('price')}
@@ -1426,20 +1426,22 @@ export default function SalesOrders() {
                             onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
                           />
                         </div>
-                        <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
-                          <Input
-                            placeholder={t('description')}
-                            value={line.description}
-                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value, isDeliveryDateManual)}
-                          />
-                        </div>
-                        <div className="col-span-1 flex justify-end">
+                        {!line.packaging_id && (
+                          <div className={hasVariants && hasPackagings ? "col-span-1" : hasVariants || hasPackagings ? "col-span-2" : "col-span-4"}>
+                            <Input
+                              placeholder={t('note')}
+                              value={line.description}
+                              onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'description', e.target.value, isDeliveryDateManual)}
+                            />
+                          </div>
+                        )}
+                        <div className="col-span-1 flex items-center justify-end">
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => handleRemoveLine(newOrder, setNewOrder, index, isDeliveryDateManual)}
                             disabled={newOrder.lines.length === 1}
-                            className="text-red-600"
+                            className="text-red-600 h-9"
                           >
                             <X className="w-4 h-4" />
                           </Button>
@@ -1812,7 +1814,7 @@ export default function SalesOrders() {
         {/* Edit Order Modal */}
         {editingOrder && (
           <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) { setEditingOrder(null); setIsEditDeliveryDateManual(false); } }}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{t('edit_order')} - {editingOrder.order_number}</DialogTitle>
               </DialogHeader>

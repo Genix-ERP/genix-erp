@@ -83,8 +83,8 @@ export function SettingsField({
   required = false
 }) {
   return (
-    <div className={cn("space-y-2", className)}>
-      <div className="flex flex-col">
+    <div className={cn("flex flex-col", className)}>
+      <div className="flex flex-col min-h-[40px]">
         <label className="text-sm font-medium text-slate-700">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
@@ -93,14 +93,17 @@ export function SettingsField({
           <span className="text-xs text-slate-500">{description}</span>
         )}
       </div>
-      {children}
+      <div className="mt-2">
+        {children}
+      </div>
     </div>
   );
 }
 
-export function SettingsRow({ children, className }) {
+export function SettingsRow({ children, className, cols = 2 }) {
+  const gridCols = cols === 3 ? "md:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-2";
   return (
-    <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4", className)}>
+    <div className={cn(`grid grid-cols-1 ${gridCols} gap-4 mb-4 items-end`, className)}>
       {children}
     </div>
   );

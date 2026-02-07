@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target
+  Calendar, Target, Scale
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,6 +22,7 @@ import CashRegister from "./CashRegister";
 import CurrencyManagement from "./CurrencyManagement";
 import FiscalPeriods from "./FiscalPeriods";
 import BudgetManagement from "./BudgetManagement";
+import ReconciliationWorkflow from "./ReconciliationWorkflow";
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -44,6 +45,8 @@ export default function BankReconciliation() {
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
   const [showCreateTransactionModal, setShowCreateTransactionModal] = useState(false);
   const [showReconcileModal, setShowReconcileModal] = useState(false);
+  const [showReconciliationWorkflow, setShowReconciliationWorkflow] = useState(false);
+  const [reconciliationAccount, setReconciliationAccount] = useState(null);
   const [activeTab, setActiveTab] = useState("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -173,6 +176,21 @@ export default function BankReconciliation() {
 
     return transactions.sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
   };
+
+  // Show reconciliation workflow if active
+  if (showReconciliationWorkflow && reconciliationAccount) {
+    return (
+      <div className="space-y-6">
+        <ReconciliationWorkflow
+          bankAccount={reconciliationAccount}
+          onClose={() => {
+            setShowReconciliationWorkflow(false);
+            setReconciliationAccount(null);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -363,17 +381,31 @@ export default function BankReconciliation() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedBankAccount(account);
-                            setActiveTab('transactions');
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReconciliationAccount(account);
+                              setShowReconciliationWorkflow(true);
+                            }}
+                            title={t('reconcile') || 'Reconcile'}
+                          >
+                            <Scale className="w-4 h-4 text-blue-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedBankAccount(account);
+                              setActiveTab('transactions');
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
