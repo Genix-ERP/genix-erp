@@ -163,8 +163,8 @@ export function CompanyProvider({ children }) {
     if (company) {
       setActiveCompanyState(company);
       localStorage.setItem(getUserStorageKey(ACTIVE_COMPANY_KEY), companyId);
-      // Dispatch event for other contexts to reload data
-      window.dispatchEvent(new CustomEvent('companyChanged', { detail: { companyId } }));
+      // Reload the page so all components refetch with the new organization header
+      window.location.reload();
       return { success: true };
     }
     return { success: false, error: 'company_not_found' };

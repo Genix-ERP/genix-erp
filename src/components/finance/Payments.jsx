@@ -210,7 +210,7 @@ export default function Payments() {
     return labels[method] || method;
   };
 
-  const bankAccounts = accounts.filter(a => a.account_type === 'asset' && a.code?.startsWith('1'));
+  const bankAccounts = accounts.filter(a => a.is_bank_account || (a.category === 'asset' && a.code?.startsWith('1')));
 
   return (
     <div className="space-y-6">
