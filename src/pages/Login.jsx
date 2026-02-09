@@ -1,15 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import LanguageSelector from '@/components/ui/language-selector';
 import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
+import './Login.scss';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -24,7 +20,6 @@ export default function Login() {
   const { t } = useTranslation(language);
   const navigate = useNavigate();
 
-  // Navigate only after auth state is confirmed
   useEffect(() => {
     if (shouldNavigate && isAuthenticated && user) {
       navigate('/');
@@ -39,10 +34,8 @@ export default function Login() {
     const result = await login(email, password, selectedTenantId);
 
     if (result.success) {
-      // Set flag to navigate - useEffect will handle navigation after state updates
       setShouldNavigate(true);
     } else if (result.tenantSelectionRequired) {
-      // Show tenant selection UI
       setTenants(result.tenants);
       setError('');
       setIsLoading(false);
@@ -60,7 +53,6 @@ export default function Login() {
     const result = await login(email, password, tenantId);
 
     if (result.success) {
-      // Set flag to navigate - useEffect will handle navigation after state updates
       setShouldNavigate(true);
     } else {
       setError(result.error);
@@ -77,192 +69,141 @@ export default function Login() {
   // Tenant selection screen
   if (tenants && tenants.length > 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
-        <style>
-          {`
-            :root {
-              --genix-navy: #0B1426;
-              --genix-blue: #0EA5E9;
-              --genix-light-blue: #E0F2FE;
-              --genix-purple: #8B5CF6;
-              --genix-green: #10B981;
-            }
-          `}
-        </style>
-
-        {/* Language Selector - Top Right */}
-        <div className="absolute top-4 right-4">
+      <div className="login-page">
+        <div className="login-page__lang">
           <LanguageSelector />
         </div>
 
-        <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
-          <CardHeader className="text-center pb-2">
+        <div className="login-card">
+          <div className="login-card__header">
             <img
               src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
               alt="Genix Logo"
-              className="h-20 w-auto object-contain mx-auto mb-4"
+              className="login-card__logo"
             />
-            <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-              {t('select_company')}
-            </CardTitle>
-            <CardDescription className="text-slate-500">
-              {t('email_multiple_companies')}
-            </CardDescription>
-          </CardHeader>
+            <h1 className="login-card__title">{t('select_company')}</h1>
+            <p className="login-card__subtitle">{t('email_multiple_companies')}</p>
+          </div>
 
-          <CardContent className="pt-4">
+          <div className="login-card__body">
             {error && (
-              <Alert variant="destructive" className="bg-red-50 border-red-200 mb-4">
-                <AlertDescription className="text-red-700">
-                  {error}
-                </AlertDescription>
-              </Alert>
+              <div className="login-error" style={{ marginBottom: '1rem' }}>
+                {error}
+              </div>
             )}
 
-            <div className="space-y-3">
+            <div className="tenant-list">
               {tenants.map((tenant) => (
-                <Button
+                <button
                   key={tenant.id}
-                  variant="outline"
-                  className="w-full h-auto py-4 px-4 justify-start hover:bg-[var(--genix-light-blue)] hover:border-[var(--genix-blue)] transition-all"
+                  className="tenant-list__item"
                   onClick={() => handleTenantSelect(tenant.id)}
                   disabled={isLoading}
                 >
-                  <Building2 className="w-5 h-5 mr-3 text-[var(--genix-blue)]" />
-                  <div className="text-left">
-                    <div className="font-medium text-slate-800">{tenant.name}</div>
-                    <div className="text-xs text-slate-500">{t('code_label')}: {tenant.code}</div>
+                  <div className="tenant-list__icon-wrap">
+                    <Building2 className="tenant-list__icon" />
                   </div>
-                </Button>
+                  <div>
+                    <div className="tenant-list__name">{tenant.name}</div>
+                    <div className="tenant-list__code">{t('code_label')}: {tenant.code}</div>
+                  </div>
+                </button>
               ))}
             </div>
 
-            <div className="mt-6">
-              <Button
-                variant="ghost"
-                className="w-full text-slate-600"
-                onClick={handleBackToLogin}
-                disabled={isLoading}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                {t('back_to_login')}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            <button
+              className="login-back"
+              onClick={handleBackToLogin}
+              disabled={isLoading}
+            >
+              <ArrowLeft style={{ width: 16, height: 16 }} />
+              {t('back_to_login')}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   // Normal login screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 relative">
-      <style>
-        {`
-          :root {
-            --genix-navy: #0B1426;
-            --genix-blue: #0EA5E9;
-            --genix-light-blue: #E0F2FE;
-            --genix-purple: #8B5CF6;
-            --genix-green: #10B981;
-          }
-        `}
-      </style>
-
-      {/* Language Selector - Top Right */}
-      <div className="absolute top-4 right-4">
+    <div className="login-page">
+      <div className="login-page__lang">
         <LanguageSelector />
       </div>
 
-      <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
-        <CardHeader className="text-center pb-2">
+      <div className="login-card">
+        <div className="login-card__header">
           <img
             src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
             alt="Genix Logo"
-            className="h-24 w-auto object-contain mx-auto mb-4"
+            className="login-card__logo"
           />
-          <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-            {t('welcome_back')}
-          </CardTitle>
-          <CardDescription className="text-slate-500">
-            {t('sign_in_to_continue')}
-          </CardDescription>
-        </CardHeader>
+          <h1 className="login-card__title">{t('welcome_back')}</h1>
+        </div>
 
-        <CardContent className="pt-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="login-card__body">
+          <form className="login-form" onSubmit={handleSubmit}>
             {error && (
-              <Alert variant="destructive" className="bg-red-50 border-red-200">
-                <AlertDescription className="text-red-700">
-                  {error}
-                </AlertDescription>
-              </Alert>
+              <div className="login-error">{error}</div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-700">{t('email')}</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
+            <div className="login-form__field">
+              <label htmlFor="email" className="login-form__label">{t('email')}</label>
+              <div className="login-form__input-wrap">
+                <Mail className="login-form__icon" />
+                <input
                   id="email"
                   type="email"
                   placeholder={t('enter_email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-11 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
+                  className="login-form__input"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-700">{t('password')}</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
+            <div className="login-form__field">
+              <label htmlFor="password" className="login-form__label">{t('password')}</label>
+              <div className="login-form__input-wrap">
+                <Lock className="login-form__icon" />
+                <input
                   id="password"
                   type="password"
                   placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 h-11 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
+                  className="login-form__input"
                   required
                 />
               </div>
             </div>
 
-            <Button
+            <button
               type="submit"
               disabled={isLoading}
-              className="w-full h-11 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:from-[var(--genix-blue)]/90 hover:to-[var(--genix-purple)]/90 text-white font-medium transition-all duration-200"
+              className="login-form__submit"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
                   {t('signing_in')}
                 </>
               ) : (
                 t('sign_in')
               )}
-            </Button>
+            </button>
           </form>
 
-          {/* Register Link - only show when backend is available */}
           {backendAvailable && (
-            <div className="mt-4 text-center">
-              <p className="text-sm text-slate-600">
-                {t('dont_have_account')}{' '}
-                <Link
-                  to="/register"
-                  className="font-medium text-[var(--genix-blue)] hover:text-[var(--genix-purple)] transition-colors"
-                >
-                  {t('sign_up')}
-                </Link>
-              </p>
-            </div>
+            <p className="login-register">
+              {t('dont_have_account')}{' '}
+              <Link to="/register">{t('sign_up')}</Link>
+            </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
