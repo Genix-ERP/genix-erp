@@ -44,12 +44,14 @@ import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Customers() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { toast } = useToast();
   const {
     customers,
     leads,
@@ -127,14 +129,33 @@ export default function Customers() {
     setFilteredCustomers(filtered);
   }, [customers, searchQuery, statusFilter, industryFilter]);
 
-  const handleSave = (customerData) => {
-    if (editingCustomer) {
-      updateCustomer(editingCustomer.id, customerData);
-    } else {
-      createCustomer(customerData);
+  const handleSave = async (customerData) => {
+    try {
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.id, customerData);
+      } else {
+        await createCustomer(customerData);
+      }
+      setShowForm(false);
+      setEditingCustomer(null);
+    } catch (error) {
+      if (error.response?.status === 409 && error.response?.data?.error?.code === 'DUPLICATE_DETECTED') {
+        const duplicates = error.response.data.error.data?.duplicates || [];
+        const names = duplicates.map(d => d.name).join(', ');
+        const fields = [...new Set(duplicates.flatMap(d => d.matched_fields))].join(', ');
+        toast({
+          variant: "destructive",
+          title: t('duplicate_detected') || "Duplicate Detected",
+          description: `${t('duplicate_contact_found') || 'Similar contact(s) already exist'}: ${names} (${fields})`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t('error') || "Error",
+          description: error.response?.data?.error?.message || error.message || 'Failed to save',
+        });
+      }
     }
-    setShowForm(false);
-    setEditingCustomer(null);
   };
 
   const handleOpportunityUpdate = (updatedOpportunity) => {
@@ -174,14 +195,33 @@ export default function Customers() {
     setShowLeadForm(true);
   };
 
-  const handleLeadSave = (leadData) => {
-    if (editingLead) {
-      updateLead(editingLead.id, leadData);
-    } else {
-      createLead(leadData);
+  const handleLeadSave = async (leadData) => {
+    try {
+      if (editingLead) {
+        await updateLead(editingLead.id, leadData);
+      } else {
+        await createLead(leadData);
+      }
+      setShowLeadForm(false);
+      setEditingLead(null);
+    } catch (error) {
+      if (error.response?.status === 409 && error.response?.data?.error?.code === 'DUPLICATE_DETECTED') {
+        const duplicates = error.response.data.error.data?.duplicates || [];
+        const names = duplicates.map(d => d.name).join(', ');
+        const fields = [...new Set(duplicates.flatMap(d => d.matched_fields))].join(', ');
+        toast({
+          variant: "destructive",
+          title: t('duplicate_detected') || "Duplicate Detected",
+          description: `${t('duplicate_lead_found') || 'Similar lead(s) already exist'}: ${names} (${fields})`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t('error') || "Error",
+          description: error.response?.data?.error?.message || error.message || 'Failed to save',
+        });
+      }
     }
-    setShowLeadForm(false);
-    setEditingLead(null);
   };
 
   const handleLeadDeleteConfirm = () => {

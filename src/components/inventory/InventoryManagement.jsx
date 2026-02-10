@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import apiClient from "@/api/client";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -79,12 +80,14 @@ export default function InventoryManagement() {
 
   const [adjustForm, setAdjustForm] = useState({
     product_id: '',
+    variant_id: '',
     warehouse_id: '',
     quantity: '',
     reason: '',
     notes: '',
     reference: ''
   });
+  const [adjustVariants, setAdjustVariants] = useState([]);
 
   const [transferForm, setTransferForm] = useState({
     product_id: '',
@@ -176,13 +179,29 @@ export default function InventoryManagement() {
   const resetAdjustForm = () => {
     setAdjustForm({
       product_id: '',
+      variant_id: '',
       warehouse_id: '',
       quantity: '',
       reason: '',
       notes: '',
       reference: ''
     });
+    setAdjustVariants([]);
   };
+
+  const fetchVariantsForProduct = useCallback(async (productId) => {
+    if (!productId) {
+      setAdjustVariants([]);
+      return;
+    }
+    try {
+      const response = await apiClient.get('/product-variants', { params: { product_id: productId } });
+      setAdjustVariants(response.data?.data || []);
+    } catch (error) {
+      console.error('Failed to fetch variants:', error);
+      setAdjustVariants([]);
+    }
+  }, []);
 
   const resetTransferForm = () => {
     setTransferForm({
@@ -200,6 +219,7 @@ export default function InventoryManagement() {
     try {
       await adjustInventory({
         product_id: adjustForm.product_id,
+        ...(adjustForm.variant_id && { variant_id: adjustForm.variant_id }),
         warehouse_id: adjustForm.warehouse_id,
         quantity: parseInt(adjustForm.quantity),
         reason: adjustForm.reason,
@@ -749,7 +769,15 @@ export default function InventoryManagement() {
               />
               <Select
                 value={adjustForm.product_id}
-                onValueChange={(value) => setAdjustForm({...adjustForm, product_id: value})}
+                onValueChange={(value) => {
+                  const selectedProduct = products.find(p => p.id === value);
+                  setAdjustForm({...adjustForm, product_id: value, variant_id: ''});
+                  if (selectedProduct?.has_variants) {
+                    fetchVariantsForProduct(value);
+                  } else {
+                    setAdjustVariants([]);
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_product')} />
@@ -757,12 +785,37 @@ export default function InventoryManagement() {
                 <SelectContent>
                   {products.filter(p => p.is_stockable !== false).map(product => (
                     <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.code})
+                      {product.name} ({product.code}) {product.has_variants ? '(V)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {adjustVariants.length > 0 && (
+              <div>
+                <LabelWithHelp
+                  label={t('variant') || 'Variant'}
+                  required
+                  helpText={t('help_adjust_variant') || "This product has variants. Select which variant to adjust."}
+                />
+                <Select
+                  value={adjustForm.variant_id}
+                  onValueChange={(value) => setAdjustForm({...adjustForm, variant_id: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_variant') || 'Select variant'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {adjustVariants.map(variant => (
+                      <SelectItem key={variant.id} value={variant.id}>
+                        {variant.display_name || variant.variant_name || variant.sku}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div>
               <LabelWithHelp
@@ -859,7 +912,7 @@ export default function InventoryManagement() {
               <Button
                 onClick={handleAdjust}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !adjustForm.product_id || !adjustForm.warehouse_id || !adjustForm.quantity || !adjustForm.reason}
+                disabled={isSaving || !adjustForm.product_id || !adjustForm.warehouse_id || !adjustForm.quantity || !adjustForm.reason || (adjustVariants.length > 0 && !adjustForm.variant_id)}
               >
                 {isSaving ? t('saving') : t('adjust_stock')}
               </Button>
