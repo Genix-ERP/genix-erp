@@ -1,0 +1,266 @@
+$navy: #0B1426;
+$blue: #0EA5E9;
+$purple: #8B5CF6;
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 1rem;
+  position: relative;
+
+  &__lang {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+  }
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(24px);
+  border-radius: 20px;
+  border: none;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 8px 32px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+
+  &__header {
+    text-align: center;
+    padding: 2.5rem 2rem 0.75rem;
+  }
+
+  &__logo {
+    height: 140px;
+    width: auto;
+    object-fit: contain;
+    margin: 0 auto 1.5rem;
+    display: block;
+  }
+
+  &__title {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: $navy;
+    letter-spacing: -0.01em;
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+  }
+
+  &__body {
+    padding: 1.5rem 2rem 2.25rem;
+  }
+}
+
+// Form
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  &__label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #475569;
+  }
+
+  &__input-wrap {
+    position: relative;
+  }
+
+  &__icon {
+    position: absolute;
+    left: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1rem;
+    height: 1rem;
+    color: #94a3b8;
+    pointer-events: none;
+  }
+
+  &__input {
+    width: 100%;
+    height: 2.75rem;
+    padding-left: 2.625rem;
+    background: rgba(248, 250, 252, 0.6);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    color: $navy;
+    transition: all 0.2s ease;
+
+    &::placeholder {
+      color: #cbd5e1;
+    }
+
+    &:hover {
+      border-color: #cbd5e1;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $blue;
+      box-shadow: 0 0 0 3px rgba($blue, 0.1);
+      background: #fff;
+    }
+  }
+
+  &__submit {
+    width: 100%;
+    height: 2.75rem;
+    margin-top: 0.375rem;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, $blue 0%, $purple 100%);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+
+    &:hover:not(:disabled) {
+      opacity: 0.92;
+      box-shadow: 0 4px 16px rgba($blue, 0.25);
+      transform: translateY(-1px);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+}
+
+// Register link
+.login-register {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #64748b;
+
+  a {
+    font-weight: 600;
+    color: $blue;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: $purple;
+    }
+  }
+}
+
+// Error alert
+.login-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  color: #dc2626;
+}
+
+// Tenant selection
+.tenant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+
+  &__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem 1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+
+    &:hover:not(:disabled) {
+      border-color: $blue;
+      background: rgba($blue, 0.02);
+      box-shadow: 0 2px 8px rgba($blue, 0.08);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  &__icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 10px;
+    background: #f0f9ff;
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: $blue;
+  }
+
+  &__name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  &__code {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.125rem;
+  }
+}
+
+.login-back {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding: 0.625rem;
+  background: none;
+  border: none;
+  font-size: 0.8125rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: #334155;
+  }
+}
