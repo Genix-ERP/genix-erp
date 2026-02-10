@@ -4394,6 +4394,9 @@ export const translations = {
     "enable_duplicate_detection_desc": "Check for duplicates when creating records",
     "check_fields": "Check Fields",
     "check_fields_desc": "Fields to check for duplicates",
+    "duplicate_detected": "Duplicate Detected",
+    "duplicate_lead_found": "Similar lead(s) already exist",
+    "duplicate_contact_found": "Similar contact(s) already exist",
 
     // Purchase Settings
     "approval_workflow": "Approval Workflow",
@@ -9450,6 +9453,9 @@ export const translations = {
     "enable_duplicate_detection_desc": "Yozuvlar yaratilganda dublikatlarni tekshirish",
     "check_fields": "Tekshirish maydonlari",
     "check_fields_desc": "Dublikatlarni tekshirish uchun maydonlar",
+    "duplicate_detected": "Dublikat topildi",
+    "duplicate_lead_found": "O'xshash lid(lar) allaqachon mavjud",
+    "duplicate_contact_found": "O'xshash kontakt(lar) allaqachon mavjud",
 
     // Purchase Settings
     "approval_workflow": "Tasdiqlash jarayoni",
@@ -14980,6 +14986,9 @@ export const translations = {
     "enable_duplicate_detection_desc": "Проверять дубликаты при создании записей",
     "check_fields": "Поля проверки",
     "check_fields_desc": "Поля для проверки дубликатов",
+    "duplicate_detected": "Дубликат обнаружен",
+    "duplicate_lead_found": "Похожие лид(ы) уже существуют",
+    "duplicate_contact_found": "Похожие контакт(ы) уже существуют",
 
     // Purchase Settings
     "approval_workflow": "Процесс утверждения",
