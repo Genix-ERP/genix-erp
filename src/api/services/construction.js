@@ -136,6 +136,21 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async getPhotoReport(id) {
+    const response = await apiClient.get(`/construction/photo-reports/${id}`);
+    return response.data.data;
+  },
+
+  async updatePhotoReport(id, data) {
+    const response = await apiClient.put(`/construction/photo-reports/${id}`, data);
+    return response.data.data;
+  },
+
+  async deletePhotoReport(id) {
+    const response = await apiClient.delete(`/construction/photo-reports/${id}`);
+    return response.data;
+  },
+
   async reviewPhotoReport(id, data) {
     const response = await apiClient.put(`/construction/photo-reports/${id}/review`, data);
     return response.data.data;
