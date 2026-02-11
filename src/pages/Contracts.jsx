@@ -21,6 +21,7 @@ const getDateLocale = (lang) => {
   }
 };
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { contactsService } from "@/api/services";
 
 export default function Contracts() {
@@ -28,6 +29,7 @@ export default function Contracts() {
   const { t } = useTranslation(language);
   const { contracts, createContract, updateContract, deleteContract, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis
   const contractAnalysis = useMemo(() => analyzeContracts(contracts, language), [contracts, language]);
@@ -289,10 +291,10 @@ export default function Contracts() {
       })
       .map(c => {
         const daysUntil = differenceInDays(new Date(c.end_date), new Date());
-        const formattedValue = (c.contract_value || 0).toLocaleString();
+        const formattedValue = formatCurrency(c.contract_value || 0);
         return language === 'uz'
-          ? `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} kun qoldi, qiymat: $${formattedValue})`
-          : `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} days left, value: $${formattedValue})`;
+          ? `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} kun qoldi, qiymat: ${formattedValue})`
+          : `  - ${c.contract_number}: "${c.contract_name}" (${daysUntil} days left, value: ${formattedValue})`;
       })
       .join('\n');
 
@@ -304,7 +306,7 @@ UMUMIY MA'LUMOTLAR:
 - Jami shartnomalar: ${contracts.length} ta
 - Faol shartnomalar: ${activeCount} ta
 - Tez orada tugaydi: ${expiringCount} ta
-- Jami qiymat: $${totalValue.toLocaleString()}
+- Jami qiymat: ${formatCurrency(totalValue)}
 
 ${expiringCount > 0 ? `TUGAYOTGAN SHARTNOMALAR:\n${expiringDetails}\n` : ''}
 
@@ -321,7 +323,7 @@ SUMMARY:
 - Total contracts: ${contracts.length}
 - Active contracts: ${activeCount}
 - Expiring soon: ${expiringCount}
-- Total value: $${totalValue.toLocaleString()}
+- Total value: ${formatCurrency(totalValue)}
 
 ${expiringCount > 0 ? `EXPIRING CONTRACTS:\n${expiringDetails}\n` : ''}
 
@@ -410,7 +412,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('total_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -580,7 +582,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                             </div>
                             <div>
                               <p className="text-slate-500">{t('value')}</p>
-                              <p className="font-semibold">${(contract.contract_value || 0).toLocaleString()}</p>
+                              <p className="font-semibold">{formatCurrency(contract.contract_value || 0)}</p>
                             </div>
                             <div>
                               <p className="text-slate-500">{t('billing')}</p>
@@ -815,7 +817,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">{t('contract_value')}</p>
-                      <p className="text-xl font-bold text-rose-600">${(selectedContract.contract_value || 0).toLocaleString()}</p>
+                      <p className="text-xl font-bold text-rose-600">{formatCurrency(selectedContract.contract_value || 0)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-slate-500">{t('billing_cycle')}</p>
@@ -1024,7 +1026,7 @@ Provide only analysis results based on the numbers and specific contract data, n
                 <div className="bg-slate-50 p-3 rounded-lg text-sm space-y-1">
                   <p><strong>{t('contract_number_label')}:</strong> {contractToDelete.contract_number}</p>
                   <p><strong>{t('party_name')}:</strong> {contractToDelete.party_name}</p>
-                  <p><strong>{t('value')}:</strong> ${(contractToDelete.contract_value || 0).toLocaleString()}</p>
+                  <p><strong>{t('value')}:</strong> {formatCurrency(contractToDelete.contract_value || 0)}</p>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <Button

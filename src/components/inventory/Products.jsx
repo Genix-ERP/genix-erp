@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import LotTracking from "./LotTracking";
@@ -66,6 +67,7 @@ const LabelWithHelp = ({ label, helpText, required }) => (
 export default function Products() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     products,
     categories,
@@ -132,10 +134,10 @@ export default function Products() {
     { key: 'tags', label: 'Teglar', render: (v) => (v || []).join(', ') },
 
     // Pricing
-    { key: 'cost_price', label: 'Tan narxi', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'list_price', label: 'Sotish narxi', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'min_price', label: 'Minimal narx', render: (v) => v ? `${v.toLocaleString()} UZS` : '-' },
-    { key: 'wholesale_price', label: 'Ulgurji narx', render: (v) => v ? `${v.toLocaleString()} UZS` : '-' },
+    { key: 'cost_price', label: 'Tan narxi', render: (v) => formatCurrency(v || 0) },
+    { key: 'list_price', label: 'Sotish narxi', render: (v) => formatCurrency(v || 0) },
+    { key: 'min_price', label: 'Minimal narx', render: (v) => v ? formatCurrency(v) : '-' },
+    { key: 'wholesale_price', label: 'Ulgurji narx', render: (v) => v ? formatCurrency(v) : '-' },
 
     // Stock Settings
     { key: 'is_stockable', label: 'Zaxira qilinadimi', render: (v) => v ? 'Ha' : 'Yo\'q' },
@@ -1013,10 +1015,10 @@ export default function Products() {
                           {getCategoryName(product.category_id)}
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-right font-medium text-slate-700 tabular-nums">
-                          ${(product.cost_price || 0).toLocaleString()}
+                          {formatCurrency(product.cost_price || 0)}
                         </TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                          ${(product.list_price || 0).toLocaleString()}
+                          {formatCurrency(product.list_price || 0)}
                         </TableCell>
                         <TableCell className="text-right">
                           {product.is_stockable ? (
@@ -1415,7 +1417,7 @@ export default function Products() {
                                 {product?.name || item.product_name || t('unknown_product')}
                               </p>
                               <p className="text-xs text-slate-500">
-                                {t('price')}: ${product?.list_price?.toLocaleString() || 0}
+                                {t('price')}: {formatCurrency(product?.list_price || 0)}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1477,7 +1479,7 @@ export default function Products() {
                             <SelectItem key={product.id} value={product.id}>
                               <div className="flex items-center gap-2">
                                 <span>{product.name}</span>
-                                <span className="text-slate-500">- ${product.list_price?.toLocaleString() || 0}</span>
+                                <span className="text-slate-500">- {formatCurrency(product.list_price || 0)}</span>
                               </div>
                             </SelectItem>
                           ))}
@@ -1491,10 +1493,10 @@ export default function Products() {
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-slate-600">{t('total_items_price') || "Elementlar narxi jami"}:</span>
                         <span className="font-semibold text-slate-900">
-                          ${formData.bundle_items.reduce((sum, item) => {
+                          {formatCurrency(formData.bundle_items.reduce((sum, item) => {
                             const product = products.find(p => p.id === item.product_id);
                             return sum + ((product?.list_price || 0) * (item.quantity || 1));
-                          }, 0).toLocaleString()}
+                          }, 0))}
                         </span>
                       </div>
                       <p className="text-xs text-orange-600 mt-1">
@@ -2442,11 +2444,11 @@ export default function Products() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="p-3 bg-blue-50 rounded-lg">
                   <p className="text-xs text-blue-600 mb-1">{t('cost_price') || 'Cost Price'}</p>
-                  <p className="text-lg font-bold text-blue-700">${(selectedProduct.cost_price || 0).toLocaleString()}</p>
+                  <p className="text-lg font-bold text-blue-700">{formatCurrency(selectedProduct.cost_price || 0)}</p>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-600 mb-1">{t('list_price') || 'List Price'}</p>
-                  <p className="text-lg font-bold text-green-700">${(selectedProduct.list_price || 0).toLocaleString()}</p>
+                  <p className="text-lg font-bold text-green-700">{formatCurrency(selectedProduct.list_price || 0)}</p>
                 </div>
                 <div className="p-3 bg-purple-50 rounded-lg">
                   <p className="text-xs text-purple-600 mb-1">{t('current_stock') || 'Current Stock'}</p>
@@ -2480,7 +2482,7 @@ export default function Products() {
                             <Badge variant="secondary" className="bg-orange-100 text-orange-700">
                               x{item.quantity}
                             </Badge>
-                            <span className="text-slate-500">${((product?.list_price || 0) * item.quantity).toLocaleString()}</span>
+                            <span className="text-slate-500">{formatCurrency((product?.list_price || 0) * item.quantity)}</span>
                           </div>
                         </div>
                       );
@@ -2488,10 +2490,10 @@ export default function Products() {
                     <div className="pt-2 border-t border-orange-200 flex justify-between text-sm font-semibold">
                       <span className="text-orange-700">{t('total_items_price') || "Jami"}:</span>
                       <span className="text-orange-700">
-                        ${selectedProduct.bundle_items.reduce((sum, item) => {
+                        {formatCurrency(selectedProduct.bundle_items.reduce((sum, item) => {
                           const product = products.find(p => p.id === item.product_id);
                           return sum + ((product?.list_price || 0) * (item.quantity || 1));
-                        }, 0).toLocaleString()}
+                        }, 0))}
                       </span>
                     </div>
                   </div>

@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { salesService } from '@/api/services/sales';
 import { useAdminSettings } from './AdminSettingsContext';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const SalesContext = createContext(null);
 
 export function SalesProvider({ children }) {
   const { getSetting } = useAdminSettings();
+  const { formatCurrency } = useCurrencyFormatter();
   const [quotations, setQuotations] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -286,9 +288,9 @@ export function SalesProvider({ children }) {
       valid: true,
       discount,
       discountAmount,
-      message: `${discount.name}: -${discountAmount.toLocaleString()}`,
+      message: `${discount.name}: -${formatCurrency(discountAmount)}`,
     };
-  }, [discounts]);
+  }, [discounts, formatCurrency]);
 
   const useDiscountCode = useCallback(async (discountId, customerId, salesOrderId, amountDiscounted) => {
     try {

@@ -34,6 +34,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { dropshippingService } from '@/api/services/dropshipping';
 import { toast } from 'sonner';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -56,6 +57,7 @@ const statusLabels = {
 export default function Dropshipping() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
@@ -278,11 +280,6 @@ export default function Dropshipping() {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to link product');
     }
-  };
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ').format(amount || 0) + ' UZS';
   };
 
   return (
@@ -540,8 +537,9 @@ export default function Dropshipping() {
                         <TableCell>{vendor.notification_email || '-'}</TableCell>
                         <TableCell>{vendor.default_lead_time_days} {t('days')}</TableCell>
                         <TableCell>
-                          {vendor.default_markup}
-                          {vendor.markup_type === 'percentage' ? '%' : ' UZS'}
+                          {vendor.markup_type === 'percentage'
+                            ? `${vendor.default_markup}%`
+                            : formatCurrency(vendor.default_markup)}
                         </TableCell>
                         <TableCell>
                           {vendor.auto_send_orders ? (

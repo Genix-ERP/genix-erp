@@ -69,6 +69,7 @@ import { useModules } from "@/components/contexts/ModulesContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function HR() {
   const { language } = useLanguage();
@@ -77,6 +78,7 @@ export default function HR() {
   const { isAppInstalled } = useInstalledApps();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { getEmployeePermissions, updateEmployeePermissions } = useEmployeePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -106,7 +108,7 @@ export default function HR() {
     { key: 'job_title', label: t('job_title') || 'Lavozimi' },
     { key: 'department', label: t('department') || "Bo'lim" },
     { key: 'hire_date', label: t('hire_date') || 'Ishga kirgan sana', render: (v) => v || '-' },
-    { key: 'salary', label: t('salary') || 'Maosh', render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'salary', label: t('salary') || 'Maosh', render: (v) => formatCurrency(v || 0) },
     { key: 'status', label: t('status') || 'Holat' },
     { key: 'performance_score', label: t('performance_score') || 'Samaradorlik bali' },
   ];
@@ -160,7 +162,7 @@ export default function HR() {
     tableColumns: [],
     tableData: [],
     totals: [
-      { label: 'Oylik maosh', value: `${(employee.salary || 0).toLocaleString()} UZS`, bold: true },
+      { label: 'Oylik maosh', value: formatCurrency(employee.salary || 0), bold: true },
     ],
   });
 
@@ -1054,7 +1056,7 @@ Only return the JSON, no other text.`;
                       <DollarSign className="w-4 h-4" />
                       {t('salary') || 'Salary'}
                     </div>
-                    <p className="font-medium">${parseFloat(selectedEmployee.salary || 0).toLocaleString()}</p>
+                    <p className="font-medium">{formatCurrency(parseFloat(selectedEmployee.salary || 0))}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
