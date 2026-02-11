@@ -1492,15 +1492,15 @@ const ProjectDetailView = ({
               <div>
                 <Label>{t('select_organization') || 'Mavjud tashkilot'}</Label>
                 <Select
-                  value={vendorForm.vendor_id}
-                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_id: value, vendor_name: '' })}
+                  value={vendorForm.vendor_id || '__new__'}
+                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_id: value === '__new__' ? '' : value, vendor_name: value === '__new__' ? vendorForm.vendor_name : '' })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_organization') || 'Tashkilotni tanlang'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('new_vendor') || 'Yangi pudratchi'}</SelectItem>
-                    {organizations.map((org) => (
+                    <SelectItem value="__new__">{t('new_vendor') || 'Yangi pudratchi'}</SelectItem>
+                    {organizations.filter(org => org.id).map((org) => (
                       <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
                     ))}
                   </SelectContent>
