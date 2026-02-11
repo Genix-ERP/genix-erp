@@ -35,6 +35,29 @@ export const constructionService = {
   },
 
   // =====================================================
+  // BUILDINGS/BLOCKS
+  // =====================================================
+
+  async listBuildings(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/buildings`);
+    return response.data.data;
+  },
+
+  async createBuilding(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/buildings`, data);
+    return response.data.data;
+  },
+
+  async updateBuilding(projectId, buildingId, data) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/buildings/${buildingId}`, data);
+    return response.data.data;
+  },
+
+  async deleteBuilding(projectId, buildingId) {
+    await apiClient.delete(`/construction/projects/${projectId}/buildings/${buildingId}`);
+  },
+
+  // =====================================================
   // SMETA SECTIONS
   // =====================================================
 
