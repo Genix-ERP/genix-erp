@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,8 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
+import financeService from "@/api/services/finance";
+import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -63,10 +65,27 @@ export default function GeneralLedger() {
     setFilteredEntries(filtered);
   }, [searchQuery, journalEntries]);
 
-  const handleSelectEntry = (entry) => {
+  const [isLoadingLines, setIsLoadingLines] = useState(false);
+
+  const handleSelectEntry = async (entry) => {
     setSelectedEntry(entry);
-    const lines = getJournalLines(entry.id);
-    setSelectedJournalLines(lines);
+    setSelectedJournalLines([]);
+    setIsLoadingLines(true);
+    try {
+      const fullEntry = await financeService.getJournalEntry(entry.id);
+      if (fullEntry?.lines) {
+        setSelectedJournalLines(fullEntry.lines);
+      } else {
+        const lines = getJournalLines(entry.id);
+        setSelectedJournalLines(lines);
+      }
+    } catch (err) {
+      console.error('Failed to fetch journal entry lines:', err);
+      const lines = getJournalLines(entry.id);
+      setSelectedJournalLines(lines);
+    } finally {
+      setIsLoadingLines(false);
+    }
   };
 
   const handleCreateEntry = async () => {
@@ -182,6 +201,67 @@ export default function GeneralLedger() {
         i === index ? { ...line, [field]: value } : line
       )
     }));
+  };
+
+  const handleEditEntry = () => {
+    if (!selectedEntry) return;
+    if (selectedEntry.status === 'posted') {
+      alert(t('cannot_edit_posted_entry') || 'Posted entries cannot be edited. Reverse the entry first.');
+      return;
+    }
+    setNewEntry({
+      journal_id: selectedEntry.journal_id || '',
+      entry_date: selectedEntry.entry_date ? new Date(selectedEntry.entry_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      description: selectedEntry.description || '',
+      reference: selectedEntry.reference || '',
+      lines: selectedJournalLines.length > 0
+        ? selectedJournalLines.map(line => ({
+            account_id: line.account_id || '',
+            description: line.description || '',
+            debit_amount: line.debit_amount || 0,
+            credit_amount: line.credit_amount || 0,
+          }))
+        : [
+            { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+            { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
+          ]
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleViewPDF = () => {
+    if (!selectedEntry) return;
+    const lines = selectedJournalLines.map(line => ({
+      account: line.account ? `${line.account.code} - ${line.account.name}` : (line.account_code ? `${line.account_code} - ${line.account_name}` : '-'),
+      description: line.description || '-',
+      debit: line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-',
+      credit: line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-',
+    }));
+
+    const doc = generateDocumentPDF({
+      template: 'report',
+      title: t('journal_entry') || 'Journal Entry',
+      documentNumber: selectedEntry.entry_number,
+      documentDate: selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'dd.MM.yyyy') : '',
+      headerFields: [
+        { label: t('description') || 'Description', value: selectedEntry.description || '-' },
+        { label: t('status') || 'Status', value: selectedEntry.status || '-' },
+        { label: t('reference') || 'Reference', value: selectedEntry.reference || '-' },
+        { label: t('total') || 'Total', value: formatCurrency(selectedEntry.total_debit || 0) },
+      ],
+      tableColumns: [
+        { key: 'account', label: t('account') || 'Account' },
+        { key: 'description', label: t('description') || 'Description' },
+        { key: 'debit', label: t('debit') || 'Debit', align: 'right' },
+        { key: 'credit', label: t('credit') || 'Credit', align: 'right' },
+      ],
+      tableData: lines,
+      totals: [
+        { label: t('total') + ' ' + t('debit'), value: formatCurrency(selectedEntry.total_debit || 0) },
+        { label: t('total') + ' ' + t('credit'), value: formatCurrency(selectedEntry.total_credit || 0) },
+      ],
+    });
+    doc.save(`${selectedEntry.entry_number || 'journal-entry'}.pdf`);
   };
 
   // Calculate totals for display
@@ -382,11 +462,17 @@ export default function GeneralLedger() {
                     {t('journal_lines')}
                   </h4>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {selectedJournalLines.length > 0 ? (
+                    {isLoadingLines ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                      </div>
+                    ) : selectedJournalLines.length > 0 ? (
                       selectedJournalLines.map(line => (
                         <div key={line.id} className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                           <div className="flex justify-between items-start mb-2">
-                            <p className="text-sm font-medium text-slate-700 flex-1 pr-2">{line.description}</p>
+                            <p className="text-sm font-medium text-slate-700 flex-1 pr-2">
+                              {line.account ? `${line.account.code} - ${line.account.name}` : line.description}
+                            </p>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -424,10 +510,22 @@ export default function GeneralLedger() {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1 text-sm">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-sm"
+                    onClick={handleEditEntry}
+                    disabled={selectedEntry.status === 'posted'}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
                     {t('edit')}
                   </Button>
-                  <Button variant="outline" className="flex-1 text-sm">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-sm"
+                    onClick={handleViewPDF}
+                    disabled={isLoadingLines}
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
                     {t('view')} PDF
                   </Button>
                 </div>

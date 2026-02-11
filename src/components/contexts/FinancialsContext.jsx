@@ -364,6 +364,17 @@ export function FinancialsProvider({ children }) {
           setBudgetLines(budgetLinesData || []);
           // Set fixed assets from backend
           setFixedAssets(fixedAssetsData || []);
+
+          // Derive financialTransactions from real payments for dashboard metrics
+          const derivedTransactions = mappedPayments.map(p => ({
+            id: p.id,
+            transaction_type: p.payment_type === 'inbound' ? 'income' : 'expense',
+            amount: p.amount || 0,
+            category: p.payment_type === 'inbound' ? 'sales' : 'operations',
+            description: p.memo || p.reference || p.payment_number || '',
+            date: p.payment_date || p.created_at,
+          }));
+          setFinancialTransactions(derivedTransactions);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -522,9 +533,9 @@ export function FinancialsProvider({ children }) {
     const storageKey = getStorageKey(PAYMENTS_KEY, companyId);
     if (backendAvailable) {
       try {
-        const confirmed = await financeService.confirmPayment(id);
-        setPayments(prev => prev.map(p => p.id === id ? confirmed : p));
-        return confirmed;
+        await financeService.confirmPayment(id);
+        setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'confirmed' } : p));
+        return;
       } catch (err) { console.error('API error:', err); }
     }
     const updated = payments.map(p => p.id === id ? { ...p, status: 'confirmed' } : p);
