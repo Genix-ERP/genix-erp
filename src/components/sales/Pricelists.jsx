@@ -95,7 +95,7 @@ export default function Pricelists() {
     try {
       const [productsData, categoriesData] = await Promise.all([
         inventoryService.listProducts({ limit: 500 }),
-        inventoryService.listProductCategories()
+        inventoryService.listCategories()
       ]);
       setProducts(Array.isArray(productsData) ? productsData : productsData?.items || []);
       setCategories(Array.isArray(categoriesData) ? categoriesData : categoriesData?.items || []);
