@@ -12,7 +12,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { inventoryService } from '@/api/services';
+import { inventoryService, bomsService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BOMManagement() {
@@ -137,13 +137,20 @@ export default function BOMManagement() {
     unit: 'pcs'
   });
 
-  const handleEditBom = (bom, e) => {
+  const handleEditBom = async (bom, e) => {
     e.stopPropagation();
-    setEditBom({
-      ...bom,
-      lines: bom.lines || []
-    });
-    setShowEditModal(true);
+    try {
+      const fullBom = await bomsService.get(bom.id);
+      setEditBom({
+        ...fullBom,
+        lines: fullBom.lines || []
+      });
+      setShowEditModal(true);
+    } catch (error) {
+      console.error('Error fetching BOM details:', error);
+      setEditBom({ ...bom, lines: bom.lines || [] });
+      setShowEditModal(true);
+    }
   };
 
   const handleUpdateBom = async () => {
@@ -284,7 +291,7 @@ export default function BOMManagement() {
                       <TableCell>
                         <Badge variant="outline">{getBomTypeLabel(bom.bom_type || 'manufacturing')}</Badge>
                       </TableCell>
-                      <TableCell>{bom.lines?.length || bom.components?.length || 0} {t('items') || 'items'}</TableCell>
+                      <TableCell>{bom.line_count || bom.lines?.length || 0} {t('items') || 'items'}</TableCell>
                       <TableCell className="font-semibold">{formatCurrency(bom.total_cost || 0)}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bom.status || (bom.is_active ? 'active' : 'draft'))}>
@@ -460,37 +467,36 @@ export default function BOMManagement() {
                 <h3 className="font-semibold text-slate-900">{t('product_information')}</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">{t('bom_reference')}</label>
+                    <label className="text-sm font-medium mb-1 block">{t('bom_code')}</label>
                     <Input
-                      value={editBom.bom_reference}
-                      onChange={(e) => setEditBom({...editBom, bom_reference: e.target.value})}
+                      value={editBom.code || ''}
+                      onChange={(e) => setEditBom({...editBom, code: e.target.value})}
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium mb-1 block">{t('status')}</label>
-                    <select
-                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                      value={editBom.status}
-                      onChange={(e) => setEditBom({...editBom, status: e.target.value})}
+                    <label className="text-sm font-medium mb-1 block">{t('bom_name')} *</label>
+                    <Input
+                      value={editBom.name || ''}
+                      onChange={(e) => setEditBom({...editBom, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
+                    <Select
+                      value={editBom.product_id}
+                      onValueChange={(value) => setEditBom({...editBom, product_id: value})}
                     >
-                      <option value="draft">{t('draft')}</option>
-                      <option value="active">{t('active')}</option>
-                      <option value="obsolete">{t('obsolete')}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('product_name')} *</label>
-                    <Input
-                      value={editBom.product_name}
-                      onChange={(e) => setEditBom({...editBom, product_name: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('product_code')} *</label>
-                    <Input
-                      value={editBom.product_code}
-                      onChange={(e) => setEditBom({...editBom, product_code: e.target.value})}
-                    />
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_product')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id}>
+                            {product.name} ({product.sku || product.code || 'No SKU'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -575,7 +581,7 @@ export default function BOMManagement() {
                 <Button
                   onClick={handleUpdateBom}
                   className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                  disabled={isSubmitting || !editBom.product_name || !editBom.product_code}
+                  disabled={isSubmitting || !editBom.name || !editBom.product_id}
                 >
                   {isSubmitting ? t('saving') : t('update_bom')}
                 </Button>
