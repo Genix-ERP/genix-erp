@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
 import { hrService } from '@/api/services/hr';
-import Integrations from '@/api/integrations';
+import { Core as Integrations } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
