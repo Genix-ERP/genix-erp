@@ -505,6 +505,21 @@ const ProjectDetailView = ({
       try {
         switch (activeSubTab) {
           case 'overview':
+            try {
+              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData] = await Promise.all([
+                constructionService.listBuildings(project.id),
+                constructionService.listSections(project.id),
+                constructionService.listTeamMembers(project.id),
+                constructionService.listProjectVendors(project.id)
+              ]);
+              setBuildings(buildingsData || []);
+              setSections(overviewSectionsData || []);
+              setTeam(overviewTeamData || []);
+              setVendors(overviewVendorsData || []);
+            } catch (e) {
+              console.error('Error loading overview data:', e);
+            }
+            break;
           case 'buildings':
             try {
               const buildingsData = await constructionService.listBuildings(project.id);
@@ -628,8 +643,7 @@ const ProjectDetailView = ({
   };
 
   // Handle section deletion
-  const handleDeleteSection = async (sectionId, e) => {
-    e.stopPropagation();
+  const handleDeleteSection = async (sectionId) => {
     if (!confirm(t('confirm_delete_section') || "Bo'limni o'chirmoqchimisiz? Barcha ishlar ham o'chiriladi!")) return;
     try {
       await constructionService.deleteSection(sectionId);
@@ -641,6 +655,17 @@ const ProjectDetailView = ({
       }
     } catch (error) {
       console.error('Error deleting section:', error);
+    }
+  };
+
+  // Handle section status change (approve/unapprove)
+  const handleApproveSectionStatus = async (sectionId, newStatus) => {
+    try {
+      await constructionService.updateSection(sectionId, { status: newStatus });
+      const sectionsData = await constructionService.listSections(project.id);
+      setSections(sectionsData || []);
+    } catch (error) {
+      console.error('Error updating section status:', error);
     }
   };
 
@@ -887,6 +912,53 @@ const ProjectDetailView = ({
     }
   };
 
+  // Handle view photo report
+  const handleViewPhotoReport = (report) => {
+    setPhotoReportForm({
+      id: report.id,
+      report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+      report_type: report.report_type || 'progress',
+      title: report.title || '',
+      description: report.description || '',
+      location_description: report.location_description || '',
+      weather: report.weather || '',
+      temperature: report.temperature || ''
+    });
+    setPhotoPreview(report.photos?.map(p => p.url) || []);
+    setShowPhotoReportModal(true);
+  };
+
+  // Handle edit photo report
+  const handleEditPhotoReport = (report) => {
+    setPhotoReportForm({
+      id: report.id,
+      report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
+      report_type: report.report_type || 'progress',
+      title: report.title || '',
+      description: report.description || '',
+      location_description: report.location_description || '',
+      weather: report.weather || '',
+      temperature: report.temperature || ''
+    });
+    setPhotoPreview(report.photos?.map(p => p.url) || []);
+    setPhotoFiles([]);
+    setShowPhotoReportModal(true);
+  };
+
+  // Handle delete photo report
+  const handleDeletePhotoReport = async (reportId) => {
+    if (!window.confirm(t('confirm_delete') || 'Haqiqatan ham o\'chirmoqchimisiz?')) {
+      return;
+    }
+    try {
+      await constructionService.deletePhotoReport(reportId);
+      const photosData = await constructionService.listPhotoReports(project.id);
+      setPhotoReports(photosData || []);
+    } catch (error) {
+      console.error('Error deleting photo report:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -971,7 +1043,13 @@ const ProjectDetailView = ({
             </div>
 
             {/* Financial Widget */}
-            <FinancialWidget project={project} formatCurrency={formatCurrency} />
+            <FinancialWidget
+              project={{
+                ...project,
+                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
+              }}
+              formatCurrency={formatCurrency}
+            />
 
             {/* Timeline Widget */}
             <TimelineWidget project={project} />
@@ -1012,7 +1090,14 @@ const ProjectDetailView = ({
             </Card>
 
             {/* Alerts Widget */}
-            <AlertsWidget project={project} sections={sections} vendors={vendors} />
+            <AlertsWidget
+              project={{
+                ...project,
+                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
+              }}
+              sections={sections}
+              vendors={vendors}
+            />
 
             {/* Team Widget */}
             <TeamWidget team={team} />
@@ -1195,19 +1280,50 @@ const ProjectDetailView = ({
                               <Badge variant="outline" className="text-xs">
                                 {section.items_count || 0} {t('items') || 'ta'}
                               </Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={(e) => handleDeleteSection(section.id, e)}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                  >
+                                    <MoreHorizontal className="w-3 h-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                  {section.status !== 'approved' && (
+                                    <DropdownMenuItem onClick={() => handleApproveSectionStatus(section.id, 'approved')}>
+                                      <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                                      {t('approve') || 'Tasdiqlash'}
+                                    </DropdownMenuItem>
+                                  )}
+                                  {section.status === 'approved' && (
+                                    <DropdownMenuItem onClick={() => handleApproveSectionStatus(section.id, 'draft')}>
+                                      <Clock className="w-4 h-4 mr-2 text-orange-600" />
+                                      {t('unapprove') || 'Bekor qilish'}
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteSection(section.id)}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {t('delete') || "O'chirish"}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
-                          <p className="text-sm text-slate-600 mt-1">
-                            {formatCurrency(section.total_cost || 0)}
-                          </p>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-sm text-slate-600">
+                              {formatCurrency(section.total_cost || 0)}
+                            </p>
+                            <Badge
+                              className={`text-xs ${section.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}
+                            >
+                              {section.status === 'approved' ? (t('approved') || 'Tasdiqlangan') : (t('pending') || 'Kutilmoqda')}
+                            </Badge>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1738,11 +1854,47 @@ const ProjectDetailView = ({
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {photoReports.map((report) => (
-                    <Card key={report.id}>
+                    <Card key={report.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
-                        <p className="font-medium">{format(new Date(report.report_date), 'dd.MM.yyyy')}</p>
-                        <p className="text-sm text-slate-500">{report.description}</p>
-                        <Badge className="mt-2">{report.review_status}</Badge>
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-medium">{format(new Date(report.report_date), 'dd.MM.yyyy')}</p>
+                            <Badge className="mt-1">{report.review_status}</Badge>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleViewPhotoReport(report)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                {t('view') || 'Ko\'rish'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditPhotoReport(report)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                {t('edit') || 'Tahrirlash'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDeletePhotoReport(report.id)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete') || 'O\'chirish'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        {report.description && (
+                          <p className="text-sm text-slate-500 mt-2 line-clamp-2">{report.description}</p>
+                        )}
+                        {report.photos && report.photos.length > 0 && (
+                          <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+                            <Camera className="w-3 h-3" />
+                            <span>{report.photos.length} {t('photos') || 'ta rasm'}</span>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
