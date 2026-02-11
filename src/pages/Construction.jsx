@@ -505,6 +505,21 @@ const ProjectDetailView = ({
       try {
         switch (activeSubTab) {
           case 'overview':
+            try {
+              const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData] = await Promise.all([
+                constructionService.listBuildings(project.id),
+                constructionService.listSections(project.id),
+                constructionService.listTeamMembers(project.id),
+                constructionService.listProjectVendors(project.id)
+              ]);
+              setBuildings(buildingsData || []);
+              setSections(overviewSectionsData || []);
+              setTeam(overviewTeamData || []);
+              setVendors(overviewVendorsData || []);
+            } catch (e) {
+              console.error('Error loading overview data:', e);
+            }
+            break;
           case 'buildings':
             try {
               const buildingsData = await constructionService.listBuildings(project.id);
