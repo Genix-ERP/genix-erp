@@ -3298,6 +3298,12 @@ export const translations = {
     "mixed": "Mixed",
     "living": "Living",
     "non_living": "Non-living",
+    "activity": "Activity",
+    "new_material_request": "New Material Request",
+    "new_daily_log": "New Daily Log",
+    "new_vendor": "New Vendor",
+    "select_organization": "Select Organization",
+    "photo_reports": "Photo Reports",
 
     // Common UI Elements
     "submit": "Submit",
@@ -8688,6 +8694,12 @@ export const translations = {
     "mixed": "Aralash",
     "living": "Yashash uchun",
     "non_living": "Yashash uchun emas",
+    "activity": "Faoliyat",
+    "new_material_request": "Yangi material so'rovi",
+    "new_daily_log": "Yangi kunlik hisobot",
+    "new_vendor": "Yangi pudratchi",
+    "select_organization": "Tashkilotni tanlang",
+    "photo_reports": "Foto hisobotlar",
 
     // Common UI Elements
     "close": "Yopish",
@@ -13826,6 +13838,12 @@ export const translations = {
     "mixed": "Смешанный",
     "living": "Жилое",
     "non_living": "Нежилое",
+    "activity": "Активность",
+    "new_material_request": "Новая заявка на материалы",
+    "new_daily_log": "Новый дневной отчет",
+    "new_vendor": "Новый подрядчик",
+    "select_organization": "Выберите организацию",
+    "photo_reports": "Фотоотчеты",
 
     // Common UI Elements
     "submit": "Отправить",
