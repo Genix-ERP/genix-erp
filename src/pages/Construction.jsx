@@ -855,17 +855,30 @@ const ProjectDetailView = ({
 
   // Remove photo from selection
   const handleRemovePhoto = (index) => {
-    setPhotoFiles(prev => prev.filter((_, i) => i !== index));
+    // Check if removing an existing photo (string URL) or new upload (object)
+    const item = photoPreview[index];
+    const isExisting = typeof item === 'string';
+
+    if (!isExisting) {
+      // For new uploads, also remove from photoFiles
+      // Find the corresponding file index (new uploads start after existing photos)
+      const existingCount = photoPreview.filter(p => typeof p === 'string').length;
+      const newFileIndex = index - existingCount;
+      if (newFileIndex >= 0) {
+        setPhotoFiles(prev => prev.filter((_, i) => i !== newFileIndex));
+      }
+    }
+
     setPhotoPreview(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Handle photo report creation
+  // Handle photo report creation or update
   const handleCreatePhotoReport = async (e) => {
     e.preventDefault();
     try {
       setUploadingPhotos(true);
 
-      // Upload photos first
+      // Upload new photos first
       const uploadedPhotos = [];
       for (const file of photoFiles) {
         try {
@@ -881,7 +894,14 @@ const ProjectDetailView = ({
         }
       }
 
-      await constructionService.createPhotoReport(project.id, {
+      // Combine existing photos (from preview) with newly uploaded ones
+      // photoPreview contains URLs of existing photos when editing
+      const existingPhotos = photoReportForm.id ? photoPreview
+        .filter(p => typeof p === 'string' && p.startsWith('/api'))
+        .map(url => ({ url, filename: 'existing', size: 0, type: 'image/jpeg' })) : [];
+      const allPhotos = [...existingPhotos, ...uploadedPhotos];
+
+      const reportData = {
         report_date: photoReportForm.report_date,
         report_type: photoReportForm.report_type,
         title: photoReportForm.title,
@@ -889,8 +909,17 @@ const ProjectDetailView = ({
         location_description: photoReportForm.location_description,
         weather: photoReportForm.weather,
         temperature: parseFloat(photoReportForm.temperature) || 0,
-        photos: uploadedPhotos
-      });
+        photos: allPhotos
+      };
+
+      if (photoReportForm.id) {
+        // Update existing photo report
+        await constructionService.updatePhotoReport(photoReportForm.id, reportData);
+      } else {
+        // Create new photo report
+        await constructionService.createPhotoReport(project.id, reportData);
+      }
+
       const photosData = await constructionService.listPhotoReports(project.id);
       setPhotoReports(photosData || []);
       setShowPhotoReportModal(false);
@@ -906,7 +935,7 @@ const ProjectDetailView = ({
       setPhotoFiles([]);
       setPhotoPreview([]);
     } catch (error) {
-      console.error('Error creating photo report:', error);
+      console.error('Error saving photo report:', error);
     } finally {
       setUploadingPhotos(false);
     }
@@ -2648,7 +2677,11 @@ const ProjectDetailView = ({
       <Dialog open={showPhotoReportModal} onOpenChange={setShowPhotoReportModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t('new_photo_report') || 'Yangi foto hisobot'}</DialogTitle>
+            <DialogTitle>
+              {photoReportForm.id
+                ? (t('edit_photo_report') || 'Foto hisobotni tahrirlash')
+                : (t('new_photo_report') || 'Yangi foto hisobot')}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreatePhotoReport} className="space-y-4">
             <div>
@@ -2761,22 +2794,32 @@ const ProjectDetailView = ({
                 {/* Photo Previews */}
                 {photoPreview.length > 0 && (
                   <div className="mt-4 grid grid-cols-4 gap-2">
-                    {photoPreview.map((item, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={item.preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-20 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePhoto(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                    {photoPreview.map((item, index) => {
+                      // Handle both new uploads (object with preview) and existing photos (URL string)
+                      const imgSrc = typeof item === 'string' ? item : (item.preview || item.url);
+                      const isExisting = typeof item === 'string';
+                      return (
+                        <div key={index} className="relative group">
+                          <img
+                            src={imgSrc}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-20 object-cover rounded-lg"
+                          />
+                          {isExisting && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-0.5 rounded-b-lg">
+                              Mavjud
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(index)}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2796,9 +2839,11 @@ const ProjectDetailView = ({
               }}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title || photoFiles.length === 0 || uploadingPhotos}>
+              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title || (photoFiles.length === 0 && photoPreview.length === 0) || uploadingPhotos}>
                 {uploadingPhotos ? (
                   <>{t('uploading') || 'Yuklanmoqda'}...</>
+                ) : photoReportForm.id ? (
+                  <>{t('update') || 'Yangilash'}</>
                 ) : (
                   <>{t('create') || 'Yaratish'}</>
                 )}
