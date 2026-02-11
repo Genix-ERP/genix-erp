@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
-import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +23,7 @@ const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { user } = useAuth();
-  const { expenses, createExpense, updateExpense, isLoading } = useModules();
+  const { expenses, createExpense, updateExpense, isLoading, employees } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
@@ -43,7 +41,7 @@ export default function Expenses() {
 
   const [newClaim, setNewClaim] = useState({
     claim_number: '',
-    employee_name: user?.full_name || '',
+    employee_name: '',
     expense_date: new Date().toISOString().split('T')[0],
     category: 'travel',
     amount: 0,
@@ -80,7 +78,7 @@ export default function Expenses() {
 
       setNewClaim({
         claim_number: '',
-        employee_name: user?.full_name || '',
+        employee_name: '',
         expense_date: new Date().toISOString().split('T')[0],
         category: 'travel',
         amount: 0,
@@ -555,12 +553,19 @@ export default function Expenses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('employee_name')}</label>
-                  <Input
-                    value={newClaim.employee_name}
-                    disabled
-                    className="bg-slate-50 text-slate-600"
-                  />
+                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
+                  <Select value={newClaim.employee_name} onValueChange={(value) => setNewClaim({...newClaim, employee_name: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_employee')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(employees || []).map((emp) => (
+                        <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                          {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -619,7 +624,7 @@ export default function Expenses() {
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newClaim.amount || isSubmitting}
+                  disabled={!newClaim.amount || !newClaim.employee_name || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
@@ -667,10 +672,18 @@ export default function Expenses() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
-                    <Input
-                      value={editClaim.employee_name}
-                      onChange={(e) => setEditClaim({...editClaim, employee_name: e.target.value})}
-                    />
+                    <Select value={editClaim.employee_name} onValueChange={(value) => setEditClaim({...editClaim, employee_name: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_employee')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(employees || []).map((emp) => (
+                          <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                            {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
