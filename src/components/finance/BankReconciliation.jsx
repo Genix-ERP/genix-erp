@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale
+  Calendar, Target, Scale, Trash2, Pencil
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -53,6 +53,8 @@ export default function BankReconciliation() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteAccountId, setDeleteAccountId] = useState(null);
+  const [editAccount, setEditAccount] = useState(null);
 
   const [newBankAccount, setNewBankAccount] = useState({
     name: '',
@@ -115,6 +117,25 @@ export default function BankReconciliation() {
       setShowCreateAccountModal(false);
     } catch (err) {
       console.error('Error creating bank account:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdateBankAccount = async () => {
+    if (!editAccount) return;
+    setIsSaving(true);
+    try {
+      await updateBankAccount(editAccount.id, {
+        name: editAccount.name,
+        bank_name: editAccount.bank_name,
+        account_number: editAccount.account_number,
+        currency: editAccount.currency,
+        account_type: editAccount.account_type
+      });
+      setEditAccount(null);
+    } catch (err) {
+      console.error('Error updating bank account:', err);
     } finally {
       setIsSaving(false);
     }
@@ -399,6 +420,26 @@ export default function BankReconciliation() {
                             }}
                           >
                             <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditAccount({ ...account });
+                            }}
+                          >
+                            <Pencil className="w-4 h-4 text-amber-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteAccountId(account.id);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
                           </Button>
                         </div>
                       </TableCell>
@@ -745,6 +786,127 @@ export default function BankReconciliation() {
           <BudgetManagement />
         </TabsContent>
       </Tabs>
+
+      {/* Edit Bank Account Modal */}
+      <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('edit_bank_account')}</DialogTitle>
+            <DialogDescription>{t('edit_bank_account_info')}</DialogDescription>
+          </DialogHeader>
+          {editAccount && (
+            <div className="space-y-4 mt-4">
+              <div>
+                <label className="text-sm font-medium">{t('account_name')}</label>
+                <Input
+                  value={editAccount.name}
+                  onChange={(e) => setEditAccount({ ...editAccount, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('bank_name')}</label>
+                <Input
+                  value={editAccount.bank_name}
+                  onChange={(e) => setEditAccount({ ...editAccount, bank_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('account_number')}</label>
+                <Input
+                  value={editAccount.account_number}
+                  onChange={(e) => setEditAccount({ ...editAccount, account_number: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">{t('currency')}</label>
+                  <Select
+                    value={editAccount.currency}
+                    onValueChange={(v) => setEditAccount({ ...editAccount, currency: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UZS">UZS - So'm</SelectItem>
+                      <SelectItem value="USD">USD - Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="RUB">RUB - Rubl</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t('account_type')}</label>
+                  <Select
+                    value={editAccount.account_type}
+                    onValueChange={(v) => setEditAccount({ ...editAccount, account_type: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="checking">{t('checking')}</SelectItem>
+                      <SelectItem value="savings">{t('savings')}</SelectItem>
+                      <SelectItem value="deposit">{t('deposit')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end mt-6">
+                <Button variant="outline" onClick={() => setEditAccount(null)}>{t('cancel')}</Button>
+                <Button
+                  onClick={handleUpdateBankAccount}
+                  disabled={isSaving || !editAccount.name || !editAccount.bank_name}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  {isSaving ? t('saving') : t('save')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={!!deleteAccountId} onOpenChange={(open) => !open && setDeleteAccountId(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              {t('confirm_delete')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('confirm_delete_bank_account')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setDeleteAccountId(null)}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={async () => {
+                try {
+                  await deleteBankAccount(deleteAccountId);
+                  if (selectedBankAccount?.id === deleteAccountId) {
+                    setSelectedBankAccount(null);
+                  }
+                } catch (err) {
+                  console.error('Failed to delete bank account:', err);
+                }
+                setDeleteAccountId(null);
+              }}
+            >
+              {t('delete')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -35,11 +35,11 @@ const assetCategories = [
 
 // Depreciation methods
 const depreciationMethods = [
-  { value: 'straight_line', label: 'Straight Line' },
-  { value: 'declining_balance', label: 'Declining Balance' },
-  { value: 'double_declining', label: 'Double Declining Balance' },
-  { value: 'sum_of_years', label: 'Sum of Years Digits' },
-  { value: 'units_of_production', label: 'Units of Production' },
+  { value: 'straight_line', labelKey: 'straight_line' },
+  { value: 'declining_balance', labelKey: 'declining_balance' },
+  { value: 'double_declining', labelKey: 'double_declining' },
+  { value: 'sum_of_years', labelKey: 'sum_of_years' },
+  { value: 'units_of_production', labelKey: 'units_of_production' },
 ];
 
 export default function FixedAssets() {
@@ -596,7 +596,7 @@ export default function FixedAssets() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -609,7 +609,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
                 <Input
-                  placeholder="e.g., FA-001"
+                  placeholder={t('asset_code_placeholder')}
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 />
@@ -652,7 +652,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('serial_number') || 'Serial Number'}</label>
                 <Input
-                  placeholder="Optional"
+                  placeholder={t('optional')}
                   value={formData.serial_number}
                   onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
                 />
@@ -660,7 +660,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location') || 'Location'}</label>
                 <Input
-                  placeholder="e.g., Office Building A"
+                  placeholder={t('location_placeholder')}
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 />
@@ -717,7 +717,7 @@ export default function FixedAssets() {
                     </SelectTrigger>
                     <SelectContent>
                       {depreciationMethods.map(m => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value}>{t(m.labelKey)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

@@ -811,10 +811,13 @@ export function FinancialsProvider({ children }) {
     const storageKey = getStorageKey(JOURNAL_ENTRIES_KEY, companyId);
     if (backendAvailable) {
       try {
-        const newEntry = await financeService.createJournalEntry({ ...entryData, company_id: companyId });
+        const newEntry = await financeService.createJournalEntry({ ...entryData, organization_id: companyId });
         setJournalEntries(prev => [newEntry, ...prev]);
         return newEntry;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+      } catch (err) {
+          console.error('API error creating journal entry:', err?.response?.data || err);
+          throw err;
+        }
     }
     const newEntry = { id: `je_${Date.now()}`, journal_number: entryData.journal_number || `JE-${new Date().getFullYear()}-${String(journalEntries.length + 1).padStart(3, '0')}`, ...entryData, company_id: companyId, created_date: new Date().toISOString() };
     const updated = [newEntry, ...journalEntries];
