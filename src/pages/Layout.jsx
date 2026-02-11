@@ -25,7 +25,8 @@ import {
   Shield,
   LogOut,
   Cog,
-  Ship
+  Ship,
+  Building2
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -268,6 +269,13 @@ function LayoutContent({ children, currentPageName }) {
       icon: Ship,
       badge: null,
       moduleId: 'cargo'
+    },
+    'construction': {
+      title: t("construction") || 'Qurilish',
+      url: createPageUrl("Construction"),
+      icon: Building2,
+      badge: null,
+      moduleId: 'construction'
     }
   }), [t]);
 
