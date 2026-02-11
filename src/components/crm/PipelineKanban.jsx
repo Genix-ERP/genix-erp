@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Kanban, DollarSign, Calendar } from "lucide-react";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const stages = [
   { id: 'qualification', name: 'Qualification', color: 'bg-blue-100 text-blue-800' },
@@ -13,6 +14,7 @@ const stages = [
 ];
 
 export default function PipelineKanban({ opportunities, leads }) {
+  const { formatCurrency } = useCurrencyFormatter();
   const getOpportunitiesByStage = (stageId) => {
     return opportunities.filter(opp => opp.stage === stageId);
   };
@@ -48,7 +50,7 @@ export default function PipelineKanban({ opportunities, leads }) {
                   <div className="text-sm text-slate-600">
                     <div className="flex items-center gap-1">
                       <DollarSign className="w-3 h-3" />
-                      <span>${stageValue.toLocaleString()}</span>
+                      <span>{formatCurrency(stageValue)}</span>
                     </div>
                   </div>
 
@@ -61,7 +63,7 @@ export default function PipelineKanban({ opportunities, leads }) {
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-slate-500">Value</span>
                               <span className="text-xs font-medium text-green-600">
-                                ${(opp.expected_value || 0).toLocaleString()}
+                                {formatCurrency(opp.expected_value || 0)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">

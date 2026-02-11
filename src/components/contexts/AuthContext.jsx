@@ -100,11 +100,13 @@ export function AuthProvider({ children }) {
       const userData = { ...apiUser, role: deriveRole(apiUser) };
       setUser(userData);
       setIsAuthenticated(true);
+      localStorage.setItem('genixerp_user', JSON.stringify(userData));
       return userData;
     } catch (err) {
       // Token invalid or expired - clear auth state
       setUser(null);
       setIsAuthenticated(false);
+      localStorage.removeItem('genixerp_user');
       throw err;
     }
   }, []);
@@ -172,6 +174,7 @@ export function AuthProvider({ children }) {
         const userData = { ...data.user, role: deriveRole(data.user) };
         setUser(userData);
         setIsAuthenticated(true);
+        localStorage.setItem('genixerp_user', JSON.stringify(userData));
         return { success: true, data };
       } else {
         // Fallback to demo users when backend unavailable
@@ -316,6 +319,7 @@ export function AuthProvider({ children }) {
       const userData = { ...data.user, role: deriveRole(data.user) };
       setUser(userData);
       setIsAuthenticated(true);
+      localStorage.setItem('genixerp_user', JSON.stringify(userData));
       return { success: true, data, isNewUser: !!data.is_new_user };
     } catch (err) {
       // Handle tenant selection required (same as login)
@@ -345,8 +349,9 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setIsAuthenticated(false);
-      // Clear demo session and tenant info
+      // Clear demo session, user data and tenant info
       localStorage.removeItem('demo_session');
+      localStorage.removeItem('genixerp_user');
       localStorage.removeItem('tenantId');
       setIsLoading(false);
     }

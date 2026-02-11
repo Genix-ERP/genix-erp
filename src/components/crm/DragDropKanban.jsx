@@ -14,6 +14,7 @@ import {
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Portal component for dragging items
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -89,6 +90,7 @@ const stageConfig = [
 export default function DragDropKanban({ opportunities = [], leads = [], onUpdateOpportunity, onEditOpportunity, onDeleteOpportunity, language = 'en' }) {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   
   const [kanbanState, setKanbanState] = useState({
     opportunities: [],
@@ -272,7 +274,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
               <span>{t('value')}</span>
             </span>
             <span className="font-bold text-green-600 text-sm">
-              ${(opportunity.expected_value || 0).toLocaleString()}
+              {formatCurrency(opportunity.expected_value || 0)}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
@@ -350,7 +352,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
             <div className="flex items-center gap-4">
               <div className="text-right bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-2 rounded-lg border border-green-200 shadow-sm">
                 <div className="text-2xl font-bold text-green-700">
-                  ${totalPipelineValue.toLocaleString()}
+                  {formatCurrency(totalPipelineValue)}
                 </div>
                 <div className="text-xs text-slate-600 font-medium">{t('total_pipeline_value')}</div>
               </div>
@@ -379,7 +381,7 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
                       </div>
                       <div className="flex items-center gap-1 text-xs font-medium text-slate-600">
                         <DollarSign className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">${value.toLocaleString()}</span>
+                        <span className="truncate">{formatCurrency(value)}</span>
                       </div>
                     </div>
 

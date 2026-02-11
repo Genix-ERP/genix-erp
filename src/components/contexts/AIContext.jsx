@@ -9,6 +9,8 @@ import { useFinancials } from './FinancialsContext';
 import { useModules } from './ModulesContext';
 import { useVendors } from './VendorsContext';
 import { useLanguage } from './LanguageContext';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { createCurrencyFormatter } from '@/utils/formatCurrency';
 
 const AIContext = createContext(null);
 
@@ -584,7 +586,9 @@ const detectMessageLanguage = (message) => {
 };
 
 // AI response generator for demo/fallback mode - uses REAL user data (company-scoped)
-const generateDemoResponse = (message, context = {}, companyId = null, systemLang = 'en') => {
+const generateDemoResponse = (message, context = {}, companyId = null, systemLang = 'en', formatCurrency = null) => {
+  // Use provided formatCurrency or create a default one
+  const fmtCurrency = formatCurrency || createCurrencyFormatter();
   const lowerMessage = message.toLowerCase();
   const userData = getUserData(companyId);
 
@@ -644,16 +648,16 @@ Once you have sales data, I can help you with:
     const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
     let topCustomersText = topCustomers.length > 0
-      ? topCustomers.map((c, i) => `${i + 1}. ${c[0]} - $${c[1].toLocaleString()}`).join('\n')
+      ? topCustomers.map((c, i) => `${i + 1}. ${c[0]} - ${fmtCurrency(c[1])}`).join('\n')
       : 'No customer data available';
 
     return {
       content: `**Sales Analysis - Your Data:**
 
 **Key Metrics:**
-- Total Revenue: $${totalRevenue.toLocaleString()}
+- Total Revenue: ${fmtCurrency(totalRevenue)}
 - Total Orders: ${salesOrders.length}
-- Average Order Value: $${avgOrderValue.toFixed(2)}
+- Average Order Value: ${fmtCurrency(avgOrderValue)}
 
 **Order Status Breakdown:**
 ${Object.entries(statusCounts).map(([status, count]) => `- ${status}: ${count} orders`).join('\n')}
@@ -662,7 +666,7 @@ ${Object.entries(statusCounts).map(([status, count]) => `- ${status}: ${count} o
 ${topCustomersText}
 
 ${unpaidOrders.length > 0 ? `**⚠️ Outstanding Payments:**
-- ${unpaidOrders.length} unpaid orders totaling $${unpaidTotal.toLocaleString()}` : '**✓ All orders are paid!**'}
+- ${unpaidOrders.length} unpaid orders totaling ${fmtCurrency(unpaidTotal)}` : '**✓ All orders are paid!**'}
 
 **Recommendations:**
 ${topCustomers.length > 0 ? `- Focus on retaining ${topCustomers[0][0]} (your top customer)` : '- Start building your customer base'}
@@ -714,7 +718,7 @@ Once you have inventory data, I can help you with:
 **Overview:**
 - Total SKUs: ${inventory.length}
 - Total Units: ${totalUnits.toLocaleString()}
-- Total Value: $${totalValue.toLocaleString()}
+- Total Value: ${fmtCurrency(totalValue)}
 
 ${lowStockItems.length > 0 ? `**⚠️ Low Stock Alert (${lowStockItems.length} items):**
 | Product | Current | Reorder Level | Status |
@@ -787,22 +791,22 @@ Once you have data, I can help you with:
       content: `**Financial Health Dashboard - Your Data:**
 
 **Revenue & Profit:**
-- Total Revenue: $${totalRevenue.toLocaleString()}
-- Total Purchases: $${totalPurchases.toLocaleString()}
-- Total Expenses: $${totalExpenses.toLocaleString()}
-- Gross Profit: $${grossProfit.toLocaleString()}
-- Net Profit: $${netProfit.toLocaleString()}
+- Total Revenue: ${fmtCurrency(totalRevenue)}
+- Total Purchases: ${fmtCurrency(totalPurchases)}
+- Total Expenses: ${fmtCurrency(totalExpenses)}
+- Gross Profit: ${fmtCurrency(grossProfit)}
+- Net Profit: ${fmtCurrency(netProfit)}
 - Profit Margin: ${profitMargin}%
 
 **Receivables & Payables:**
-- Accounts Receivable: $${accountsReceivable.toLocaleString()} (${unpaidSales.length} unpaid invoices)
-- Accounts Payable: $${accountsPayable.toLocaleString()} (${unpaidPurchases.length} unpaid bills)
+- Accounts Receivable: ${fmtCurrency(accountsReceivable)} (${unpaidSales.length} unpaid invoices)
+- Accounts Payable: ${fmtCurrency(accountsPayable)} (${unpaidPurchases.length} unpaid bills)
 
 ${Object.keys(expenseByCategory).length > 0 ? `**Expense Breakdown:**
-${Object.entries(expenseByCategory).map(([cat, amt]) => `- ${cat}: $${amt.toLocaleString()}`).join('\n')}` : ''}
+${Object.entries(expenseByCategory).map(([cat, amt]) => `- ${cat}: ${fmtCurrency(amt)}`).join('\n')}` : ''}
 
 **Recommendations:**
-${unpaidSales.length > 0 ? `- Follow up on ${unpaidSales.length} unpaid invoices totaling $${accountsReceivable.toLocaleString()}` : '- All invoices are paid!'}
+${unpaidSales.length > 0 ? `- Follow up on ${unpaidSales.length} unpaid invoices totaling ${fmtCurrency(accountsReceivable)}` : '- All invoices are paid!'}
 ${unpaidPurchases.length > 0 ? `- ${unpaidPurchases.length} bills pending payment` : ''}
 ${netProfit < 0 ? '- ⚠️ Review expenses - currently operating at a loss' : '- Maintain current profitability trends'}`,
       tool_calls: [{ name: 'analyze_financials', status: 'completed' }]
@@ -863,15 +867,15 @@ Once you have customer data, I can help you with:
 **Overview:**
 - Total Customers: ${customers.length}
 - Customers with Orders: ${Object.keys(customerRevenue).length}
-- Total Revenue: $${totalCustomerRevenue.toLocaleString()}
+- Total Revenue: ${fmtCurrency(totalCustomerRevenue)}
 
 **Customer Segments by Revenue:**
-- Enterprise (>$50k): ${enterprise.length} accounts
-- Mid-Market ($10k-$50k): ${midMarket.length} accounts
-- SMB (<$10k): ${smb.length} accounts
+- Enterprise (>${fmtCurrency(50000)}): ${enterprise.length} accounts
+- Mid-Market (${fmtCurrency(10000)}-${fmtCurrency(50000)}): ${midMarket.length} accounts
+- SMB (<${fmtCurrency(10000)}): ${smb.length} accounts
 
 ${topCustomers.length > 0 ? `**Top Customers by Revenue:**
-${topCustomers.map((c, i) => `${i + 1}. ${c[0]} - $${c[1].toLocaleString()}`).join('\n')}` : ''}
+${topCustomers.map((c, i) => `${i + 1}. ${c[0]} - ${fmtCurrency(c[1])}`).join('\n')}` : ''}
 
 ${customersWithUnpaid.length > 0 ? `**⚠️ Customers with Unpaid Orders:**
 ${customersWithUnpaid.slice(0, 5).map(c => `- ${c}`).join('\n')}` : '**✓ All customers have paid their orders!**'}
@@ -934,7 +938,7 @@ Once you have employee data, I can help you with:
 **Workforce Overview:**
 - Total Employees: ${employees.length}
 - Active Employees: ${activeEmployees.length}
-- Average Salary: $${avgSalary.toLocaleString()}
+- Average Salary: ${fmtCurrency(avgSalary)}
 
 **Department Distribution:**
 ${Object.entries(departments).map(([dept, count]) => `- ${dept}: ${count} employees`).join('\n')}
@@ -943,7 +947,7 @@ ${Object.entries(departments).map(([dept, count]) => `- ${dept}: ${count} employ
 - Total Payroll Records: ${payroll.length}
 - Processed Payrolls: ${processedPayroll.length}
 - Pending Payrolls: ${pendingPayroll.length}
-${totalMonthlyPayroll > 0 ? `- Total Payroll Amount: $${totalMonthlyPayroll.toLocaleString()}` : ''}
+${totalMonthlyPayroll > 0 ? `- Total Payroll Amount: ${fmtCurrency(totalMonthlyPayroll)}` : ''}
 
 **Recommendations:**
 ${pendingPayroll.length > 0 ? `- Process ${pendingPayroll.length} pending payroll records` : '- All payroll records are processed!'}
@@ -1008,9 +1012,9 @@ Once you have asset data, I can help you with:
 
 **Overview:**
 - Total Assets: ${assets.length}
-- Purchase Value: $${totalPurchaseValue.toLocaleString()}
-- Current Value: $${totalValue.toLocaleString()}
-- Total Depreciation: $${totalDepreciation.toLocaleString()}
+- Purchase Value: ${fmtCurrency(totalPurchaseValue)}
+- Current Value: ${fmtCurrency(totalValue)}
+- Total Depreciation: ${fmtCurrency(totalDepreciation)}
 
 **Assets by Category:**
 ${Object.entries(byCategory).map(([cat, count]) => `- ${cat}: ${count}`).join('\n')}
@@ -1076,8 +1080,8 @@ Once you have project data, I can help you with:
 
 **Overview:**
 - Total Projects: ${projects.length}
-- Total Budget: $${totalBudget.toLocaleString()}
-- Total Spent: $${totalSpent.toLocaleString()}
+- Total Budget: ${fmtCurrency(totalBudget)}
+- Total Spent: ${fmtCurrency(totalSpent)}
 - Budget Utilization: ${totalBudget > 0 ? ((totalSpent / totalBudget) * 100).toFixed(1) : 0}%
 
 **Projects by Status:**
@@ -1153,7 +1157,7 @@ Once you have contract data, I can help you with:
 **Overview:**
 - Total Contracts: ${contracts.length}
 - Active Contracts: ${activeContracts.length}
-- Total Contract Value: $${totalValue.toLocaleString()}
+- Total Contract Value: ${fmtCurrency(totalValue)}
 
 **Contracts by Type:**
 ${Object.entries(byType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
@@ -1264,7 +1268,7 @@ Example: "Generate sales report for last quarter as PDF"`,
       content: `${t('imYourCopilot').split('.')[0]}.
 
 **${t('businessAtGlance')}**
-${salesOrders.length > 0 ? `- ${t('salesOrdersCount')}: ${salesOrders.length} (${t('totalRevenue')}: $${totalRevenue.toLocaleString()})` : `- ${t('salesOrdersCount')}: ${t('noOrdersYet')}`}
+${salesOrders.length > 0 ? `- ${t('salesOrdersCount')}: ${salesOrders.length} (${t('totalRevenue')}: ${fmtCurrency(totalRevenue)})` : `- ${t('salesOrdersCount')}: ${t('noOrdersYet')}`}
 ${inventory.length > 0 ? `- ${t('inventoryItemsCount')}: ${inventory.length}${lowStockItems.length > 0 ? ` (⚠️ ${lowStockItems.length} ${t('lowStockCount')})` : ''}` : `- ${t('inventoryItemsCount')}: ${t('noItemsYet')}`}
 ${customers.length > 0 ? `- ${t('customersCount')}: ${customers.length}` : `- ${t('customersCount')}: ${t('noneYet')}`}
 ${employees.length > 0 ? `- ${t('employeesCount')}: ${employees.length}` : `- ${t('employeesCount')}: ${t('noneYet')}`}
@@ -1321,6 +1325,7 @@ export function AIProvider({ children }) {
   const { isBackendConnected, isOwner, isSiteAdmin, user } = useAuth();
   const { activeCompany, addCompany, companies, getCompanyCount } = useCompany();
   const { canMakeAIRequest, incrementAIUsage, getRemainingAIRequests, getAIUsagePercentage, getPlanLimits, subscription, canAddCompany } = useSubscription();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // Get user's language preference
   let currentLanguage = 'en';
@@ -1467,7 +1472,7 @@ export function AIProvider({ children }) {
           const newItem = await inventoryContext.createItem(itemData);
           return {
             success: true,
-            message: `✅ **Mahsulot qo'shildi!**\n\n**Nomi:** ${params.name}\n**Miqdori:** ${params.quantity || 0} dona\n**Narxi:** $${params.price || 0}\n\nInventar bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Mahsulot qo'shildi!**\n\n**Nomi:** ${params.name}\n**Miqdori:** ${params.quantity || 0} dona\n**Narxi:** ${formatCurrency(params.price || 0)}\n\nInventar bo'limida ko'rishingiz mumkin.`,
             data: newItem
           };
         } catch (err) {
@@ -1611,7 +1616,7 @@ export function AIProvider({ children }) {
           const newOrder = await modulesContext.createSalesOrder(orderData);
           return {
             success: true,
-            message: `✅ **Buyurtma yaratildi!**\n\n**Buyurtma raqami:** ${newOrder.order_number}\n**Mijoz:** ${params.customer_name}\n**Summa:** $${(params.total_amount || 0).toLocaleString()}\n\nSavdo buyurtmalari bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Buyurtma yaratildi!**\n\n**Buyurtma raqami:** ${newOrder.order_number}\n**Mijoz:** ${params.customer_name}\n**Summa:** ${formatCurrency(params.total_amount || 0)}\n\nSavdo buyurtmalari bo'limida ko'rishingiz mumkin.`,
             data: newOrder
           };
         } catch (err) {
@@ -1653,7 +1658,7 @@ export function AIProvider({ children }) {
           const newPO = await modulesContext.createPurchaseOrder(poData);
           return {
             success: true,
-            message: `✅ **Xarid buyurtmasi yaratildi!**\n\n**Buyurtma raqami:** ${newPO.po_number}\n**Yetkazuvchi:** ${params.vendor_name}\n**Summa:** $${(params.total_amount || 0).toLocaleString()}\n\nXarid buyurtmalari bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Xarid buyurtmasi yaratildi!**\n\n**Buyurtma raqami:** ${newPO.po_number}\n**Yetkazuvchi:** ${params.vendor_name}\n**Summa:** ${formatCurrency(params.total_amount || 0)}\n\nXarid buyurtmalari bo'limida ko'rishingiz mumkin.`,
             data: newPO
           };
         } catch (err) {
@@ -1697,7 +1702,7 @@ export function AIProvider({ children }) {
           const newEmp = modulesContext.createEmployee(empData);
           return {
             success: true,
-            message: `✅ **Xodim qo'shildi!**\n\n**Ismi:** ${params.full_name}\n**Lavozimi:** ${params.job_title || 'Xodim'}${params.department ? `\n**Bo'lim:** ${params.department}` : ''}${params.salary ? `\n**Maosh:** $${params.salary.toLocaleString()}` : ''}\n\nHR bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Xodim qo'shildi!**\n\n**Ismi:** ${params.full_name}\n**Lavozimi:** ${params.job_title || 'Xodim'}${params.department ? `\n**Bo'lim:** ${params.department}` : ''}${params.salary ? `\n**Maosh:** ${formatCurrency(params.salary)}` : ''}\n\nHR bo'limida ko'rishingiz mumkin.`,
             data: newEmp
           };
         } catch (err) {
@@ -1739,7 +1744,7 @@ export function AIProvider({ children }) {
           const newExp = modulesContext.createExpense(expData);
           return {
             success: true,
-            message: `✅ **Xarajat qo'shildi!**\n\n**Summa:** $${params.amount.toLocaleString()}\n**Kategoriya:** ${params.category || 'Umumiy'}${params.description ? `\n**Izoh:** ${params.description}` : ''}\n\nXarajatlar bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Xarajat qo'shildi!**\n\n**Summa:** ${formatCurrency(params.amount)}\n**Kategoriya:** ${params.category || 'Umumiy'}${params.description ? `\n**Izoh:** ${params.description}` : ''}\n\nXarajatlar bo'limida ko'rishingiz mumkin.`,
             data: newExp
           };
         } catch (err) {
@@ -1785,7 +1790,7 @@ export function AIProvider({ children }) {
           const newProj = modulesContext.createProject(projData);
           return {
             success: true,
-            message: `✅ **Loyiha yaratildi!**\n\n**Nomi:** ${params.project_name}${params.client_name ? `\n**Mijoz:** ${params.client_name}` : ''}${params.budget ? `\n**Byudjet:** $${params.budget.toLocaleString()}` : ''}\n\nLoyihalar bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Loyiha yaratildi!**\n\n**Nomi:** ${params.project_name}${params.client_name ? `\n**Mijoz:** ${params.client_name}` : ''}${params.budget ? `\n**Byudjet:** ${formatCurrency(params.budget)}` : ''}\n\nLoyihalar bo'limida ko'rishingiz mumkin.`,
             data: newProj
           };
         } catch (err) {
@@ -1830,7 +1835,7 @@ export function AIProvider({ children }) {
           const newCont = modulesContext.createContract(contData);
           return {
             success: true,
-            message: `✅ **Shartnoma yaratildi!**\n\n**Nomi:** ${params.contract_name}${params.party_name ? `\n**Tomon:** ${params.party_name}` : ''}${params.contract_value ? `\n**Qiymat:** $${params.contract_value.toLocaleString()}` : ''}\n\nShartnomalar bo'limida ko'rishingiz mumkin.`,
+            message: `✅ **Shartnoma yaratildi!**\n\n**Nomi:** ${params.contract_name}${params.party_name ? `\n**Tomon:** ${params.party_name}` : ''}${params.contract_value ? `\n**Qiymat:** ${formatCurrency(params.contract_value)}` : ''}\n\nShartnomalar bo'limida ko'rishingiz mumkin.`,
             data: newCont
           };
         } catch (err) {
@@ -1890,7 +1895,7 @@ export function AIProvider({ children }) {
           message: 'Noma\'lum amal'
         };
     }
-  }, [isOwner, isSiteAdmin, canAddCompany, getPlanLimits, addCompany, inventoryContext, customersContext, modulesContext, vendorsContext]);
+  }, [isOwner, isSiteAdmin, canAddCompany, getPlanLimits, addCompany, inventoryContext, customersContext, modulesContext, vendorsContext, formatCurrency]);
 
   // Confirm and execute pending action
   const confirmAction = useCallback(async () => {
@@ -2090,7 +2095,7 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
       // Generate demo response with slight delay for realism (only as fallback)
       await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
 
-      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage);
+      const demoResponse = generateDemoResponse(content, context, activeCompany?.id, currentLanguage, formatCurrency);
       const assistantMessage = {
         id: `msg_${++messageIdCounter.current}`,
         role: 'assistant',
@@ -2114,7 +2119,7 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
       setIsLoading(false);
       return errorMessage;
     }
-  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany]);
+  }, [isBackendConnected, activeConversation, canMakeAIRequest, incrementAIUsage, getPlanLimits, executeAction, activeCompany, formatCurrency]);
 
   // Clear current conversation
   const clearConversation = useCallback(() => {

@@ -7,6 +7,7 @@ import { createPageUrl } from "@/utils";
 import { Users, ArrowRight } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const statusColors = {
   prospect: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -18,6 +19,7 @@ const statusColors = {
 export default function RecentCustomers({ customers }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   return (
     <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl">
@@ -49,7 +51,7 @@ export default function RecentCustomers({ customers }) {
                   </Badge>
                   {customer.monthly_value && (
                     <p className="text-sm text-slate-600 mt-1">
-                      ${customer.monthly_value.toLocaleString()}/mo
+                      {formatCurrency(customer.monthly_value)}{t("per_month")}
                     </p>
                   )}
                 </div>

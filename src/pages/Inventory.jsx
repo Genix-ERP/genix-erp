@@ -45,11 +45,13 @@ import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Inventory() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     items,
     products,
@@ -309,7 +311,7 @@ export default function Inventory() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-slate-500 mb-1">{t('total_value')}</p>
-                      <p className="text-2xl md:text-3xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
+                      <p className="text-2xl md:text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
                       <TrendingUp className="w-6 h-6 text-green-600" />

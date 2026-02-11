@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const defaultStages = [
   { id: 'new_lead', name: 'New Lead', color: 'bg-slate-500', lightColor: 'bg-slate-100' },
@@ -53,6 +54,7 @@ const defaultStages = [
 export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, communications }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const [stages, setStages] = useState(defaultStages);
   const [boardData, setBoardData] = useState({ columns: [] });
   const [draggedItem, setDraggedItem] = useState(null);
@@ -388,7 +390,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                     </div>
                     <div className="space-y-1">
                       <div className="text-sm text-slate-600">
-                        ${column.totalValue.toLocaleString()}
+                        {formatCurrency(column.totalValue)}
                       </div>
                       {column.avgProbability > 0 && (
                         <div className="flex items-center gap-2 text-xs">
@@ -441,7 +443,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
                             <div className="flex items-center gap-2">
                               <DollarSign className="w-4 h-4 text-green-600" />
                               <span className="font-medium text-green-600">
-                                ${card.amount.toLocaleString()}
+                                {formatCurrency(card.amount)}
                               </span>
                             </div>
 
@@ -548,7 +550,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">
-                {boardData.columns.reduce((sum, col) => sum + col.totalValue, 0).toLocaleString()}
+                {formatCurrency(boardData.columns.reduce((sum, col) => sum + col.totalValue, 0))}
               </div>
               <div className="text-sm text-slate-600">{t('total_pipeline_value') || 'Total Pipeline Value'}</div>
             </div>

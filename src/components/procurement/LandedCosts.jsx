@@ -27,6 +27,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { procurementService } from "@/api/services/procurement";
 import { toast } from 'sonner';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -37,6 +38,7 @@ const statusColors = {
 export default function LandedCosts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const allocationMethods = [
     { value: 'by_value', label: t('by_value'), description: t('by_value_desc') },
@@ -103,15 +105,6 @@ export default function LandedCosts() {
     const matchesStatus = statusFilter === 'all' || lc.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  // Format currency
-  const formatCurrency = (amount, currency = 'UZS') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount || 0) + ' ' + currency;
-  };
 
   // Load GR data for creating landed cost
   const loadGRData = async (grId) => {

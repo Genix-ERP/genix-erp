@@ -23,6 +23,7 @@ import CurrencyManagement from "./CurrencyManagement";
 import FiscalPeriods from "./FiscalPeriods";
 import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -40,6 +41,7 @@ export default function BankReconciliation() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [selectedBankAccount, setSelectedBankAccount] = useState(null);
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
@@ -148,13 +150,6 @@ export default function BankReconciliation() {
     } catch (err) {
       console.error('Error reconciling transaction:', err);
     }
-  };
-
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
   };
 
   const getFilteredTransactions = () => {

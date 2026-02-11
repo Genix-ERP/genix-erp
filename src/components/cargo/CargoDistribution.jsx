@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 
 export default function CargoDistribution() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     shipments,
     distributeGoods,
@@ -209,7 +211,7 @@ export default function CargoDistribution() {
                           <div>
                             <span className="text-slate-500">Jami summa:</span>
                             <span className="font-semibold ml-1">
-                              ${shipment.total_cost?.toLocaleString() || 0}
+                              {formatCurrency(shipment.total_cost || 0)}
                             </span>
                           </div>
                         </div>
@@ -264,7 +266,7 @@ export default function CargoDistribution() {
                       </TableCell>
                       <TableCell>{dist.items?.length || 0} xil</TableCell>
                       <TableCell className="text-right font-semibold">
-                        ${dist.total_cost?.toLocaleString() || 0}
+                        {formatCurrency(dist.total_cost || 0)}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {dist.distribution_date ? format(new Date(dist.distribution_date), 'dd MMM yyyy') : '-'}
@@ -355,7 +357,7 @@ export default function CargoDistribution() {
                         <div className="flex-1">
                           <div className="font-semibold">{item.item_name || item.name}</div>
                           <div className="text-sm text-slate-600">
-                            Miqdor: {item.quantity} | Narx: ${item.unit_price || item.price || 0}
+                            Miqdor: {item.quantity} | Narx: {formatCurrency(item.unit_price || item.price || 0)}
                           </div>
                         </div>
                         <Button
@@ -405,9 +407,9 @@ export default function CargoDistribution() {
                             / {item.available_quantity}
                           </span>
                         </TableCell>
-                        <TableCell>${item.unit_cost}</TableCell>
+                        <TableCell>{formatCurrency(item.unit_cost)}</TableCell>
                         <TableCell className="font-semibold">
-                          ${(item.quantity * item.unit_cost).toLocaleString()}
+                          {formatCurrency(item.quantity * item.unit_cost)}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -432,15 +434,15 @@ export default function CargoDistribution() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Tovarlar qiymati:</span>
-                      <span className="font-semibold">${totals.itemsTotal.toLocaleString()}</span>
+                      <span className="font-semibold">{formatCurrency(totals.itemsTotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span>Taqsimlangan xarajatlar:</span>
-                      <span className="font-semibold">${totals.allocatedCosts.toLocaleString()}</span>
+                      <span className="font-semibold">{formatCurrency(totals.allocatedCosts)}</span>
                     </div>
                     <div className="flex justify-between text-lg font-bold border-t pt-2">
                       <span>Jami:</span>
-                      <span>${totals.total.toLocaleString()}</span>
+                      <span>{formatCurrency(totals.total)}</span>
                     </div>
                   </div>
                 </CardContent>

@@ -62,11 +62,13 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Invoices() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const {
     invoices,
@@ -430,12 +432,6 @@ export default function Invoices() {
       return getStatusBadge("overdue");
     }
     return getStatusBadge(invoice.payment_status);
-  };
-
-  const formatCurrency = (amount) => {
-    // Use locale-aware currency formatting
-    const currencySymbol = language === 'en' ? 'UZS' : language === 'ru' ? 'сум' : "so'm";
-    return `${(amount || 0).toLocaleString()} ${currencySymbol}`;
   };
 
   const getDaysUntilDue = (dueDate) => {

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Target, Plus } from "lucide-react";
 import KanbanCard from "./KanbanCard";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function StageColumn({ 
   column, 
@@ -16,6 +17,7 @@ export default function StageColumn({
   onAddNote,
   onEdit
 }) {
+  const { formatCurrency } = useCurrencyFormatter();
   const getProbabilityColor = (probability) => {
     if (probability >= 70) return 'text-green-600';
     if (probability >= 40) return 'text-yellow-600';
@@ -39,7 +41,7 @@ export default function StageColumn({
           </div>
           <div className="space-y-1">
             <div className="text-sm text-slate-600">
-              ${column.totalValue.toLocaleString()}
+              {formatCurrency(column.totalValue)}
             </div>
             {column.avgProbability > 0 && (
               <div className="flex items-center gap-2 text-xs">

@@ -46,6 +46,7 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { inventoryService } from '@/api/services/inventory';
@@ -55,6 +56,7 @@ export default function VendorPricelist() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const { suppliers } = useProcurement();
 
   const [vendorPrices, setVendorPrices] = useState([]);
@@ -244,13 +246,6 @@ export default function VendorPricelist() {
   const getProductName = (productId) => {
     const product = products.find(p => p.id === productId);
     return product?.name || productId;
-  };
-
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return `${(amount || 0).toLocaleString()} so'm`;
-    }
-    return `$${(amount || 0).toLocaleString()}`;
   };
 
   // Statistics

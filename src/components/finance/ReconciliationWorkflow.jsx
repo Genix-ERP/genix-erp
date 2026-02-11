@@ -15,10 +15,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import financeService from "@/api/services/finance";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function ReconciliationWorkflow({ bankAccount, onClose }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [reconciliations, setReconciliations] = useState([]);
   const [activeReconciliation, setActiveReconciliation] = useState(null);
@@ -187,13 +189,6 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       console.error('Failed to delete reconciliation:', error);
       alert(error.response?.data?.error?.message || 'Failed to delete');
     }
-  };
-
-  const formatCurrency = (amount, currency = 'USD') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
   };
 
   // Calculate totals

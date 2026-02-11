@@ -10,6 +10,7 @@ import { Plus, Cog, AlertTriangle, CheckCircle, Wrench } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
@@ -19,6 +20,7 @@ const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 export default function WorkCenters() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const { workCenters, loading, createWorkCenter } = useManufacturing();
   const { canCreate } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -198,7 +200,7 @@ export default function WorkCenters() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('hourly_cost')}:</span>
-                      <span className="font-semibold">${wc.hourly_cost || 0}</span>
+                      <span className="font-semibold">{formatCurrency(wc.hourly_cost || 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('working_hours_per_day')}:</span>

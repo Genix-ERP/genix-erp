@@ -8,11 +8,13 @@ import { Zap, Brain, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function MRPPlanning() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { productionOrders } = useManufacturing();
+  const { formatCurrency } = useCurrencyFormatter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [mrpResults, setMrpResults] = useState(null);
   const [error, setError] = useState(null);
@@ -210,7 +212,7 @@ Each array should have 2-4 realistic items.`,
                     <div className="space-y-1 text-sm text-slate-600">
                       <p>{t('quantity') || 'Quantity'}: <span className="font-semibold">{item.quantity} {t('units') || 'units'}</span></p>
                       <p>{t('lead_time') || 'Lead Time'}: <span className="font-semibold">{item.lead_time_days} {t('days') || 'days'}</span></p>
-                      <p>{t('est_cost') || 'Est. Cost'}: <span className="font-semibold">${item.estimated_cost?.toFixed(2) || 0}</span></p>
+                      <p>{t('est_cost') || 'Est. Cost'}: <span className="font-semibold">{formatCurrency(item.estimated_cost || 0)}</span></p>
                     </div>
                   </div>
                 ))}

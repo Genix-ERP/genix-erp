@@ -15,6 +15,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { analyzeAssets } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
@@ -24,6 +25,7 @@ export default function Assets() {
   const { t } = useTranslation(language);
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis
   const assetAnalysis = useMemo(() => {
@@ -334,7 +336,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('purchase_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -348,7 +350,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('current_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.currentValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.currentValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -362,7 +364,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('depreciation')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalDepreciation.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalDepreciation)}</p>
                 </div>
               </div>
             </CardContent>
@@ -439,7 +441,7 @@ export default function Assets() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -522,15 +524,15 @@ export default function Assets() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <p className="text-slate-500">{t('purchase_cost')}</p>
-                                <p className="font-semibold">${(asset.purchase_cost || 0).toLocaleString()}</p>
+                                <p className="font-semibold">{formatCurrency(asset.purchase_cost || 0)}</p>
                               </div>
                               <div>
                                 <p className="text-slate-500">{t('current_value')}</p>
-                                <p className="font-semibold text-green-600">${(asset.current_value || 0).toLocaleString()}</p>
+                                <p className="font-semibold text-green-600">{formatCurrency(asset.current_value || 0)}</p>
                               </div>
                               <div>
                                 <p className="text-slate-500">{t('depreciation')}</p>
-                                <p className="font-semibold text-orange-600">${(asset.accumulated_depreciation || 0).toLocaleString()}</p>
+                                <p className="font-semibold text-orange-600">{formatCurrency(asset.accumulated_depreciation || 0)}</p>
                               </div>
                               <div>
                                 <p className="text-slate-500">{t('method')}</p>
