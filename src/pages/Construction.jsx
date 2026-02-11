@@ -1036,7 +1036,7 @@ const ProjectDetailView = ({
             <FinancialWidget
               project={{
                 ...project,
-                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_amount) || 0), 0)
+                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
               }}
               formatCurrency={formatCurrency}
             />
@@ -1083,7 +1083,7 @@ const ProjectDetailView = ({
             <AlertsWidget
               project={{
                 ...project,
-                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_amount) || 0), 0)
+                total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
               }}
               sections={sections}
               vendors={vendors}
