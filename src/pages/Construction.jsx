@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
 import { hrService } from '@/api/services/hr';
+import Integrations from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -57,13 +58,17 @@ import {
   Hammer,
   HardHat,
   LayoutGrid,
-  Columns3
+  Columns3,
+  Upload,
+  X,
+  Image
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
+import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
 import {
@@ -189,8 +194,7 @@ const ProjectsTab = ({
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="text-xs text-slate-500 font-mono">{project.code}</p>
-                      <h3 className="font-semibold text-slate-800 mt-1">{project.name}</h3>
+                      <h3 className="font-semibold text-slate-800">{project.name}</h3>
                     </div>
                     {getStatusBadge(project.status)}
                   </div>
@@ -274,10 +278,17 @@ const ProjectDetailView = ({
   const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
   const [showMaterialRequestModal, setShowMaterialRequestModal] = useState(false);
 
+  // Import/Export modals
+  const [showBuildingImportModal, setShowBuildingImportModal] = useState(false);
+  const [showBuildingExportModal, setShowBuildingExportModal] = useState(false);
+  const [showSmetaImportModal, setShowSmetaImportModal] = useState(false);
+  const [showSmetaExportModal, setShowSmetaExportModal] = useState(false);
+
   // Forms
   const [buildingForm, setBuildingForm] = useState({
-    code: '', name: '', description: '', building_type: '', building_purpose: '',
-    floors_count: '', total_area: '', apartments_count: '', estimated_cost: ''
+    name: '', description: '', building_type: '', building_purpose: '',
+    floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
+    status: 'draft'
   });
   const [sectionForm, setSectionForm] = useState({ code: '', name: '', description: '' });
   const [itemForm, setItemForm] = useState({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
@@ -308,6 +319,182 @@ const ProjectDetailView = ({
     weather: '',
     temperature: ''
   });
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoPreview, setPhotoPreview] = useState([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+
+  // Building export/import columns
+  const buildingExportColumns = [
+    { key: 'name', label: t('building_name') || 'Bino nomi' },
+    { key: 'description', label: t('description') || 'Tavsif' },
+    { key: 'building_type', label: t('building_type') || 'Bino turi' },
+    { key: 'building_purpose', label: t('building_purpose') || 'Maqsad' },
+    { key: 'floors_count', label: t('floors_count') || 'Qavatlar soni' },
+    { key: 'total_area', label: t('total_area') || 'Umumiy maydon (m²)' },
+    { key: 'apartments_count', label: t('apartments_count') || 'Xonadonlar soni' },
+    { key: 'estimated_cost', label: t('estimated_cost') || 'Taxminiy narx', render: (v) => formatCurrency(v || 0) },
+    { key: 'status', label: t('status') || 'Holat' },
+    { key: 'progress_percent', label: t('progress') || 'Progress (%)' },
+  ];
+
+  const buildingImportColumns = [
+    { key: 'name', label: t('building_name') || 'Bino nomi', required: true },
+    { key: 'description', label: t('description') || 'Tavsif' },
+    { key: 'building_type', label: t('building_type') || 'Bino turi' },
+    { key: 'building_purpose', label: t('building_purpose') || 'Maqsad' },
+    { key: 'floors_count', label: t('floors_count') || 'Qavatlar soni' },
+    { key: 'total_area', label: t('total_area') || 'Umumiy maydon (m²)' },
+    { key: 'apartments_count', label: t('apartments_count') || 'Xonadonlar soni' },
+    { key: 'estimated_cost', label: t('estimated_cost') || 'Taxminiy narx' },
+  ];
+
+  // Smeta export/import columns (sections with items)
+  const smetaExportColumns = [
+    { key: 'section_name', label: t('section') || "Bo'lim" },
+    { key: 'section_code', label: t('section_code') || "Bo'lim kodi" },
+    { key: 'item_code', label: t('item_code') || 'Ish kodi' },
+    { key: 'item_name', label: t('item_name') || 'Ish nomi' },
+    { key: 'unit', label: t('unit') || "O'lchov birligi" },
+    { key: 'quantity', label: t('quantity') || 'Miqdor' },
+    { key: 'unit_price', label: t('unit_price') || 'Birlik narxi', render: (v) => formatCurrency(v || 0) },
+    { key: 'total_price', label: t('total') || 'Jami', render: (v) => formatCurrency(v || 0) },
+  ];
+
+  const smetaImportColumns = [
+    { key: 'section_name', label: t('section') || "Bo'lim", required: true },
+    { key: 'section_code', label: t('section_code') || "Bo'lim kodi" },
+    { key: 'item_code', label: t('item_code') || 'Ish kodi' },
+    { key: 'item_name', label: t('item_name') || 'Ish nomi', required: true },
+    { key: 'unit', label: t('unit') || "O'lchov birligi" },
+    { key: 'quantity', label: t('quantity') || 'Miqdor' },
+    { key: 'unit_price', label: t('unit_price') || 'Birlik narxi' },
+  ];
+
+  // Handle building import
+  const handleBuildingImport = async (data) => {
+    try {
+      for (const row of data) {
+        const buildingData = {
+          name: row.name,
+          description: row.description || '',
+          building_type: row.building_type || '',
+          building_purpose: row.building_purpose || '',
+          floors_count: row.floors_count ? parseInt(row.floors_count, 10) : 0,
+          total_area: row.total_area ? parseFloat(row.total_area) : 0,
+          apartments_count: row.apartments_count ? parseInt(row.apartments_count, 10) : 0,
+          estimated_cost: row.estimated_cost ? parseFloat(row.estimated_cost) : 0,
+        };
+        await constructionService.createBuilding(project.id, buildingData);
+      }
+      // Reload buildings
+      const buildingsData = await constructionService.listBuildings(project.id);
+      setBuildings(buildingsData || []);
+      setShowBuildingImportModal(false);
+    } catch (error) {
+      console.error('Error importing buildings:', error);
+    }
+  };
+
+  // Handle smeta import
+  const handleSmetaImport = async (data) => {
+    try {
+      // Group items by section
+      const sectionMap = new Map();
+      for (const row of data) {
+        const sectionKey = row.section_name || 'Default';
+        if (!sectionMap.has(sectionKey)) {
+          sectionMap.set(sectionKey, {
+            code: row.section_code || '',
+            name: sectionKey,
+            items: []
+          });
+        }
+        if (row.item_name) {
+          sectionMap.get(sectionKey).items.push({
+            code: row.item_code || '',
+            name: row.item_name,
+            unit: row.unit || 'dona',
+            quantity: row.quantity ? parseFloat(row.quantity) : 0,
+            unit_price: row.unit_price ? parseFloat(row.unit_price) : 0,
+          });
+        }
+      }
+
+      // Create sections and items
+      for (const [, sectionData] of sectionMap) {
+        // Check if section already exists
+        let section = sections.find(s => s.name === sectionData.name);
+        if (!section) {
+          section = await constructionService.createSection(project.id, {
+            code: sectionData.code,
+            name: sectionData.name,
+            description: ''
+          });
+        }
+
+        // Create items for this section
+        for (const item of sectionData.items) {
+          await constructionService.createItem(section.id, item);
+        }
+      }
+
+      // Reload sections
+      const sectionsData = await constructionService.listSections(project.id);
+      setSections(sectionsData || []);
+      setShowSmetaImportModal(false);
+    } catch (error) {
+      console.error('Error importing smeta:', error);
+    }
+  };
+
+  // Prepare smeta data for export (flatten sections and items)
+  const getSmetaExportData = async () => {
+    const exportData = [];
+    for (const section of sections) {
+      try {
+        const sectionItems = await constructionService.listItems(section.id);
+        if (sectionItems && sectionItems.length > 0) {
+          for (const item of sectionItems) {
+            exportData.push({
+              section_name: section.name,
+              section_code: section.code || '',
+              item_code: item.code || '',
+              item_name: item.name,
+              unit: item.unit || '',
+              quantity: item.quantity || 0,
+              unit_price: item.unit_price || 0,
+              total_price: (item.quantity || 0) * (item.unit_price || 0),
+            });
+          }
+        } else {
+          // Include section even if no items
+          exportData.push({
+            section_name: section.name,
+            section_code: section.code || '',
+            item_code: '',
+            item_name: '',
+            unit: '',
+            quantity: 0,
+            unit_price: 0,
+            total_price: 0,
+          });
+        }
+      } catch (e) {
+        console.error('Error loading items for section:', section.id, e);
+      }
+    }
+    return exportData;
+  };
+
+  const [smetaExportData, setSmetaExportData] = useState([]);
+
+  // Load smeta export data when export modal opens
+  useEffect(() => {
+    if (showSmetaExportModal) {
+      getSmetaExportData().then(data => setSmetaExportData(data));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSmetaExportModal, sections]);
 
   // Load data based on active tab
   useEffect(() => {
@@ -393,7 +580,7 @@ const ProjectDetailView = ({
     }
   }, [selectedSection?.id]);
 
-  // Handle building creation
+  // Handle building creation/update
   const handleCreateBuilding = async (e) => {
     e.preventDefault();
     try {
@@ -404,16 +591,25 @@ const ProjectDetailView = ({
         apartments_count: buildingForm.apartments_count ? parseInt(buildingForm.apartments_count, 10) : 0,
         estimated_cost: buildingForm.estimated_cost ? parseFloat(buildingForm.estimated_cost) : 0,
       };
-      await constructionService.createBuilding(project.id, formData);
+
+      if (buildingForm.id) {
+        // Update existing building
+        await constructionService.updateBuilding(project.id, buildingForm.id, formData);
+      } else {
+        // Create new building
+        await constructionService.createBuilding(project.id, formData);
+      }
+
       const buildingsData = await constructionService.listBuildings(project.id);
       setBuildings(buildingsData || []);
       setShowBuildingModal(false);
       setBuildingForm({
-        code: '', name: '', description: '', building_type: '', building_purpose: '',
-        floors_count: '', total_area: '', apartments_count: '', estimated_cost: ''
+        name: '', description: '', building_type: '', building_purpose: '',
+        floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
+        status: 'draft'
       });
     } catch (error) {
-      console.error('Error creating building:', error);
+      console.error('Error saving building:', error);
     }
   };
 
@@ -613,10 +809,53 @@ const ProjectDetailView = ({
     }
   };
 
+  // Handle photo file selection
+  const handlePhotoSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    // Limit to 10 photos
+    const newFiles = files.slice(0, 10 - photoFiles.length);
+    setPhotoFiles(prev => [...prev, ...newFiles]);
+
+    // Create previews
+    newFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(prev => [...prev, { file, preview: reader.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove photo from selection
+  const handleRemovePhoto = (index) => {
+    setPhotoFiles(prev => prev.filter((_, i) => i !== index));
+    setPhotoPreview(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Handle photo report creation
   const handleCreatePhotoReport = async (e) => {
     e.preventDefault();
     try {
+      setUploadingPhotos(true);
+
+      // Upload photos first
+      const uploadedPhotos = [];
+      for (const file of photoFiles) {
+        try {
+          const uploadResult = await Integrations.UploadFile(file);
+          uploadedPhotos.push({
+            url: uploadResult.url,
+            filename: file.name,
+            size: file.size,
+            type: file.type
+          });
+        } catch (uploadError) {
+          console.error('Error uploading photo:', uploadError);
+        }
+      }
+
       await constructionService.createPhotoReport(project.id, {
         report_date: photoReportForm.report_date,
         report_type: photoReportForm.report_type,
@@ -624,7 +863,8 @@ const ProjectDetailView = ({
         description: photoReportForm.description,
         location_description: photoReportForm.location_description,
         weather: photoReportForm.weather,
-        temperature: parseFloat(photoReportForm.temperature) || 0
+        temperature: parseFloat(photoReportForm.temperature) || 0,
+        photos: uploadedPhotos
       });
       const photosData = await constructionService.listPhotoReports(project.id);
       setPhotoReports(photosData || []);
@@ -638,8 +878,12 @@ const ProjectDetailView = ({
         weather: '',
         temperature: ''
       });
+      setPhotoFiles([]);
+      setPhotoPreview([]);
     } catch (error) {
       console.error('Error creating photo report:', error);
+    } finally {
+      setUploadingPhotos(false);
     }
   };
 
@@ -655,7 +899,6 @@ const ProjectDetailView = ({
             <h1 className="text-2xl font-bold text-slate-800">{project.name}</h1>
             {getStatusBadge(project.status)}
           </div>
-          <p className="text-slate-500 text-sm mt-1">{project.code}</p>
         </div>
         <ReportGenerator
           project={project}
@@ -784,10 +1027,17 @@ const ProjectDetailView = ({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between border-b">
               <CardTitle>{t('buildings_blocks') || 'Binolar / Bloklar'}</CardTitle>
-              <Button onClick={() => setShowBuildingModal(true)} size="sm" className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-                <Plus className="w-4 h-4 mr-2" />
-                {t('add_building') || "Bino qo'shish"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <ImportExportButtons
+                  onImport={() => setShowBuildingImportModal(true)}
+                  onExport={() => setShowBuildingExportModal(true)}
+                  exportDisabled={buildings.length === 0}
+                />
+                <Button onClick={() => setShowBuildingModal(true)} size="sm" className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('add_building') || "Bino qo'shish"}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-6">
               {loading ? (
@@ -808,7 +1058,6 @@ const ProjectDetailView = ({
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <h3 className="font-semibold text-slate-800">{building.name}</h3>
-                            <p className="text-sm text-slate-500">{building.code}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge className={building.status === 'completed' ? 'bg-green-500' : building.status === 'in_progress' ? 'bg-orange-500' : 'bg-gray-500'}>
@@ -824,7 +1073,6 @@ const ProjectDetailView = ({
                                 <DropdownMenuItem onClick={() => {
                                   setBuildingForm({
                                     id: building.id,
-                                    code: building.code,
                                     name: building.name,
                                     description: building.description || '',
                                     building_type: building.building_type || '',
@@ -832,7 +1080,8 @@ const ProjectDetailView = ({
                                     floors_count: building.floors_count || '',
                                     total_area: building.total_area || '',
                                     apartments_count: building.apartments_count || '',
-                                    estimated_cost: building.estimated_cost || ''
+                                    estimated_cost: building.estimated_cost || '',
+                                    status: building.status || 'draft'
                                   });
                                   setShowBuildingModal(true);
                                 }}>
@@ -898,6 +1147,15 @@ const ProjectDetailView = ({
 
         {/* Smeta Tab */}
         <TabsContent value="smeta" className="mt-6">
+          {/* Smeta Header with Import/Export */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-800">{t('smeta') || 'Smeta'}</h3>
+            <ImportExportButtons
+              onImport={() => setShowSmetaImportModal(true)}
+              onExport={() => setShowSmetaExportModal(true)}
+              exportDisabled={sections.length === 0}
+            />
+          </div>
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Sections List */}
             <Card className="lg:col-span-1">
@@ -1525,28 +1783,17 @@ const ProjectDetailView = ({
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t('new_building') || "Yangi bino"}</DialogTitle>
+            <DialogTitle>{buildingForm.id ? (t('edit_building') || "Binoni tahrirlash") : (t('new_building') || "Yangi bino")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateBuilding} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('building_code') || 'Bino kodi'} *</Label>
-                <Input
-                  value={buildingForm.code}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, code: e.target.value })}
-                  placeholder="BLOCK-A"
-                  required
-                />
-              </div>
-              <div>
-                <Label>{t('building_name') || 'Bino nomi'} *</Label>
-                <Input
-                  value={buildingForm.name}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, name: e.target.value })}
-                  placeholder="A blok - Turar-joy"
-                  required
-                />
-              </div>
+            <div>
+              <Label>{t('building_name') || 'Bino nomi'} *</Label>
+              <Input
+                value={buildingForm.name}
+                onChange={(e) => setBuildingForm({ ...buildingForm, name: e.target.value })}
+                placeholder="A blok - Turar-joy"
+                required
+              />
             </div>
             <div>
               <Label>{t('description') || 'Tavsif'}</Label>
@@ -1614,24 +1861,81 @@ const ProjectDetailView = ({
                 />
               </div>
             </div>
-            <div>
-              <Label>{t('estimated_cost') || 'Taxminiy narx'}</Label>
-              <Input
-                type="number"
-                value={buildingForm.estimated_cost}
-                onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: e.target.value })}
-                placeholder="5000000000"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('estimated_cost') || 'Taxminiy narx'}</Label>
+                <Input
+                  type="number"
+                  value={buildingForm.estimated_cost}
+                  onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: e.target.value })}
+                  placeholder="5000000000"
+                />
+              </div>
+              {buildingForm.id && (
+                <div>
+                  <Label>{t('status') || 'Holat'}</Label>
+                  <Select value={buildingForm.status} onValueChange={(v) => setBuildingForm({ ...buildingForm, status: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                      <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                      <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit">{t('create') || 'Yaratish'}</Button>
+              <Button type="submit">{buildingForm.id ? (t('update') || 'Yangilash') : (t('create') || 'Yaratish')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Building Import Modal */}
+      <ImportModal
+        open={showBuildingImportModal}
+        onClose={() => setShowBuildingImportModal(false)}
+        onImport={handleBuildingImport}
+        columns={buildingImportColumns}
+        entityName={t('buildings') || 'Binolar'}
+        templateColumns={buildingImportColumns}
+      />
+
+      {/* Building Export Modal */}
+      <ExportModal
+        open={showBuildingExportModal}
+        onClose={() => setShowBuildingExportModal(false)}
+        data={buildings}
+        columns={buildingExportColumns}
+        entityName={t('buildings') || 'Binolar'}
+        title={`${project.name} - ${t('buildings') || 'Binolar'}`}
+      />
+
+      {/* Smeta Import Modal */}
+      <ImportModal
+        open={showSmetaImportModal}
+        onClose={() => setShowSmetaImportModal(false)}
+        onImport={handleSmetaImport}
+        columns={smetaImportColumns}
+        entityName={t('smeta') || 'Smeta'}
+        templateColumns={smetaImportColumns}
+      />
+
+      {/* Smeta Export Modal */}
+      <ExportModal
+        open={showSmetaExportModal}
+        onClose={() => setShowSmetaExportModal(false)}
+        data={smetaExportData}
+        columns={smetaExportColumns}
+        entityName={t('smeta') || 'Smeta'}
+        title={`${project.name} - ${t('smeta') || 'Smeta'}`}
+      />
 
       {/* Section Modal */}
       <Dialog open={showSectionModal} onOpenChange={setShowSectionModal}>
@@ -2256,12 +2560,76 @@ const ProjectDetailView = ({
                 placeholder="20"
               />
             </div>
+
+            {/* Photo Upload Section */}
+            <div>
+              <Label>{t('photos') || 'Rasmlar'} *</Label>
+              <div className="mt-2">
+                {/* Upload Area */}
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                    <p className="text-sm text-slate-500">
+                      {t('click_to_upload') || 'Rasmlarni yuklash uchun bosing'}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      PNG, JPG (max 10 ta rasm)
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoSelect}
+                    disabled={photoFiles.length >= 10}
+                  />
+                </label>
+
+                {/* Photo Previews */}
+                {photoPreview.length > 0 && (
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    {photoPreview.map((item, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={item.preview}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {photoFiles.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    {photoFiles.length} {t('photos_selected') || 'ta rasm tanlandi'}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowPhotoReportModal(false)}>
+              <Button type="button" variant="outline" onClick={() => {
+                setShowPhotoReportModal(false);
+                setPhotoFiles([]);
+                setPhotoPreview([]);
+              }}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title}>
-                {t('create') || 'Yaratish'}
+              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title || photoFiles.length === 0 || uploadingPhotos}>
+                {uploadingPhotos ? (
+                  <>{t('uploading') || 'Yuklanmoqda'}...</>
+                ) : (
+                  <>{t('create') || 'Yaratish'}</>
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -2407,21 +2775,19 @@ export default function Construction() {
   const [editingProject, setEditingProject] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectForm, setProjectForm] = useState({
-    code: '',
     name: '',
     description: '',
     address: '',
     city: '',
     region: '',
-    client_name: '',
-    client_phone: '',
     project_type: '',
     building_type: '',
     total_area: '',
     floors_count: '',
     contract_amount: '',
     planned_start_date: '',
-    planned_end_date: ''
+    planned_end_date: '',
+    status: 'draft'
   });
 
   useEffect(() => {
@@ -2468,9 +2834,10 @@ export default function Construction() {
 
   const resetForm = () => {
     setProjectForm({
-      code: '', name: '', description: '', address: '', city: '', region: '',
-      client_name: '', client_phone: '', project_type: '', building_type: '',
-      total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: ''
+      name: '', description: '', address: '', city: '', region: '',
+      project_type: '', building_type: '',
+      total_area: '', floors_count: '', contract_amount: '', planned_start_date: '', planned_end_date: '',
+      status: 'draft'
     });
     setEditingProject(null);
   };
@@ -2478,21 +2845,19 @@ export default function Construction() {
   const handleEditProject = (project) => {
     setEditingProject(project);
     setProjectForm({
-      code: project.code,
       name: project.name,
       description: project.description || '',
       address: project.address || '',
       city: project.city || '',
       region: project.region || '',
-      client_name: project.client_name || '',
-      client_phone: project.client_phone || '',
       project_type: project.project_type || '',
       building_type: project.building_type || '',
       total_area: project.total_area || '',
       floors_count: project.floors_count || '',
       contract_amount: project.contract_amount || '',
       planned_start_date: project.planned_start_date ? format(new Date(project.planned_start_date), 'yyyy-MM-dd') : '',
-      planned_end_date: project.planned_end_date ? format(new Date(project.planned_end_date), 'yyyy-MM-dd') : ''
+      planned_end_date: project.planned_end_date ? format(new Date(project.planned_end_date), 'yyyy-MM-dd') : '',
+      status: project.status || 'draft'
     });
     setShowProjectModal(true);
   };
@@ -2659,25 +3024,13 @@ export default function Construction() {
           </DialogHeader>
 
           <form onSubmit={handleSubmitProject} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('project_code') || 'Loyiha kodi'} *</Label>
-                <Input
-                  value={projectForm.code}
-                  onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
-                  placeholder="PRJ-2024-001"
-                  required
-                  disabled={!!editingProject}
-                />
-              </div>
-              <div>
-                <Label>{t('project_name') || 'Loyiha nomi'} *</Label>
-                <Input
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                  required
-                />
-              </div>
+            <div>
+              <Label>{t('project_name') || 'Loyiha nomi'} *</Label>
+              <Input
+                value={projectForm.name}
+                onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                required
+              />
             </div>
 
             <div>
@@ -2687,23 +3040,6 @@ export default function Construction() {
                 onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
                 rows={2}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('client_name') || 'Mijoz nomi'}</Label>
-                <Input
-                  value={projectForm.client_name}
-                  onChange={(e) => setProjectForm({ ...projectForm, client_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('client_phone') || 'Telefon'}</Label>
-                <Input
-                  value={projectForm.client_phone}
-                  onChange={(e) => setProjectForm({ ...projectForm, client_phone: e.target.value })}
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -2800,6 +3136,25 @@ export default function Construction() {
                 />
               </div>
             </div>
+
+            {editingProject && (
+              <div>
+                <Label>{t('status') || 'Holat'}</Label>
+                <Select value={projectForm.status} onValueChange={(v) => setProjectForm({ ...projectForm, status: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                    <SelectItem value="planning">{t('planning') || 'Rejalashtirish'}</SelectItem>
+                    <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                    <SelectItem value="on_hold">{t('on_hold') || "To'xtatilgan"}</SelectItem>
+                    <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowProjectModal(false)}>

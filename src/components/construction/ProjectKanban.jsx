@@ -82,7 +82,6 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency }) {
           <div className="flex items-center gap-2">
             <GripVertical className="w-4 h-4 text-slate-400" />
             <div>
-              <p className="text-xs text-slate-500 font-mono">{project.code}</p>
               <h4 className="font-medium text-slate-800 text-sm line-clamp-2">{project.name}</h4>
             </div>
           </div>
