@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ const categoryIcons = {
 };
 
 export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelete }) {
+  const { formatCurrency } = useCurrencyFormatter();
   const CategoryIcon = categoryIcons[workflow.category] || Settings;
 
   return (
@@ -98,7 +100,7 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
                 <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
                 <div className="min-w-0">
                   <p className="text-xs text-slate-500 truncate">Savings</p>
-                  <p className="text-sm font-medium text-green-600 truncate">${workflow.cost_savings}/mo</p>
+                  <p className="text-sm font-medium text-green-600 truncate">{formatCurrency(workflow.cost_savings)}/mo</p>
                 </div>
               </div>
             )}

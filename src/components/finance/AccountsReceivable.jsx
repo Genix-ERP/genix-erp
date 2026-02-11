@@ -15,6 +15,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 
 const AGING_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
@@ -40,6 +41,7 @@ export default function AccountsReceivable() {
     refreshData
   } = useFinancials();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
 
@@ -254,7 +256,7 @@ export default function AccountsReceivable() {
                 <DollarSign className="w-6 h-6 text-green-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-slate-900">${metrics.totalReceivable.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalReceivable)}</p>
             <p className="text-sm text-slate-600">{t('total_receivable')}</p>
           </CardContent>
         </Card>
@@ -266,7 +268,7 @@ export default function AccountsReceivable() {
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-red-900">${metrics.overdueAmount.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-red-900">{formatCurrency(metrics.overdueAmount)}</p>
             <p className="text-sm text-slate-600">{t('overdue_amount')}</p>
           </CardContent>
         </Card>
@@ -312,7 +314,7 @@ export default function AccountsReceivable() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.name}: $${entry.value.toLocaleString()}`}
+                    label={(entry) => `${entry.name}: ${formatCurrency(entry.value)}`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -321,7 +323,7 @@ export default function AccountsReceivable() {
                       <Cell key={`cell-${index}`} fill={AGING_COLORS[index % AGING_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -410,7 +412,7 @@ export default function AccountsReceivable() {
                         <TableCell className="text-sm">
                           {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
-                        <TableCell className="font-semibold">${(invoice.total_amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(invoice.total_amount || 0)}</TableCell>
                         <TableCell>
                           <Badge className={getStatusColor(invoice.status)}>{t(invoice.status) || invoice.status}</Badge>
                         </TableCell>

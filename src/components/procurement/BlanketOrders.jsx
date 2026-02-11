@@ -61,12 +61,14 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { procurementService } from "@/api/services/procurement";
 import { inventoryService } from "@/api/services/inventory";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BlanketOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { suppliers } = useProcurement();
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // State
   const [blanketOrders, setBlanketOrders] = useState([]);
@@ -181,15 +183,6 @@ export default function BlanketOrders() {
     };
     const config = statusConfig[status] || statusConfig.draft;
     return <Badge className={config.color}>{config.label}</Badge>;
-  };
-
-  // Format currency
-  const formatCurrency = (amount, currency = "UZS") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
-      minimumFractionDigits: 0,
-    }).format(amount || 0);
   };
 
   // Reset form

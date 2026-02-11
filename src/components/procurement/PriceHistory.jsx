@@ -53,6 +53,7 @@ import { useProcurement } from "@/components/contexts/ProcurementContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 
@@ -66,6 +67,7 @@ export default function PriceHistory() {
     isLoading,
   } = useProcurement();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
@@ -220,13 +222,6 @@ export default function PriceHistory() {
         </Badge>
       );
     return <Badge variant="outline">0%</Badge>;
-  };
-
-  const formatCurrency = (amount, currency) => {
-    if (currency === "USD") {
-      return `$${(amount || 0).toLocaleString()}`;
-    }
-    return `${(amount || 0).toLocaleString()} so'm`;
   };
 
   const getLatestPrice = (prices) => {

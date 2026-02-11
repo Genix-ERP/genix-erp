@@ -25,6 +25,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import apiClient from "@/api/client";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -52,6 +53,7 @@ export default function InventoryManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     products,
     warehouses,
@@ -310,7 +312,7 @@ export default function InventoryManagement() {
               <div>
                 <p className="text-sm text-slate-500">{t('total_value')}</p>
                 <p className="text-2xl font-bold text-slate-900">
-                  ${summary.totalValue.toLocaleString()}
+                  {formatCurrency(summary.totalValue)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -555,7 +557,7 @@ export default function InventoryManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-slate-500">{t('inbound_value')}</p>
-                        <p className="text-2xl font-bold text-green-600">${analyticsStats.inboundValue.toLocaleString()}</p>
+                        <p className="text-2xl font-bold text-green-600">{formatCurrency(analyticsStats.inboundValue)}</p>
                       </div>
                       <TrendingUp className="w-6 h-6 text-green-600" />
                     </div>
@@ -567,7 +569,7 @@ export default function InventoryManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-slate-500">{t('outbound_value')}</p>
-                        <p className="text-2xl font-bold text-red-600">${analyticsStats.outboundValue.toLocaleString()}</p>
+                        <p className="text-2xl font-bold text-red-600">{formatCurrency(analyticsStats.outboundValue)}</p>
                       </div>
                       <TrendingDown className="w-6 h-6 text-red-600" />
                     </div>
@@ -580,7 +582,7 @@ export default function InventoryManagement() {
                       <div>
                         <p className="text-sm text-slate-500">{t('net_movement')}</p>
                         <p className={`text-2xl font-bold ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ${analyticsStats.netValue.toLocaleString()}
+                          {formatCurrency(analyticsStats.netValue)}
                         </p>
                       </div>
                       <ArrowRightLeft className={`w-6 h-6 ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`} />

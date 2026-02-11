@@ -18,6 +18,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function CashRegister() {
   const { language } = useLanguage();
@@ -31,6 +32,7 @@ export default function CashRegister() {
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,13 +147,6 @@ export default function CashRegister() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
   };
 
   const getTypeIcon = (type) => {

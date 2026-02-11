@@ -14,6 +14,7 @@ import { contactsService } from '@/api/services/contacts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Default status IDs for Kanban
 const DEFAULT_STATUS_IDS = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
@@ -30,6 +31,7 @@ export default function Projects() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const { projects, createProject, updateProject, isLoading } = useModules();
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,11 +325,11 @@ export default function Projects() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-slate-500 mb-1">{t('budget')}</p>
-            <p className="font-semibold">${Number(project.budget || 0).toLocaleString()}</p>
+            <p className="font-semibold">{formatCurrency(Number(project.budget || 0))}</p>
           </div>
           <div>
             <p className="text-slate-500 mb-1">{t('spent')}</p>
-            <p className="font-semibold">${Number(project.spent || 0).toLocaleString()}</p>
+            <p className="font-semibold">{formatCurrency(Number(project.spent || 0))}</p>
           </div>
         </div>
 
@@ -429,7 +431,7 @@ export default function Projects() {
                   <DollarSign className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">${metrics.totalBudget.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalBudget)}</p>
               <p className="text-sm text-slate-600">{t('total_budget')}</p>
             </CardContent>
           </Card>
@@ -466,7 +468,7 @@ export default function Projects() {
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">{t('total_spent')}</p>
-                      <p className="text-lg font-bold text-slate-900">${(projectAnalysis.metrics?.totalSpent || 0).toLocaleString()}</p>
+                      <p className="text-lg font-bold text-slate-900">{formatCurrency(projectAnalysis.metrics?.totalSpent || 0)}</p>
                     </div>
                   </div>
                 </div>

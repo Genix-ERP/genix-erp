@@ -45,6 +45,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
 import { useToast } from "@/components/ui/use-toast";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Customers() {
   const { language } = useLanguage();
@@ -52,6 +53,7 @@ export default function Customers() {
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { toast } = useToast();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     customers,
     leads,
@@ -413,12 +415,12 @@ export default function Customers() {
                             <div>
                               {customer.monthly_value && (
                                 <p className="font-medium text-green-600">
-                                  ${customer.monthly_value.toLocaleString()}/mo
+                                  {formatCurrency(customer.monthly_value)}/mo
                                 </p>
                               )}
                               {customer.annual_revenue && (
                                 <p className="text-sm text-slate-500">
-                                  ${customer.annual_revenue.toLocaleString()} annual
+                                  {formatCurrency(customer.annual_revenue)} annual
                                 </p>
                               )}
                             </div>

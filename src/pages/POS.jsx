@@ -16,6 +16,7 @@ import {
   User, Play, Square, Printer, Clock, DollarSign, Package, RefreshCw, History
 } from "lucide-react";
 import { POSProvider, usePOS } from "@/components/contexts/POSContext";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { toast } from 'sonner';
 
 // ==========================================
@@ -29,6 +30,7 @@ function POSContent() {
     products, productsLoading, searchProducts,
     orders, completeOrder
   } = usePOS();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showOpenSession, setShowOpenSession] = useState(false);
@@ -62,14 +64,6 @@ function POSContent() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, searchProducts]);
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  };
 
   // Handle product click
   const handleProductClick = (product) => {

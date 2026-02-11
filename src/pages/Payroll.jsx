@@ -15,12 +15,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { analyzePayroll } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Payroll() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -324,7 +326,7 @@ export default function Payroll() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('gross_pay')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalGrossPay.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalGrossPay)}</p>
                 </div>
               </div>
             </CardContent>
@@ -338,7 +340,7 @@ export default function Payroll() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('net_pay')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalNetPay.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalNetPay)}</p>
                 </div>
               </div>
             </CardContent>
@@ -423,7 +425,7 @@ export default function Payroll() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" fontSize={12} />
                   <YAxis fontSize={12} />
-                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, t('amount')]} />
+                  <Tooltip formatter={(value) => [formatCurrency(value), t('amount')]} />
                   <Bar dataKey="amount" name={t('amount')} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -505,8 +507,8 @@ export default function Payroll() {
                               `${format(new Date(payroll.pay_period_start), 'dd.MM')} - ${format(new Date(payroll.pay_period_end), 'dd.MM')}`
                               : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">${(payroll.gross_pay || 0).toLocaleString()}</TableCell>
-                          <TableCell className="font-semibold text-green-600">${(payroll.net_pay || 0).toLocaleString()}</TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(payroll.gross_pay || 0)}</TableCell>
+                          <TableCell className="font-semibold text-green-600">{formatCurrency(payroll.net_pay || 0)}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(payroll.status)}>{t(payroll.status)}</Badge>
                           </TableCell>
@@ -688,15 +690,15 @@ export default function Payroll() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>{t('gross_pay')}:</span>
-                      <span className="font-semibold">${calculatePayroll(newPayroll).gross_pay.toFixed(2)}</span>
+                      <span className="font-semibold">{formatCurrency(calculatePayroll(newPayroll).gross_pay)}</span>
                     </div>
                     <div className="flex justify-between text-red-600">
                       <span>{t('total_deductions')}:</span>
-                      <span className="font-semibold">-${calculatePayroll(newPayroll).total_deductions.toFixed(2)}</span>
+                      <span className="font-semibold">-{formatCurrency(calculatePayroll(newPayroll).total_deductions)}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t text-lg">
                       <span className="font-bold">{t('net_pay')}:</span>
-                      <span className="font-bold text-green-600">${calculatePayroll(newPayroll).net_pay.toFixed(2)}</span>
+                      <span className="font-bold text-green-600">{formatCurrency(calculatePayroll(newPayroll).net_pay)}</span>
                     </div>
                   </div>
                 </div>
@@ -844,15 +846,15 @@ export default function Payroll() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span>{t('gross_pay')}:</span>
-                        <span className="font-semibold">${calculatePayroll(editPayroll).gross_pay.toFixed(2)}</span>
+                        <span className="font-semibold">{formatCurrency(calculatePayroll(editPayroll).gross_pay)}</span>
                       </div>
                       <div className="flex justify-between text-red-600">
                         <span>{t('total_deductions')}:</span>
-                        <span className="font-semibold">-${calculatePayroll(editPayroll).total_deductions.toFixed(2)}</span>
+                        <span className="font-semibold">-{formatCurrency(calculatePayroll(editPayroll).total_deductions)}</span>
                       </div>
                       <div className="flex justify-between pt-2 border-t text-lg">
                         <span className="font-bold">{t('net_pay')}:</span>
-                        <span className="font-bold text-green-600">${calculatePayroll(editPayroll).net_pay.toFixed(2)}</span>
+                        <span className="font-bold text-green-600">{formatCurrency(calculatePayroll(editPayroll).net_pay)}</span>
                       </div>
                     </div>
                   </div>

@@ -28,7 +28,8 @@ import {
   Upload,
   Loader2,
   Info,
-  Crown
+  Crown,
+  Zap
 } from 'lucide-react';
 
 // Import settings components
@@ -41,6 +42,7 @@ import ManufacturingSettings from '@/components/admin-settings/ManufacturingSett
 import HRSettings from '@/components/admin-settings/HRSettings';
 import FinanceSettings from '@/components/admin-settings/FinanceSettings';
 import ProjectSettings from '@/components/admin-settings/ProjectSettings';
+import WorkflowSettings from '@/components/admin-settings/WorkflowSettings';
 import CompanySettings from '@/components/settings/CompanySettings';
 import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
 
@@ -57,7 +59,8 @@ const SECTIONS = [
   { id: 'manufacturing', icon: Factory, label: 'manufacturing_settings', component: ManufacturingSettings, appIds: ['manufacturing'] },
   { id: 'hr', icon: Briefcase, label: 'hr_settings', component: HRSettings, appIds: ['hr', 'payroll', 'expenses'] },
   { id: 'finance', icon: DollarSign, label: 'finance_settings', component: FinanceSettings, appIds: ['finance', 'assets', 'expenses'] },
-  { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] }
+  { id: 'projects', icon: FolderKanban, label: 'project_settings', component: ProjectSettings, appIds: ['projects'] },
+  { id: 'workflows', icon: Zap, label: 'workflow_settings', component: WorkflowSettings, appIds: null }
 ];
 
 export default function AdminSettings() {

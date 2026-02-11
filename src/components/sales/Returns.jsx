@@ -54,11 +54,13 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Returns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     returns,
     salesOrders,
@@ -263,10 +265,6 @@ export default function Returns() {
       used: t('used'),
     };
     return conditions[condition] || condition;
-  };
-
-  const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const totalAmount = formData.items.reduce(

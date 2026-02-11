@@ -13,6 +13,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // SAP-style document types - using translation keys
 const documentTypes = [
@@ -39,6 +40,7 @@ export default function StockMovementTracker({ movements, items }) {
   const { t } = useTranslation(language);
   const { adjustInventory, warehouses, products, lots = [] } = useInventory();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredMovements, setFilteredMovements] = useState(movements || []);
 
@@ -251,7 +253,7 @@ export default function StockMovementTracker({ movements, items }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">{t('inbound_value')}</p>
-                <p className="text-2xl font-bold text-green-600">${movementStats.inboundValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(movementStats.inboundValue)}</p>
               </div>
               <TrendingUp className="w-6 h-6 text-green-600" />
             </div>
@@ -263,7 +265,7 @@ export default function StockMovementTracker({ movements, items }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">{t('outbound_value')}</p>
-                <p className="text-2xl font-bold text-red-600">${movementStats.outboundValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-red-600">{formatCurrency(movementStats.outboundValue)}</p>
               </div>
               <TrendingDown className="w-6 h-6 text-red-600" />
             </div>
@@ -276,7 +278,7 @@ export default function StockMovementTracker({ movements, items }) {
               <div>
                 <p className="text-sm text-slate-500">{t('net_movement')}</p>
                 <p className={`text-2xl font-bold ${movementStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ${movementStats.netValue.toLocaleString()}
+                  {formatCurrency(movementStats.netValue)}
                 </p>
               </div>
               <ArrowRightLeft className={`w-6 h-6 ${movementStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`} />
@@ -372,10 +374,10 @@ export default function StockMovementTracker({ movements, items }) {
                             {isPositive ? '+' : ''}{movement.quantity || 0}
                           </span>
                         </TableCell>
-                        <TableCell>${unitCost.toFixed(2)}</TableCell>
+                        <TableCell>{formatCurrency(unitCost)}</TableCell>
                         <TableCell>
                           <span className={`font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                            ${Math.abs(totalValue).toLocaleString()}
+                            {formatCurrency(Math.abs(totalValue))}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -389,7 +391,7 @@ export default function StockMovementTracker({ movements, items }) {
                         <TableCell>
                           {!isPositive && (
                             <div>
-                              <div className="font-medium">${(movement.cogs_calculated || 0).toFixed(2)}</div>
+                              <div className="font-medium">{formatCurrency(movement.cogs_calculated || 0)}</div>
                               <Badge className="text-xs bg-slate-100 text-slate-800">
                                 {movement.costing_method_used?.toUpperCase() || 'FIFO'}
                               </Badge>

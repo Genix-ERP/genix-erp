@@ -17,6 +17,7 @@ import { useEmployeePermissions } from '@/components/contexts/EmployeePermission
 import { contactsService, aiService } from '@/api/services';
 import { financeService } from '@/api/services/finance';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -61,6 +62,7 @@ export default function AccountsPayable() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -184,11 +186,11 @@ export default function AccountsPayable() {
   // Export columns configuration
   const exportColumns = [
     { key: 'invoice_number', label: t('invoice_number') || 'Invoice Number' },
-    { key: 'partner_id', label: t('vendor') || 'Vendor' },
+    { key: 'partner_name', label: t('vendor') || 'Vendor' },
     { key: 'invoice_date', label: t('date') || 'Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
     { key: 'due_date', label: t('due_date') || 'Due Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'total_amount', label: t('amount') || 'Amount', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'status', label: t('status') || 'Status' },
+    { key: 'total_amount', label: t('amount') || 'Amount', render: (v) => formatCurrency(v || 0) },
+    { key: 'status', label: t('status') || 'Status', render: (v) => t(v) || v },
   ];
 
   // Import columns configuration
@@ -331,11 +333,11 @@ export default function AccountsPayable() {
       { key: 'amount', label: t('amount') || 'Amount', align: 'right' },
     ],
     tableData: [
-      { description: t('subtotal') || 'Subtotal', amount: `${(bill.subtotal || 0).toLocaleString()} UZS` },
-      { description: t('tax') + ' (12%)' || 'Tax (12%)', amount: `${(bill.tax_amount || 0).toLocaleString()} UZS` },
+      { description: t('subtotal') || 'Subtotal', amount: formatCurrency(bill.subtotal || 0) },
+      { description: t('tax') + ' (12%)' || 'Tax (12%)', amount: formatCurrency(bill.tax_amount || 0) },
     ],
     totals: [
-      { label: t('total') || 'Total', value: `${(bill.total_amount || 0).toLocaleString()} UZS`, bold: true },
+      { label: t('total') || 'Total', value: formatCurrency(bill.total_amount || 0), bold: true },
     ],
   });
 
@@ -418,7 +420,7 @@ export default function AccountsPayable() {
                 <DollarSign className="w-6 h-6 text-red-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-slate-900">${metrics.totalPayable.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalPayable)}</p>
             <p className="text-sm text-slate-600">{t('total_payable')}</p>
           </CardContent>
         </Card>
@@ -605,7 +607,7 @@ export default function AccountsPayable() {
                       <TableCell className="text-sm">
                         {bill.due_date ? format(new Date(bill.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
-                      <TableCell className="font-semibold">${(bill.total_amount || 0).toLocaleString()}</TableCell>
+                      <TableCell className="font-semibold">{formatCurrency(bill.total_amount || 0)}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bill.status)}>{t(bill.status) || bill.status}</Badge>
                       </TableCell>
@@ -1054,7 +1056,7 @@ export default function AccountsPayable() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t('amount')}:</span>
-                  <span className="font-semibold">${(debitNoteBill.total_amount || 0).toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(debitNoteBill.total_amount || 0)}</span>
                 </div>
               </div>
               <div className="space-y-2">
@@ -1117,7 +1119,7 @@ export default function AccountsPayable() {
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
                   <p className="text-sm font-bold text-slate-900">
-                    ${(selectedBill.total_amount || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.total_amount || 0)}
                   </p>
                 </div>
               </div>
@@ -1145,19 +1147,19 @@ export default function AccountsPayable() {
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('subtotal')}</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    ${(selectedBill.subtotal || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.subtotal || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('tax')}</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    ${(selectedBill.tax_amount || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.tax_amount || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('amount_due')}</p>
                   <p className="text-sm font-semibold text-red-600">
-                    ${(selectedBill.amount_due || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.amount_due || 0)}
                   </p>
                 </div>
               </div>

@@ -13,12 +13,14 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BOMManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { boms, loading, createBOM, updateBOM } = useManufacturing();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -283,7 +285,7 @@ export default function BOMManagement() {
                         <Badge variant="outline">{getBomTypeLabel(bom.bom_type || 'manufacturing')}</Badge>
                       </TableCell>
                       <TableCell>{bom.lines?.length || bom.components?.length || 0} {t('items') || 'items'}</TableCell>
-                      <TableCell className="font-semibold">${(bom.total_cost || 0).toFixed(2)}</TableCell>
+                      <TableCell className="font-semibold">{formatCurrency(bom.total_cost || 0)}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bom.status || (bom.is_active ? 'active' : 'draft'))}>
                           {getStatusLabel(bom.status || (bom.is_active ? 'active' : 'draft'))}

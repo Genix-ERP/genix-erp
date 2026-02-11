@@ -18,6 +18,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { format } from "date-fns";
 
@@ -38,6 +39,7 @@ export default function BudgetManagement() {
     isLoading
   } = useFinancials();
   const { canCreate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -252,10 +254,6 @@ export default function BudgetManagement() {
     const totalActual = lines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
     const percentage = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
     return { totalPlanned, totalActual, percentage };
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
   };
 
   return (

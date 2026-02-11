@@ -18,6 +18,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { analyzeFinancials } from "@/api/services/aiAnalytics";
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
@@ -26,6 +27,7 @@ export default function FinanceDashboard() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { financialTransactions, isLoading } = useFinancials();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis using real data
   const financialAnalysis = useMemo(() =>
@@ -123,7 +125,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_income')}</p>
               <p className="text-3xl font-bold text-green-600 tabular-nums">
-                ${metrics.totalIncome.toLocaleString()}
+                {formatCurrency(metrics.totalIncome)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
@@ -145,7 +147,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_expenses')}</p>
               <p className="text-3xl font-bold text-red-600 tabular-nums">
-                ${metrics.totalExpenses.toLocaleString()}
+                {formatCurrency(metrics.totalExpenses)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
@@ -169,7 +171,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('net_profit')}</p>
               <p className={`text-3xl font-bold tabular-nums ${metrics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                ${metrics.netProfit.toLocaleString()}
+                {formatCurrency(metrics.netProfit)}
               </p>
               <p className="text-xs text-slate-500 mt-2">
                 {metrics.netProfit >= 0 ? t('healthy_profit') || 'Healthy profit' : t('needs_attention') || 'Needs attention'}
@@ -217,7 +219,7 @@ export default function FinanceDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Bar dataKey="income" fill="#10b981" name={t('income')} />
                   <Bar dataKey="expenses" fill="#ef4444" name={t('expense')} />
                 </BarChart>
@@ -252,7 +254,7 @@ export default function FinanceDashboard() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                 </RechartsPieChart>
               </ResponsiveContainer>
             ) : (

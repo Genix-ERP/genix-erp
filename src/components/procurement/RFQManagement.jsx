@@ -52,6 +52,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { procurementService } from "@/api/services/procurement";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function RFQManagement() {
   const { language } = useLanguage();
@@ -66,6 +67,7 @@ export default function RFQManagement() {
     isLoading,
   } = useProcurement();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -164,7 +166,7 @@ export default function RFQManagement() {
         (t('po_created_success') || "Buyurtma muvaffaqiyatli yaratildi!") +
         `\n\n${t('order_number') || "Buyurtma raqami"}: ${result.order_number}\n` +
         `${t('vendor') || "Ta'minotchi"}: ${result.vendor_name}\n` +
-        `${t('total') || "Jami"}: ${result.total_amount?.toLocaleString()}`
+        `${t('total') || "Jami"}: ${formatCurrency(result.total_amount || 0)}`
       );
       setShowDetails(false);
     } catch (error) {
@@ -736,7 +738,7 @@ export default function RFQManagement() {
                               {getSupplierName(response.supplier_id)}
                             </TableCell>
                             <TableCell className="text-right font-semibold">
-                              {response.total_amount?.toLocaleString()}
+                              {formatCurrency(response.total_amount || 0)}
                             </TableCell>
                             <TableCell className="text-sm">
                               {response.submitted_at
