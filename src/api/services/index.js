@@ -1,5 +1,6 @@
 // Export all API services
 export { default as authService } from './auth';
+export { default as activityService } from './activity';
 export { default as contactsService } from './contacts';
 export { default as inventoryService } from './inventory';
 export { default as financeService } from './finance';
