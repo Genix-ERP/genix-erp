@@ -155,7 +155,7 @@ const appsList = [
     version: '1.0',
     icon: Building2,
     color: '#f97316',
-    permissionModule: 'construction'
+    permissionModule: MODULES.CONSTRUCTION
   }
 ];
 
