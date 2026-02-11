@@ -270,6 +270,24 @@ export const constructionService = {
   },
 
   // =====================================================
+  // PROJECT TEAM MEMBERS
+  // =====================================================
+
+  async listTeamMembers(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/team`);
+    return response.data.data;
+  },
+
+  async addTeamMember(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/team`, data);
+    return response.data.data;
+  },
+
+  async removeTeamMember(projectId, memberId) {
+    await apiClient.delete(`/construction/projects/${projectId}/team/${memberId}`);
+  },
+
+  // =====================================================
   // VENDOR PAYMENTS (Future)
   // =====================================================
 
@@ -285,6 +303,15 @@ export const constructionService = {
 
   async recordPayment(id, data) {
     const response = await apiClient.put(`/construction/vendor-payments/${id}/pay`, data);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // ORGANIZATIONS (for vendor selection)
+  // =====================================================
+
+  async listOrganizations() {
+    const response = await apiClient.get('/organizations');
     return response.data.data;
   },
 };

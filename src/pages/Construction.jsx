@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
+import { hrService } from '@/api/services/hr';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -197,7 +198,9 @@ const ProjectDetailView = ({
   const [items, setItems] = useState([]);
   const [selectedSection, setSelectedSection] = useState(null);
   const [team, setTeam] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [organizations, setOrganizations] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
   const [photoReports, setPhotoReports] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
@@ -220,6 +223,21 @@ const ProjectDetailView = ({
   });
   const [sectionForm, setSectionForm] = useState({ code: '', name: '', description: '' });
   const [itemForm, setItemForm] = useState({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
+  const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
+  const [vendorForm, setVendorForm] = useState({
+    vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+    vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: ''
+  });
+  const [materialRequestForm, setMaterialRequestForm] = useState({
+    request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: ''
+  });
+  const [dailyLogForm, setDailyLogForm] = useState({
+    report_date: new Date().toISOString().split('T')[0],
+    weather_morning: '', weather_afternoon: '',
+    temperature_min: '', temperature_max: '',
+    work_summary: '', issues_encountered: '', safety_notes: '',
+    workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+  });
 
   // Load data based on active tab
   useEffect(() => {
@@ -241,13 +259,24 @@ const ProjectDetailView = ({
             setSections(sectionsData || []);
             break;
           case 'team':
-            // Team loading would go here when API is ready
+            try {
+              const [teamData, employeesData] = await Promise.all([
+                constructionService.listTeamMembers(project.id),
+                hrService.listEmployees({ limit: 200 })
+              ]);
+              setTeam(teamData || []);
+              setEmployees(employeesData?.items || employeesData || []);
+            } catch (e) { setTeam([]); setEmployees([]); }
             break;
           case 'vendors':
             try {
-              const vendorsData = await constructionService.listProjectVendors(project.id);
+              const [vendorsData, orgsData] = await Promise.all([
+                constructionService.listProjectVendors(project.id),
+                constructionService.listOrganizations()
+              ]);
               setVendors(vendorsData || []);
-            } catch (e) { setVendors([]); }
+              setOrganizations(orgsData || []);
+            } catch (e) { setVendors([]); setOrganizations([]); }
             break;
           case 'daily_logs':
             try {
@@ -332,6 +361,23 @@ const ProjectDetailView = ({
     }
   };
 
+  // Handle section deletion
+  const handleDeleteSection = async (sectionId, e) => {
+    e.stopPropagation();
+    if (!confirm(t('confirm_delete_section') || "Bo'limni o'chirmoqchimisiz? Barcha ishlar ham o'chiriladi!")) return;
+    try {
+      await constructionService.deleteSection(sectionId);
+      const sectionsData = await constructionService.listSections(project.id);
+      setSections(sectionsData || []);
+      if (selectedSection?.id === sectionId) {
+        setSelectedSection(null);
+        setItems([]);
+      }
+    } catch (error) {
+      console.error('Error deleting section:', error);
+    }
+  };
+
   // Handle item creation
   const handleCreateItem = async (e) => {
     e.preventDefault();
@@ -348,6 +394,132 @@ const ProjectDetailView = ({
       setItemForm({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
     } catch (error) {
       console.error('Error creating item:', error);
+    }
+  };
+
+  // Handle item deletion
+  const handleDeleteItem = async (itemId) => {
+    if (!confirm(t('confirm_delete_item') || "Ishni o'chirmoqchimisiz?")) return;
+    try {
+      await constructionService.deleteItem(itemId);
+      const itemsData = await constructionService.listItems(selectedSection.id);
+      setItems(itemsData || []);
+      // Refresh sections to update totals
+      const sectionsData = await constructionService.listSections(project.id);
+      setSections(sectionsData || []);
+    } catch (error) {
+      console.error('Error deleting item:', error);
+    }
+  };
+
+  // Handle team member creation
+  const handleCreateTeamMember = async (e) => {
+    e.preventDefault();
+    try {
+      await constructionService.addTeamMember(project.id, teamForm);
+      const teamData = await constructionService.listTeamMembers(project.id);
+      setTeam(teamData || []);
+      setShowTeamModal(false);
+      setTeamForm({ employee_id: '', role: '', responsibilities: '', start_date: '' });
+    } catch (error) {
+      console.error('Error adding team member:', error);
+    }
+  };
+
+  // Handle team member removal
+  const handleRemoveTeamMember = async (memberId) => {
+    if (!confirm(t('confirm_remove_member') || "Jamoa a'zosini o'chirmoqchimisiz?")) return;
+    try {
+      await constructionService.removeTeamMember(project.id, memberId);
+      const teamData = await constructionService.listTeamMembers(project.id);
+      setTeam(teamData || []);
+    } catch (error) {
+      console.error('Error removing team member:', error);
+    }
+  };
+
+  // Handle vendor creation
+  const handleCreateVendor = async (e) => {
+    e.preventDefault();
+    try {
+      await constructionService.addProjectVendor(project.id, {
+        vendor_id: vendorForm.vendor_id || '',
+        vendor_name: vendorForm.vendor_id ? '' : vendorForm.vendor_name, // Only send name if no org selected
+        contract_number: vendorForm.contract_number,
+        contract_date: vendorForm.contract_date,
+        contract_amount: parseFloat(vendorForm.contract_amount) || 0,
+        currency: vendorForm.currency || 'UZS',
+        vendor_type: vendorForm.vendor_type,
+        work_scope: vendorForm.work_scope,
+        contact_person: vendorForm.contact_person,
+        contact_phone: vendorForm.contact_phone,
+        contact_email: vendorForm.contact_email,
+        start_date: vendorForm.start_date,
+        end_date: vendorForm.end_date
+      });
+      const vendorsData = await constructionService.listProjectVendors(project.id);
+      setVendors(vendorsData || []);
+      setShowVendorModal(false);
+      setVendorForm({
+        vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+        vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: ''
+      });
+    } catch (error) {
+      console.error('Error adding vendor:', error);
+    }
+  };
+
+  // Handle material request creation
+  const handleCreateMaterialRequest = async (e) => {
+    e.preventDefault();
+    try {
+      await constructionService.createMaterialRequest(project.id, {
+        request_number: materialRequestForm.request_number,
+        request_date: materialRequestForm.request_date,
+        required_date: materialRequestForm.required_date,
+        notes: materialRequestForm.notes
+      });
+      const materialsData = await constructionService.listMaterialRequests(project.id);
+      setMaterialRequests(materialsData || []);
+      setShowMaterialRequestModal(false);
+      setMaterialRequestForm({
+        request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: ''
+      });
+    } catch (error) {
+      console.error('Error creating material request:', error);
+    }
+  };
+
+  // Handle daily log creation
+  const handleCreateDailyLog = async (e) => {
+    e.preventDefault();
+    try {
+      await constructionService.createDailyReport(project.id, {
+        report_date: dailyLogForm.report_date,
+        weather_morning: dailyLogForm.weather_morning,
+        weather_afternoon: dailyLogForm.weather_afternoon,
+        temperature_min: parseFloat(dailyLogForm.temperature_min) || 0,
+        temperature_max: parseFloat(dailyLogForm.temperature_max) || 0,
+        work_summary: dailyLogForm.work_summary,
+        issues_encountered: dailyLogForm.issues_encountered,
+        safety_notes: dailyLogForm.safety_notes,
+        workers_count: parseInt(dailyLogForm.workers_count) || 0,
+        workers_details: dailyLogForm.workers_details,
+        equipment_used: dailyLogForm.equipment_used,
+        materials_received: dailyLogForm.materials_received
+      });
+      const logsData = await constructionService.listDailyReports(project.id);
+      setDailyLogs(logsData || []);
+      setShowDailyLogModal(false);
+      setDailyLogForm({
+        report_date: new Date().toISOString().split('T')[0],
+        weather_morning: '', weather_afternoon: '',
+        temperature_min: '', temperature_max: '',
+        work_summary: '', issues_encountered: '', safety_notes: '',
+        workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+      });
+    } catch (error) {
+      console.error('Error creating daily log:', error);
     }
   };
 
@@ -600,17 +772,27 @@ const ProjectDetailView = ({
                       {sections.map((section) => (
                         <div
                           key={section.id}
-                          className={`p-4 cursor-pointer hover:bg-slate-50 ${selectedSection?.id === section.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                          className={`p-4 cursor-pointer hover:bg-slate-50 group ${selectedSection?.id === section.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
                           onClick={() => setSelectedSection(section)}
                         >
                           <div className="flex items-center justify-between">
-                            <div>
+                            <div className="flex-1 min-w-0">
                               <p className="text-xs text-slate-500 font-mono">{section.code}</p>
-                              <p className="font-medium text-sm">{section.name}</p>
+                              <p className="font-medium text-sm truncate">{section.name}</p>
                             </div>
-                            <Badge variant="outline" className="text-xs">
-                              {section.items_count || 0} {t('items') || 'ta'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {section.items_count || 0} {t('items') || 'ta'}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => handleDeleteSection(section.id, e)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </div>
                           <p className="text-sm text-slate-600 mt-1">
                             {formatCurrency(section.total_cost || 0)}
@@ -663,11 +845,12 @@ const ProjectDetailView = ({
                           <th className="text-right py-3 px-2">{t('unit_price') || 'Narx'}</th>
                           <th className="text-right py-3 px-2">{t('total') || 'Jami'}</th>
                           <th className="text-right py-3 px-2">{t('progress') || '%'}</th>
+                          <th className="text-center py-3 px-2 w-10"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((item) => (
-                          <tr key={item.id} className="border-b hover:bg-slate-50">
+                          <tr key={item.id} className="border-b hover:bg-slate-50 group">
                             <td className="py-3 px-2 font-mono text-xs">{item.code || '-'}</td>
                             <td className="py-3 px-2">{item.name}</td>
                             <td className="py-3 px-2 text-right">{item.unit}</td>
@@ -679,6 +862,16 @@ const ProjectDetailView = ({
                                 {item.completion_percent || 0}%
                               </Badge>
                             </td>
+                            <td className="py-3 px-2 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDeleteItem(item.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -686,7 +879,7 @@ const ProjectDetailView = ({
                         <tr className="font-semibold bg-slate-50">
                           <td colSpan={5} className="py-3 px-2 text-right">{t('total') || 'Jami'}:</td>
                           <td className="py-3 px-2 text-right">{formatCurrency(items.reduce((sum, i) => sum + (i.total_price || 0), 0))}</td>
-                          <td></td>
+                          <td colSpan={2}></td>
                         </tr>
                       </tfoot>
                     </table>
@@ -708,14 +901,53 @@ const ProjectDetailView = ({
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">{t('no_team_members') || "Jamoa a'zolari yo'q"}</p>
-                <Button variant="outline" className="mt-4" onClick={() => setShowTeamModal(true)}>
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  {t('add_first_member') || "Birinchi a'zoni qo'shing"}
-                </Button>
-              </div>
+              {team.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500">{t('no_team_members') || "Jamoa a'zolari yo'q"}</p>
+                  <Button variant="outline" className="mt-4" onClick={() => setShowTeamModal(true)}>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    {t('add_first_member') || "Birinchi a'zoni qo'shing"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {team.map((member) => (
+                    <Card key={member.id} className="relative">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                              <Users className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">{member.employee_name || 'Xodim'}</h4>
+                              <p className="text-sm text-slate-500">{member.position}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleRemoveTeamMember(member.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="mt-3 pt-3 border-t">
+                          <Badge variant="secondary" className="mb-2">{member.role}</Badge>
+                          {member.responsibilities && (
+                            <p className="text-sm text-slate-600 mt-1">{member.responsibilities}</p>
+                          )}
+                          {member.phone && (
+                            <p className="text-xs text-slate-400 mt-2">{member.phone}</p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1119,6 +1351,432 @@ const ProjectDetailView = ({
                 {t('cancel') || 'Bekor qilish'}
               </Button>
               <Button type="submit">{t('create') || 'Yaratish'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Team Member Modal */}
+      <Dialog open={showTeamModal} onOpenChange={setShowTeamModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('add_team_member') || "Jamoa a'zosini qo'shish"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateTeamMember} className="space-y-4">
+            <div>
+              <Label>{t('employee') || 'Xodim'} *</Label>
+              <Select
+                value={teamForm.employee_id}
+                onValueChange={(value) => setTeamForm({ ...teamForm, employee_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_employee') || 'Xodimni tanlang'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name} {emp.position ? `(${emp.position})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('role') || 'Vazifasi'} *</Label>
+              <Select
+                value={teamForm.role}
+                onValueChange={(value) => setTeamForm({ ...teamForm, role: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_role') || 'Vazifani tanlang'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="project_manager">{t('project_manager') || 'Loyiha boshqaruvchisi'}</SelectItem>
+                  <SelectItem value="chief_engineer">{t('chief_engineer') || 'Bosh muhandis'}</SelectItem>
+                  <SelectItem value="site_engineer">{t('site_engineer') || 'Obyekt muhandisi'}</SelectItem>
+                  <SelectItem value="foreman">{t('foreman') || 'Prораб'}</SelectItem>
+                  <SelectItem value="quantity_surveyor">{t('quantity_surveyor') || 'Smetachi'}</SelectItem>
+                  <SelectItem value="safety_officer">{t('safety_officer') || 'Xavfsizlik xodimi'}</SelectItem>
+                  <SelectItem value="accountant">{t('accountant') || 'Hisobchi'}</SelectItem>
+                  <SelectItem value="other">{t('other') || 'Boshqa'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t('responsibilities') || "Mas'uliyatlari"}</Label>
+              <Textarea
+                value={teamForm.responsibilities}
+                onChange={(e) => setTeamForm({ ...teamForm, responsibilities: e.target.value })}
+                placeholder={t('responsibilities_placeholder') || "Xodimning asosiy mas'uliyatlari..."}
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label>{t('start_date') || 'Boshlanish sanasi'}</Label>
+              <Input
+                type="date"
+                value={teamForm.start_date}
+                onChange={(e) => setTeamForm({ ...teamForm, start_date: e.target.value })}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowTeamModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit" disabled={!teamForm.employee_id || !teamForm.role}>
+                {t('add') || "Qo'shish"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Vendor Modal */}
+      <Dialog open={showVendorModal} onOpenChange={setShowVendorModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('add_vendor') || "Pudratchi qo'shish"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateVendor} className="space-y-4">
+            {/* Vendor Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('select_organization') || 'Mavjud tashkilot'}</Label>
+                <Select
+                  value={vendorForm.vendor_id}
+                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_id: value, vendor_name: '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_organization') || 'Tashkilotni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('new_vendor') || 'Yangi pudratchi'}</SelectItem>
+                    {organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {!vendorForm.vendor_id && (
+                <div>
+                  <Label>{t('vendor_name') || 'Pudratchi nomi'} *</Label>
+                  <Input
+                    value={vendorForm.vendor_name}
+                    onChange={(e) => setVendorForm({ ...vendorForm, vendor_name: e.target.value })}
+                    placeholder="Qurilish MChJ"
+                    required={!vendorForm.vendor_id}
+                  />
+                </div>
+              )}
+              {vendorForm.vendor_id && <div></div>}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('vendor_type') || 'Turi'}</Label>
+                <Select
+                  value={vendorForm.vendor_type}
+                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_type') || 'Turni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="subcontractor">{t('subcontractor') || 'Pudratchi'}</SelectItem>
+                    <SelectItem value="supplier">{t('supplier') || 'Yetkazib beruvchi'}</SelectItem>
+                    <SelectItem value="consultant">{t('consultant') || 'Maslahatchi'}</SelectItem>
+                    <SelectItem value="other">{t('other') || 'Boshqa'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{t('contract_date') || 'Shartnoma sanasi'}</Label>
+                <Input
+                  type="date"
+                  value={vendorForm.contract_date || ''}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contract_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('contract_number') || 'Shartnoma raqami'}</Label>
+                <Input
+                  value={vendorForm.contract_number}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contract_number: e.target.value })}
+                  placeholder="SH-2024-001"
+                />
+              </div>
+              <div>
+                <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
+                <Input
+                  type="number"
+                  value={vendorForm.contract_amount}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contract_amount: e.target.value })}
+                  placeholder="100000000"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>{t('work_scope') || 'Ish hajmi'}</Label>
+              <Textarea
+                value={vendorForm.work_scope}
+                onChange={(e) => setVendorForm({ ...vendorForm, work_scope: e.target.value })}
+                placeholder={t('work_scope_placeholder') || "Bajaradigan ishlar tavsifi..."}
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>{t('contact_person') || "Bog'lanish shaxsi"}</Label>
+                <Input
+                  value={vendorForm.contact_person}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
+                  placeholder="Alisher Karimov"
+                />
+              </div>
+              <div>
+                <Label>{t('contact_phone') || 'Telefon'}</Label>
+                <Input
+                  value={vendorForm.contact_phone}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contact_phone: e.target.value })}
+                  placeholder="+998 90 123 45 67"
+                />
+              </div>
+              <div>
+                <Label>{t('contact_email') || 'Email'}</Label>
+                <Input
+                  type="email"
+                  value={vendorForm.contact_email}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contact_email: e.target.value })}
+                  placeholder="info@company.uz"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('start_date') || 'Boshlanish sanasi'}</Label>
+                <Input
+                  type="date"
+                  value={vendorForm.start_date}
+                  onChange={(e) => setVendorForm({ ...vendorForm, start_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>{t('end_date') || 'Tugash sanasi'}</Label>
+                <Input
+                  type="date"
+                  value={vendorForm.end_date}
+                  onChange={(e) => setVendorForm({ ...vendorForm, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowVendorModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit" disabled={!vendorForm.vendor_id && !vendorForm.vendor_name}>
+                {t('add') || "Qo'shish"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Material Request Modal */}
+      <Dialog open={showMaterialRequestModal} onOpenChange={setShowMaterialRequestModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('new_material_request') || "Yangi material so'rovi"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateMaterialRequest} className="space-y-4">
+            <div>
+              <Label>{t('request_number') || "So'rov raqami"} *</Label>
+              <Input
+                value={materialRequestForm.request_number}
+                onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, request_number: e.target.value })}
+                placeholder="MR-2024-001"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('request_date') || "So'rov sanasi"} *</Label>
+                <Input
+                  type="date"
+                  value={materialRequestForm.request_date}
+                  onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, request_date: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>{t('required_date') || 'Kerak bo\'lgan sana'}</Label>
+                <Input
+                  type="date"
+                  value={materialRequestForm.required_date}
+                  onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, required_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>{t('notes') || 'Izohlar'}</Label>
+              <Textarea
+                value={materialRequestForm.notes}
+                onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, notes: e.target.value })}
+                placeholder={t('notes_placeholder') || "Qo'shimcha ma'lumotlar..."}
+                rows={3}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowMaterialRequestModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit" disabled={!materialRequestForm.request_number || !materialRequestForm.request_date}>
+                {t('create') || 'Yaratish'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Daily Log Modal */}
+      <Dialog open={showDailyLogModal} onOpenChange={setShowDailyLogModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('new_daily_log') || 'Yangi kunlik hisobot'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateDailyLog} className="space-y-4">
+            <div>
+              <Label>{t('report_date') || 'Hisobot sanasi'} *</Label>
+              <Input
+                type="date"
+                value={dailyLogForm.report_date}
+                onChange={(e) => setDailyLogForm({ ...dailyLogForm, report_date: e.target.value })}
+                required
+              />
+            </div>
+
+            {/* Weather Section */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <h4 className="font-medium text-sm text-slate-700">{t('weather') || 'Ob-havo'}</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('weather_morning') || 'Ertalab'}</Label>
+                  <Select
+                    value={dailyLogForm.weather_morning}
+                    onValueChange={(value) => setDailyLogForm({ ...dailyLogForm, weather_morning: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_weather') || 'Tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sunny">{t('sunny') || 'Quyoshli'}</SelectItem>
+                      <SelectItem value="cloudy">{t('cloudy') || 'Bulutli'}</SelectItem>
+                      <SelectItem value="rainy">{t('rainy') || 'Yomg\'irli'}</SelectItem>
+                      <SelectItem value="snowy">{t('snowy') || 'Qorli'}</SelectItem>
+                      <SelectItem value="windy">{t('windy') || 'Shamol'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('weather_afternoon') || 'Tushdan keyin'}</Label>
+                  <Select
+                    value={dailyLogForm.weather_afternoon}
+                    onValueChange={(value) => setDailyLogForm({ ...dailyLogForm, weather_afternoon: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_weather') || 'Tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sunny">{t('sunny') || 'Quyoshli'}</SelectItem>
+                      <SelectItem value="cloudy">{t('cloudy') || 'Bulutli'}</SelectItem>
+                      <SelectItem value="rainy">{t('rainy') || 'Yomg\'irli'}</SelectItem>
+                      <SelectItem value="snowy">{t('snowy') || 'Qorli'}</SelectItem>
+                      <SelectItem value="windy">{t('windy') || 'Shamol'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('temperature_min') || 'Min harorat (°C)'}</Label>
+                  <Input
+                    type="number"
+                    value={dailyLogForm.temperature_min}
+                    onChange={(e) => setDailyLogForm({ ...dailyLogForm, temperature_min: e.target.value })}
+                    placeholder="-5"
+                  />
+                </div>
+                <div>
+                  <Label>{t('temperature_max') || 'Max harorat (°C)'}</Label>
+                  <Input
+                    type="number"
+                    value={dailyLogForm.temperature_max}
+                    onChange={(e) => setDailyLogForm({ ...dailyLogForm, temperature_max: e.target.value })}
+                    placeholder="15"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Work Summary */}
+            <div>
+              <Label>{t('work_summary') || 'Bajarilgan ishlar'}</Label>
+              <Textarea
+                value={dailyLogForm.work_summary}
+                onChange={(e) => setDailyLogForm({ ...dailyLogForm, work_summary: e.target.value })}
+                placeholder={t('work_summary_placeholder') || 'Bugun bajarilgan ishlar tavsifi...'}
+                rows={3}
+              />
+            </div>
+
+            {/* Workers */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('workers_count') || 'Ishchilar soni'}</Label>
+                <Input
+                  type="number"
+                  value={dailyLogForm.workers_count}
+                  onChange={(e) => setDailyLogForm({ ...dailyLogForm, workers_count: e.target.value })}
+                  placeholder="25"
+                />
+              </div>
+              <div>
+                <Label>{t('equipment_used') || 'Ishlatilgan texnika'}</Label>
+                <Input
+                  value={dailyLogForm.equipment_used}
+                  onChange={(e) => setDailyLogForm({ ...dailyLogForm, equipment_used: e.target.value })}
+                  placeholder="Ekskavator, kran..."
+                />
+              </div>
+            </div>
+
+            {/* Issues and Safety */}
+            <div>
+              <Label>{t('issues_encountered') || 'Yuzaga kelgan muammolar'}</Label>
+              <Textarea
+                value={dailyLogForm.issues_encountered}
+                onChange={(e) => setDailyLogForm({ ...dailyLogForm, issues_encountered: e.target.value })}
+                placeholder={t('issues_placeholder') || 'Muammolar bo\'lmasa, bo\'sh qoldiring...'}
+                rows={2}
+              />
+            </div>
+            <div>
+              <Label>{t('safety_notes') || 'Xavfsizlik eslatmalari'}</Label>
+              <Textarea
+                value={dailyLogForm.safety_notes}
+                onChange={(e) => setDailyLogForm({ ...dailyLogForm, safety_notes: e.target.value })}
+                placeholder={t('safety_notes_placeholder') || 'Xavfsizlik bo\'yicha eslatmalar...'}
+                rows={2}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowDailyLogModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit" disabled={!dailyLogForm.report_date}>
+                {t('create') || 'Yaratish'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
