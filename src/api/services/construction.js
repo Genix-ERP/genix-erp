@@ -160,6 +160,20 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async getDailyReport(id) {
+    const response = await apiClient.get(`/construction/daily-reports/${id}`);
+    return response.data.data;
+  },
+
+  async updateDailyReport(id, data) {
+    const response = await apiClient.put(`/construction/daily-reports/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteDailyReport(id) {
+    await apiClient.delete(`/construction/daily-reports/${id}`);
+  },
+
   // =====================================================
   // WORK PROGRESS (KS-2) (Future)
   // =====================================================
@@ -196,6 +210,15 @@ export const constructionService = {
   async approveMaterialRequest(id, data) {
     const response = await apiClient.put(`/construction/material-requests/${id}/approve`, data);
     return response.data.data;
+  },
+
+  async updateMaterialRequest(id, data) {
+    const response = await apiClient.put(`/construction/material-requests/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteMaterialRequest(id) {
+    await apiClient.delete(`/construction/material-requests/${id}`);
   },
 
   // =====================================================
