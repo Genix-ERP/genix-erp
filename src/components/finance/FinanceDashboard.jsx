@@ -31,8 +31,8 @@ export default function FinanceDashboard() {
 
   // AI Analysis using real data
   const financialAnalysis = useMemo(() =>
-    analyzeFinancials(financialTransactions),
-    [financialTransactions]
+    analyzeFinancials(financialTransactions, [], [], language, formatCurrency),
+    [financialTransactions, language, formatCurrency]
   );
 
   const [cashFlowData, setCashFlowData] = useState([]);
@@ -42,7 +42,7 @@ export default function FinanceDashboard() {
     if (financialTransactions.length > 0) {
       calculateChartData();
     }
-  }, [financialTransactions]);
+  }, [financialTransactions, language]);
 
   const calculateChartData = () => {
     // Calculate monthly data for charts
@@ -79,7 +79,7 @@ export default function FinanceDashboard() {
 
     const expenseBreakdown = Object.entries(categoryData)
       .map(([category, amount]) => ({
-        category: category.charAt(0).toUpperCase() + category.slice(1),
+        category: t(category) || category.charAt(0).toUpperCase() + category.slice(1),
         amount: amount
       }))
       .sort((a, b) => b.amount - a.amount)
