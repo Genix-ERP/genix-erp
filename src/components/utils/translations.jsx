@@ -1,3 +1,5 @@
+import { useLanguage } from '@/components/contexts/LanguageContext';
+
 export const translations = {
   en: {
     // General
@@ -14807,8 +14809,8 @@ export const translations = {
 };
 
 export function useTranslation() {
-  const { language } = require('@/components/contexts/LanguageContext').useLanguage();
-  
+  const { language } = useLanguage();
+
   return (key) => {
     const langTranslations = translations[language] || translations.en;
     return langTranslations[key] || translations.en[key] || key;
