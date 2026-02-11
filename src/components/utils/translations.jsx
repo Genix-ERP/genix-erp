@@ -2286,6 +2286,7 @@ export const translations = {
     "excellent_margin": "Excellent margin",
     "good_performance": "Good performance",
     "below_target": "Below target",
+    "ai_financial_intelligence": "AI Financial Intelligence",
     "target": "Target",
     "transaction_history": "Transaction History",
     "expenses_by_category": "Expenses by Category",
@@ -7329,6 +7330,7 @@ export const translations = {
     "excellent_margin": "A'lo marja",
     "good_performance": "Yaxshi ko'rsatkichlar",
     "below_target": "Maqsaddan past",
+    "ai_financial_intelligence": "AI Moliyaviy tahlil",
     "transaction_history": "Tranzaktsiya tarixi",
     "expenses_by_category": "Kategoriya bo'yicha xarajatlar",
     "cash_flow_trends": "Naqd pul oqimi tendentsiyalari",
@@ -14811,8 +14813,10 @@ export const translations = {
 export function useTranslation() {
   const { language } = useLanguage();
 
-  return (key) => {
+  const t = (key) => {
     const langTranslations = translations[language] || translations.en;
     return langTranslations[key] || translations.en[key] || key;
   };
+
+  return { t };
 }
