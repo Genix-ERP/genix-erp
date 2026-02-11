@@ -15,6 +15,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Building2,
   Plus,
   FolderTree,
@@ -277,19 +283,22 @@ const ProjectDetailView = ({
   const [itemForm, setItemForm] = useState({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [vendorForm, setVendorForm] = useState({
-    vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-    vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: ''
+    id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+    vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
   });
   const [materialRequestForm, setMaterialRequestForm] = useState({
-    request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: ''
+    id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
   });
   const [dailyLogForm, setDailyLogForm] = useState({
+    id: null,
     report_date: new Date().toISOString().split('T')[0],
     weather_morning: '', weather_afternoon: '',
     temperature_min: '', temperature_max: '',
     work_summary: '', issues_encountered: '', safety_notes: '',
     workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
   });
+  const [selectedDailyLog, setSelectedDailyLog] = useState(null);
+  const [showDailyLogViewModal, setShowDailyLogViewModal] = useState(false);
   const [photoReportForm, setPhotoReportForm] = useState({
     report_date: new Date().toISOString().split('T')[0],
     report_type: 'progress',
@@ -499,13 +508,13 @@ const ProjectDetailView = ({
     }
   };
 
-  // Handle vendor creation
+  // Handle vendor creation/update
   const handleCreateVendor = async (e) => {
     e.preventDefault();
     try {
-      await constructionService.addProjectVendor(project.id, {
+      const vendorData = {
         vendor_id: vendorForm.vendor_id || '',
-        vendor_name: vendorForm.vendor_id ? '' : vendorForm.vendor_name, // Only send name if no org selected
+        vendor_name: vendorForm.vendor_id ? '' : vendorForm.vendor_name,
         contract_number: vendorForm.contract_number,
         contract_date: vendorForm.contract_date,
         contract_amount: parseFloat(vendorForm.contract_amount) || 0,
@@ -516,46 +525,59 @@ const ProjectDetailView = ({
         contact_phone: vendorForm.contact_phone,
         contact_email: vendorForm.contact_email,
         start_date: vendorForm.start_date,
-        end_date: vendorForm.end_date
-      });
+        end_date: vendorForm.end_date,
+        notes: vendorForm.notes
+      };
+
+      if (vendorForm.id) {
+        await constructionService.updateProjectVendor(vendorForm.id, vendorData);
+      } else {
+        await constructionService.addProjectVendor(project.id, vendorData);
+      }
       const vendorsData = await constructionService.listProjectVendors(project.id);
       setVendors(vendorsData || []);
       setShowVendorModal(false);
       setVendorForm({
-        vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-        vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: ''
+        id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+        vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
       });
     } catch (error) {
-      console.error('Error adding vendor:', error);
+      console.error('Error saving vendor:', error);
     }
   };
 
-  // Handle material request creation
+  // Handle material request creation/update
   const handleCreateMaterialRequest = async (e) => {
     e.preventDefault();
     try {
-      await constructionService.createMaterialRequest(project.id, {
+      const requestData = {
         request_number: materialRequestForm.request_number,
         request_date: materialRequestForm.request_date,
         required_date: materialRequestForm.required_date,
         notes: materialRequestForm.notes
-      });
+      };
+
+      if (materialRequestForm.id) {
+        await constructionService.updateMaterialRequest(materialRequestForm.id, requestData);
+      } else {
+        await constructionService.createMaterialRequest(project.id, requestData);
+      }
       const materialsData = await constructionService.listMaterialRequests(project.id);
       setMaterialRequests(materialsData || []);
       setShowMaterialRequestModal(false);
       setMaterialRequestForm({
-        request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: ''
+        id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
       });
     } catch (error) {
-      console.error('Error creating material request:', error);
+      console.error('Error saving material request:', error);
     }
   };
 
-  // Handle daily log creation
+  // Handle daily log creation/update
   const handleCreateDailyLog = async (e) => {
     e.preventDefault();
     try {
-      await constructionService.createDailyReport(project.id, {
+      const logData = {
         report_date: dailyLogForm.report_date,
         weather_morning: dailyLogForm.weather_morning,
         weather_afternoon: dailyLogForm.weather_afternoon,
@@ -568,11 +590,18 @@ const ProjectDetailView = ({
         workers_details: dailyLogForm.workers_details,
         equipment_used: dailyLogForm.equipment_used,
         materials_received: dailyLogForm.materials_received
-      });
+      };
+
+      if (dailyLogForm.id) {
+        await constructionService.updateDailyReport(dailyLogForm.id, logData);
+      } else {
+        await constructionService.createDailyReport(project.id, logData);
+      }
       const logsData = await constructionService.listDailyReports(project.id);
       setDailyLogs(logsData || []);
       setShowDailyLogModal(false);
       setDailyLogForm({
+        id: null,
         report_date: new Date().toISOString().split('T')[0],
         weather_morning: '', weather_afternoon: '',
         temperature_min: '', temperature_max: '',
@@ -580,7 +609,7 @@ const ProjectDetailView = ({
         workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
       });
     } catch (error) {
-      console.error('Error creating daily log:', error);
+      console.error('Error saving daily log:', error);
     }
   };
 
@@ -774,28 +803,74 @@ const ProjectDetailView = ({
               ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {buildings.map((building) => (
-                    <Card key={building.id} className="border hover:shadow-md transition-shadow cursor-pointer">
+                    <Card key={building.id} className="border hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <h3 className="font-semibold text-slate-800">{building.name}</h3>
                             <p className="text-sm text-slate-500">{building.code}</p>
                           </div>
-                          <Badge className={building.status === 'completed' ? 'bg-green-500' : building.status === 'in_progress' ? 'bg-orange-500' : 'bg-gray-500'}>
-                            {building.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge className={building.status === 'completed' ? 'bg-green-500' : building.status === 'in_progress' ? 'bg-orange-500' : 'bg-gray-500'}>
+                              {t(building.status) || building.status}
+                            </Badge>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
+                                  setBuildingForm({
+                                    id: building.id,
+                                    code: building.code,
+                                    name: building.name,
+                                    description: building.description || '',
+                                    building_type: building.building_type || '',
+                                    building_purpose: building.building_purpose || '',
+                                    floors_count: building.floors_count || '',
+                                    total_area: building.total_area || '',
+                                    apartments_count: building.apartments_count || '',
+                                    estimated_cost: building.estimated_cost || ''
+                                  });
+                                  setShowBuildingModal(true);
+                                }}>
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  {t('edit') || 'Tahrirlash'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={async () => {
+                                    if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
+                                      try {
+                                        await constructionService.deleteBuilding(project.id, building.id);
+                                        const buildingsData = await constructionService.listBuildings(project.id);
+                                        setBuildings(buildingsData || []);
+                                      } catch (error) {
+                                        console.error('Error deleting building:', error);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  {t('delete') || "O'chirish"}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('building_type') || 'Bino turi'}</span>
-                            <span className="font-medium">{building.building_type || building.building_purpose || '-'}</span>
+                            <span className="font-medium">{t(building.building_type) || building.building_type || building.building_purpose || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-500">{t('floors_count') || 'Qavatlar'}</span>
+                            <span className="text-slate-500">{t('floors_count') || 'Qavatlar soni'}</span>
                             <span className="font-medium">{building.floors_count || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-500">{t('total_area') || 'Maydon'}</span>
+                            <span className="text-slate-500">{t('total_area') || 'Umumiy maydon'} (m²)</span>
                             <span className="font-medium">{building.total_area ? `${building.total_area} m²` : '-'}</span>
                           </div>
                           <div className="flex justify-between">
@@ -803,7 +878,7 @@ const ProjectDetailView = ({
                             <span className="font-medium">{building.apartments_count || '-'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-500">{t('estimated_cost') || 'Smeta'}</span>
+                            <span className="text-slate-500">{t('estimated_cost') || 'Taxminiy narx'}</span>
                             <span className="font-medium">{building.estimated_cost ? formatCurrency(building.estimated_cost) : '-'}</span>
                           </div>
                         </div>
@@ -1013,7 +1088,7 @@ const ProjectDetailView = ({
                           </Button>
                         </div>
                         <div className="mt-3 pt-3 border-t">
-                          <Badge variant="secondary" className="mb-2">{member.role}</Badge>
+                          <Badge variant="secondary" className="mb-2">{t(member.role) || member.role}</Badge>
                           {member.responsibilities && (
                             <p className="text-sm text-slate-600 mt-1">{member.responsibilities}</p>
                           )}
@@ -1035,7 +1110,13 @@ const ProjectDetailView = ({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>{t('subcontractors') || 'Pudratchilar'}</CardTitle>
-              <Button onClick={() => setShowVendorModal(true)}>
+              <Button onClick={() => {
+                setVendorForm({
+                  id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+                  vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
+                });
+                setShowVendorModal(true);
+              }}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t('add_vendor') || 'Pudratchi qo\'shish'}
               </Button>
@@ -1045,7 +1126,13 @@ const ProjectDetailView = ({
                 <div className="text-center py-12">
                   <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_vendors') || 'Pudratchilar mavjud emas'}</p>
-                  <Button variant="outline" className="mt-4" onClick={() => setShowVendorModal(true)}>
+                  <Button variant="outline" className="mt-4" onClick={() => {
+                    setVendorForm({
+                      id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
+                      vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
+                    });
+                    setShowVendorModal(true);
+                  }}>
                     <Plus className="w-4 h-4 mr-2" />
                     {t('add_first_vendor') || 'Birinchi pudratchini qo\'shing'}
                   </Button>
@@ -1055,9 +1142,65 @@ const ProjectDetailView = ({
                   {vendors.map((vendor) => (
                     <Card key={vendor.id}>
                       <CardContent className="p-4">
-                        <h4 className="font-semibold">{vendor.vendor_name || 'Vendor'}</h4>
-                        <p className="text-sm text-slate-500">{vendor.contract_number}</p>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold">{vendor.vendor_name || 'Vendor'}</h4>
+                            <p className="text-sm text-slate-500">{vendor.contract_number}</p>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setVendorForm({
+                                  id: vendor.id,
+                                  vendor_id: vendor.vendor_id || '',
+                                  vendor_name: vendor.vendor_name || '',
+                                  vendor_type: vendor.vendor_type || '',
+                                  contract_number: vendor.contract_number || '',
+                                  contract_amount: vendor.contract_amount || '',
+                                  work_scope: vendor.work_scope || '',
+                                  contact_person: vendor.contact_person || '',
+                                  contact_phone: vendor.contact_phone || '',
+                                  start_date: vendor.start_date || '',
+                                  end_date: vendor.end_date || '',
+                                  notes: vendor.notes || ''
+                                });
+                                setShowVendorModal(true);
+                              }}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                {t('edit') || 'Tahrirlash'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={async () => {
+                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
+                                    try {
+                                      await constructionService.removeProjectVendor(vendor.id);
+                                      const vendorsData = await constructionService.listProjectVendors(project.id);
+                                      setVendors(vendorsData || []);
+                                    } catch (error) {
+                                      console.error('Error deleting vendor:', error);
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete') || "O'chirish"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                         <p className="text-lg font-bold mt-2">{formatCurrency(vendor.contract_amount || 0)}</p>
+                        {vendor.work_scope && (
+                          <p className="text-sm text-slate-600 mt-1">{vendor.work_scope}</p>
+                        )}
+                        {vendor.contact_phone && (
+                          <p className="text-xs text-slate-400 mt-2">{vendor.contact_phone}</p>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -1073,7 +1216,12 @@ const ProjectDetailView = ({
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>{t('material_requests') || 'Material so\'rovlari'}</CardTitle>
-                <Button size="sm" onClick={() => setShowMaterialRequestModal(true)}>
+                <Button size="sm" onClick={() => {
+                  setMaterialRequestForm({
+                    id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
+                  });
+                  setShowMaterialRequestModal(true);
+                }}>
                   <Plus className="w-4 h-4 mr-2" />
                   {t('new_request') || 'Yangi so\'rov'}
                 </Button>
@@ -1087,12 +1235,69 @@ const ProjectDetailView = ({
                 ) : (
                   <div className="space-y-3">
                     {materialRequests.map((req) => (
-                      <div key={req.id} className="p-3 border rounded-lg">
-                        <div className="flex justify-between">
-                          <span className="font-medium">{req.request_number}</span>
-                          <Badge>{req.status}</Badge>
+                      <div key={req.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{req.request_number}</span>
+                              <Badge className={
+                                req.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                req.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                req.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-slate-100 text-slate-700'
+                              }>{t(req.status) || req.status}</Badge>
+                            </div>
+                            <div className="flex gap-4 mt-1 text-sm text-slate-500">
+                              <span>{t('request_date') || 'Sana'}: {format(new Date(req.request_date), 'dd.MM.yyyy')}</span>
+                              {req.required_date && (
+                                <span>{t('required_date') || 'Kerakli sana'}: {format(new Date(req.required_date), 'dd.MM.yyyy')}</span>
+                              )}
+                            </div>
+                            {req.notes && (
+                              <p className="text-sm text-slate-600 mt-2">{req.notes}</p>
+                            )}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setMaterialRequestForm({
+                                  id: req.id,
+                                  request_number: req.request_number || '',
+                                  request_date: req.request_date || new Date().toISOString().split('T')[0],
+                                  required_date: req.required_date || '',
+                                  notes: req.notes || '',
+                                  status: req.status || 'draft'
+                                });
+                                setShowMaterialRequestModal(true);
+                              }}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                {t('edit') || 'Tahrirlash'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={async () => {
+                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
+                                    try {
+                                      await constructionService.deleteMaterialRequest(req.id);
+                                      const materialsData = await constructionService.listMaterialRequests(project.id);
+                                      setMaterialRequests(materialsData || []);
+                                    } catch (error) {
+                                      console.error('Error deleting material request:', error);
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete') || "O'chirish"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        <p className="text-sm text-slate-500">{format(new Date(req.request_date), 'dd.MM.yyyy')}</p>
                       </div>
                     ))}
                   </div>
@@ -1119,7 +1324,17 @@ const ProjectDetailView = ({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>{t('daily_logs') || 'Kunlik jurnal'}</CardTitle>
-              <Button onClick={() => setShowDailyLogModal(true)}>
+              <Button onClick={() => {
+                setDailyLogForm({
+                  id: null,
+                  report_date: new Date().toISOString().split('T')[0],
+                  weather_morning: '', weather_afternoon: '',
+                  temperature_min: '', temperature_max: '',
+                  work_summary: '', issues_encountered: '', safety_notes: '',
+                  workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+                });
+                setShowDailyLogModal(true);
+              }}>
                 <Plus className="w-4 h-4 mr-2" />
                 {t('new_entry') || 'Yangi yozuv'}
               </Button>
@@ -1129,7 +1344,17 @@ const ProjectDetailView = ({
                 <div className="text-center py-12">
                   <ClipboardList className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_daily_logs') || 'Kunlik yozuvlar mavjud emas'}</p>
-                  <Button variant="outline" className="mt-4" onClick={() => setShowDailyLogModal(true)}>
+                  <Button variant="outline" className="mt-4" onClick={() => {
+                    setDailyLogForm({
+                      id: null,
+                      report_date: new Date().toISOString().split('T')[0],
+                      weather_morning: '', weather_afternoon: '',
+                      temperature_min: '', temperature_max: '',
+                      work_summary: '', issues_encountered: '', safety_notes: '',
+                      workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+                    });
+                    setShowDailyLogModal(true);
+                  }}>
                     <Plus className="w-4 h-4 mr-2" />
                     {t('add_first_entry') || 'Birinchi yozuvni qo\'shing'}
                   </Button>
@@ -1137,18 +1362,91 @@ const ProjectDetailView = ({
               ) : (
                 <div className="space-y-4">
                   {dailyLogs.map((log) => (
-                    <Card key={log.id}>
+                    <Card key={log.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{format(new Date(log.report_date), 'dd.MM.yyyy')}</p>
-                            <p className="text-sm text-slate-500 mt-1">{log.weather}</p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{format(new Date(log.report_date), 'dd.MM.yyyy')}</p>
+                              <Badge className={
+                                log.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
+                                log.verification_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-yellow-100 text-yellow-700'
+                              }>{t(log.verification_status) || log.verification_status}</Badge>
+                            </div>
+                            {(log.weather_morning || log.weather_afternoon) && (
+                              <p className="text-sm text-slate-500 mt-1">
+                                {log.weather_morning && `${t('morning') || 'Ertalab'}: ${log.weather_morning}`}
+                                {log.weather_morning && log.weather_afternoon && ' | '}
+                                {log.weather_afternoon && `${t('afternoon') || 'Kunduzi'}: ${log.weather_afternoon}`}
+                              </p>
+                            )}
+                            {(log.temperature_min || log.temperature_max) && (
+                              <p className="text-sm text-slate-500">
+                                {t('temperature') || 'Harorat'}: {log.temperature_min}°C - {log.temperature_max}°C
+                              </p>
+                            )}
                           </div>
-                          <Badge>{log.verification_status}</Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedDailyLog(log);
+                                setShowDailyLogViewModal(true);
+                              }}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                {t('view') || 'Ko\'rish'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
+                                setDailyLogForm({
+                                  id: log.id,
+                                  report_date: log.report_date || new Date().toISOString().split('T')[0],
+                                  weather_morning: log.weather_morning || '',
+                                  weather_afternoon: log.weather_afternoon || '',
+                                  temperature_min: log.temperature_min || '',
+                                  temperature_max: log.temperature_max || '',
+                                  work_summary: log.work_summary || log.summary || '',
+                                  issues_encountered: log.issues_encountered || '',
+                                  safety_notes: log.safety_notes || '',
+                                  workers_count: log.workers_count || '',
+                                  workers_details: log.workers_details || '',
+                                  equipment_used: log.equipment_used || '',
+                                  materials_received: log.materials_received || ''
+                                });
+                                setShowDailyLogModal(true);
+                              }}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                {t('edit') || 'Tahrirlash'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={async () => {
+                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
+                                    try {
+                                      await constructionService.deleteDailyReport(log.id);
+                                      const logsData = await constructionService.listDailyReports(project.id);
+                                      setDailyLogs(logsData || []);
+                                    } catch (error) {
+                                      console.error('Error deleting daily log:', error);
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                {t('delete') || "O'chirish"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                        <p className="mt-3">{log.summary}</p>
+                        {log.work_summary && (
+                          <p className="mt-3 text-sm text-slate-700 line-clamp-2">{log.work_summary}</p>
+                        )}
                         <div className="flex gap-4 mt-3 text-sm text-slate-600">
-                          <span><Users className="w-4 h-4 inline mr-1" />{log.workers_count} {t('workers') || 'ishchi'}</span>
+                          <span><Users className="w-4 h-4 inline mr-1" />{log.workers_count || 0} {t('workers') || 'ishchi'}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -1523,7 +1821,7 @@ const ProjectDetailView = ({
       <Dialog open={showVendorModal} onOpenChange={setShowVendorModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t('add_vendor') || "Pudratchi qo'shish"}</DialogTitle>
+            <DialogTitle>{vendorForm.id ? (t('edit_vendor') || "Pudratchini tahrirlash") : (t('add_vendor') || "Pudratchi qo'shish")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateVendor} className="space-y-4">
             {/* Vendor Selection */}
@@ -1674,7 +1972,7 @@ const ProjectDetailView = ({
       <Dialog open={showMaterialRequestModal} onOpenChange={setShowMaterialRequestModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t('new_material_request') || "Yangi material so'rovi"}</DialogTitle>
+            <DialogTitle>{materialRequestForm.id ? (t('edit_material_request') || "Material so'rovini tahrirlash") : (t('new_material_request') || "Yangi material so'rovi")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateMaterialRequest} className="space-y-4">
             <div>
@@ -1730,7 +2028,7 @@ const ProjectDetailView = ({
       <Dialog open={showDailyLogModal} onOpenChange={setShowDailyLogModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t('new_daily_log') || 'Yangi kunlik hisobot'}</DialogTitle>
+            <DialogTitle>{dailyLogForm.id ? (t('edit_daily_log') || 'Kunlik hisobotni tahrirlash') : (t('new_daily_log') || 'Yangi kunlik hisobot')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateDailyLog} className="space-y-4">
             <div>
@@ -1967,6 +2265,117 @@ const ProjectDetailView = ({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Daily Log View Modal */}
+      <Dialog open={showDailyLogViewModal} onOpenChange={setShowDailyLogViewModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('daily_log_details') || 'Kunlik hisobot tafsilotlari'}</DialogTitle>
+          </DialogHeader>
+          {selectedDailyLog && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('report_date') || 'Hisobot sanasi'}</p>
+                  <p className="font-medium">{format(new Date(selectedDailyLog.report_date), 'dd.MM.yyyy')}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('status') || 'Holat'}</p>
+                  <Badge className={
+                    selectedDailyLog.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
+                    selectedDailyLog.verification_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }>{t(selectedDailyLog.verification_status) || selectedDailyLog.verification_status}</Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('weather_morning') || 'Ertalab ob-havo'}</p>
+                  <p className="font-medium">{selectedDailyLog.weather_morning || '-'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('weather_afternoon') || 'Kunduzi ob-havo'}</p>
+                  <p className="font-medium">{selectedDailyLog.weather_afternoon || '-'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('temperature') || 'Harorat'}</p>
+                  <p className="font-medium">{selectedDailyLog.temperature_min}°C - {selectedDailyLog.temperature_max}°C</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500">{t('workers_count') || 'Ishchilar soni'}</p>
+                  <p className="font-medium">{selectedDailyLog.workers_count || 0}</p>
+                </div>
+              </div>
+
+              {selectedDailyLog.work_summary && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('work_summary') || 'Bajarilgan ishlar'}</p>
+                  <p className="text-sm">{selectedDailyLog.work_summary}</p>
+                </div>
+              )}
+
+              {selectedDailyLog.issues_encountered && (
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <p className="text-xs text-orange-600 mb-1">{t('issues_encountered') || 'Muammolar'}</p>
+                  <p className="text-sm">{selectedDailyLog.issues_encountered}</p>
+                </div>
+              )}
+
+              {selectedDailyLog.safety_notes && (
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-600 mb-1">{t('safety_notes') || 'Xavfsizlik eslatmalari'}</p>
+                  <p className="text-sm">{selectedDailyLog.safety_notes}</p>
+                </div>
+              )}
+
+              {selectedDailyLog.equipment_used && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('equipment_used') || 'Ishlatilgan jihozlar'}</p>
+                  <p className="text-sm">{selectedDailyLog.equipment_used}</p>
+                </div>
+              )}
+
+              {selectedDailyLog.materials_received && (
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">{t('materials_received') || 'Qabul qilingan materiallar'}</p>
+                  <p className="text-sm">{selectedDailyLog.materials_received}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDailyLogViewModal(false)}>
+              {t('close') || 'Yopish'}
+            </Button>
+            <Button onClick={() => {
+              setDailyLogForm({
+                id: selectedDailyLog.id,
+                report_date: selectedDailyLog.report_date || new Date().toISOString().split('T')[0],
+                weather_morning: selectedDailyLog.weather_morning || '',
+                weather_afternoon: selectedDailyLog.weather_afternoon || '',
+                temperature_min: selectedDailyLog.temperature_min || '',
+                temperature_max: selectedDailyLog.temperature_max || '',
+                work_summary: selectedDailyLog.work_summary || '',
+                issues_encountered: selectedDailyLog.issues_encountered || '',
+                safety_notes: selectedDailyLog.safety_notes || '',
+                workers_count: selectedDailyLog.workers_count || '',
+                workers_details: selectedDailyLog.workers_details || '',
+                equipment_used: selectedDailyLog.equipment_used || '',
+                materials_received: selectedDailyLog.materials_received || ''
+              });
+              setShowDailyLogViewModal(false);
+              setShowDailyLogModal(true);
+            }}>
+              <Edit className="w-4 h-4 mr-2" />
+              {t('edit') || 'Tahrirlash'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
