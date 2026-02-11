@@ -290,6 +290,15 @@ const ProjectDetailView = ({
     work_summary: '', issues_encountered: '', safety_notes: '',
     workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
   });
+  const [photoReportForm, setPhotoReportForm] = useState({
+    report_date: new Date().toISOString().split('T')[0],
+    report_type: 'progress',
+    title: '',
+    description: '',
+    location_description: '',
+    weather: '',
+    temperature: ''
+  });
 
   // Load data based on active tab
   useEffect(() => {
@@ -572,6 +581,36 @@ const ProjectDetailView = ({
       });
     } catch (error) {
       console.error('Error creating daily log:', error);
+    }
+  };
+
+  // Handle photo report creation
+  const handleCreatePhotoReport = async (e) => {
+    e.preventDefault();
+    try {
+      await constructionService.createPhotoReport(project.id, {
+        report_date: photoReportForm.report_date,
+        report_type: photoReportForm.report_type,
+        title: photoReportForm.title,
+        description: photoReportForm.description,
+        location_description: photoReportForm.location_description,
+        weather: photoReportForm.weather,
+        temperature: parseFloat(photoReportForm.temperature) || 0
+      });
+      const photosData = await constructionService.listPhotoReports(project.id);
+      setPhotoReports(photosData || []);
+      setShowPhotoReportModal(false);
+      setPhotoReportForm({
+        report_date: new Date().toISOString().split('T')[0],
+        report_type: 'progress',
+        title: '',
+        description: '',
+        location_description: '',
+        weather: '',
+        temperature: ''
+      });
+    } catch (error) {
+      console.error('Error creating photo report:', error);
     }
   };
 
@@ -1824,6 +1863,106 @@ const ProjectDetailView = ({
                 {t('cancel') || 'Bekor qilish'}
               </Button>
               <Button type="submit" disabled={!dailyLogForm.report_date}>
+                {t('create') || 'Yaratish'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Report Modal */}
+      <Dialog open={showPhotoReportModal} onOpenChange={setShowPhotoReportModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('new_photo_report') || 'Yangi foto hisobot'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreatePhotoReport} className="space-y-4">
+            <div>
+              <Label>{t('report_date') || 'Hisobot sanasi'} *</Label>
+              <Input
+                type="date"
+                value={photoReportForm.report_date}
+                onChange={(e) => setPhotoReportForm({ ...photoReportForm, report_date: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t('report_type') || 'Hisobot turi'}</Label>
+                <Select
+                  value={photoReportForm.report_type}
+                  onValueChange={(value) => setPhotoReportForm({ ...photoReportForm, report_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_type') || 'Turni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="progress">{t('progress') || 'Progress'}</SelectItem>
+                    <SelectItem value="quality">{t('quality') || 'Sifat'}</SelectItem>
+                    <SelectItem value="safety">{t('safety') || 'Xavfsizlik'}</SelectItem>
+                    <SelectItem value="issue">{t('issue') || 'Muammo'}</SelectItem>
+                    <SelectItem value="completion">{t('completion') || 'Tugallash'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>{t('weather') || 'Ob-havo'}</Label>
+                <Select
+                  value={photoReportForm.weather}
+                  onValueChange={(value) => setPhotoReportForm({ ...photoReportForm, weather: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_weather') || 'Tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sunny">{t('sunny') || 'Quyoshli'}</SelectItem>
+                    <SelectItem value="cloudy">{t('cloudy') || 'Bulutli'}</SelectItem>
+                    <SelectItem value="rainy">{t('rainy') || "Yomg'irli"}</SelectItem>
+                    <SelectItem value="snowy">{t('snowy') || 'Qorli'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>{t('title') || 'Sarlavha'} *</Label>
+              <Input
+                value={photoReportForm.title}
+                onChange={(e) => setPhotoReportForm({ ...photoReportForm, title: e.target.value })}
+                placeholder={t('photo_report_title_placeholder') || 'Foto hisobot sarlavhasi'}
+                required
+              />
+            </div>
+            <div>
+              <Label>{t('description') || 'Tavsif'}</Label>
+              <Textarea
+                value={photoReportForm.description}
+                onChange={(e) => setPhotoReportForm({ ...photoReportForm, description: e.target.value })}
+                placeholder={t('photo_report_description_placeholder') || 'Bajarilgan ishlar haqida tavsif...'}
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label>{t('location_description') || 'Joylashuv'}</Label>
+              <Input
+                value={photoReportForm.location_description}
+                onChange={(e) => setPhotoReportForm({ ...photoReportForm, location_description: e.target.value })}
+                placeholder={t('location_placeholder') || "Masalan: A blok, 3-qavat"}
+              />
+            </div>
+            <div>
+              <Label>{t('temperature') || 'Harorat'} (°C)</Label>
+              <Input
+                type="number"
+                value={photoReportForm.temperature}
+                onChange={(e) => setPhotoReportForm({ ...photoReportForm, temperature: e.target.value })}
+                placeholder="20"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowPhotoReportModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit" disabled={!photoReportForm.report_date || !photoReportForm.title}>
                 {t('create') || 'Yaratish'}
               </Button>
             </DialogFooter>
