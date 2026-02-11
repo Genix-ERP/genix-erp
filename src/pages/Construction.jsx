@@ -49,12 +49,25 @@ import {
   Receipt,
   Briefcase,
   Hammer,
-  HardHat
+  HardHat,
+  LayoutGrid,
+  Columns3
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
+import { ActivityLogPanel } from '@/components/shared/ActivityLog';
+import { ReportGenerator } from '@/components/construction/ReportGenerator';
+import { ProjectKanban } from '@/components/construction/ProjectKanban';
+import {
+  ProgressWidget,
+  FinancialWidget,
+  TimelineWidget,
+  TeamWidget,
+  VendorsWidget,
+  AlertsWidget
+} from '@/components/construction/DashboardWidgets';
 
 // Tab Components
 const ProjectsTab = ({
@@ -68,11 +81,14 @@ const ProjectsTab = ({
   onEditProject,
   onDeleteProject,
   onViewProject,
+  onStatusChange,
   getStatusBadge,
   formatCurrency,
   t,
   PROJECT_STATUS
 }) => {
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'kanban'
+
   const filteredProjects = projects.filter(p => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -88,43 +104,79 @@ const ProjectsTab = ({
         <CardTitle className="text-lg font-semibold text-slate-800">
           {t('construction_projects') || 'Qurilish loyihalari'}
         </CardTitle>
-        <Button onClick={onCreateProject} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-          <Plus className="w-4 h-4 mr-2" />
-          {t('new_project') || 'Yangi loyiha'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View Toggle */}
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none"
+              onClick={() => setViewMode('grid')}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-none"
+              onClick={() => setViewMode('kanban')}
+            >
+              <Columns3 className="w-4 h-4" />
+            </Button>
+          </div>
+          <Button onClick={onCreateProject} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
+            <Plus className="w-4 h-4 mr-2" />
+            {t('new_project') || 'Yangi loyiha'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <Input
-              placeholder={t('search_projects') || 'Loyihalarni qidirish...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+        {/* Search and Filter - only show in grid view */}
+        {viewMode === 'grid' && (
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <Input
+                placeholder={t('search_projects') || 'Loyihalarni qidirish...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder={t('all_statuses') || 'Barcha holatlar'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('all_statuses') || 'Barcha holatlar'}</SelectItem>
+                <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                <SelectItem value="planning">{t('planning') || 'Rejalashtirish'}</SelectItem>
+                <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                <SelectItem value="on_hold">{t('on_hold') || "To'xtatilgan"}</SelectItem>
+                <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue placeholder={t('all_statuses') || 'Barcha holatlar'} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('all_statuses') || 'Barcha holatlar'}</SelectItem>
-              <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
-              <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
-              <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        )}
 
         {loading ? (
           <div className="text-center py-8 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
+        ) : viewMode === 'kanban' ? (
+          /* Kanban View */
+          <ProjectKanban
+            projects={projects}
+            onStatusChange={onStatusChange}
+            onViewProject={onViewProject}
+            onEditProject={onEditProject}
+            formatCurrency={formatCurrency}
+          />
         ) : filteredProjects.length === 0 ? (
           <div className="text-center py-12">
             <Building2 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500">{t('no_projects') || 'Loyihalar topilmadi'}</p>
           </div>
         ) : (
+          /* Grid View */
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredProjects.map((project) => (
               <Card key={project.id} className="hover:shadow-lg transition-shadow border-slate-200 cursor-pointer" onClick={() => onViewProject(project)}>
@@ -537,6 +589,12 @@ const ProjectDetailView = ({
           </div>
           <p className="text-slate-500 text-sm mt-1">{project.code}</p>
         </div>
+        <ReportGenerator
+          project={project}
+          sections={sections}
+          items={items}
+          buildings={buildings}
+        />
         <Button variant="outline">
           <Settings className="w-4 h-4 mr-2" />
           {t('settings') || 'Sozlamalar'}
@@ -582,11 +640,31 @@ const ProjectDetailView = ({
             <TrendingUp className="w-4 h-4 mr-2" />
             {t('progress') || 'Progress'}
           </TabsTrigger>
+          <TabsTrigger value="activity" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Clock className="w-4 h-4 mr-2" />
+            {t('activity') || 'Faoliyat'}
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="mt-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Progress Widget - Full width on small screens */}
+            <div className="lg:col-span-1">
+              <ProgressWidget project={{
+                ...project,
+                buildings_count: buildings.length,
+                sections_count: sections.length,
+                team_count: team.length
+              }} />
+            </div>
+
+            {/* Financial Widget */}
+            <FinancialWidget project={project} formatCurrency={formatCurrency} />
+
+            {/* Timeline Widget */}
+            <TimelineWidget project={project} />
+
             {/* Project Info Card */}
             <Card className="lg:col-span-2">
               <CardHeader>
@@ -622,53 +700,14 @@ const ProjectDetailView = ({
               </CardContent>
             </Card>
 
-            {/* Financial Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('financial_summary') || 'Moliyaviy'}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-slate-500">{t('contract_amount') || 'Shartnoma'}</p>
-                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(project.contract_amount || 0)}</p>
-                </div>
-                <Separator />
-                <div>
-                  <p className="text-sm text-slate-500">{t('total_smeta') || 'Smeta'}</p>
-                  <p className="text-xl font-semibold">{formatCurrency(project.total_smeta || 0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500">{t('progress') || 'Progress'}</p>
-                  <Progress value={project.progress_percent || 0} className="h-3 mt-2" />
-                  <p className="text-right text-sm mt-1">{project.progress_percent || 0}%</p>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Alerts Widget */}
+            <AlertsWidget project={project} sections={sections} vendors={vendors} />
 
-            {/* Timeline Card */}
-            <Card className="lg:col-span-3">
-              <CardHeader>
-                <CardTitle>{t('timeline') || 'Vaqt jadvali'}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-8">
-                  <div className="text-center">
-                    <p className="text-sm text-slate-500">{t('planned_start') || 'Rejadagi boshlanish'}</p>
-                    <p className="font-medium">{project.planned_start_date ? format(new Date(project.planned_start_date), 'dd.MM.yyyy') : '-'}</p>
-                  </div>
-                  <div className="flex-1 h-2 bg-slate-200 rounded-full relative">
-                    <div
-                      className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
-                      style={{ width: `${project.progress_percent || 0}%` }}
-                    />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-slate-500">{t('planned_end') || 'Rejadagi tugash'}</p>
-                    <p className="font-medium">{project.planned_end_date ? format(new Date(project.planned_end_date), 'dd.MM.yyyy') : '-'}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Team Widget */}
+            <TeamWidget team={team} />
+
+            {/* Vendors Widget */}
+            <VendorsWidget vendors={vendors} formatCurrency={formatCurrency} />
           </div>
         </TabsContent>
 
@@ -1132,6 +1171,16 @@ const ProjectDetailView = ({
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Activity Log Tab */}
+        <TabsContent value="activity" className="mt-6">
+          <ActivityLogPanel
+            modelName="construction_project"
+            recordId={project.id}
+            users={employees.map(e => ({ id: e.id, name: `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email }))}
+            maxHeight="600px"
+          />
         </TabsContent>
       </Tabs>
 
@@ -1910,6 +1959,15 @@ export default function Construction() {
     setSelectedProject(project);
   };
 
+  const handleStatusChange = async (projectId, newStatus) => {
+    try {
+      await constructionService.updateProject(projectId, { status: newStatus });
+      await loadProjects();
+    } catch (error) {
+      console.error('Failed to update project status:', error);
+    }
+  };
+
   // If viewing a project, show detail view
   if (selectedProject) {
     return (
@@ -2035,6 +2093,7 @@ export default function Construction() {
           onEditProject={handleEditProject}
           onDeleteProject={handleDeleteProject}
           onViewProject={handleViewProject}
+          onStatusChange={handleStatusChange}
           getStatusBadge={getStatusBadge}
           formatCurrency={formatCurrency}
           t={t}
