@@ -912,8 +912,24 @@ const ProjectDetailView = ({
     }
   };
 
+  // Helper to parse photos from report (handles both array and JSON string)
+  const parsePhotos = (photos) => {
+    if (!photos) return [];
+    if (Array.isArray(photos)) return photos;
+    if (typeof photos === 'string') {
+      try {
+        const parsed = JSON.parse(photos);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
   // Handle view photo report
   const handleViewPhotoReport = (report) => {
+    const photos = parsePhotos(report.photos);
     setPhotoReportForm({
       id: report.id,
       report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -924,12 +940,13 @@ const ProjectDetailView = ({
       weather: report.weather || '',
       temperature: report.temperature || ''
     });
-    setPhotoPreview(report.photos?.map(p => p.url) || []);
+    setPhotoPreview(photos.map(p => p.url || p));
     setShowPhotoReportModal(true);
   };
 
   // Handle edit photo report
   const handleEditPhotoReport = (report) => {
+    const photos = parsePhotos(report.photos);
     setPhotoReportForm({
       id: report.id,
       report_date: report.report_date?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -940,7 +957,7 @@ const ProjectDetailView = ({
       weather: report.weather || '',
       temperature: report.temperature || ''
     });
-    setPhotoPreview(report.photos?.map(p => p.url) || []);
+    setPhotoPreview(photos.map(p => p.url || p));
     setPhotoFiles([]);
     setShowPhotoReportModal(true);
   };
@@ -1889,12 +1906,15 @@ const ProjectDetailView = ({
                         {report.description && (
                           <p className="text-sm text-slate-500 mt-2 line-clamp-2">{report.description}</p>
                         )}
-                        {report.photos && report.photos.length > 0 && (
-                          <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
-                            <Camera className="w-3 h-3" />
-                            <span>{report.photos.length} {t('photos') || 'ta rasm'}</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const photos = parsePhotos(report.photos);
+                          return photos.length > 0 && (
+                            <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+                              <Camera className="w-3 h-3" />
+                              <span>{photos.length} {t('photos') || 'ta rasm'}</span>
+                            </div>
+                          );
+                        })()}
                       </CardContent>
                     </Card>
                   ))}
