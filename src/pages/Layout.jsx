@@ -67,6 +67,7 @@ import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
 import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
 import { CargoProvider } from "@/components/contexts/CargoContext";
+import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
@@ -521,9 +522,11 @@ export default function Layout({ children, currentPageName }) {
                               <HRProvider>
                                 <ProjectsProvider>
                                   <CargoProvider>
-                                    <AIProvider>
-                                      <LayoutContent children={children} currentPageName={currentPageName} />
-                                    </AIProvider>
+                                    <ConstructionProvider>
+                                      <AIProvider>
+                                        <LayoutContent children={children} currentPageName={currentPageName} />
+                                      </AIProvider>
+                                    </ConstructionProvider>
                                   </CargoProvider>
                                 </ProjectsProvider>
                               </HRProvider>

@@ -21,7 +21,8 @@ import {
   Receipt,
   FileText,
   Ship,
-  Lock
+  Lock,
+  Building2
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
@@ -146,6 +147,15 @@ const appsList = [
     icon: Ship,
     color: '#0ea5e9',
     permissionModule: MODULES.INVENTORY
+  },
+  {
+    id: 'construction',
+    nameKey: 'app_construction_name',
+    descriptionKey: 'app_construction_description',
+    version: '1.0',
+    icon: Building2,
+    color: '#f97316',
+    permissionModule: 'construction'
   }
 ];
 
