@@ -8,10 +8,12 @@ import { Target, TrendingUp, Clock, AlertTriangle, Zap, Brain } from "lucide-rea
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function ReorderOptimizer({ items, movements }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const [reorderRecommendations, setReorderRecommendations] = useState([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationInsights, setOptimizationInsights] = useState(null);
@@ -282,7 +284,7 @@ export default function ReorderOptimizer({ items, movements }) {
                         <div>
                           <div className="font-medium">{item.optimalOrderQty} {t('units')}</div>
                           <div className="text-sm text-slate-500">
-                            ${((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0)).toLocaleString()} {t('value')}
+                            {formatCurrency((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0))} {t('value')}
                           </div>
                         </div>
                       </TableCell>
@@ -293,7 +295,7 @@ export default function ReorderOptimizer({ items, movements }) {
                           className={item.riskLevel === 'high' ? 'bg-red-600 hover:bg-red-700' : ''}
                           onClick={() => {
                             // For now, show an alert - in production this would create a purchase order
-                            alert(`${t('schedule_order')}: ${item.name}\n${t('quantity')}: ${item.optimalOrderQty} ${t('units')}\n${t('value')}: $${((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0)).toLocaleString()}`);
+                            alert(`${t('schedule_order')}: ${item.name}\n${t('quantity')}: ${item.optimalOrderQty} ${t('units')}\n${t('value')}: ${formatCurrency((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0))}`);
                           }}
                         >
                           {item.riskLevel === 'high' ? t('order_now') : t('schedule_order')}

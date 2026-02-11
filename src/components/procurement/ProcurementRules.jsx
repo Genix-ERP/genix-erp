@@ -57,6 +57,7 @@ import {
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { procurementService } from "@/api/services/procurement";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -91,6 +92,7 @@ export default function ProcurementRules({ users = [] }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { toast } = useToast();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [rules, setRules] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -300,8 +302,8 @@ export default function ProcurementRules({ users = [] }) {
   };
 
   const formatAmount = (amount) => {
-    if (!amount) return "-";
-    return new Intl.NumberFormat("uz-UZ").format(amount) + " UZS";
+    if (!amount && amount !== 0) return "-";
+    return formatCurrency(amount);
   };
 
   return (

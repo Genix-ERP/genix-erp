@@ -16,6 +16,7 @@ import { analyzeExpenses } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
@@ -26,6 +27,7 @@ export default function Expenses() {
   const { user } = useAuth();
   const { expenses, createExpense, updateExpense, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis
   const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
@@ -278,7 +280,7 @@ export default function Expenses() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('total_amount')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalAmount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalAmount)}</p>
                 </div>
               </div>
             </CardContent>
@@ -388,7 +390,7 @@ export default function Expenses() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Legend
                     layout="horizontal"
                     align="center"
@@ -485,7 +487,7 @@ export default function Expenses() {
                           <TableCell>
                             <Badge variant="outline">{t(claim.category)}</Badge>
                           </TableCell>
-                          <TableCell className="font-semibold">${(claim.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
                           </TableCell>

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
@@ -23,6 +24,7 @@ import { MODULES } from "@/config/permissions";
 export default function CargoCashRegister() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     cargoCash,
     setCargoCash,
@@ -238,18 +240,18 @@ export default function CargoCashRegister() {
           <CardContent>
             <div className="space-y-3">
               <div className="text-3xl font-bold text-blue-900">
-                {cargoCash.uzs_balance?.toLocaleString()} {t('sum')}
+                {formatCurrency(cargoCash.uzs_balance || 0, 'UZS')}
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-green-600" />
                   <span className="text-slate-600">{t('income')}:</span>
-                  <span className="font-semibold">{totals.uzs.income.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(totals.uzs.income, 'UZS')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingDown className="w-4 h-4 text-red-600" />
                   <span className="text-slate-600">{t('expense')}:</span>
-                  <span className="font-semibold">{totals.uzs.expense.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(totals.uzs.expense, 'UZS')}</span>
                 </div>
               </div>
             </div>
@@ -267,18 +269,18 @@ export default function CargoCashRegister() {
           <CardContent>
             <div className="space-y-3">
               <div className="text-3xl font-bold text-green-900">
-                ${cargoCash.usd_balance?.toLocaleString()}
+                {formatCurrency(cargoCash.usd_balance || 0, 'USD')}
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-green-600" />
                   <span className="text-slate-600">{t('income')}:</span>
-                  <span className="font-semibold">${totals.usd.income.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(totals.usd.income, 'USD')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingDown className="w-4 h-4 text-red-600" />
                   <span className="text-slate-600">{t('expense')}:</span>
-                  <span className="font-semibold">${totals.usd.expense.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(totals.usd.expense, 'USD')}</span>
                 </div>
               </div>
             </div>
@@ -427,9 +429,7 @@ export default function CargoCashRegister() {
                         txType === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>
                         {txType === 'income' ? '+' : '-'}
-                        {transactionCurrency === 'USD' ? '$' : ''}
-                        {transaction.amount.toLocaleString()}
-                        {transactionCurrency === 'UZS' ? ` ${t('sum')}` : ''}
+                        {formatCurrency(transaction.amount, transactionCurrency)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

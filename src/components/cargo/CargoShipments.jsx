@@ -14,6 +14,7 @@ import {
 import * as XLSX from 'xlsx';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
@@ -21,6 +22,7 @@ import { MODULES } from "@/config/permissions";
 export default function CargoShipments() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     shipments,
     createShipment,
@@ -480,7 +482,7 @@ export default function CargoShipments() {
                       {formatDate(shipment.expected_date)}
                     </TableCell>
                     <TableCell>{getStatusBadge(shipment.status)}</TableCell>
-                    <TableCell className="font-semibold">${total.toLocaleString()}</TableCell>
+                    <TableCell className="font-semibold">{formatCurrency(total)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -712,8 +714,8 @@ export default function CargoShipments() {
                               </div>
                             </TableCell>
                             <TableCell>{item.quantity}</TableCell>
-                            <TableCell>{String(item.currency || 'USD')} {item.price}</TableCell>
-                            <TableCell className="font-semibold">{String(item.currency || 'USD')} {(typeof item.total === 'number' ? item.total : (item.quantity * item.price)).toLocaleString()}</TableCell>
+                            <TableCell>{formatCurrency(item.price, String(item.currency || 'USD'))}</TableCell>
+                            <TableCell className="font-semibold">{formatCurrency(typeof item.total === 'number' ? item.total : (item.quantity * item.price), String(item.currency || 'USD'))}</TableCell>
                             <TableCell>
                               <div className="flex items-center justify-end gap-1">
                                 <Button
@@ -801,15 +803,15 @@ export default function CargoShipments() {
               <CardContent className="p-4">
                 <div className="flex justify-between text-sm mb-2">
                   <span>{t('items_total')}:</span>
-                  <span className="font-semibold">${calculateTotal().itemsTotal.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(calculateTotal().itemsTotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>{t('costs_total')}:</span>
-                  <span className="font-semibold">${calculateTotal().costsTotal.toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(calculateTotal().costsTotal)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
                   <span>{t('total')}:</span>
-                  <span>${calculateTotal().total.toLocaleString()}</span>
+                  <span>{formatCurrency(calculateTotal().total)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -891,9 +893,9 @@ export default function CargoShipments() {
                         <TableRow key={idx}>
                           <TableCell>{item.name || item.item_name}</TableCell>
                           <TableCell>{item.quantity}</TableCell>
-                          <TableCell>{String(item.currency || 'USD')} {item.price || item.unit_price}</TableCell>
+                          <TableCell>{formatCurrency(item.price || item.unit_price, String(item.currency || 'USD'))}</TableCell>
                           <TableCell className="font-semibold">
-                            {String(item.currency || 'USD')} {((item.price || item.unit_price) * item.quantity).toLocaleString()}
+                            {formatCurrency((item.price || item.unit_price) * item.quantity, String(item.currency || 'USD'))}
                           </TableCell>
                           <TableCell className="text-xs text-slate-600">
                             {item.imei || '-'}
@@ -914,20 +916,20 @@ export default function CargoShipments() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-slate-500">Transport</Label>
-                      <p className="font-semibold">${Number(selectedShipment.costs?.transport || selectedShipment.transport_cost || 0).toLocaleString()}</p>
+                      <p className="font-semibold">{formatCurrency(Number(selectedShipment.costs?.transport || selectedShipment.transport_cost || 0))}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Bojxona</Label>
-                      <p className="font-semibold">${Number(selectedShipment.costs?.customs || selectedShipment.customs_cost || 0).toLocaleString()}</p>
+                      <p className="font-semibold">{formatCurrency(Number(selectedShipment.costs?.customs || selectedShipment.customs_cost || 0))}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Boshqa</Label>
-                      <p className="font-semibold">${Number(selectedShipment.costs?.other || selectedShipment.other_cost || 0).toLocaleString()}</p>
+                      <p className="font-semibold">{formatCurrency(Number(selectedShipment.costs?.other || selectedShipment.other_cost || 0))}</p>
                     </div>
                     <div>
                       <Label className="text-slate-500">Jami xarajatlar</Label>
                       <p className="font-semibold text-lg">
-                        ${Number(calculateShipmentCosts(selectedShipment).total || 0).toLocaleString()}
+                        {formatCurrency(Number(calculateShipmentCosts(selectedShipment).total || 0))}
                       </p>
                     </div>
                   </div>
@@ -941,16 +943,16 @@ export default function CargoShipments() {
                     <div>
                       <Label className="text-slate-600">Tovarlar qiymati</Label>
                       <p className="text-2xl font-bold text-slate-800">
-                        ${(selectedShipment.items?.reduce((sum, item) => sum + ((item.price || item.unit_price) * item.quantity), 0) || 0).toLocaleString()}
+                        {formatCurrency(selectedShipment.items?.reduce((sum, item) => sum + ((item.price || item.unit_price) * item.quantity), 0) || 0)}
                       </p>
                     </div>
                     <div>
                       <Label className="text-slate-600">Jami summa (xarajatlar bilan)</Label>
                       <p className="text-3xl font-bold text-blue-900">
-                        ${(
+                        {formatCurrency(
                           (selectedShipment.items?.reduce((sum, item) => sum + ((item.price || item.unit_price) * item.quantity), 0) || 0) +
                           calculateShipmentCosts(selectedShipment).total
-                        ).toLocaleString()}
+                        )}
                       </p>
                     </div>
                   </div>

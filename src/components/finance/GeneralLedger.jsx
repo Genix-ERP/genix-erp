@@ -13,6 +13,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 
 export default function GeneralLedger() {
@@ -27,6 +28,7 @@ export default function GeneralLedger() {
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -282,7 +284,7 @@ export default function GeneralLedger() {
                         <TableCell className="font-mono text-sm text-slate-600">{entry.journal_number}</TableCell>
                         <TableCell className="text-slate-700">{entry.description}</TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                          ${(entry.total_debit || 0).toLocaleString()}
+                          {formatCurrency(entry.total_debit || 0)}
                         </TableCell>
                         <TableCell>
                           <Badge className={`${getStatusColor(entry.status)} flex items-center gap-1 w-fit`}>
@@ -335,7 +337,7 @@ export default function GeneralLedger() {
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
                       <p className="text-sm font-semibold text-slate-900 tabular-nums">
-                        ${(selectedEntry.total_debit || 0).toLocaleString()}
+                        {formatCurrency(selectedEntry.total_debit || 0)}
                       </p>
                     </div>
                   </div>
@@ -358,13 +360,13 @@ export default function GeneralLedger() {
                             <div>
                               <p className="text-xs text-slate-500 mb-1">{t('debit')}</p>
                               <p className="text-sm font-semibold text-green-600 tabular-nums">
-                                {line.debit_amount > 0 ? `$${line.debit_amount.toLocaleString()}` : '-'}
+                                {line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-'}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-slate-500 mb-1">{t('credit')}</p>
                               <p className="text-sm font-semibold text-red-600 tabular-nums">
-                                {line.credit_amount > 0 ? `$${line.credit_amount.toLocaleString()}` : '-'}
+                                {line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-'}
                               </p>
                             </div>
                           </div>
@@ -383,7 +385,7 @@ export default function GeneralLedger() {
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-slate-900">{t('total')} {t('debit')}/{t('credit')}</span>
                     <span className="text-lg font-bold text-[var(--genix-blue)] tabular-nums">
-                      ${(selectedEntry.total_debit || 0).toLocaleString()}
+                      {formatCurrency(selectedEntry.total_debit || 0)}
                     </span>
                   </div>
                 </div>

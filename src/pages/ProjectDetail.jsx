@@ -55,6 +55,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { projectsService } from '@/api/services/projects';
 import { hrService } from '@/api/services/hr';
 import { contactsService } from '@/api/services/contacts';
@@ -66,6 +67,7 @@ export default function ProjectDetail() {
   const { t } = useTranslation(language);
   const { projects, updateProject } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -606,10 +608,10 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${(project.budget || 0).toLocaleString()}
+                {formatCurrency(project.budget || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                ${(project.spent || 0).toLocaleString()} {t('spent') || 'spent'}
+                {formatCurrency(project.spent || 0)} {t('spent') || 'spent'}
               </p>
             </CardContent>
           </Card>
@@ -986,7 +988,7 @@ export default function ProjectDetail() {
                   </div>
                   <div className="text-center p-3 bg-purple-100 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">
-                      ${timeEntries.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                      {formatCurrency(timeEntries.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0))}
                     </div>
                     <div className="text-xs text-purple-600">{t('billable_amount') || 'Billable Amount'}</div>
                   </div>
@@ -1040,7 +1042,7 @@ export default function ProjectDetail() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {entry.amount ? `$${entry.amount.toLocaleString()}` : '-'}
+                            {entry.amount ? formatCurrency(entry.amount) : '-'}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1070,13 +1072,13 @@ export default function ProjectDetail() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                   <div className="text-center p-3 bg-red-100 rounded-lg">
                     <div className="text-2xl font-bold text-red-600">
-                      ${expenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                      {formatCurrency(expenses.reduce((sum, e) => sum + (e.amount || 0), 0))}
                     </div>
                     <div className="text-xs text-red-600">{t('total_expenses') || 'Total Expenses'}</div>
                   </div>
                   <div className="text-center p-3 bg-orange-100 rounded-lg">
                     <div className="text-2xl font-bold text-orange-600">
-                      ${expenses.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                      {formatCurrency(expenses.filter(e => e.billable).reduce((sum, e) => sum + (e.amount || 0), 0))}
                     </div>
                     <div className="text-xs text-orange-600">{t('billable_expenses') || 'Billable'}</div>
                   </div>
@@ -1123,7 +1125,7 @@ export default function ProjectDetail() {
                           </TableCell>
                           <TableCell>{expense.vendor_name || expense.employee_name || '-'}</TableCell>
                           <TableCell className="text-right font-medium">
-                            ${(expense.amount || 0).toLocaleString()}
+                            {formatCurrency(expense.amount || 0)}
                           </TableCell>
                           <TableCell>
                             <Badge className={

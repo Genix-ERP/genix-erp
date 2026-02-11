@@ -14,11 +14,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
 export default function InventoryValuation() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     products = [],
     inventory = [],
@@ -135,10 +137,6 @@ export default function InventoryValuation() {
       itemCount: valuationData.length,
     };
   }, [valuationData]);
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ', { style: 'decimal', minimumFractionDigits: 0 }).format(amount || 0);
-  };
 
   const exportToCSV = () => {
     const headers = ['SKU', 'Product', 'Category', 'Costing Method', 'Quantity', 'Unit Cost', 'Total Value', 'List Price', 'Potential Revenue', 'Margin %'];
@@ -379,7 +377,7 @@ export default function InventoryValuation() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-slate-600">{t('total_inventory_value') || 'Total Inventory Value'}</p>
-                      <p className="text-xl font-bold text-slate-900">{formatCurrency(summary.totalValue)} {t('uzs') || "so'm"}</p>
+                      <p className="text-xl font-bold text-slate-900">{formatCurrency(summary.totalValue)}</p>
                     </div>
                   </div>
                 </div>
@@ -416,7 +414,7 @@ export default function InventoryValuation() {
                             <Badge variant="outline" className="text-xs">{data.items} {t('items') || 'items'}</Badge>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold">{formatCurrency(data.value)} {t('uzs') || "so'm"}</span>
+                            <span className="font-bold">{formatCurrency(data.value)}</span>
                             <span className="text-slate-500 text-sm ml-2">({percentage.toFixed(1)}%)</span>
                           </div>
                         </div>
@@ -511,7 +509,7 @@ export default function InventoryValuation() {
                   <div className="text-right">
                     <p className="text-sm text-slate-600">{t('total_valuation') || 'Total Valuation'}</p>
                     <p className="text-2xl font-bold text-[var(--genix-blue)]">
-                      {formatCurrency(summary.totalValue)} {t('uzs') || "so'm"}
+                      {formatCurrency(summary.totalValue)}
                     </p>
                   </div>
                 </div>

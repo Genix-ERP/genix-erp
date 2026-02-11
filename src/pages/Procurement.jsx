@@ -44,6 +44,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { procurementService } from '@/api/services/procurement';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 import Suppliers from '@/components/procurement/Suppliers';
 import RFQManagement from '@/components/procurement/RFQManagement';
@@ -57,6 +58,7 @@ export default function Procurement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     suppliers,
     purchaseOrders,
@@ -599,9 +601,7 @@ export default function Procurement() {
                     <div>
                       <p className="text-xs text-slate-500">{t('total_value') || 'Total Value'}</p>
                       <p className="text-lg font-bold text-green-600">
-                        {metrics.totalValue > 1000000
-                          ? `${(metrics.totalValue / 1000000).toFixed(1)}M`
-                          : metrics.totalValue.toLocaleString()}
+                        {formatCurrency(metrics.totalValue)}
                       </p>
                     </div>
                     <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -730,7 +730,7 @@ export default function Procurement() {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
                         <YAxis fontSize={12} />
-                        <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, t('amount') || 'Amount']} />
+                        <Tooltip formatter={(value) => [formatCurrency(value), t('amount') || 'Amount']} />
                         <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -760,7 +760,7 @@ export default function Procurement() {
                           <div className="text-right">
                             <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                             <p className="text-xs text-slate-500 mt-1">
-                              {(po.total_amount || 0).toLocaleString()}
+                              {formatCurrency(po.total_amount || 0)}
                             </p>
                           </div>
                         </div>

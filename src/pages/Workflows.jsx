@@ -36,6 +36,7 @@ import WorkflowAIChat from "@/components/workflows/WorkflowAIChat";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Workflows() {
   const [workflows, setWorkflows] = useState([]);
@@ -53,6 +54,7 @@ export default function Workflows() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { user, isSiteAdmin, isOwner } = useAuth();
+  const { formatCurrency } = useCurrencyFormatter();
   const navigate = useNavigate();
 
   // Check if user has admin access (site_admin, owner, admin, or system_admin role)
@@ -117,7 +119,7 @@ export default function Workflows() {
       const insights = await InvokeLLM({
         prompt: `Analyze workflow automation data and provide strategic insights:
         - Total workflows: ${workflowData.length}
-        - Total monthly savings: $${totalSavings.toLocaleString()}
+        - Total monthly savings: ${formatCurrency(totalSavings)}
         - Average completion time: ${avgCompletionTime.toFixed(1)} hours
         - Average success rate: ${avgSuccessRate.toFixed(1)}%
         - Active workflows: ${workflowData.filter(w => w.status === 'active').length}
@@ -257,7 +259,7 @@ export default function Workflows() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-slate-500 truncate">{t('monthly_savings')}</p>
-                  <p className="text-2xl font-bold text-green-600 truncate">${metrics.totalSavings.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-600 truncate">{formatCurrency(metrics.totalSavings)}</p>
                 </div>
               </div>
             </CardContent>
@@ -309,8 +311,8 @@ export default function Workflows() {
         {/* Filters and Search - Fully Responsive */}
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col gap-3 sm:gap-4">
-              <div className="relative w-full">
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative w-full sm:flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <Input
                   placeholder={t('search_workflows_placeholder') || "Search workflows..."}
@@ -319,34 +321,32 @@ export default function Workflows() {
                   className="pl-9 w-full"
                 />
               </div>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder={t('category_filter_placeholder') || "Filter by category"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all_categories') || "All Categories"}</SelectItem>
-                    <SelectItem value="hr">{t('category_hr') || "HR"}</SelectItem>
-                    <SelectItem value="procurement">{t('category_procurement') || "Procurement"}</SelectItem>
-                    <SelectItem value="customer_support">{t('category_customer_support') || "Customer Support"}</SelectItem>
-                    <SelectItem value="sales">{t('category_sales') || "Sales"}</SelectItem>
-                    <SelectItem value="inventory">{t('category_inventory') || "Inventory"}</SelectItem>
-                    <SelectItem value="finance">{t('category_finance') || "Finance"}</SelectItem>
-                    <SelectItem value="marketing">{t('category_marketing') || "Marketing"}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder={t('status_filter_placeholder') || "Filter by status"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all_status') || "All Status"}</SelectItem>
-                    <SelectItem value="active">{t('status_active') || "Active"}</SelectItem>
-                    <SelectItem value="paused">{t('status_paused') || "Paused"}</SelectItem>
-                    <SelectItem value="draft">{t('status_draft') || "Draft"}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder={t('category_filter_placeholder') || "Filter by category"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_categories') || "All Categories"}</SelectItem>
+                  <SelectItem value="hr">{t('category_hr') || "HR"}</SelectItem>
+                  <SelectItem value="procurement">{t('category_procurement') || "Procurement"}</SelectItem>
+                  <SelectItem value="customer_support">{t('category_customer_support') || "Customer Support"}</SelectItem>
+                  <SelectItem value="sales">{t('category_sales') || "Sales"}</SelectItem>
+                  <SelectItem value="inventory">{t('category_inventory') || "Inventory"}</SelectItem>
+                  <SelectItem value="finance">{t('category_finance') || "Finance"}</SelectItem>
+                  <SelectItem value="marketing">{t('category_marketing') || "Marketing"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder={t('status_filter_placeholder') || "Filter by status"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_status') || "All Status"}</SelectItem>
+                  <SelectItem value="active">{t('status_active') || "Active"}</SelectItem>
+                  <SelectItem value="paused">{t('status_paused') || "Paused"}</SelectItem>
+                  <SelectItem value="draft">{t('status_draft') || "Draft"}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

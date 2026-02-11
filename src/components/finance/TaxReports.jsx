@@ -60,17 +60,12 @@ import { format, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOf
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { taxReportsService } from '@/api/services/taxReports';
-
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('uz-UZ', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount || 0) + ' UZS';
-};
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function TaxReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);

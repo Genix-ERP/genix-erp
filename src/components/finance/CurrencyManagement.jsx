@@ -16,6 +16,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function CurrencyManagement() {
   const { language } = useLanguage();
@@ -32,6 +33,7 @@ export default function CurrencyManagement() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState("currencies");
   const [showCreateCurrencyModal, setShowCreateCurrencyModal] = useState(false);
@@ -122,13 +124,6 @@ export default function CurrencyManagement() {
     }
   };
 
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-  };
-
   // Get rates history for a currency
   const getRateHistory = (currencyCode) => {
     return exchangeRates
@@ -169,9 +164,8 @@ export default function CurrencyManagement() {
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-2xl font-bold">
-                      {latestRate ? new Intl.NumberFormat('uz-UZ').format(latestRate.rate) : '-'}
+                      {latestRate ? formatCurrency(latestRate.rate) : '-'}
                     </p>
-                    <p className="text-xs text-slate-500">so'm</p>
                   </div>
                   {rateChange && (
                     <Badge className={parseFloat(rateChange) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
@@ -319,7 +313,7 @@ export default function CurrencyManagement() {
                           {currency.is_base ? (
                             <Badge variant="outline">{t('base_currency') || 'Base currency'}</Badge>
                           ) : (
-                            latestRate ? `${new Intl.NumberFormat('uz-UZ').format(latestRate.rate)} so'm` : '-'
+                            latestRate ? formatCurrency(latestRate.rate) : '-'
                           )}
                         </TableCell>
                         <TableCell>
@@ -386,7 +380,7 @@ export default function CurrencyManagement() {
                           </div>
                         </TableCell>
                         <TableCell className="font-semibold">
-                          {new Intl.NumberFormat('uz-UZ').format(rate.rate)} so'm
+                          {formatCurrency(rate.rate)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{rate.source}</Badge>

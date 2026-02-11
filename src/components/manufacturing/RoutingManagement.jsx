@@ -45,12 +45,14 @@ import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function RoutingManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
   const { canCreate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [routings, setRoutings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -657,7 +659,7 @@ export default function RoutingManagement() {
                           </TableCell>
                           <TableCell className="text-right">{op.duration_minutes} {t('min')}</TableCell>
                           <TableCell className="text-right">{op.setup_time_minutes} {t('min')}</TableCell>
-                          <TableCell className="text-right">${opCost.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(opCost)}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -675,7 +677,7 @@ export default function RoutingManagement() {
                 <div>
                   <p className="text-sm text-slate-500">{t('total_cost') || "Jami narx"}</p>
                   <p className="text-xl font-bold">
-                    ${calculateRoutingTotals(selectedRouting).totalCost.toFixed(2)}
+                    {formatCurrency(calculateRoutingTotals(selectedRouting).totalCost)}
                   </p>
                 </div>
               </div>

@@ -57,10 +57,12 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Quotations() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     quotations,
     createQuotation,
@@ -278,10 +280,6 @@ export default function Quotations() {
     };
     const variant = variants[status] || variants.draft;
     return <Badge className={variant.color}>{variant.label}</Badge>;
-  };
-
-  const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const { subtotal, discountAmount, taxAmount, total } = calculateTotals(

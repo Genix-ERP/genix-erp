@@ -34,6 +34,7 @@ import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Import sales components
 import QuotationsSection from '@/components/sales/QuotationsSection';
@@ -59,6 +60,7 @@ export default function SalesOrders() {
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const {
@@ -123,7 +125,7 @@ export default function SalesOrders() {
     { key: 'customer_name', label: t('customer') },
     { key: 'order_date', label: t('date'), render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
     { key: 'delivery_date', label: t('delivery_date'), render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'total_amount', label: t('amount'), render: (v) => `${(v || 0).toLocaleString()} UZS` },
+    { key: 'total_amount', label: t('amount'), render: (v) => formatCurrency(v || 0) },
     { key: 'status', label: t('status') },
     { key: 'payment_status', label: t('payment_status') },
   ];
@@ -165,8 +167,8 @@ export default function SalesOrders() {
           no: idx + 1,
           description: line.description || line.product_name || '-',
           quantity: line.quantity || 0,
-          unit_price: `${(line.unit_price || 0).toLocaleString()} UZS`,
-          total: `${((line.quantity || 0) * (line.unit_price || 0)).toLocaleString()} UZS`,
+          unit_price: formatCurrency(line.unit_price || 0),
+          total: formatCurrency((line.quantity || 0) * (line.unit_price || 0)),
         }))
       : [{ no: 1, description: t('no_items'), quantity: '-', unit_price: '-', total: '-' }];
 
@@ -190,10 +192,10 @@ export default function SalesOrders() {
       ],
       tableData,
       totals: [
-        { label: t('subtotal'), value: `${(order.subtotal || 0).toLocaleString()} UZS` },
-        { label: t('tax'), value: `${(order.tax_amount || 0).toLocaleString()} UZS` },
-        { label: t('shipping'), value: `${(order.shipping_amount || order.shipping_cost || 0).toLocaleString()} UZS` },
-        { label: t('total'), value: `${(order.total_amount || 0).toLocaleString()} UZS`, bold: true },
+        { label: t('subtotal'), value: formatCurrency(order.subtotal || 0) },
+        { label: t('tax'), value: formatCurrency(order.tax_amount || 0) },
+        { label: t('shipping'), value: formatCurrency(order.shipping_amount || order.shipping_cost || 0) },
+        { label: t('total'), value: formatCurrency(order.total_amount || 0), bold: true },
       ],
     };
   };
@@ -897,10 +899,6 @@ export default function SalesOrders() {
     invoices: metrics.unpaidInvoices,
     returns: metrics.pendingReturns,
     discounts: metrics.activeDiscounts,
-  };
-
-  const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   // Loading state

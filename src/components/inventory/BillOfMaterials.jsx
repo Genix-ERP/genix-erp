@@ -24,6 +24,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -99,6 +100,7 @@ export default function BillOfMaterials() {
     isLoading
   } = useInventory();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -377,10 +379,6 @@ export default function BillOfMaterials() {
     }, 0);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ', { style: 'decimal', minimumFractionDigits: 0 }).format(amount || 0);
-  };
-
   return (
     <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
@@ -552,7 +550,7 @@ export default function BillOfMaterials() {
                             <Badge variant="secondary">{lines.length}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {formatCurrency(totalCost)} {t('uzs') || "so'm"}
+                            {formatCurrency(totalCost)}
                           </TableCell>
                           <TableCell>
                             <Badge className={bom.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}>
@@ -1275,7 +1273,7 @@ export default function BillOfMaterials() {
                     <div className="text-right">
                       <p className="text-sm text-slate-600">{t('total_cost') || 'Total Cost'}:</p>
                       <p className="text-xl font-bold text-slate-900">
-                        {formatCurrency(calculateTotalCost(selectedBOM))} {t('uzs') || "so'm"}
+                        {formatCurrency(calculateTotalCost(selectedBOM))}
                       </p>
                     </div>
                   </div>
@@ -1345,12 +1343,12 @@ export default function BillOfMaterials() {
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-lg">
                   <span className="font-medium">{t('total_material_cost') || 'Total Material Cost'}:</span>
-                  <span className="font-bold">{formatCurrency(calculateTotalCost(selectedBOM))} {t('uzs') || "so'm"}</span>
+                  <span className="font-bold">{formatCurrency(calculateTotalCost(selectedBOM))}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>{t('cost_per_unit') || 'Cost per Unit'}:</span>
                   <span className="font-medium">
-                    {formatCurrency(calculateTotalCost(selectedBOM) / (selectedBOM.quantity || 1))} {t('uzs') || "so'm"}
+                    {formatCurrency(calculateTotalCost(selectedBOM) / (selectedBOM.quantity || 1))}
                   </span>
                 </div>
               </div>

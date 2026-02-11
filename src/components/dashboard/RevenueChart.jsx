@@ -4,10 +4,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function RevenueChart({ data }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   return (
     <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
@@ -30,10 +32,10 @@ export default function RevenueChart({ data }) {
               <YAxis 
                 stroke="#64748b"
                 fontSize={12}
-                tickFormatter={(value) => `$${value.toLocaleString()}`}
+                tickFormatter={(value) => formatCurrency(value)}
               />
               <Tooltip 
-                formatter={(value) => [`$${value.toLocaleString()}`, t('revenue')]}
+                formatter={(value) => [formatCurrency(value), t('revenue')]}
                 contentStyle={{
                   backgroundColor: 'white',
                   border: '1px solid #e2e8f0',

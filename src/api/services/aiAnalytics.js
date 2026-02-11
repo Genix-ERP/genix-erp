@@ -1,4 +1,7 @@
 // AI Analytics Service - Provides intelligent analysis of business data
+import { createCurrencyFormatter } from '@/utils/formatCurrency';
+
+const defaultFormatter = createCurrencyFormatter();
 
 // Translations for AI insights
 const aiTranslations = {
@@ -10,22 +13,22 @@ const aiTranslations = {
     revenueDeclining: "Revenue Declining",
     salesRevenueDecreased: (rate) => `Sales revenue decreased by ${rate}% compared to last month`,
     outstandingPayments: "Outstanding Payments",
-    ordersUnpaid: (count, total) => `${count} orders totaling $${total} are unpaid`,
+    ordersUnpaid: (count, total, formatCurrency = defaultFormatter) => `${count} orders totaling ${formatCurrency(total)} are unpaid`,
     pendingQuotations: "Pending Quotations",
     quotationsAwaiting: (count) => `${count} quotations awaiting customer confirmation`,
     focusTopCustomers: "Focus on Top Customers",
-    topCustomerGenerates: (name, revenue) => `Your top customer ${name} generates $${revenue}. Consider loyalty programs.`,
+    topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Your top customer ${name} generates ${formatCurrency(revenue)}. Consider loyalty programs.`,
     followUpPayments: "Follow Up on Payments",
     sendPaymentReminders: (count) => `Send payment reminders for ${count} unpaid orders`,
     increaseOrderValue: "Increase Order Value",
-    avgOrderValueLow: (avg) => `Average order value is $${avg}. Consider upselling or bundle offers.`,
+    avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `Average order value is ${formatCurrency(avg)}. Consider upselling or bundle offers.`,
 
     // Inventory
     noInventoryData: "No inventory data available.",
     lowStockAlert: "Low Stock Alert",
     itemsBelowReorder: (count) => `${count} items are below reorder level`,
     deadStockDetected: "Dead Stock Detected",
-    itemsNotMoving: (count, value) => `${count} items worth $${value} are not moving`,
+    itemsNotMoving: (count, value, formatCurrency = defaultFormatter) => `${count} items worth ${formatCurrency(value)} are not moving`,
     itemsExpiringSoon: "Items Expiring Soon",
     willExpireWithin: (count) => `${count} items will expire within 30 days`,
     overstockItems: "Overstock Items",
@@ -81,7 +84,7 @@ const aiTranslations = {
     // CRM
     noCRMData: "No CRM data available.",
     highValueLeads: "High-Value Leads",
-    leadsAbove: (count, value) => `${count} leads with potential value above $${value}`,
+    leadsAbove: (count, value, formatCurrency = defaultFormatter) => `${count} leads with potential value above ${formatCurrency(value)}`,
     stagnantLeads: "Stagnant Leads",
     leadsNoActivity: (count) => `${count} leads haven't been contacted in 30+ days`,
     conversionOpportunity: "Conversion Opportunity",
@@ -133,7 +136,7 @@ const aiTranslations = {
     // Expenses
     noExpenseData: "No expense data available.",
     pendingApprovals: "Pending Approvals",
-    expensesAwaiting: (count, amount) => `${count} expenses totaling $${amount} awaiting approval`,
+    expensesAwaiting: (count, amount, formatCurrency = defaultFormatter) => `${count} expenses totaling ${formatCurrency(amount)} awaiting approval`,
     topExpenseCategory: "Top Expense Category",
     largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'en')} is your largest expense category`,
     highRejectionRate: "High Rejection Rate",
@@ -164,7 +167,7 @@ const aiTranslations = {
     totalValueActive: "Total value of active contracts",
     activeContracts: "Active Contracts",
     contractsActive: (count) => `${count} contracts currently active`,
-    contractsSummary: (count, value) => `${count} Active | $${value} Value`,
+    contractsSummary: (count, value, formatCurrency = defaultFormatter) => `${count} Active | ${formatCurrency(value)} Value`,
     initiateRenewals: "Initiate Renewals",
     startRenewalProcess: (count) => `Start renewal process for ${count} expiring contracts`,
     contractReview: "Contract Review",
@@ -178,22 +181,22 @@ const aiTranslations = {
     revenueDeclining: "Daromad pasayishi",
     salesRevenueDecreased: (rate) => `Savdo daromadi o'tgan oyga nisbatan ${rate}% kamaydi`,
     outstandingPayments: "To'lanmagan to'lovlar",
-    ordersUnpaid: (count, total) => `${count} ta buyurtma, jami $${total} to'lanmagan`,
+    ordersUnpaid: (count, total, formatCurrency = defaultFormatter) => `${count} ta buyurtma, jami ${formatCurrency(total)} to'lanmagan`,
     pendingQuotations: "Kutilayotgan taklifnomalar",
     quotationsAwaiting: (count) => `${count} ta taklifnoma mijoz tasdig'ini kutmoqda`,
     focusTopCustomers: "Top mijozlarga e'tibor",
-    topCustomerGenerates: (name, revenue) => `Sizning eng yaxshi mijozingiz ${name} $${revenue} keltiradi. Sodiqlik dasturlarini ko'rib chiqing.`,
+    topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Sizning eng yaxshi mijozingiz ${name} ${formatCurrency(revenue)} keltiradi. Sodiqlik dasturlarini ko'rib chiqing.`,
     followUpPayments: "To'lovlarni kuzatish",
     sendPaymentReminders: (count) => `${count} ta to'lanmagan buyurtma uchun eslatma yuboring`,
     increaseOrderValue: "Buyurtma qiymatini oshirish",
-    avgOrderValueLow: (avg) => `O'rtacha buyurtma qiymati $${avg}. Upselling yoki paketli takliflarni ko'rib chiqing.`,
+    avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `O'rtacha buyurtma qiymati ${formatCurrency(avg)}. Upselling yoki paketli takliflarni ko'rib chiqing.`,
 
     // Inventory
     noInventoryData: "Inventar ma'lumotlari mavjud emas.",
     lowStockAlert: "Kam zaxira ogohlantirishi",
     itemsBelowReorder: (count) => `${count} ta mahsulot qayta buyurtma darajasidan past`,
     deadStockDetected: "O'lik zaxira aniqlandi",
-    itemsNotMoving: (count, value) => `${count} ta mahsulot, qiymati $${value}, sotilmayapti`,
+    itemsNotMoving: (count, value, formatCurrency = defaultFormatter) => `${count} ta mahsulot, qiymati ${formatCurrency(value)}, sotilmayapti`,
     itemsExpiringSoon: "Tez orada muddati tugaydi",
     willExpireWithin: (count) => `${count} ta mahsulot 30 kun ichida muddati tugaydi`,
     overstockItems: "Ortiqcha zaxira",
@@ -249,7 +252,7 @@ const aiTranslations = {
     // CRM
     noCRMData: "CRM ma'lumotlari mavjud emas.",
     highValueLeads: "Yuqori qiymatli lidlar",
-    leadsAbove: (count, value) => `${count} ta lid potentsial qiymati $${value}dan yuqori`,
+    leadsAbove: (count, value, formatCurrency = defaultFormatter) => `${count} ta lid potentsial qiymati ${formatCurrency(value)}dan yuqori`,
     stagnantLeads: "Faol bo'lmagan lidlar",
     leadsNoActivity: (count) => `${count} ta lid 30+ kun davomida aloqa qilinmagan`,
     conversionOpportunity: "Konversiya imkoniyati",
@@ -301,7 +304,7 @@ const aiTranslations = {
     // Expenses
     noExpenseData: "Xarajatlar ma'lumotlari mavjud emas.",
     pendingApprovals: "Kutilayotgan tasdiqlar",
-    expensesAwaiting: (count, amount) => `${count} ta xarajat, jami $${amount} tasdiqlashni kutmoqda`,
+    expensesAwaiting: (count, amount, formatCurrency = defaultFormatter) => `${count} ta xarajat, jami ${formatCurrency(amount)} tasdiqlashni kutmoqda`,
     topExpenseCategory: "Eng katta xarajat toifasi",
     largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'uz')} sizning eng katta xarajat toifangiz`,
     highRejectionRate: "Yuqori rad etish darajasi",
@@ -332,7 +335,7 @@ const aiTranslations = {
     totalValueActive: "Faol shartnomalarning umumiy qiymati",
     activeContracts: "Faol shartnomalar",
     contractsActive: (count) => `${count} ta shartnoma hozirda faol`,
-    contractsSummary: (count, value) => `${count} Faol | $${value} Qiymat`,
+    contractsSummary: (count, value, formatCurrency = defaultFormatter) => `${count} Faol | ${formatCurrency(value)} Qiymat`,
     initiateRenewals: "Yangilashni boshlash",
     startRenewalProcess: (count) => `${count} ta tugayotgan shartnoma uchun yangilash jarayonini boshlang`,
     contractReview: "Shartnomalarni ko'rib chiqish",
@@ -346,22 +349,22 @@ const aiTranslations = {
     revenueDeclining: "Снижение выручки",
     salesRevenueDecreased: (rate) => `Выручка от продаж снизилась на ${rate}% по сравнению с прошлым месяцем`,
     outstandingPayments: "Неоплаченные платежи",
-    ordersUnpaid: (count, total) => `${count} заказов на сумму $${total} не оплачены`,
+    ordersUnpaid: (count, total, formatCurrency = defaultFormatter) => `${count} заказов на сумму ${formatCurrency(total)} не оплачены`,
     pendingQuotations: "Ожидающие предложения",
     quotationsAwaiting: (count) => `${count} предложений ожидают подтверждения клиента`,
     focusTopCustomers: "Фокус на ключевых клиентах",
-    topCustomerGenerates: (name, revenue) => `Ваш лучший клиент ${name} приносит $${revenue}. Рассмотрите программы лояльности.`,
+    topCustomerGenerates: (name, revenue, formatCurrency = defaultFormatter) => `Ваш лучший клиент ${name} приносит ${formatCurrency(revenue)}. Рассмотрите программы лояльности.`,
     followUpPayments: "Отслеживание платежей",
     sendPaymentReminders: (count) => `Отправьте напоминания об оплате для ${count} неоплаченных заказов`,
     increaseOrderValue: "Увеличение стоимости заказа",
-    avgOrderValueLow: (avg) => `Средняя стоимость заказа $${avg}. Рассмотрите допродажи или пакетные предложения.`,
+    avgOrderValueLow: (avg, formatCurrency = defaultFormatter) => `Средняя стоимость заказа ${formatCurrency(avg)}. Рассмотрите допродажи или пакетные предложения.`,
 
     // Inventory
     noInventoryData: "Данные об инвентаре недоступны.",
     lowStockAlert: "Предупреждение о низком запасе",
     itemsBelowReorder: (count) => `${count} товаров ниже уровня перезаказа`,
     deadStockDetected: "Обнаружен мёртвый запас",
-    itemsNotMoving: (count, value) => `${count} товаров на сумму $${value} не продаются`,
+    itemsNotMoving: (count, value, formatCurrency = defaultFormatter) => `${count} товаров на сумму ${formatCurrency(value)} не продаются`,
     itemsExpiringSoon: "Скоро истекает срок",
     willExpireWithin: (count) => `У ${count} товаров срок годности истекает в течение 30 дней`,
     overstockItems: "Избыточный запас",
@@ -417,7 +420,7 @@ const aiTranslations = {
     // CRM
     noCRMData: "Данные CRM недоступны.",
     highValueLeads: "Ценные лиды",
-    leadsAbove: (count, value) => `${count} лидов с потенциалом выше $${value}`,
+    leadsAbove: (count, value, formatCurrency = defaultFormatter) => `${count} лидов с потенциалом выше ${formatCurrency(value)}`,
     stagnantLeads: "Застойные лиды",
     leadsNoActivity: (count) => `${count} лидов не контактировались более 30 дней`,
     conversionOpportunity: "Возможность конверсии",
@@ -469,7 +472,7 @@ const aiTranslations = {
     // Expenses
     noExpenseData: "Данные о расходах недоступны.",
     pendingApprovals: "Ожидающие одобрения",
-    expensesAwaiting: (count, amount) => `${count} расходов на сумму $${amount} ожидают одобрения`,
+    expensesAwaiting: (count, amount, formatCurrency = defaultFormatter) => `${count} расходов на сумму ${formatCurrency(amount)} ожидают одобрения`,
     topExpenseCategory: "Основная категория расходов",
     largestExpense: (cat, lang) => `${translateCategory(cat, lang || 'ru')} - ваша крупнейшая категория расходов`,
     highRejectionRate: "Высокий процент отклонений",
@@ -500,7 +503,7 @@ const aiTranslations = {
     totalValueActive: "Общая стоимость активных контрактов",
     activeContracts: "Активные контракты",
     contractsActive: (count) => `${count} контрактов активны`,
-    contractsSummary: (count, value) => `${count} Активных | $${value} Стоимость`,
+    contractsSummary: (count, value, formatCurrency = defaultFormatter) => `${count} Активных | ${formatCurrency(value)} Стоимость`,
     initiateRenewals: "Начать продление",
     startRenewalProcess: (count) => `Начните процесс продления для ${count} истекающих контрактов`,
     contractReview: "Проверка контрактов",
@@ -550,7 +553,7 @@ const translateCategory = (category, language = 'en') => {
 /**
  * Analyzes sales data and provides insights
  */
-export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
+export const analyzeSales = (salesOrders, customers = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!salesOrders || salesOrders.length === 0) {
     return {
@@ -639,8 +642,8 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
     insights.push({
       type: 'warning',
       title: t.outstandingPayments,
-      description: t.ordersUnpaid(unpaidOrders.length, unpaidTotal.toLocaleString()),
-      metric: `$${unpaidTotal.toLocaleString()}`,
+      description: t.ordersUnpaid(unpaidOrders.length, unpaidTotal, formatCurrency),
+      metric: formatCurrency(unpaidTotal),
       priority: unpaidTotal > 10000 ? 'high' : 'medium'
     });
   }
@@ -661,7 +664,7 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
   if (topCustomers.length > 0) {
     recommendations.push({
       action: t.focusTopCustomers,
-      description: t.topCustomerGenerates(topCustomers[0].name, topCustomers[0].revenue.toLocaleString()),
+      description: t.topCustomerGenerates(topCustomers[0].name, topCustomers[0].revenue, formatCurrency),
       impact: 'high'
     });
   }
@@ -677,13 +680,13 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
   if (avgOrderValue < 5000) {
     recommendations.push({
       action: t.increaseOrderValue,
-      description: t.avgOrderValueLow(avgOrderValue.toFixed(0)),
+      description: t.avgOrderValueLow(avgOrderValue, formatCurrency),
       impact: 'medium'
     });
   }
 
   return {
-    summary: `Total Revenue: $${totalRevenue.toLocaleString()} | ${salesOrders.length} Orders | Avg: $${avgOrderValue.toFixed(0)}`,
+    summary: `Total Revenue: ${formatCurrency(totalRevenue)} | ${salesOrders.length} Orders | Avg: ${formatCurrency(avgOrderValue)}`,
     metrics: {
       totalRevenue,
       orderCount: salesOrders.length,
@@ -702,7 +705,7 @@ export const analyzeSales = (salesOrders, customers = [], language = 'en') => {
 /**
  * Analyzes inventory data and provides insights
  */
-export const analyzeInventory = (items, movements = [], language = 'en') => {
+export const analyzeInventory = (items, movements = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!items || items.length === 0) {
     return {
@@ -763,8 +766,8 @@ export const analyzeInventory = (items, movements = [], language = 'en') => {
     insights.push({
       type: 'negative',
       title: t.deadStockDetected,
-      description: t.itemsNotMoving(deadStockItems.length, deadStockValue.toLocaleString()),
-      metric: `$${deadStockValue.toLocaleString()}`,
+      description: t.itemsNotMoving(deadStockItems.length, deadStockValue, formatCurrency),
+      metric: formatCurrency(deadStockValue),
       priority: 'high'
     });
   }
@@ -821,7 +824,7 @@ export const analyzeInventory = (items, movements = [], language = 'en') => {
   }
 
   return {
-    summary: `Total Value: $${totalValue.toLocaleString()} | ${items.length} SKUs | ${totalUnits} Units`,
+    summary: `Total Value: ${formatCurrency(totalValue)} | ${items.length} SKUs | ${totalUnits} Units`,
     metrics: {
       totalValue,
       totalSKUs: items.length,
@@ -841,7 +844,7 @@ export const analyzeInventory = (items, movements = [], language = 'en') => {
 /**
  * Analyzes financial data and provides insights
  */
-export const analyzeFinancials = (transactions, invoices = [], expenses = [], language = 'en') => {
+export const analyzeFinancials = (transactions, invoices = [], expenses = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!transactions || transactions.length === 0) {
     return {
@@ -906,7 +909,7 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
       type: 'negative',
       title: t.operatingAtLoss,
       description: t.expensesExceedIncome,
-      metric: `$${Math.abs(netProfit).toLocaleString()} loss`,
+      metric: `${formatCurrency(Math.abs(netProfit))} loss`,
       priority: 'critical'
     });
   }
@@ -916,7 +919,7 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
       type: 'info',
       title: t.expenseConcentration,
       description: t.categoryAccountsFor(largestExpenseCategory[0], ((largestExpenseCategory[1] / totalExpenses) * 100).toFixed(0)),
-      metric: `$${largestExpenseCategory[1].toLocaleString()}`,
+      metric: formatCurrency(largestExpenseCategory[1]),
       priority: 'medium'
     });
   }
@@ -939,7 +942,7 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
   });
 
   return {
-    summary: `Income: $${totalIncome.toLocaleString()} | Expenses: $${totalExpenses.toLocaleString()} | Net: $${netProfit.toLocaleString()}`,
+    summary: `Income: ${formatCurrency(totalIncome)} | Expenses: ${formatCurrency(totalExpenses)} | Net: ${formatCurrency(netProfit)}`,
     metrics: {
       totalIncome,
       totalExpenses,
@@ -1082,7 +1085,7 @@ export const analyzeHR = (employees, payrolls = [], language = 'en') => {
 /**
  * Analyzes projects data and provides insights
  */
-export const analyzeProjects = (projects, language = 'en') => {
+export const analyzeProjects = (projects, language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!projects || projects.length === 0) {
     return {
@@ -1171,7 +1174,7 @@ export const analyzeProjects = (projects, language = 'en') => {
   }
 
   return {
-    summary: `${activeProjects.length} Active | ${completedProjects.length} Completed | Budget: $${totalBudget.toLocaleString()}`,
+    summary: `${activeProjects.length} Active | ${completedProjects.length} Completed | Budget: ${formatCurrency(totalBudget)}`,
     metrics: {
       totalProjects: projects.length,
       activeCount: activeProjects.length,
@@ -1281,7 +1284,7 @@ export const analyzeBusinessHealth = (data) => {
 /**
  * Analyzes CRM data and provides insights
  */
-export const analyzeCRM = (customers, leads = [], opportunities = []) => {
+export const analyzeCRM = (customers, leads = [], opportunities = [], formatCurrency = defaultFormatter) => {
   if (!customers || customers.length === 0) {
     return {
       summary: "No CRM data available.",
@@ -1345,7 +1348,7 @@ export const analyzeCRM = (customers, leads = [], opportunities = []) => {
       type: 'info',
       title: 'Pipeline Value',
       description: 'Weighted pipeline based on probability',
-      metric: `$${pipelineValue.toLocaleString()}`,
+      metric: formatCurrency(pipelineValue),
       priority: 'medium'
     });
   }
@@ -1355,7 +1358,7 @@ export const analyzeCRM = (customers, leads = [], opportunities = []) => {
       type: 'info',
       title: 'Closing This Month',
       description: `${closingThisMonth.length} opportunities expected`,
-      metric: `$${closingThisMonth.reduce((sum, o) => sum + (o.expected_value || 0), 0).toLocaleString()}`,
+      metric: formatCurrency(closingThisMonth.reduce((sum, o) => sum + (o.expected_value || 0), 0)),
       priority: 'high'
     });
   }
@@ -1387,7 +1390,7 @@ export const analyzeCRM = (customers, leads = [], opportunities = []) => {
   }
 
   return {
-    summary: `${activeCustomers.length} Active | ${prospects.length} Prospects | MRR: $${totalMRR.toLocaleString()}`,
+    summary: `${activeCustomers.length} Active | ${prospects.length} Prospects | MRR: ${formatCurrency(totalMRR)}`,
     metrics: {
       totalCustomers: customers.length,
       activeCount: activeCustomers.length,
@@ -1503,7 +1506,7 @@ export const analyzeManufacturing = (workOrders = [], boms = [], language = 'en'
 /**
  * Analyzes procurement data and provides insights
  */
-export const analyzeProcurement = (purchaseOrders = [], vendors = [], language = 'en') => {
+export const analyzeProcurement = (purchaseOrders = [], vendors = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!purchaseOrders || purchaseOrders.length === 0) {
     return {
@@ -1548,7 +1551,7 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
       type: 'info',
       title: t.vendorConcentration,
       description: t.vendorRepresents(topVendors[0].name, ((topVendors[0].spend / totalSpend) * 100).toFixed(0)),
-      metric: `$${topVendors[0].spend.toLocaleString()}`,
+      metric: formatCurrency(topVendors[0].spend),
       priority: 'medium'
     });
   }
@@ -1570,7 +1573,7 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
   });
 
   return {
-    summary: `${pendingOrders.length} Pending | $${totalSpend.toLocaleString()} Total Spend`,
+    summary: `${pendingOrders.length} Pending | ${formatCurrency(totalSpend)} Total Spend`,
     metrics: {
       totalOrders: purchaseOrders.length,
       pendingCount: pendingOrders.length,
@@ -1588,7 +1591,7 @@ export const analyzeProcurement = (purchaseOrders = [], vendors = [], language =
 /**
  * Analyzes fixed assets data and provides insights
  */
-export const analyzeAssets = (assets = [], language = 'en') => {
+export const analyzeAssets = (assets = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!assets || assets.length === 0) {
     return {
@@ -1639,7 +1642,7 @@ export const analyzeAssets = (assets = [], language = 'en') => {
     type: 'info',
     title: t.netBookValue,
     description: t.currentValueAfter,
-    metric: `$${netBookValue.toLocaleString()}`,
+    metric: formatCurrency(netBookValue),
     priority: 'medium'
   });
 
@@ -1662,7 +1665,7 @@ export const analyzeAssets = (assets = [], language = 'en') => {
   }
 
   return {
-    summary: `${activeAssets.length} Active | $${netBookValue.toLocaleString()} NBV`,
+    summary: `${activeAssets.length} Active | ${formatCurrency(netBookValue)} NBV`,
     metrics: {
       totalAssets: assets.length,
       activeCount: activeAssets.length,
@@ -1680,7 +1683,7 @@ export const analyzeAssets = (assets = [], language = 'en') => {
 /**
  * Analyzes expense data and provides insights
  */
-export const analyzeExpenses = (expenses = [], language = 'en') => {
+export const analyzeExpenses = (expenses = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!expenses || expenses.length === 0) {
     return {
@@ -1715,8 +1718,8 @@ export const analyzeExpenses = (expenses = [], language = 'en') => {
     insights.push({
       type: 'warning',
       title: t.pendingApprovals,
-      description: t.expensesAwaiting(pendingExpenses.length, pendingAmount.toLocaleString()),
-      metric: `$${pendingAmount.toLocaleString()}`,
+      description: t.expensesAwaiting(pendingExpenses.length, pendingAmount, formatCurrency),
+      metric: formatCurrency(pendingAmount),
       priority: 'high'
     });
   }
@@ -1726,7 +1729,7 @@ export const analyzeExpenses = (expenses = [], language = 'en') => {
       type: 'info',
       title: t.topExpenseCategory,
       description: t.largestExpense(topCategories[0].name, language),
-      metric: `$${topCategories[0].amount.toLocaleString()}`,
+      metric: formatCurrency(topCategories[0].amount),
       priority: 'medium'
     });
   }
@@ -1759,7 +1762,7 @@ export const analyzeExpenses = (expenses = [], language = 'en') => {
   });
 
   return {
-    summary: `${pendingExpenses.length} Pending | $${totalAmount.toLocaleString()} Total`,
+    summary: `${pendingExpenses.length} Pending | ${formatCurrency(totalAmount)} Total`,
     metrics: {
       totalExpenses: expenses.length,
       pendingCount: pendingExpenses.length,
@@ -1778,7 +1781,7 @@ export const analyzeExpenses = (expenses = [], language = 'en') => {
 /**
  * Analyzes payroll data and provides insights
  */
-export const analyzePayroll = (payrollRecords = [], employees = [], language = 'en') => {
+export const analyzePayroll = (payrollRecords = [], employees = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!payrollRecords || payrollRecords.length === 0) {
     return {
@@ -1814,7 +1817,7 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
     type: 'info',
     title: t.totalPayrollCost,
     description: t.grossPayroll,
-    metric: `$${totalGross.toLocaleString()}`,
+    metric: formatCurrency(totalGross),
     priority: 'medium'
   });
 
@@ -1846,7 +1849,7 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
   });
 
   return {
-    summary: `${completedPayroll.length} Processed | $${totalNet.toLocaleString()} Net`,
+    summary: `${completedPayroll.length} Processed | ${formatCurrency(totalNet)} Net`,
     metrics: {
       totalRecords: payrollRecords.length,
       pendingCount: pendingPayroll.length,
@@ -1865,7 +1868,7 @@ export const analyzePayroll = (payrollRecords = [], employees = [], language = '
 /**
  * Analyzes contract data and provides insights
  */
-export const analyzeContracts = (contracts = [], language = 'en') => {
+export const analyzeContracts = (contracts = [], language = 'en', formatCurrency = defaultFormatter) => {
   const t = getT(language);
   if (!contracts || contracts.length === 0) {
     return {
@@ -1903,7 +1906,7 @@ export const analyzeContracts = (contracts = [], language = 'en') => {
     type: 'info',
     title: t.activeContractValue,
     description: t.totalValueActive,
-    metric: `$${activeValue.toLocaleString()}`,
+    metric: formatCurrency(activeValue),
     priority: 'medium'
   });
 
@@ -1934,7 +1937,7 @@ export const analyzeContracts = (contracts = [], language = 'en') => {
   });
 
   return {
-    summary: t.contractsSummary(activeContracts.length, activeValue.toLocaleString()),
+    summary: t.contractsSummary(activeContracts.length, activeValue, formatCurrency),
     metrics: {
       totalContracts: contracts.length,
       activeCount: activeContracts.length,
