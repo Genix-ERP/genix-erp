@@ -100,9 +100,9 @@ export default function AccountsPayable() {
   const [extractionError, setExtractionError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Load vendors when create modal opens
+  // Load vendors when create modal opens or recurring tab is active
   useEffect(() => {
-    if (showCreateModal && vendors.length === 0) {
+    if ((showCreateModal || activeTab === 'recurring') && vendors.length === 0) {
       setVendorsLoading(true);
       contactsService.list({ contact_type: 'vendor' })
         .then(data => {
@@ -117,7 +117,7 @@ export default function AccountsPayable() {
           setVendorsLoading(false);
         });
     }
-  }, [showCreateModal, vendors.length]);
+  }, [showCreateModal, activeTab, vendors.length]);
 
   // Handle file selection for AI extraction
   const handleFileSelect = (e) => {
@@ -673,7 +673,7 @@ export default function AccountsPayable() {
             entityType="vendor_bills"
             entityName={t('payment') || 'Payment'}
             fields={[
-              { key: 'partner_id', label: t('vendor') || 'Vendor', required: true },
+              { key: 'partner_id', label: t('vendor') || 'Vendor', type: 'select', required: true, options: vendors.map(v => ({ value: v.id, label: v.name })) },
               { key: 'amount', label: t('amount') || 'Amount', type: 'number', required: true },
               { key: 'description', label: t('description') || 'Description' },
             ]}
