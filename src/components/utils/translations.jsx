@@ -3189,6 +3189,8 @@ export const translations = {
     "app_contracts_description": "Manage contract lifecycle with automated renewals.",
     "app_cargo_name": "Cargo",
     "app_cargo_description": "International freight forwarding and distribution system for B2B/B2C logistics.",
+    "app_construction_name": "Construction",
+    "app_construction_description": "Construction project management with smeta, progress tracking, and multi-vendor coordination.",
 
     // Common UI Elements
     "submit": "Submit",
@@ -8464,6 +8466,8 @@ export const translations = {
     "app_contracts_description": "Avtomatlashtirilgan yangilash bilan shartnoma hayot siklini boshqarish.",
     "app_cargo_name": "Cargo",
     "app_cargo_description": "B2B/B2C logistika uchun xalqaro yuk tashish va taqsimlash tizimi.",
+    "app_construction_name": "Qurilish",
+    "app_construction_description": "Smeta, progress va ko'p pudratchi bilan qurilish loyihalarini boshqarish.",
 
     // Common UI Elements
     "close": "Yopish",
@@ -13489,6 +13493,8 @@ export const translations = {
     "app_contracts_description": "Управление жизненным циклом контрактов с автоматическим продлением.",
     "app_cargo_name": "Cargo",
     "app_cargo_description": "Международная система перевозки и распределения грузов для B2B/B2C логистики.",
+    "app_construction_name": "Строительство",
+    "app_construction_description": "Управление строительными проектами со сметой, прогрессом и координацией подрядчиков.",
 
     // Common UI Elements
     "submit": "Отправить",
