@@ -76,7 +76,7 @@ const ProjectsTab = ({
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.client_name?.String || '').toLowerCase().includes(searchQuery.toLowerCase());
+      (p.client_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -135,30 +135,30 @@ const ProjectsTab = ({
                     </div>
                     {getStatusBadge(project.status)}
                   </div>
-                  {project.client_name?.String && (
+                  {project.client_name && (
                     <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
                       <Users className="w-4 h-4" />
-                      {project.client_name.String}
+                      {project.client_name}
                     </div>
                   )}
-                  {(project.city?.String || project.region?.String) && (
+                  {(project.city || project.region) && (
                     <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
                       <MapPin className="w-4 h-4" />
-                      {[project.city?.String, project.region?.String].filter(Boolean).join(', ')}
+                      {[project.city, project.region].filter(Boolean).join(', ')}
                     </div>
                   )}
-                  {project.contract_amount?.Float64 > 0 && (
+                  {project.contract_amount > 0 && (
                     <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
                       <DollarSign className="w-4 h-4" />
-                      {formatCurrency(project.contract_amount.Float64)}
+                      {formatCurrency(project.contract_amount)}
                     </div>
                   )}
                   <div className="mb-3">
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-600">{t('progress') || 'Progress'}</span>
-                      <span className="font-medium">{project.progress_percent?.Float64 || 0}%</span>
+                      <span className="font-medium">{project.progress_percent || 0}%</span>
                     </div>
-                    <Progress value={project.progress_percent?.Float64 || 0} className="h-2" />
+                    <Progress value={project.progress_percent || 0} className="h-2" />
                   </div>
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
                     <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); onEditProject(project); }}>
@@ -424,27 +424,27 @@ const ProjectDetailView = ({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-slate-500">{t('client_name') || 'Mijoz'}</p>
-                    <p className="font-medium">{project.client_name?.String || '-'}</p>
+                    <p className="font-medium">{project.client_name || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('client_phone') || 'Telefon'}</p>
-                    <p className="font-medium">{project.client_phone?.String || '-'}</p>
+                    <p className="font-medium">{project.client_phone || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('location') || 'Manzil'}</p>
-                    <p className="font-medium">{[project.address?.String, project.city?.String, project.region?.String].filter(Boolean).join(', ') || '-'}</p>
+                    <p className="font-medium">{[project.address, project.city, project.region].filter(Boolean).join(', ') || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('project_type') || 'Loyiha turi'}</p>
-                    <p className="font-medium">{project.project_type?.String || '-'}</p>
+                    <p className="font-medium">{project.project_type || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('building_type') || 'Bino turi'}</p>
-                    <p className="font-medium">{project.building_type?.String || '-'}</p>
+                    <p className="font-medium">{project.building_type || '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('total_area') || 'Umumiy maydon'}</p>
-                    <p className="font-medium">{project.total_area?.Float64 ? `${project.total_area.Float64} m²` : '-'}</p>
+                    <p className="font-medium">{project.total_area ? `${project.total_area} m²` : '-'}</p>
                   </div>
                 </div>
               </CardContent>
@@ -458,7 +458,7 @@ const ProjectDetailView = ({
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-sm text-slate-500">{t('contract_amount') || 'Shartnoma'}</p>
-                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(project.contract_amount?.Float64 || 0)}</p>
+                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(project.contract_amount || 0)}</p>
                 </div>
                 <Separator />
                 <div>
@@ -467,8 +467,8 @@ const ProjectDetailView = ({
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('progress') || 'Progress'}</p>
-                  <Progress value={project.progress_percent?.Float64 || 0} className="h-3 mt-2" />
-                  <p className="text-right text-sm mt-1">{project.progress_percent?.Float64 || 0}%</p>
+                  <Progress value={project.progress_percent || 0} className="h-3 mt-2" />
+                  <p className="text-right text-sm mt-1">{project.progress_percent || 0}%</p>
                 </div>
               </CardContent>
             </Card>
@@ -482,17 +482,17 @@ const ProjectDetailView = ({
                 <div className="flex items-center gap-8">
                   <div className="text-center">
                     <p className="text-sm text-slate-500">{t('planned_start') || 'Rejadagi boshlanish'}</p>
-                    <p className="font-medium">{project.planned_start_date?.Time ? format(new Date(project.planned_start_date.Time), 'dd.MM.yyyy') : '-'}</p>
+                    <p className="font-medium">{project.planned_start_date ? format(new Date(project.planned_start_date), 'dd.MM.yyyy') : '-'}</p>
                   </div>
                   <div className="flex-1 h-2 bg-slate-200 rounded-full relative">
                     <div
                       className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
-                      style={{ width: `${project.progress_percent?.Float64 || 0}%` }}
+                      style={{ width: `${project.progress_percent || 0}%` }}
                     />
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-slate-500">{t('planned_end') || 'Rejadagi tugash'}</p>
-                    <p className="font-medium">{project.planned_end_date?.Time ? format(new Date(project.planned_end_date.Time), 'dd.MM.yyyy') : '-'}</p>
+                    <p className="font-medium">{project.planned_end_date ? format(new Date(project.planned_end_date), 'dd.MM.yyyy') : '-'}</p>
                   </div>
                 </div>
               </CardContent>
@@ -538,29 +538,29 @@ const ProjectDetailView = ({
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('building_type') || 'Bino turi'}</span>
-                            <span className="font-medium">{building.building_type?.String || building.building_purpose?.String || '-'}</span>
+                            <span className="font-medium">{building.building_type || building.building_purpose || '-'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('floors_count') || 'Qavatlar'}</span>
-                            <span className="font-medium">{building.floors_count?.Int32 || '-'}</span>
+                            <span className="font-medium">{building.floors_count || '-'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('total_area') || 'Maydon'}</span>
-                            <span className="font-medium">{building.total_area?.Float64 ? `${building.total_area.Float64} m²` : '-'}</span>
+                            <span className="font-medium">{building.total_area ? `${building.total_area} m²` : '-'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('apartments') || 'Xonadonlar'}</span>
-                            <span className="font-medium">{building.apartments_count?.Int32 || '-'}</span>
+                            <span className="font-medium">{building.apartments_count || '-'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('estimated_cost') || 'Smeta'}</span>
-                            <span className="font-medium">{building.estimated_cost?.Float64 ? formatCurrency(building.estimated_cost.Float64) : '-'}</span>
+                            <span className="font-medium">{building.estimated_cost ? formatCurrency(building.estimated_cost) : '-'}</span>
                           </div>
                         </div>
                         <div className="mt-4">
                           <p className="text-xs text-slate-500 mb-1">{t('progress') || 'Progress'}</p>
-                          <Progress value={building.progress_percent?.Float64 || 0} className="h-2" />
-                          <p className="text-xs text-right mt-1">{building.progress_percent?.Float64 || 0}%</p>
+                          <Progress value={building.progress_percent || 0} className="h-2" />
+                          <p className="text-xs text-right mt-1">{building.progress_percent || 0}%</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -671,9 +671,9 @@ const ProjectDetailView = ({
                             <td className="py-3 px-2 font-mono text-xs">{item.code || '-'}</td>
                             <td className="py-3 px-2">{item.name}</td>
                             <td className="py-3 px-2 text-right">{item.unit}</td>
-                            <td className="py-3 px-2 text-right">{item.quantity?.Float64 || 0}</td>
-                            <td className="py-3 px-2 text-right">{formatCurrency(item.unit_price?.Float64 || 0)}</td>
-                            <td className="py-3 px-2 text-right font-medium">{formatCurrency(item.total_price?.Float64 || 0)}</td>
+                            <td className="py-3 px-2 text-right">{item.quantity || 0}</td>
+                            <td className="py-3 px-2 text-right">{formatCurrency(item.unit_price || 0)}</td>
+                            <td className="py-3 px-2 text-right font-medium">{formatCurrency(item.total_price || 0)}</td>
                             <td className="py-3 px-2 text-right">
                               <Badge variant={item.completion_percent >= 100 ? 'default' : 'outline'}>
                                 {item.completion_percent || 0}%
@@ -685,7 +685,7 @@ const ProjectDetailView = ({
                       <tfoot>
                         <tr className="font-semibold bg-slate-50">
                           <td colSpan={5} className="py-3 px-2 text-right">{t('total') || 'Jami'}:</td>
-                          <td className="py-3 px-2 text-right">{formatCurrency(items.reduce((sum, i) => sum + (i.total_price?.Float64 || 0), 0))}</td>
+                          <td className="py-3 px-2 text-right">{formatCurrency(items.reduce((sum, i) => sum + (i.total_price || 0), 0))}</td>
                           <td></td>
                         </tr>
                       </tfoot>
@@ -1225,19 +1225,19 @@ export default function Construction() {
     setProjectForm({
       code: project.code,
       name: project.name,
-      description: project.description?.String || '',
-      address: project.address?.String || '',
-      city: project.city?.String || '',
-      region: project.region?.String || '',
-      client_name: project.client_name?.String || '',
-      client_phone: project.client_phone?.String || '',
-      project_type: project.project_type?.String || '',
-      building_type: project.building_type?.String || '',
-      total_area: project.total_area?.Float64 || '',
-      floors_count: project.floors_count?.Int32 || '',
-      contract_amount: project.contract_amount?.Float64 || '',
-      planned_start_date: project.planned_start_date?.Time ? format(new Date(project.planned_start_date.Time), 'yyyy-MM-dd') : '',
-      planned_end_date: project.planned_end_date?.Time ? format(new Date(project.planned_end_date.Time), 'yyyy-MM-dd') : ''
+      description: project.description || '',
+      address: project.address || '',
+      city: project.city || '',
+      region: project.region || '',
+      client_name: project.client_name || '',
+      client_phone: project.client_phone || '',
+      project_type: project.project_type || '',
+      building_type: project.building_type || '',
+      total_area: project.total_area || '',
+      floors_count: project.floors_count || '',
+      contract_amount: project.contract_amount || '',
+      planned_start_date: project.planned_start_date ? format(new Date(project.planned_start_date), 'yyyy-MM-dd') : '',
+      planned_end_date: project.planned_end_date ? format(new Date(project.planned_end_date), 'yyyy-MM-dd') : ''
     });
     setShowProjectModal(true);
   };
