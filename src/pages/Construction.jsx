@@ -895,10 +895,15 @@ const ProjectDetailView = ({
       }
 
       // Combine existing photos (from preview) with newly uploaded ones
-      // photoPreview contains URLs of existing photos when editing
+      // photoPreview contains full URLs of existing photos when editing
       const existingPhotos = photoReportForm.id ? photoPreview
-        .filter(p => typeof p === 'string' && p.startsWith('/api'))
-        .map(url => ({ url, filename: 'existing', size: 0, type: 'image/jpeg' })) : [];
+        .filter(p => typeof p === 'string' && p.includes('/api/v1/files/'))
+        .map(fullUrl => {
+          // Extract the relative URL part (/api/v1/files/xxx)
+          const match = fullUrl.match(/\/api\/v1\/files\/[a-f0-9]+/);
+          const relativeUrl = match ? match[0] : fullUrl;
+          return { url: relativeUrl, filename: 'existing', size: 0, type: 'image/jpeg' };
+        }) : [];
       const allPhotos = [...existingPhotos, ...uploadedPhotos];
 
       const reportData = {
@@ -941,6 +946,20 @@ const ProjectDetailView = ({
     }
   };
 
+  // Helper to get full URL for file
+  const getFileUrl = (url) => {
+    if (!url) return '';
+    // If it's already a full URL (data: or http), return as is
+    if (url.startsWith('data:') || url.startsWith('http')) return url;
+    // Build full URL from API base
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+    // Remove /api/v1 from base if the url already starts with /api/v1
+    if (url.startsWith('/api/v1/')) {
+      return apiBase.replace('/api/v1', '') + url;
+    }
+    return apiBase.replace('/api/v1', '') + url;
+  };
+
   // Helper to parse photos from report (handles both array and JSON string)
   const parsePhotos = (photos) => {
     if (!photos) return [];
@@ -969,7 +988,8 @@ const ProjectDetailView = ({
       weather: report.weather || '',
       temperature: report.temperature || ''
     });
-    setPhotoPreview(photos.map(p => p.url || p));
+    // Convert relative URLs to full URLs for display
+    setPhotoPreview(photos.map(p => getFileUrl(p.url || p)));
     setShowPhotoReportModal(true);
   };
 
@@ -986,7 +1006,8 @@ const ProjectDetailView = ({
       weather: report.weather || '',
       temperature: report.temperature || ''
     });
-    setPhotoPreview(photos.map(p => p.url || p));
+    // Convert relative URLs to full URLs for display
+    setPhotoPreview(photos.map(p => getFileUrl(p.url || p)));
     setPhotoFiles([]);
     setShowPhotoReportModal(true);
   };
@@ -1932,16 +1953,37 @@ const ProjectDetailView = ({
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
+                        {report.title && (
+                          <p className="text-sm font-medium mt-1">{report.title}</p>
+                        )}
                         {report.description && (
-                          <p className="text-sm text-slate-500 mt-2 line-clamp-2">{report.description}</p>
+                          <p className="text-sm text-slate-500 mt-1 line-clamp-2">{report.description}</p>
                         )}
                         {(() => {
                           const photos = parsePhotos(report.photos);
                           return photos.length > 0 && (
-                            <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
-                              <Camera className="w-3 h-3" />
-                              <span>{photos.length} {t('photos') || 'ta rasm'}</span>
-                            </div>
+                            <>
+                              {/* Photo thumbnails */}
+                              <div className="flex gap-1 mt-3 overflow-hidden">
+                                {photos.slice(0, 3).map((photo, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={getFileUrl(photo.url || photo)}
+                                    alt={photo.filename || `Photo ${idx + 1}`}
+                                    className="w-16 h-16 object-cover rounded-md"
+                                  />
+                                ))}
+                                {photos.length > 3 && (
+                                  <div className="w-16 h-16 bg-slate-100 rounded-md flex items-center justify-center text-sm text-slate-500">
+                                    +{photos.length - 3}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+                                <Camera className="w-3 h-3" />
+                                <span>{photos.length} {t('photos_count') || 'ta rasm'}</span>
+                              </div>
+                            </>
                           );
                         })()}
                       </CardContent>
