@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ImportModal } from "@/components/shared/ImportExport";
 import {
   Building2,
   Plus,
@@ -115,6 +116,8 @@ export default function CompanySettings() {
     currency: "UZS",
     is_active: true
   });
+
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const limits = getPlanLimits();
   const maxCompanies = limits.maxCompanies || 1;
@@ -264,63 +267,74 @@ export default function CompanySettings() {
     }
   };
 
-  // Handle Excel Import
-  const handleImport = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Import columns definition for the modal
+  const importColumns = [
+    { key: 'company_code', label: t('company_code') || 'Kod', required: true },
+    { key: 'company_name', label: t('company_name') || 'Firma nomi', required: true },
+    { key: 'tax_id', label: 'INN' },
+    { key: 'stir', label: 'STIR' },
+    { key: 'oked', label: 'OKED' },
+    { key: 'bank_account', label: t('bank_account') || 'Hisob raqami' },
+    { key: 'bank_mfo', label: 'MFO' },
+    { key: 'bank_name', label: t('bank_name') || 'Bank nomi' },
+    { key: 'is_vat_payer', label: t('vat_payer') || "QQS to'lovchimi?" },
+    { key: 'tax_regime', label: t('tax_regime') || 'Soliq rejimi' },
+    { key: 'activity_status', label: t('activity_status') || 'Faoliyat holati' },
+    { key: 'business_group', label: t('business_group') || 'Guruh/Klaster' },
+    { key: 'intercompany_relations', label: t('intercompany_relations') || 'Intercompany aloqa' },
+    { key: 'director_name', label: t('director_name') || 'Direktor F.I.O.' },
+    { key: 'director_phone', label: t('director_phone') || 'Direktor telefon' },
+    { key: 'phone', label: t('company_phone') || 'Kompaniya telefon' },
+    { key: 'email', label: t('email') || 'Email' },
+    { key: 'legal_address', label: t('legal_address') || 'Yuridik manzil' },
+    { key: 'currency', label: t('currency') || 'Valyuta' },
+    { key: 'notes', label: t('notes') || 'Izoh' },
+  ];
 
+  // Handle import from ImportModal
+  const handleImportData = async (data) => {
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-      // Map Excel columns to API fields based on template
-      const mappedData = jsonData.map(row => ({
-        code: row['Kod'] || row['Code'] || row['company_code'] || `ORG-${Date.now()}`,
-        name: row['Firma nomi'] || row['Name'] || row['company_name'] || '',
-        tax_id: row['INN'] || row['tax_id'] || '',
-        stir: row['STIR'] || row['stir'] || '',
-        oked: row['OKED'] || row['oked'] || '',
-        bank_account: row['Hisob raqami'] || row['Bank Account'] || row['bank_account'] || '',
-        bank_mfo: row['MFO'] || row['bank_mfo'] || '',
-        bank_name: row['Bank nomi'] || row['Bank Name'] || row['bank_name'] || '',
-        is_vat_payer: row['QQS to\'lovchimi?'] === 'Ha' || row['is_vat_payer'] === true || row['is_vat_payer'] === 'Yes',
-        tax_regime: row['Soliq rejimi'] || row['Tax Regime'] || row['tax_regime'] || '',
-        activity_status: row['Faoliyat holati'] || row['Activity Status'] || row['activity_status'] || 'active',
-        business_group: row['Guruh/Klaster'] || row['Business Group'] || row['business_group'] || '',
-        intercompany_relations: row['Intercompany aloqa'] || row['intercompany_relations'] || '',
-        director_name: row['Direktor F.I.O.'] || row['Director Name'] || row['director_name'] || '',
-        director_phone: row['Direktor telefon'] || row['Director Phone'] || row['director_phone'] || '',
-        legal_address: row['Yuridik manzil'] || row['Legal Address'] || row['legal_address'] || '',
-        notes: row['Izoh'] || row['Notes'] || row['notes'] || '',
-        currency: row['Valyuta'] || row['Currency'] || 'UZS',
-        country: row['Davlat'] || row['Country'] || 'Uzbekistan',
+      // Transform data to match API format
+      const mappedData = data.map(row => ({
+        code: row.company_code || `ORG-${Date.now()}`,
+        name: row.company_name || '',
+        tax_id: row.tax_id || '',
+        stir: row.stir || '',
+        oked: row.oked || '',
+        bank_account: row.bank_account || '',
+        bank_mfo: row.bank_mfo || '',
+        bank_name: row.bank_name || '',
+        is_vat_payer: row.is_vat_payer === 'Ha' || row.is_vat_payer === 'Yes' || row.is_vat_payer === true,
+        tax_regime: row.tax_regime || '',
+        activity_status: row.activity_status || 'active',
+        business_group: row.business_group || '',
+        intercompany_relations: row.intercompany_relations || '',
+        director_name: row.director_name || '',
+        director_phone: row.director_phone || '',
+        legal_address: row.legal_address || '',
+        notes: row.notes || '',
+        currency: row.currency || 'UZS',
+        country: 'Uzbekistan',
         contact_info: {
-          email: row['Email'] || row['email'] || '',
-          phone: row['Kompaniya telefon'] || row['Phone'] || row['phone'] || ''
+          email: row.email || '',
+          phone: row.phone || ''
         }
       })).filter(org => org.name); // Filter out empty rows
 
       if (mappedData.length === 0) {
-        setError('Excel faylda ma\'lumot topilmadi');
-        return;
+        throw new Error('Excel faylda ma\'lumot topilmadi');
       }
 
       const result = await importCompanies(mappedData);
       if (result.success) {
         alert(`Import muvaffaqiyatli: ${result.data.imported} ta qo'shildi, ${result.data.skipped} ta o'tkazib yuborildi`);
       } else {
-        setError(result.error);
+        throw new Error(result.error);
       }
     } catch (err) {
       console.error('Import error:', err);
-      setError('Excel faylni o\'qishda xatolik');
+      throw err;
     }
-
-    // Reset file input
-    event.target.value = '';
   };
 
   // Handle Excel Export
@@ -463,13 +477,6 @@ export default function CompanySettings() {
         <CardContent className="space-y-4">
           {/* Import/Export Buttons */}
           <div className="flex items-center justify-end gap-2 pb-2 border-b">
-            <input
-              type="file"
-              id="company-import"
-              accept=".xlsx,.xls"
-              onChange={handleImport}
-              className="hidden"
-            />
             <Button
               variant="outline"
               size="sm"
@@ -481,7 +488,7 @@ export default function CompanySettings() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => document.getElementById('company-import').click()}
+              onClick={() => setShowImportModal(true)}
               disabled={!canAddMore}
             >
               <Upload className="w-4 h-4 mr-2" />
@@ -1248,6 +1255,15 @@ export default function CompanySettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportData}
+        columns={importColumns}
+        entityName={t('companies') || 'Kompaniyalar'}
+      />
     </div>
   );
 }
