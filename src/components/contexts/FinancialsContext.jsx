@@ -504,6 +504,7 @@ export function FinancialsProvider({ children }) {
           amount: paymentData.amount,
           reference: paymentData.reference || '',
           notes: paymentData.notes || paymentData.description || '',
+          bank_account_id: paymentData.bank_account_id || undefined,
         });
         // Map backend response to frontend format for UI consistency
         const newPayment = {

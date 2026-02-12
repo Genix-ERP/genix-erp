@@ -53,6 +53,7 @@ export default function Payments() {
     reference: '',
     description: '',
     contact_id: '',
+    account_id: '',
     bill_id: '', // Link to vendor bill
   });
 
@@ -129,6 +130,7 @@ export default function Payments() {
         amount: parseFloat(newPayment.amount) || 0,
         reference: newPayment.reference,
         notes: newPayment.description,
+        bank_account_id: newPayment.account_id || undefined,
         // Keep frontend fields for UI display
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
@@ -149,6 +151,7 @@ export default function Payments() {
         reference: '',
         description: '',
         contact_id: '',
+        account_id: '',
         bill_id: '',
       });
 
