@@ -59,9 +59,25 @@ export function CompanyProvider({ children }) {
         id: org.id,
         company_code: org.code || '',
         company_name: org.name || '',
+        tax_id: org.tax_id || '',
+        stir: org.stir || '',
+        oked: org.oked || '',
+        bank_account: org.bank_account || '',
+        bank_mfo: org.bank_mfo || '',
+        bank_name: org.bank_name || '',
+        is_vat_payer: org.is_vat_payer || false,
+        tax_regime: org.tax_regime || '',
+        activity_status: org.activity_status || 'active',
+        business_group: org.business_group || '',
+        intercompany_relations: org.intercompany_relations || '',
+        director_name: org.director_name || '',
+        director_phone: org.director_phone || '',
+        phone: org.contact_info?.phone || '',
+        email: org.contact_info?.email || '',
+        legal_address: org.legal_address || '',
+        notes: org.notes || '',
         country: org.country ?? 'Uzbekistan',
         currency: org.currency ?? 'UZS',
-        accounting_standard: org.accounting_standard ?? 'LOCAL_GAAP',
         logo_url: org.logo_url || null,
         is_active: org.is_active !== false,
         owner_id: userId,
@@ -198,15 +214,33 @@ export function CompanyProvider({ children }) {
     }
 
     try {
-      // Create on backend
+      // Create on backend with all Uzbekistan business fields
       const response = await apiClient.post('/organizations', {
         code: companyData.company_code,
         name: companyData.company_name,
         type: 'company',
-        country: companyData.country,
-        currency: companyData.currency,
-        accounting_standard: companyData.accounting_standard,
-        logo_url: companyData.logo_url
+        tax_id: companyData.tax_id,
+        stir: companyData.stir,
+        oked: companyData.oked,
+        bank_account: companyData.bank_account,
+        bank_mfo: companyData.bank_mfo,
+        bank_name: companyData.bank_name,
+        is_vat_payer: companyData.is_vat_payer,
+        tax_regime: companyData.tax_regime,
+        activity_status: companyData.activity_status || 'active',
+        business_group: companyData.business_group,
+        intercompany_relations: companyData.intercompany_relations,
+        director_name: companyData.director_name,
+        director_phone: companyData.director_phone,
+        legal_address: companyData.legal_address,
+        notes: companyData.notes,
+        country: companyData.country || 'Uzbekistan',
+        currency: companyData.currency || 'UZS',
+        logo_url: companyData.logo_url,
+        contact_info: {
+          email: companyData.email,
+          phone: companyData.phone
+        }
       });
 
       // Backend returns { success: true, data: {...} }
@@ -217,9 +251,25 @@ export function CompanyProvider({ children }) {
         id: newOrg.id,
         company_code: newOrg.code || '',
         company_name: newOrg.name || '',
+        tax_id: newOrg.tax_id || companyData.tax_id || '',
+        stir: newOrg.stir || companyData.stir || '',
+        oked: newOrg.oked || companyData.oked || '',
+        bank_account: newOrg.bank_account || companyData.bank_account || '',
+        bank_mfo: newOrg.bank_mfo || companyData.bank_mfo || '',
+        bank_name: newOrg.bank_name || companyData.bank_name || '',
+        is_vat_payer: newOrg.is_vat_payer ?? companyData.is_vat_payer ?? false,
+        tax_regime: newOrg.tax_regime || companyData.tax_regime || '',
+        activity_status: newOrg.activity_status || companyData.activity_status || 'active',
+        business_group: newOrg.business_group || companyData.business_group || '',
+        intercompany_relations: newOrg.intercompany_relations || companyData.intercompany_relations || '',
+        director_name: newOrg.director_name || companyData.director_name || '',
+        director_phone: newOrg.director_phone || companyData.director_phone || '',
+        phone: newOrg.contact_info?.phone || companyData.phone || '',
+        email: newOrg.contact_info?.email || companyData.email || '',
+        legal_address: newOrg.legal_address || companyData.legal_address || '',
+        notes: newOrg.notes || companyData.notes || '',
         country: newOrg.country ?? companyData.country ?? 'Uzbekistan',
         currency: newOrg.currency ?? companyData.currency ?? 'UZS',
-        accounting_standard: newOrg.accounting_standard ?? companyData.accounting_standard ?? 'LOCAL_GAAP',
         logo_url: newOrg.logo_url || null,
         is_active: newOrg.is_active !== false,
         owner_id: userId,
@@ -272,11 +322,32 @@ export function CompanyProvider({ children }) {
       const backendUpdates = {};
       if (updates.company_code !== undefined) backendUpdates.code = updates.company_code;
       if (updates.company_name !== undefined) backendUpdates.name = updates.company_name;
+      if (updates.tax_id !== undefined) backendUpdates.tax_id = updates.tax_id;
+      if (updates.stir !== undefined) backendUpdates.stir = updates.stir;
+      if (updates.oked !== undefined) backendUpdates.oked = updates.oked;
+      if (updates.bank_account !== undefined) backendUpdates.bank_account = updates.bank_account;
+      if (updates.bank_mfo !== undefined) backendUpdates.bank_mfo = updates.bank_mfo;
+      if (updates.bank_name !== undefined) backendUpdates.bank_name = updates.bank_name;
+      if (updates.is_vat_payer !== undefined) backendUpdates.is_vat_payer = updates.is_vat_payer;
+      if (updates.tax_regime !== undefined) backendUpdates.tax_regime = updates.tax_regime;
+      if (updates.activity_status !== undefined) backendUpdates.activity_status = updates.activity_status;
+      if (updates.business_group !== undefined) backendUpdates.business_group = updates.business_group;
+      if (updates.intercompany_relations !== undefined) backendUpdates.intercompany_relations = updates.intercompany_relations;
+      if (updates.director_name !== undefined) backendUpdates.director_name = updates.director_name;
+      if (updates.director_phone !== undefined) backendUpdates.director_phone = updates.director_phone;
+      if (updates.legal_address !== undefined) backendUpdates.legal_address = updates.legal_address;
+      if (updates.notes !== undefined) backendUpdates.notes = updates.notes;
       if (updates.country !== undefined) backendUpdates.country = updates.country;
       if (updates.currency !== undefined) backendUpdates.currency = updates.currency;
-      if (updates.accounting_standard !== undefined) backendUpdates.accounting_standard = updates.accounting_standard;
       if (updates.logo_url !== undefined) backendUpdates.logo_url = updates.logo_url;
       if (updates.is_active !== undefined) backendUpdates.is_active = updates.is_active;
+      // Handle contact info
+      if (updates.email !== undefined || updates.phone !== undefined) {
+        backendUpdates.contact_info = {
+          email: updates.email,
+          phone: updates.phone
+        };
+      }
 
       await apiClient.put(`/organizations/${companyId}`, backendUpdates);
 
@@ -371,6 +442,58 @@ export function CompanyProvider({ children }) {
     return updateCompany(companyId, { is_active: !company.is_active });
   }, [companies, updateCompany]);
 
+  // Import companies from array
+  const importCompanies = useCallback(async (companiesData) => {
+    try {
+      const response = await apiClient.post('/organizations/import', {
+        organizations: companiesData
+      });
+
+      // Refresh companies list after import
+      await loadCompanies();
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error) {
+      console.error('Error importing companies:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'import_failed'
+      };
+    }
+  }, [loadCompanies]);
+
+  // Export companies to JSON
+  const exportCompanies = useCallback(() => {
+    return companies.map(company => ({
+      code: company.company_code,
+      name: company.company_name,
+      tax_id: company.tax_id,
+      stir: company.stir,
+      oked: company.oked,
+      bank_account: company.bank_account,
+      bank_mfo: company.bank_mfo,
+      bank_name: company.bank_name,
+      is_vat_payer: company.is_vat_payer,
+      tax_regime: company.tax_regime,
+      activity_status: company.activity_status,
+      business_group: company.business_group,
+      intercompany_relations: company.intercompany_relations,
+      director_name: company.director_name,
+      director_phone: company.director_phone,
+      legal_address: company.legal_address,
+      notes: company.notes,
+      currency: company.currency,
+      country: company.country,
+      contact_info: {
+        email: company.email,
+        phone: company.phone
+      }
+    }));
+  }, [companies]);
+
   return (
     <CompanyContext.Provider value={{
       companies,
@@ -384,6 +507,8 @@ export function CompanyProvider({ children }) {
       getCompany,
       getCompanyCount,
       toggleCompanyStatus,
+      importCompanies,
+      exportCompanies,
       refreshCompanies: loadCompanies
     }}>
       {children}
