@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
-import { createCurrencyFormatter } from '@/utils/formatCurrency';
+import { createCurrencyFormatter, createCompactCurrencyFormatter } from '@/utils/formatCurrency';
 
 export function useCurrencyFormatter() {
   const { getSetting } = useAdminSettings();
@@ -22,5 +22,16 @@ export function useCurrencyFormatter() {
     [currency, currency_symbol, currency_position, decimal_separator, thousands_separator]
   );
 
-  return { formatCurrency };
+  // Compact formatter for large numbers (e.g., 5.2 mlrd, 10 mln)
+  const formatCurrencyCompact = useMemo(
+    () => createCompactCurrencyFormatter({
+      currency,
+      currency_symbol,
+      currency_position,
+      locale: 'uz',
+    }),
+    [currency, currency_symbol, currency_position]
+  );
+
+  return { formatCurrency, formatCurrencyCompact };
 }
