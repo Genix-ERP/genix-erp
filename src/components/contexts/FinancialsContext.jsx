@@ -1004,7 +1004,9 @@ export function FinancialsProvider({ children }) {
         if (paymentsData) {
           const mappedPayments = (paymentsData.data || paymentsData || []).map(p => ({
             ...p,
-            payment_type: p.payment_type || (p.amount >= 0 ? 'inbound' : 'outbound'),
+            payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
+            party_name: p.contact_name || '',
+            payment_method: p.payment_method || 'bank_transfer',
           }));
           setPayments(mappedPayments);
         }
