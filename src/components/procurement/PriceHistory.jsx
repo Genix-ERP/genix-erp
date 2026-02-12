@@ -465,7 +465,7 @@ export default function PriceHistory() {
                 </SelectTrigger>
                 <SelectContent>
                   {productsLoading ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="__loading__" disabled>
                       {t('loading') || "Yuklanmoqda..."}
                     </SelectItem>
                   ) : (

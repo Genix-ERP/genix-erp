@@ -559,11 +559,11 @@ export default function GoodsReceipt() {
                 </SelectTrigger>
                 <SelectContent>
                   {warehousesLoading ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="__loading__" disabled>
                       {t('loading') || 'Loading...'}
                     </SelectItem>
                   ) : warehouses.length === 0 ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="__empty__" disabled>
                       {t('no_warehouses') || 'No warehouses found'}
                     </SelectItem>
                   ) : (
