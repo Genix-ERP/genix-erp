@@ -620,6 +620,7 @@ export function ProcurementProvider({ children }) {
           order_date: poData.order_date || new Date().toISOString().split('T')[0],
           expected_date: poData.expected_delivery_date || poData.expected_date || '',
           payment_terms: poData.payment_terms || 'net_30',
+          warehouse_id: poData.warehouse_id || undefined,
           notes: poData.notes || '',
           lines: validLines.map(line => ({
             product_id: line.product_id || '',
