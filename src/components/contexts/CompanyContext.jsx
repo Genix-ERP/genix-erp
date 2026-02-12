@@ -203,20 +203,13 @@ export function CompanyProvider({ children }) {
       };
     }
 
-    // Check for duplicate code locally first
-    if (currentCompanies.some(c => c.company_code === companyData.company_code)) {
-      console.log('Duplicate code found locally');
-      return {
-        success: false,
-        error: 'duplicate_code',
-        message: 'Bu kod bilan kompaniya mavjud'
-      };
-    }
+    // Auto-generate unique code if not provided
+    const autoCode = companyData.company_code || `ORG-${Date.now()}`;
 
     try {
       // Create on backend with all Uzbekistan business fields
       const response = await apiClient.post('/organizations', {
-        code: companyData.company_code,
+        code: autoCode,
         name: companyData.company_name,
         type: 'company',
         tax_id: companyData.tax_id,

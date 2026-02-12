@@ -70,7 +70,6 @@ export default function CompanySettings() {
   const [addError, setAddError] = useState(null);
   // Simplified form matching Excel template for Uzbekistan business requirements
   const [formData, setFormData] = useState({
-    company_code: "",
     company_name: "",
     tax_id: "",           // INN
     stir: "",             // STIR (can be same as INN)
@@ -94,7 +93,6 @@ export default function CompanySettings() {
   });
 
   const [addFormData, setAddFormData] = useState({
-    company_code: "",
     company_name: "",
     tax_id: "",
     stir: "",
@@ -143,7 +141,6 @@ export default function CompanySettings() {
   const handleEdit = (company) => {
     setEditingCompany(company);
     setFormData({
-      company_code: company.company_code || "",
       company_name: company.company_name || "",
       tax_id: company.tax_id || "",
       stir: company.stir || "",
@@ -219,7 +216,6 @@ export default function CompanySettings() {
       return;
     }
     setAddFormData({
-      company_code: "",
       company_name: "",
       tax_id: "",
       stir: "",
@@ -269,7 +265,6 @@ export default function CompanySettings() {
 
   // Import columns definition for the modal
   const importColumns = [
-    { key: 'company_code', label: t('company_code') || 'Kod', required: true },
     { key: 'company_name', label: t('company_name') || 'Firma nomi', required: true },
     { key: 'tax_id', label: 'INN' },
     { key: 'stir', label: 'STIR' },
@@ -294,9 +289,9 @@ export default function CompanySettings() {
   // Handle import from ImportModal
   const handleImportData = async (data) => {
     try {
-      // Transform data to match API format
-      const mappedData = data.map(row => ({
-        code: row.company_code || `ORG-${Date.now()}`,
+      // Transform data to match API format (auto-generate code from name)
+      const mappedData = data.map((row, index) => ({
+        code: `ORG-${Date.now()}-${index}`,  // Auto-generate unique code
         name: row.company_name || '',
         tax_id: row.tax_id || '',
         stir: row.stir || '',
@@ -340,7 +335,6 @@ export default function CompanySettings() {
   // Handle Excel Export
   const handleExport = () => {
     const exportData = companies.map(company => ({
-      'Kod': company.company_code,
       'Firma nomi': company.company_name,
       'INN': company.tax_id || '',
       'STIR': company.stir || '',
@@ -359,7 +353,6 @@ export default function CompanySettings() {
       'Email': company.email || '',
       'Yuridik manzil': company.legal_address || '',
       'Valyuta': company.currency || 'UZS',
-      'Davlat': company.country || 'Uzbekistan',
       'Izoh': company.notes || ''
     }));
 
@@ -372,7 +365,6 @@ export default function CompanySettings() {
   // Download import template
   const handleDownloadTemplate = () => {
     const templateData = [{
-      'Kod': 'ACME01',
       'Firma nomi': 'ACME Corporation',
       'INN': '123456789',
       'STIR': '123456789',
@@ -391,7 +383,6 @@ export default function CompanySettings() {
       'Email': 'info@acme.uz',
       'Yuridik manzil': 'Toshkent shahri, Chilonzor tumani',
       'Valyuta': 'UZS',
-      'Davlat': 'Uzbekistan',
       'Izoh': ''
     }];
 
@@ -401,7 +392,6 @@ export default function CompanySettings() {
     const instructions = [
       { 'TO\'LDIRISH YO\'RIQNOMASI': '' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'Maydon' },
-      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Kod', 'Izoh': 'Kompaniya kodi (unikal)' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'Firma nomi', 'Izoh': 'Rasmiy nomi (majburiy)' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'INN', 'Izoh': 'Identifikatsiya raqami (9 raqam)' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'STIR', 'Izoh': 'Soliq to\'lovchi raqami' },
@@ -649,18 +639,7 @@ export default function CompanySettings() {
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information') || 'Asosiy ma\'lumotlar'}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('company_code') || 'Kod'} *</Label>
-                  <Input
-                    value={formData.company_code}
-                    onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
-                    placeholder="COMP001"
-                    required
-                    disabled
-                  />
-                </div>
-
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>{t('company_name') || 'Firma nomi'} *</Label>
                   <Input
                     value={formData.company_name}
@@ -946,18 +925,7 @@ export default function CompanySettings() {
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information') || 'Asosiy ma\'lumotlar'}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('company_code') || 'Kod'} *</Label>
-                  <Input
-                    value={addFormData.company_code}
-                    onChange={(e) => setAddFormData({ ...addFormData, company_code: e.target.value })}
-                    placeholder="COMP001"
-                    required
-                  />
-                  <p className="text-xs text-slate-500">{t('unique_identifier_hint') || 'Unikal identifikator'}</p>
-                </div>
-
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>{t('company_name') || 'Firma nomi'} *</Label>
                   <Input
                     value={addFormData.company_name}
