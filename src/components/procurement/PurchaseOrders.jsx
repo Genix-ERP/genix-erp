@@ -67,6 +67,9 @@ export default function PurchaseOrders() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
 
+  // Warehouses for selection
+  const [warehouses, setWarehouses] = useState([]);
+
   // Product variants
   const [productVariants, setProductVariants] = useState({});
 
@@ -80,6 +83,7 @@ export default function PurchaseOrders() {
     po_number: '',
     supplier_id: '',
     vendor_name: '',
+    warehouse_id: '',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date().toISOString().split('T')[0],
     total_amount: 0,
@@ -101,6 +105,16 @@ export default function PurchaseOrders() {
       }
     };
     fetchProducts();
+
+    const fetchWarehouses = async () => {
+      try {
+        const data = await inventoryService.listWarehouses();
+        setWarehouses(Array.isArray(data) ? data : data?.items || []);
+      } catch (error) {
+        console.error('Failed to fetch warehouses:', error);
+      }
+    };
+    fetchWarehouses();
   }, []);
 
   // Fetch purchase returns
@@ -342,6 +356,7 @@ export default function PurchaseOrders() {
         po_number: '',
         supplier_id: '',
         vendor_name: '',
+        warehouse_id: '',
         order_date: new Date().toISOString().split('T')[0],
         expected_delivery_date: new Date().toISOString().split('T')[0],
         total_amount: 0,
@@ -705,6 +720,28 @@ export default function PurchaseOrders() {
                     setIsDeliveryDateManual(true);
                   }}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
+                <Select
+                  value={newPO.warehouse_id || '__none__'}
+                  onValueChange={(value) => setNewPO({...newPO, warehouse_id: value === '__none__' ? '' : value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
+                    {warehouses.map((wh) => (
+                      <SelectItem key={wh.id} value={wh.id}>
+                        {wh.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
