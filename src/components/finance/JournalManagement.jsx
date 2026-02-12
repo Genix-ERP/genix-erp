@@ -168,7 +168,7 @@ export default function JournalManagement() {
     types: [...new Set(journals.map(j => j.type))].length,
   };
 
-  const FormFields = ({ isEdit = false }) => (
+  const renderFormFields = (isEdit = false) => (
     <div className="space-y-4 py-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -506,7 +506,7 @@ export default function JournalManagement() {
               {t('create_journal_desc') || 'Create a new accounting journal'}
             </DialogDescription>
           </DialogHeader>
-          <FormFields />
+          {renderFormFields()}
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
@@ -536,7 +536,7 @@ export default function JournalManagement() {
               {t('edit_journal') || 'Edit Journal'}
             </DialogTitle>
           </DialogHeader>
-          <FormFields isEdit />
+          {renderFormFields(true)}
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
