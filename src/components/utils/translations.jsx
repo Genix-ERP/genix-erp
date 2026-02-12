@@ -94,6 +94,31 @@ export const translations = {
     "local_standard": "Local standard",
     "company_active": "Company is active",
 
+    // Company Extended Fields (Uzbekistan)
+    "bank_info": "Bank Information",
+    "bank_account": "Bank Account",
+    "bank_name": "Bank Name",
+    "tax_info": "Tax Information",
+    "vat_payer": "VAT Payer?",
+    "tax_regime": "Tax Regime",
+    "tax_general": "General",
+    "tax_simplified": "Simplified",
+    "tax_single": "Single",
+    "activity_status": "Activity Status",
+    "status_active": "Active",
+    "status_suspended": "Suspended",
+    "status_liquidating": "Liquidating",
+    "status_dormant": "Dormant",
+    "business_group": "Business Group",
+    "intercompany_relations": "Intercompany Relations",
+    "director_name": "Director Name",
+    "director_phone": "Director Phone",
+    "company_phone": "Company Phone",
+    "legal_address": "Legal Address",
+    "notes": "Notes",
+    "notes_placeholder": "Additional notes about this company...",
+    "select": "Select",
+
     // Subscription
     "current_subscription": "Current Subscription",
     "trial_period": "Trial period",
@@ -3316,6 +3341,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "New Photo Report",
+    "edit_photo_report": "Edit Photo Report",
+    "photos_count": "photos",
     "report_type": "Report Type",
     "progress": "Progress",
     "safety": "Safety",
@@ -5256,7 +5283,32 @@ export const translations = {
     "country": "Mamlakat",
     "accounting_standard": "Buxgalteriya standarti",
     "local_standard": "Mahalliy standart",
-    "company_active": "Kompaniya aktiv",
+    "company_active": "Kompaniya faol",
+
+    // Company Extended Fields (Uzbekistan)
+    "bank_info": "Bank ma'lumotlari",
+    "bank_account": "Hisob raqami",
+    "bank_name": "Bank nomi",
+    "tax_info": "Soliq ma'lumotlari",
+    "vat_payer": "QQS to'lovchimi?",
+    "tax_regime": "Soliq rejimi",
+    "tax_general": "Umumiy",
+    "tax_simplified": "Aylanmadan",
+    "tax_single": "Yagona",
+    "activity_status": "Faoliyat holati",
+    "status_active": "Faol",
+    "status_suspended": "To'xtatilgan",
+    "status_liquidating": "Tugatish",
+    "status_dormant": "Dormant",
+    "business_group": "Guruh/Klaster",
+    "intercompany_relations": "Intercompany aloqa",
+    "director_name": "Direktor F.I.O.",
+    "director_phone": "Direktor telefon",
+    "company_phone": "Kompaniya telefon",
+    "legal_address": "Yuridik manzil",
+    "notes": "Eslatmalar",
+    "notes_placeholder": "Ushbu tashuvchi haqida qo'shimcha eslatmalar...",
+    "select": "Tanlang",
 
     // Subscription
     "current_subscription": "Joriy Obuna",
@@ -8570,6 +8622,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "Yangi foto hisobot",
+    "edit_photo_report": "Foto hisobotni tahrirlash",
+    "photos_count": "ta rasm",
     "report_type": "Hisobot turi",
     "safety": "Xavfsizlik",
     "completion": "Tugallash",
@@ -12678,6 +12732,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "Новый фотоотчет",
+    "edit_photo_report": "Редактировать фотоотчет",
+    "photos_count": "фото",
     "report_type": "Тип отчета",
     "progress": "Прогресс",
     "safety": "Безопасность",

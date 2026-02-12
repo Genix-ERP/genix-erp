@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ImportModal } from "@/components/shared/ImportExport";
 import {
   Building2,
   Plus,
@@ -24,8 +25,12 @@ import {
   Crown,
   AlertTriangle,
   Star,
-  MoreHorizontal
+  MoreHorizontal,
+  Upload,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
+import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 import {
   DropdownMenu,
@@ -46,7 +51,10 @@ export default function CompanySettings() {
     updateCompany,
     deleteCompany,
     setActiveCompany,
-    getCompanyCount
+    getCompanyCount,
+    importCompanies,
+    exportCompanies,
+    refreshCompanies
   } = useCompany();
 
   const { getPlanLimits, hasFeature } = useSubscription();
@@ -60,43 +68,54 @@ export default function CompanySettings() {
   const [companyToDelete, setCompanyToDelete] = useState(null);
   const [error, setError] = useState(null);
   const [addError, setAddError] = useState(null);
+  // Simplified form matching Excel template for Uzbekistan business requirements
   const [formData, setFormData] = useState({
-    company_code: "",
     company_name: "",
-    legal_name: "",
-    tax_id: "",
-    registration_number: "",
+    tax_id: "",           // INN
+    stir: "",             // STIR (can be same as INN)
+    oked: "",             // OKED code
+    bank_account: "",     // Bank hisob raqami
+    bank_mfo: "",         // Bank MFO
+    bank_name: "",        // Bank nomi
+    is_vat_payer: false,  // QQS to'lovchimi?
+    tax_regime: "",       // Soliq rejimi
+    activity_status: "active", // Faoliyat holati
+    business_group: "",   // Guruh/Klaster
+    intercompany_relations: "", // Intercompany aloqa
+    director_name: "",    // Direktor F.I.O.
+    director_phone: "",   // Direktor telefon
+    phone: "",            // Kompaniya telefon
     email: "",
-    phone: "",
-    website: "",
-    street: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "Uzbekistan",
+    legal_address: "",    // Yuridik manzil
+    notes: "",            // Izoh
     currency: "UZS",
-    accounting_standard: "LOCAL_GAAP",
     is_active: true
   });
 
   const [addFormData, setAddFormData] = useState({
-    company_code: "",
     company_name: "",
-    legal_name: "",
     tax_id: "",
-    registration_number: "",
-    email: "",
+    stir: "",
+    oked: "",
+    bank_account: "",
+    bank_mfo: "",
+    bank_name: "",
+    is_vat_payer: false,
+    tax_regime: "",
+    activity_status: "active",
+    business_group: "",
+    intercompany_relations: "",
+    director_name: "",
+    director_phone: "",
     phone: "",
-    website: "",
-    street: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "Uzbekistan",
+    email: "",
+    legal_address: "",
+    notes: "",
     currency: "UZS",
-    accounting_standard: "LOCAL_GAAP",
     is_active: true
   });
+
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const limits = getPlanLimits();
   const maxCompanies = limits.maxCompanies || 1;
@@ -122,21 +141,25 @@ export default function CompanySettings() {
   const handleEdit = (company) => {
     setEditingCompany(company);
     setFormData({
-      company_code: company.company_code || "",
       company_name: company.company_name || "",
-      legal_name: company.legal_name || "",
       tax_id: company.tax_id || "",
-      registration_number: company.registration_number || "",
-      email: company.email || "",
+      stir: company.stir || "",
+      oked: company.oked || "",
+      bank_account: company.bank_account || "",
+      bank_mfo: company.bank_mfo || "",
+      bank_name: company.bank_name || "",
+      is_vat_payer: company.is_vat_payer || false,
+      tax_regime: company.tax_regime || "",
+      activity_status: company.activity_status || "active",
+      business_group: company.business_group || "",
+      intercompany_relations: company.intercompany_relations || "",
+      director_name: company.director_name || "",
+      director_phone: company.director_phone || "",
       phone: company.phone || "",
-      website: company.website || "",
-      street: company.street || "",
-      city: company.city || "",
-      state: company.state || "",
-      postal_code: company.postal_code || "",
-      country: company.country || "Uzbekistan",
+      email: company.email || "",
+      legal_address: company.legal_address || "",
+      notes: company.notes || "",
       currency: company.currency || "UZS",
-      accounting_standard: company.accounting_standard || "LOCAL_GAAP",
       is_active: company.is_active !== false
     });
     setError(null);
@@ -193,21 +216,25 @@ export default function CompanySettings() {
       return;
     }
     setAddFormData({
-      company_code: "",
       company_name: "",
-      legal_name: "",
       tax_id: "",
-      registration_number: "",
-      email: "",
+      stir: "",
+      oked: "",
+      bank_account: "",
+      bank_mfo: "",
+      bank_name: "",
+      is_vat_payer: false,
+      tax_regime: "",
+      activity_status: "active",
+      business_group: "",
+      intercompany_relations: "",
+      director_name: "",
+      director_phone: "",
       phone: "",
-      website: "",
-      street: "",
-      city: "",
-      state: "",
-      postal_code: "",
-      country: "Uzbekistan",
+      email: "",
+      legal_address: "",
+      notes: "",
       currency: "UZS",
-      accounting_standard: "LOCAL_GAAP",
       is_active: true
     });
     setAddError(null);
@@ -234,6 +261,156 @@ export default function CompanySettings() {
       console.error("Error adding company:", err);
       setAddError('Kompaniyani qo\'shishda xatolik');
     }
+  };
+
+  // Import columns definition for the modal
+  const importColumns = [
+    { key: 'company_name', label: t('company_name') || 'Firma nomi', required: true },
+    { key: 'tax_id', label: 'INN' },
+    { key: 'stir', label: 'STIR' },
+    { key: 'oked', label: 'OKED' },
+    { key: 'bank_account', label: t('bank_account') || 'Hisob raqami' },
+    { key: 'bank_mfo', label: 'MFO' },
+    { key: 'bank_name', label: t('bank_name') || 'Bank nomi' },
+    { key: 'is_vat_payer', label: t('vat_payer') || "QQS to'lovchimi?" },
+    { key: 'tax_regime', label: t('tax_regime') || 'Soliq rejimi' },
+    { key: 'activity_status', label: t('activity_status') || 'Faoliyat holati' },
+    { key: 'business_group', label: t('business_group') || 'Guruh/Klaster' },
+    { key: 'intercompany_relations', label: t('intercompany_relations') || 'Intercompany aloqa' },
+    { key: 'director_name', label: t('director_name') || 'Direktor F.I.O.' },
+    { key: 'director_phone', label: t('director_phone') || 'Direktor telefon' },
+    { key: 'phone', label: t('company_phone') || 'Kompaniya telefon' },
+    { key: 'email', label: t('email') || 'Email' },
+    { key: 'legal_address', label: t('legal_address') || 'Yuridik manzil' },
+    { key: 'currency', label: t('currency') || 'Valyuta' },
+    { key: 'notes', label: t('notes') || 'Izoh' },
+  ];
+
+  // Handle import from ImportModal
+  const handleImportData = async (data) => {
+    try {
+      // Transform data to match API format (auto-generate code from name)
+      const mappedData = data.map((row, index) => ({
+        code: `ORG-${Date.now()}-${index}`,  // Auto-generate unique code
+        name: row.company_name || '',
+        tax_id: row.tax_id || '',
+        stir: row.stir || '',
+        oked: row.oked || '',
+        bank_account: row.bank_account || '',
+        bank_mfo: row.bank_mfo || '',
+        bank_name: row.bank_name || '',
+        is_vat_payer: row.is_vat_payer === 'Ha' || row.is_vat_payer === 'Yes' || row.is_vat_payer === true,
+        tax_regime: row.tax_regime || '',
+        activity_status: row.activity_status || 'active',
+        business_group: row.business_group || '',
+        intercompany_relations: row.intercompany_relations || '',
+        director_name: row.director_name || '',
+        director_phone: row.director_phone || '',
+        legal_address: row.legal_address || '',
+        notes: row.notes || '',
+        currency: row.currency || 'UZS',
+        country: 'Uzbekistan',
+        contact_info: {
+          email: row.email || '',
+          phone: row.phone || ''
+        }
+      })).filter(org => org.name); // Filter out empty rows
+
+      if (mappedData.length === 0) {
+        throw new Error('Excel faylda ma\'lumot topilmadi');
+      }
+
+      const result = await importCompanies(mappedData);
+      if (result.success) {
+        alert(`Import muvaffaqiyatli: ${result.data.imported} ta qo'shildi, ${result.data.skipped} ta o'tkazib yuborildi`);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      throw err;
+    }
+  };
+
+  // Handle Excel Export
+  const handleExport = () => {
+    const exportData = companies.map(company => ({
+      'Firma nomi': company.company_name,
+      'INN': company.tax_id || '',
+      'STIR': company.stir || '',
+      'OKED': company.oked || '',
+      'Hisob raqami': company.bank_account || '',
+      'MFO': company.bank_mfo || '',
+      'Bank nomi': company.bank_name || '',
+      'QQS to\'lovchimi?': company.is_vat_payer ? 'Ha' : 'Yo\'q',
+      'Soliq rejimi': company.tax_regime || '',
+      'Faoliyat holati': company.activity_status || 'active',
+      'Guruh/Klaster': company.business_group || '',
+      'Intercompany aloqa': company.intercompany_relations || '',
+      'Direktor F.I.O.': company.director_name || '',
+      'Direktor telefon': company.director_phone || '',
+      'Kompaniya telefon': company.phone || '',
+      'Email': company.email || '',
+      'Yuridik manzil': company.legal_address || '',
+      'Valyuta': company.currency || 'UZS',
+      'Izoh': company.notes || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Kompaniyalar');
+    XLSX.writeFile(workbook, `kompaniyalar_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // Download import template
+  const handleDownloadTemplate = () => {
+    const templateData = [{
+      'Firma nomi': 'ACME Corporation',
+      'INN': '123456789',
+      'STIR': '123456789',
+      'OKED': '46900',
+      'Hisob raqami': '20208000123456789012',
+      'MFO': '00440',
+      'Bank nomi': 'Kapitalbank',
+      'QQS to\'lovchimi?': 'Ha',
+      'Soliq rejimi': 'Umumiy',
+      'Faoliyat holati': 'Faol',
+      'Guruh/Klaster': 'Qurilish',
+      'Intercompany aloqa': '',
+      'Direktor F.I.O.': 'Abdullayev Alisher',
+      'Direktor telefon': '+998901234567',
+      'Kompaniya telefon': '+998712345678',
+      'Email': 'info@acme.uz',
+      'Yuridik manzil': 'Toshkent shahri, Chilonzor tumani',
+      'Valyuta': 'UZS',
+      'Izoh': ''
+    }];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+    // Add instructions sheet
+    const instructions = [
+      { 'TO\'LDIRISH YO\'RIQNOMASI': '' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Maydon' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Firma nomi', 'Izoh': 'Rasmiy nomi (majburiy)' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'INN', 'Izoh': 'Identifikatsiya raqami (9 raqam)' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'STIR', 'Izoh': 'Soliq to\'lovchi raqami' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'OKED', 'Izoh': 'Iqtisodiy faoliyat klassifikatori' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Hisob raqami', 'Izoh': 'Bank hisob raqami (20 raqam)' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'MFO', 'Izoh': 'Bank MFO raqami (5 raqam)' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Bank nomi', 'Izoh': 'Kapitalbank, NBU, Ipoteka bank, va h.k.' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'QQS to\'lovchimi?', 'Izoh': 'Ha / Yo\'q' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Soliq rejimi', 'Izoh': 'Umumiy / Aylanmadan / Yagona' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Faoliyat holati', 'Izoh': 'Faol / To\'xtatilgan / Tugatish / Dormant' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'Guruh/Klaster', 'Izoh': 'Qurilish / Mebel / Avtosalon / va h.k.' },
+    ];
+
+    const instructionsSheet = XLSX.utils.json_to_sheet(instructions);
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Kompaniyalar');
+    XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Yo\'riqnoma');
+    XLSX.writeFile(workbook, 'kompaniyalar_shablon.xlsx');
   };
 
   return (
@@ -288,6 +465,36 @@ export default function CompanySettings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Import/Export Buttons */}
+          <div className="flex items-center justify-end gap-2 pb-2 border-b">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              {t('download_template') || 'Shablon'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowImportModal(true)}
+              disabled={!canAddMore}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {t('import') || 'Import'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={companies.length === 0}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {t('export') || 'Eksport'}
+            </Button>
+          </div>
+
           {/* Search and Add Button */}
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
@@ -430,160 +637,50 @@ export default function CompanySettings() {
 
             {/* Basic Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information')}</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information') || 'Asosiy ma\'lumotlar'}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('company_code')} *</Label>
-                  <Input
-                    value={formData.company_code}
-                    onChange={(e) => setFormData({ ...formData, company_code: e.target.value })}
-                    placeholder="MAIN"
-                    required
-                    disabled
-                  />
-                  <p className="text-xs text-slate-500">{t('company_code_not_editable')}</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('company_name')} *</Label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('company_name') || 'Firma nomi'} *</Label>
                   <Input
                     value={formData.company_name}
                     onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                    placeholder={t('my_company_placeholder')}
+                    placeholder="ACME Corporation"
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('legal_name')}</Label>
-                  <Input
-                    value={formData.legal_name}
-                    onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
-                    placeholder={t('legal_name_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('tax_id_inn')}</Label>
+                  <Label>INN</Label>
                   <Input
                     value={formData.tax_id}
                     onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
                     placeholder="123456789"
+                    maxLength={9}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('registration_number')}</Label>
+                  <Label>STIR</Label>
                   <Input
-                    value={formData.registration_number}
-                    onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
-                    placeholder="REG-123456"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('email')}</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="company@example.com"
+                    value={formData.stir}
+                    onChange={(e) => setFormData({ ...formData, stir: e.target.value })}
+                    placeholder="123456789"
+                    maxLength={20}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('phone')}</Label>
+                  <Label>OKED</Label>
                   <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('website')}</Label>
-                  <Input
-                    value={formData.website}
-                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="https://example.com"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Address */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('address')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('street')}</Label>
-                  <Input
-                    value={formData.street}
-                    onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                    placeholder={t('street_placeholder')}
+                    value={formData.oked}
+                    onChange={(e) => setFormData({ ...formData, oked: e.target.value })}
+                    placeholder="46900"
+                    maxLength={20}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('city')}</Label>
-                  <Input
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    placeholder={t('city_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('state_region')}</Label>
-                  <Input
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    placeholder={t('state_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('postal_code')}</Label>
-                  <Input
-                    value={formData.postal_code}
-                    onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
-                    placeholder="100000"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('country')}</Label>
-                  <Select
-                    value={formData.country}
-                    onValueChange={(value) => setFormData({ ...formData, country: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Uzbekistan">Uzbekistan</SelectItem>
-                      <SelectItem value="Kazakhstan">Kazakhstan</SelectItem>
-                      <SelectItem value="Kyrgyzstan">Kyrgyzstan</SelectItem>
-                      <SelectItem value="Tajikistan">Tajikistan</SelectItem>
-                      <SelectItem value="Turkmenistan">Turkmenistan</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Settings */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('settings')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('currency')}</Label>
+                  <Label>{t('currency') || 'Valyuta'}</Label>
                   <Select
                     value={formData.currency}
                     onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -599,36 +696,191 @@ export default function CompanySettings() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
+
+            {/* Bank Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('bank_info') || 'Bank ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('bank_account') || 'Hisob raqami'}</Label>
+                  <Input
+                    value={formData.bank_account}
+                    onChange={(e) => setFormData({ ...formData, bank_account: e.target.value })}
+                    placeholder="20208000123456789012"
+                    maxLength={30}
+                  />
+                </div>
 
                 <div className="space-y-2">
-                  <Label>{t('accounting_standard')}</Label>
+                  <Label>MFO</Label>
+                  <Input
+                    value={formData.bank_mfo}
+                    onChange={(e) => setFormData({ ...formData, bank_mfo: e.target.value })}
+                    placeholder="00440"
+                    maxLength={10}
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('bank_name') || 'Bank nomi'}</Label>
+                  <Input
+                    value={formData.bank_name}
+                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                    placeholder="Kapitalbank, NBU, Ipoteka bank..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Tax Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('tax_info') || 'Soliq ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_vat_payer"
+                    checked={formData.is_vat_payer}
+                    onChange={(e) => setFormData({ ...formData, is_vat_payer: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="is_vat_payer" className="cursor-pointer">
+                    {t('vat_payer') || "QQS to'lovchimi?"}
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('tax_regime') || 'Soliq rejimi'}</Label>
                   <Select
-                    value={formData.accounting_standard}
-                    onValueChange={(value) => setFormData({ ...formData, accounting_standard: value })}
+                    value={formData.tax_regime}
+                    onValueChange={(value) => setFormData({ ...formData, tax_regime: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select') || 'Tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">{t('tax_general') || 'Umumiy'}</SelectItem>
+                      <SelectItem value="simplified">{t('tax_simplified') || 'Aylanmadan'}</SelectItem>
+                      <SelectItem value="single">{t('tax_single') || 'Yagona'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('activity_status') || 'Faoliyat holati'}</Label>
+                  <Select
+                    value={formData.activity_status}
+                    onValueChange={(value) => setFormData({ ...formData, activity_status: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOCAL_GAAP">{t('local_standard')}</SelectItem>
-                      <SelectItem value="IFRS">IFRS</SelectItem>
-                      <SelectItem value="US_GAAP">US GAAP</SelectItem>
+                      <SelectItem value="active">{t('status_active') || 'Faol'}</SelectItem>
+                      <SelectItem value="suspended">{t('status_suspended') || "To'xtatilgan"}</SelectItem>
+                      <SelectItem value="liquidating">{t('status_liquidating') || 'Tugatish'}</SelectItem>
+                      <SelectItem value="dormant">{t('status_dormant') || 'Dormant'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="flex items-center gap-2 md:col-span-2">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4"
+                <div className="space-y-2">
+                  <Label>{t('business_group') || 'Guruh/Klaster'}</Label>
+                  <Input
+                    value={formData.business_group}
+                    onChange={(e) => setFormData({ ...formData, business_group: e.target.value })}
+                    placeholder="Qurilish, Mebel, Avtosalon..."
                   />
-                  <Label htmlFor="is_active" className="cursor-pointer">
-                    {t('company_active')}
-                  </Label>
                 </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('intercompany_relations') || 'Intercompany aloqa'}</Label>
+                  <Input
+                    value={formData.intercompany_relations}
+                    onChange={(e) => setFormData({ ...formData, intercompany_relations: e.target.value })}
+                    placeholder="Bosh kompaniya yoki bog'liq kompaniyalar"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information') || 'Aloqa ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('director_name') || 'Direktor F.I.O.'}</Label>
+                  <Input
+                    value={formData.director_name}
+                    onChange={(e) => setFormData({ ...formData, director_name: e.target.value })}
+                    placeholder="Abdullayev Alisher Karimovich"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('director_phone') || 'Direktor telefon'}</Label>
+                  <Input
+                    value={formData.director_phone}
+                    onChange={(e) => setFormData({ ...formData, director_phone: e.target.value })}
+                    placeholder="+998 90 123 45 67"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+998 71 234 56 78"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('email') || 'Email'}</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="info@company.uz"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('legal_address') || 'Yuridik manzil'}</Label>
+                  <Input
+                    value={formData.legal_address}
+                    onChange={(e) => setFormData({ ...formData, legal_address: e.target.value })}
+                    placeholder="Toshkent shahri, Chilonzor tumani, ..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('notes') || 'Izoh'}</h3>
+              <div className="space-y-2">
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder={t('notes_placeholder') || 'Qo\'shimcha izohlar...'}
+                  className="w-full min-h-[80px] px-3 py-2 border rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="is_active" className="cursor-pointer">
+                  {t('company_active') || 'Kompaniya faol'}
+                </Label>
               </div>
             </div>
 
@@ -658,7 +910,7 @@ export default function CompanySettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="w-5 h-5" />
-              {t('add_new_company')}
+              {t('add_new_company') || "Yangi kompaniya qo'shish"}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddSubmit} className="space-y-6 py-4">
@@ -671,159 +923,50 @@ export default function CompanySettings() {
 
             {/* Basic Information */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information')}</h3>
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('basic_information') || 'Asosiy ma\'lumotlar'}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('company_code')} *</Label>
-                  <Input
-                    value={addFormData.company_code}
-                    onChange={(e) => setAddFormData({ ...addFormData, company_code: e.target.value })}
-                    placeholder="COMP001"
-                    required
-                  />
-                  <p className="text-xs text-slate-500">{t('unique_identifier_hint')}</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('company_name')} *</Label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('company_name') || 'Firma nomi'} *</Label>
                   <Input
                     value={addFormData.company_name}
                     onChange={(e) => setAddFormData({ ...addFormData, company_name: e.target.value })}
-                    placeholder={t('my_company_placeholder')}
+                    placeholder="ACME Corporation"
                     required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('legal_name')}</Label>
-                  <Input
-                    value={addFormData.legal_name}
-                    onChange={(e) => setAddFormData({ ...addFormData, legal_name: e.target.value })}
-                    placeholder={t('legal_name_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('tax_id_inn')}</Label>
+                  <Label>INN</Label>
                   <Input
                     value={addFormData.tax_id}
                     onChange={(e) => setAddFormData({ ...addFormData, tax_id: e.target.value })}
                     placeholder="123456789"
+                    maxLength={9}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('registration_number')}</Label>
+                  <Label>STIR</Label>
                   <Input
-                    value={addFormData.registration_number}
-                    onChange={(e) => setAddFormData({ ...addFormData, registration_number: e.target.value })}
-                    placeholder="REG-123456"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('email')}</Label>
-                  <Input
-                    type="email"
-                    value={addFormData.email}
-                    onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
-                    placeholder="company@example.com"
+                    value={addFormData.stir}
+                    onChange={(e) => setAddFormData({ ...addFormData, stir: e.target.value })}
+                    placeholder="123456789"
+                    maxLength={20}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('phone')}</Label>
+                  <Label>OKED</Label>
                   <Input
-                    value={addFormData.phone}
-                    onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('website')}</Label>
-                  <Input
-                    value={addFormData.website}
-                    onChange={(e) => setAddFormData({ ...addFormData, website: e.target.value })}
-                    placeholder="https://example.com"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Address */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('address')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('street')}</Label>
-                  <Input
-                    value={addFormData.street}
-                    onChange={(e) => setAddFormData({ ...addFormData, street: e.target.value })}
-                    placeholder={t('street_placeholder')}
+                    value={addFormData.oked}
+                    onChange={(e) => setAddFormData({ ...addFormData, oked: e.target.value })}
+                    placeholder="46900"
+                    maxLength={20}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t('city')}</Label>
-                  <Input
-                    value={addFormData.city}
-                    onChange={(e) => setAddFormData({ ...addFormData, city: e.target.value })}
-                    placeholder={t('city_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('state_region')}</Label>
-                  <Input
-                    value={addFormData.state}
-                    onChange={(e) => setAddFormData({ ...addFormData, state: e.target.value })}
-                    placeholder={t('state_placeholder')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('postal_code')}</Label>
-                  <Input
-                    value={addFormData.postal_code}
-                    onChange={(e) => setAddFormData({ ...addFormData, postal_code: e.target.value })}
-                    placeholder="100000"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t('country')}</Label>
-                  <Select
-                    value={addFormData.country}
-                    onValueChange={(value) => setAddFormData({ ...addFormData, country: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Uzbekistan">Uzbekistan</SelectItem>
-                      <SelectItem value="Kazakhstan">Kazakhstan</SelectItem>
-                      <SelectItem value="Kyrgyzstan">Kyrgyzstan</SelectItem>
-                      <SelectItem value="Tajikistan">Tajikistan</SelectItem>
-                      <SelectItem value="Turkmenistan">Turkmenistan</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Settings */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('settings')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('currency')}</Label>
+                  <Label>{t('currency') || 'Valyuta'}</Label>
                   <Select
                     value={addFormData.currency}
                     onValueChange={(value) => setAddFormData({ ...addFormData, currency: value })}
@@ -839,36 +982,191 @@ export default function CompanySettings() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
+
+            {/* Bank Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('bank_info') || 'Bank ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('bank_account') || 'Hisob raqami'}</Label>
+                  <Input
+                    value={addFormData.bank_account}
+                    onChange={(e) => setAddFormData({ ...addFormData, bank_account: e.target.value })}
+                    placeholder="20208000123456789012"
+                    maxLength={30}
+                  />
+                </div>
 
                 <div className="space-y-2">
-                  <Label>{t('accounting_standard')}</Label>
+                  <Label>MFO</Label>
+                  <Input
+                    value={addFormData.bank_mfo}
+                    onChange={(e) => setAddFormData({ ...addFormData, bank_mfo: e.target.value })}
+                    placeholder="00440"
+                    maxLength={10}
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('bank_name') || 'Bank nomi'}</Label>
+                  <Input
+                    value={addFormData.bank_name}
+                    onChange={(e) => setAddFormData({ ...addFormData, bank_name: e.target.value })}
+                    placeholder="Kapitalbank, NBU, Ipoteka bank..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Tax Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('tax_info') || 'Soliq ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="add_is_vat_payer"
+                    checked={addFormData.is_vat_payer}
+                    onChange={(e) => setAddFormData({ ...addFormData, is_vat_payer: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="add_is_vat_payer" className="cursor-pointer">
+                    {t('vat_payer') || "QQS to'lovchimi?"}
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('tax_regime') || 'Soliq rejimi'}</Label>
                   <Select
-                    value={addFormData.accounting_standard}
-                    onValueChange={(value) => setAddFormData({ ...addFormData, accounting_standard: value })}
+                    value={addFormData.tax_regime}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, tax_regime: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select') || 'Tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">{t('tax_general') || 'Umumiy'}</SelectItem>
+                      <SelectItem value="simplified">{t('tax_simplified') || 'Aylanmadan'}</SelectItem>
+                      <SelectItem value="single">{t('tax_single') || 'Yagona'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('activity_status') || 'Faoliyat holati'}</Label>
+                  <Select
+                    value={addFormData.activity_status}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, activity_status: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="LOCAL_GAAP">{t('local_standard')}</SelectItem>
-                      <SelectItem value="IFRS">IFRS</SelectItem>
-                      <SelectItem value="US_GAAP">US GAAP</SelectItem>
+                      <SelectItem value="active">{t('status_active') || 'Faol'}</SelectItem>
+                      <SelectItem value="suspended">{t('status_suspended') || "To'xtatilgan"}</SelectItem>
+                      <SelectItem value="liquidating">{t('status_liquidating') || 'Tugatish'}</SelectItem>
+                      <SelectItem value="dormant">{t('status_dormant') || 'Dormant'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="flex items-center gap-2 md:col-span-2">
-                  <input
-                    type="checkbox"
-                    id="add_is_active"
-                    checked={addFormData.is_active}
-                    onChange={(e) => setAddFormData({ ...addFormData, is_active: e.target.checked })}
-                    className="w-4 h-4"
+                <div className="space-y-2">
+                  <Label>{t('business_group') || 'Guruh/Klaster'}</Label>
+                  <Input
+                    value={addFormData.business_group}
+                    onChange={(e) => setAddFormData({ ...addFormData, business_group: e.target.value })}
+                    placeholder="Qurilish, Mebel, Avtosalon..."
                   />
-                  <Label htmlFor="add_is_active" className="cursor-pointer">
-                    {t('company_active')}
-                  </Label>
                 </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('intercompany_relations') || 'Intercompany aloqa'}</Label>
+                  <Input
+                    value={addFormData.intercompany_relations}
+                    onChange={(e) => setAddFormData({ ...addFormData, intercompany_relations: e.target.value })}
+                    placeholder="Bosh kompaniya yoki bog'liq kompaniyalar"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('contact_information') || 'Aloqa ma\'lumotlari'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('director_name') || 'Direktor F.I.O.'}</Label>
+                  <Input
+                    value={addFormData.director_name}
+                    onChange={(e) => setAddFormData({ ...addFormData, director_name: e.target.value })}
+                    placeholder="Abdullayev Alisher Karimovich"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('director_phone') || 'Direktor telefon'}</Label>
+                  <Input
+                    value={addFormData.director_phone}
+                    onChange={(e) => setAddFormData({ ...addFormData, director_phone: e.target.value })}
+                    placeholder="+998 90 123 45 67"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
+                  <Input
+                    value={addFormData.phone}
+                    onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
+                    placeholder="+998 71 234 56 78"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('email') || 'Email'}</Label>
+                  <Input
+                    type="email"
+                    value={addFormData.email}
+                    onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
+                    placeholder="info@company.uz"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>{t('legal_address') || 'Yuridik manzil'}</Label>
+                  <Input
+                    value={addFormData.legal_address}
+                    onChange={(e) => setAddFormData({ ...addFormData, legal_address: e.target.value })}
+                    placeholder="Toshkent shahri, Chilonzor tumani, ..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 border-b pb-2">{t('notes') || 'Izoh'}</h3>
+              <div className="space-y-2">
+                <textarea
+                  value={addFormData.notes}
+                  onChange={(e) => setAddFormData({ ...addFormData, notes: e.target.value })}
+                  placeholder={t('notes_placeholder') || 'Qo\'shimcha izohlar...'}
+                  className="w-full min-h-[80px] px-3 py-2 border rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="add_is_active"
+                  checked={addFormData.is_active}
+                  onChange={(e) => setAddFormData({ ...addFormData, is_active: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="add_is_active" className="cursor-pointer">
+                  {t('company_active') || 'Kompaniya faol'}
+                </Label>
               </div>
             </div>
 
@@ -925,6 +1223,15 @@ export default function CompanySettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportData}
+        columns={importColumns}
+        entityName={t('companies') || 'Kompaniyalar'}
+      />
     </div>
   );
 }
