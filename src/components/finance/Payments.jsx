@@ -572,6 +572,10 @@ export default function Payments() {
                 <Select
                   value={newPayment.bill_id}
                   onValueChange={(value) => {
+                    if (value === '__none__') {
+                      setNewPayment({...newPayment, bill_id: ''});
+                      return;
+                    }
                     const selectedBill = unpaidBills.find(b => b.id === value);
                     if (selectedBill) {
                       setNewPayment({
@@ -590,7 +594,7 @@ export default function Payments() {
                     <SelectValue placeholder={t('select_bill') || 'Select a bill to pay'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">
+                    <SelectItem value="__none__">
                       <span className="text-slate-500">{t('no_bill') || 'No specific bill'}</span>
                     </SelectItem>
                     {unpaidBills.map(bill => (
