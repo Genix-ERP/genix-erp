@@ -3316,6 +3316,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "New Photo Report",
+    "edit_photo_report": "Edit Photo Report",
+    "photos_count": "photos",
     "report_type": "Report Type",
     "progress": "Progress",
     "safety": "Safety",
@@ -8569,6 +8571,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "Yangi foto hisobot",
+    "edit_photo_report": "Foto hisobotni tahrirlash",
+    "photos_count": "ta rasm",
     "report_type": "Hisobot turi",
     "safety": "Xavfsizlik",
     "completion": "Tugallash",
@@ -12567,6 +12571,8 @@ export const translations = {
 
     // Photo Report translations
     "new_photo_report": "Новый фотоотчет",
+    "edit_photo_report": "Редактировать фотоотчет",
+    "photos_count": "фото",
     "report_type": "Тип отчета",
     "progress": "Прогресс",
     "safety": "Безопасность",
