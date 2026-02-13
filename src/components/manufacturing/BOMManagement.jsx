@@ -34,12 +34,14 @@ export default function BOMManagement() {
 
   const [products, setProducts] = useState([]);
   const [workCenters, setWorkCenters] = useState([]);
+  const [routings, setRoutings] = useState([]);
   const [newBom, setNewBom] = useState({
     code: '',
     name: '',
     product_id: '',
     quantity: 1,
     bom_type: 'manufacturing',
+    routing_id: '',
     lines: [],
     operations: []
   });
@@ -58,7 +60,7 @@ export default function BOMManagement() {
     notes: ''
   });
 
-  // Load products and work centers
+  // Load products, work centers, and routings
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -68,6 +70,12 @@ export default function BOMManagement() {
         ]);
         setProducts(productsData || []);
         setWorkCenters(workCentersData || []);
+
+        // Load routings from localStorage
+        const storedRoutings = localStorage.getItem('genix_routings');
+        if (storedRoutings) {
+          setRoutings(JSON.parse(storedRoutings));
+        }
       } catch (error) {
         console.error('Failed to load data:', error);
       }
@@ -526,15 +534,12 @@ export default function BOMManagement() {
                       <TableCell>
                         <div className="flex gap-1">
                           {canUpdate(MODULES.MANUFACTURING) && (
-                            <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)}>
+                            <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)} title={t('edit') || 'Edit'}>
                               <Edit className="w-4 h-4" />
                             </Button>
                           )}
                           <Button size="sm" variant="ghost" onClick={(e) => handleViewBom(bom, e)} title={t('view') || 'View'}>
                             <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)} title={t('edit') || 'Edit'}>
-                            <Edit className="w-4 h-4" />
                           </Button>
                           {canDelete(MODULES.MANUFACTURING) && (
                             <Button size="sm" variant="ghost" onClick={(e) => handleDeleteBom(bom, e)} disabled={isDeleting} title={t('delete') || 'Delete'}>
@@ -581,7 +586,7 @@ export default function BOMManagement() {
                     required
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
                   <Select
                     value={newBom.product_id}
@@ -598,6 +603,41 @@ export default function BOMManagement() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
+                  <Select
+                    value={newBom.routing_id}
+                    onValueChange={(value) => {
+                      const selectedRouting = routings.find(r => r.id === value);
+                      if (selectedRouting) {
+                        // Copy operations from routing to BOM
+                        const copiedOperations = selectedRouting.operations.map(op => ({
+                          operation_name: op.name,
+                          work_center_id: op.work_center_id,
+                          setup_time_minutes: op.setup_time_minutes || 0,
+                          run_time_minutes: op.duration_minutes || 0,
+                          notes: op.description || ''
+                        }));
+                        setNewBom({...newBom, routing_id: value, operations: copiedOperations});
+                      } else {
+                        setNewBom({...newBom, routing_id: value});
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
+                      {routings.map((routing) => (
+                        <SelectItem key={routing.id} value={routing.id}>
+                          {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">{t('routing_hint') || 'Select a routing to auto-fill operations'}</p>
                 </div>
               </div>
             </div>
@@ -688,6 +728,13 @@ export default function BOMManagement() {
 
               {/* Operations Tab */}
               <TabsContent value="operations" className="space-y-4 mt-4">
+                {newBom.routing_id && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    <span className="font-medium">{t('routing_selected') || 'Routing selected'}:</span>{' '}
+                    {routings.find(r => r.id === newBom.routing_id)?.name || newBom.routing_id}
+                    {' - '}{t('operations_from_routing') || 'Operations loaded from routing. You can still add more below.'}
+                  </div>
+                )}
                 {/* Add Operation Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                   <div className="grid grid-cols-2 gap-3">
@@ -844,7 +891,7 @@ export default function BOMManagement() {
                       onChange={(e) => setEditBom({...editBom, name: e.target.value})}
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <label className="text-sm font-medium mb-1 block">{t('product')} *</label>
                     <Select
                       value={editBom.product_id}
@@ -857,6 +904,39 @@ export default function BOMManagement() {
                         {products.map((product) => (
                           <SelectItem key={product.id} value={product.id}>
                             {product.name} ({product.sku || product.code || 'No SKU'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
+                    <Select
+                      value={editBom.routing_id || ''}
+                      onValueChange={(value) => {
+                        const selectedRouting = routings.find(r => r.id === value);
+                        if (selectedRouting) {
+                          const copiedOperations = selectedRouting.operations.map(op => ({
+                            operation_name: op.name,
+                            work_center_id: op.work_center_id,
+                            setup_time_minutes: op.setup_time_minutes || 0,
+                            run_time_minutes: op.duration_minutes || 0,
+                            notes: op.description || ''
+                          }));
+                          setEditBom({...editBom, routing_id: value, operations: copiedOperations});
+                        } else {
+                          setEditBom({...editBom, routing_id: value});
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
+                        {routings.map((routing) => (
+                          <SelectItem key={routing.id} value={routing.id}>
+                            {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
                           </SelectItem>
                         ))}
                       </SelectContent>
