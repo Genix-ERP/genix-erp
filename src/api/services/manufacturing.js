@@ -225,5 +225,26 @@ export const bomsService = {
   async delete(id) {
     await apiClient.delete(`/boms/${id}`);
     return true;
+  },
+
+  // BOM Operations (routing)
+  async listOperations(bomId) {
+    const response = await apiClient.get(`/boms/${bomId}/operations`);
+    return response.data.data || [];
+  },
+
+  async createOperation(bomId, data) {
+    const response = await apiClient.post(`/boms/${bomId}/operations`, data);
+    return response.data.data;
+  },
+
+  async updateOperation(bomId, operationId, data) {
+    const response = await apiClient.put(`/boms/${bomId}/operations/${operationId}`, data);
+    return response.data.data;
+  },
+
+  async deleteOperation(bomId, operationId) {
+    await apiClient.delete(`/boms/${bomId}/operations/${operationId}`);
+    return true;
   }
 };
