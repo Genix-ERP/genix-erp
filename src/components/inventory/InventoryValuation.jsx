@@ -139,7 +139,7 @@ export default function InventoryValuation() {
   }, [valuationData]);
 
   const exportToCSV = () => {
-    const headers = ['SKU', 'Product', 'Category', 'Costing Method', 'Quantity', 'Unit Cost', 'Total Value', 'List Price', 'Potential Revenue', 'Margin %'];
+    const headers = [t('sku') || 'SKU', t('product') || 'Product', t('category') || 'Category', t('costing_method') || 'Costing Method', t('quantity') || 'Quantity', t('unit_cost') || 'Unit Cost', t('total_value') || 'Total Value', t('list_price') || 'List Price', t('potential_revenue') || 'Potential Revenue', `${t('margin') || 'Margin'} %`];
     const rows = valuationData.map(item => [
       item.sku || '',
       item.name,
