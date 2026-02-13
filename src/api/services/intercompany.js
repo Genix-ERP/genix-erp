@@ -94,6 +94,49 @@ export const intercompanyService = {
     const response = await apiClient.get('/intercompany-balances', { params });
     return response.data.data;
   },
+
+  // =====================================================
+  // INTERCOMPANY RULES (Odoo-like configuration)
+  // =====================================================
+
+  // List all inter-company rules
+  async listRules(params = {}) {
+    const response = await apiClient.get('/intercompany-rules', { params });
+    return response.data;
+  },
+
+  // Get a single rule by ID
+  async getRule(id) {
+    const response = await apiClient.get(`/intercompany-rules/${id}`);
+    return response.data.data;
+  },
+
+  // Create a new inter-company rule
+  async createRule(data) {
+    const response = await apiClient.post('/intercompany-rules', data);
+    return response.data;
+  },
+
+  // Update an existing rule
+  async updateRule(id, data) {
+    const response = await apiClient.put(`/intercompany-rules/${id}`, data);
+    return response.data;
+  },
+
+  // Delete a rule
+  async deleteRule(id) {
+    await apiClient.delete(`/intercompany-rules/${id}`);
+  },
+
+  // =====================================================
+  // INTERCOMPANY TRANSACTION LOGS
+  // =====================================================
+
+  // List transaction logs (audit trail)
+  async listLogs(params = {}) {
+    const response = await apiClient.get('/intercompany-logs', { params });
+    return response.data;
+  },
 };
 
 export default intercompanyService;

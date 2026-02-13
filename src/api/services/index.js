@@ -33,7 +33,8 @@ export {
   productionOrdersService,
   workOrdersService,
   qualityChecksService,
-  bomsService
+  bomsService,
+  manufacturingTransfersService
 } from './manufacturing';
 
 // Re-export the API client
