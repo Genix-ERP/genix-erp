@@ -15,6 +15,7 @@ export { default as projectsService } from './projects';
 export { default as aiService } from './ai';
 export { default as pbxService } from './pbx';
 export { default as leadsService } from './leads';
+export { default as intercompanyService } from './intercompany';
 
 // CRM Services
 export {
