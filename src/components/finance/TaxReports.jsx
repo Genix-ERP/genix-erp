@@ -61,11 +61,13 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { taxReportsService } from '@/api/services/taxReports';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export default function TaxReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);
@@ -477,10 +479,12 @@ export default function TaxReports() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>{t('tax_report_periods') || 'Tax Report Periods'}</CardTitle>
-                <Button onClick={() => setShowCreatePeriod(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  {t('new_period') || 'New Period'}
-                </Button>
+                {canCreate(MODULES.FINANCIALS) && (
+                  <Button onClick={() => setShowCreatePeriod(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('new_period') || 'New Period'}
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -580,13 +584,13 @@ export default function TaxReports() {
                                 <Eye className="w-4 h-4 mr-2" />
                                 {t('view_details') || 'View Details'}
                               </DropdownMenuItem>
-                              {period.status !== 'filed' && (
+                              {canUpdate(MODULES.FINANCIALS) && period.status !== 'filed' && (
                                 <DropdownMenuItem onClick={() => handleCalculateReport(period.id)}>
                                   <Calculator className="w-4 h-4 mr-2" />
                                   {t('calculate') || 'Calculate'}
                                 </DropdownMenuItem>
                               )}
-                              {period.status !== 'filed' && (
+                              {canDelete(MODULES.FINANCIALS) && period.status !== 'filed' && (
                                 <DropdownMenuItem
                                   onClick={() => handleDeletePeriod(period.id)}
                                   className="text-red-600"
@@ -826,7 +830,7 @@ export default function TaxReports() {
                   {getStatusBadge(selectedPeriod.period.status)}
                 </div>
                 <div className="flex gap-2">
-                  {selectedPeriod.period.status !== 'filed' && (
+                  {canUpdate(MODULES.FINANCIALS) && selectedPeriod.period.status !== 'filed' && (
                     <>
                       <Button variant="outline" onClick={() => handleCalculateReport(selectedPeriod.period.id)}>
                         <Calculator className="w-4 h-4 mr-2" />

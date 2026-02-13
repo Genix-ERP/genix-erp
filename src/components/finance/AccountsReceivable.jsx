@@ -40,7 +40,7 @@ export default function AccountsReceivable() {
     isLoading,
     refreshData
   } = useFinancials();
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
@@ -425,12 +425,12 @@ export default function AccountsReceivable() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {invoice.status === 'overdue' && (
+                            {canUpdate(MODULES.FINANCIALS) && invoice.status === 'overdue' && (
                               <Button size="sm" variant="ghost" onClick={() => sendReminder(invoice.id)} title={t('remind')}>
                                 <Send className="w-4 h-4" />
                               </Button>
                             )}
-                            {invoice.status !== 'paid' && (
+                            {canUpdate(MODULES.FINANCIALS) && invoice.status !== 'paid' && (
                               <Button size="sm" variant="ghost" onClick={() => markAsPaid(invoice.id)} title={t('pay')}>
                                 <DollarSign className="w-4 h-4" />
                               </Button>

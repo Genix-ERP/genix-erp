@@ -672,7 +672,7 @@ export default function AccountsPayable() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {bill.status === 'draft' && (
+                          {canUpdate('financials') && bill.status === 'draft' && (
                             <>
                               <Button
                                 size="sm"
@@ -688,17 +688,17 @@ export default function AccountsPayable() {
                               </Button>
                             </>
                           )}
-                          {(bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
+                          {canUpdate('financials') && (bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
                             <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)} title={t('pay') || 'Record Payment'}>
                               <DollarSign className="w-4 h-4" />
                             </Button>
                           )}
-                          {(bill.invoice_type || 'invoice') === 'invoice' && bill.status !== 'draft' && bill.status !== 'cancelled' && (
+                          {canCreate('financials') && (bill.invoice_type || 'invoice') === 'invoice' && bill.status !== 'draft' && bill.status !== 'cancelled' && (
                             <Button size="sm" variant="ghost" onClick={() => handleCreateDebitNote(bill)} title={t('create_debit_note')} className="text-orange-600 hover:text-orange-700">
                               <RotateCcw className="w-4 h-4" />
                             </Button>
                           )}
-                          {bill.invoice_type === 'debit_note' && bill.status === 'draft' && (
+                          {canUpdate('financials') && bill.invoice_type === 'debit_note' && bill.status === 'draft' && (
                             <Button size="sm" variant="ghost" onClick={() => handleConfirmDebitNote(bill.id)} title={t('confirm_debit_note')} className="text-green-600 hover:text-green-700">
                               <CheckCircle className="w-4 h-4" />
                             </Button>
@@ -720,6 +720,9 @@ export default function AccountsPayable() {
           <RecurringPanel
             entityType="vendor_bills"
             entityName={t('payment') || 'Payment'}
+            canCreate={canCreate('financials')}
+            canEdit={canUpdate('financials')}
+            canRemove={canDelete('financials')}
             fields={[
               { key: 'partner_id', label: t('vendor') || 'Vendor', type: 'select', required: true, options: vendors.map(v => ({ value: v.id, label: v.name })) },
               { key: 'amount', label: t('amount') || 'Amount', type: 'number', required: true },
