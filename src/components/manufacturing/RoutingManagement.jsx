@@ -523,7 +523,7 @@ export default function RoutingManagement() {
                         <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {workCenters.map(wc => (
+                        {workCenters.filter(wc => wc.id).map(wc => (
                           <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -815,7 +815,7 @@ export default function RoutingManagement() {
                           <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {workCenters.map(wc => (
+                          {workCenters.filter(wc => wc.id).map(wc => (
                             <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                           ))}
                         </SelectContent>
