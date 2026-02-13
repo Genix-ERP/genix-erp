@@ -238,27 +238,35 @@ export default function GeneralLedger() {
       credit: line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-',
     }));
 
+    const statusMap = {
+      posted: t('posted') || 'Posted',
+      draft: t('draft') || 'Draft',
+      cancelled: t('cancelled') || 'Cancelled',
+      reversed: t('reversed') || 'Reversed',
+    };
+
     const doc = generateDocumentPDF({
-      template: 'report',
-      title: t('journal_entry') || 'Journal Entry',
+      template: 'invoice',
+      title: t('journal_entry') || 'Buxgalteriya yozuvi',
       documentNumber: selectedEntry.entry_number,
       documentDate: selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'dd.MM.yyyy') : '',
+      dateLabel: t('date') || 'Date',
       headerFields: [
         { label: t('description') || 'Description', value: selectedEntry.description || '-' },
-        { label: t('status') || 'Status', value: selectedEntry.status || '-' },
+        { label: t('status') || 'Status', value: statusMap[selectedEntry.status] || selectedEntry.status || '-' },
         { label: t('reference') || 'Reference', value: selectedEntry.reference || '-' },
         { label: t('total') || 'Total', value: formatCurrency(selectedEntry.total_debit || 0) },
       ],
       tableColumns: [
-        { key: 'account', label: t('account') || 'Account' },
-        { key: 'description', label: t('description') || 'Description' },
-        { key: 'debit', label: t('debit') || 'Debit', align: 'right' },
-        { key: 'credit', label: t('credit') || 'Credit', align: 'right' },
+        { key: 'account', label: t('account') || 'Account', width: 55 },
+        { key: 'description', label: t('description') || 'Description', width: 55 },
+        { key: 'debit', label: t('debit') || 'Debit', align: 'right', width: 35 },
+        { key: 'credit', label: t('credit') || 'Credit', align: 'right', width: 35 },
       ],
       tableData: lines,
       totals: [
-        { label: t('total') + ' ' + t('debit'), value: formatCurrency(selectedEntry.total_debit || 0) },
-        { label: t('total') + ' ' + t('credit'), value: formatCurrency(selectedEntry.total_credit || 0) },
+        { label: `${t('total')} ${t('debit')}`, value: formatCurrency(selectedEntry.total_debit || 0), bold: true },
+        { label: `${t('total')} ${t('credit')}`, value: formatCurrency(selectedEntry.total_credit || 0), bold: true },
       ],
     });
     doc.save(`${selectedEntry.entry_number || 'journal-entry'}.pdf`);
