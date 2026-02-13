@@ -15,6 +15,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import financeService from "@/api/services/finance";
 import GeneralLedger from "./GeneralLedger";
 import FinancialReports from "./FinancialReports";
 import JournalManagement from "./JournalManagement";
@@ -69,7 +70,7 @@ export default function ChartOfAccounts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { accounts, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
+  const { accounts, accountTypes: backendAccountTypes, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const accountTypes = getAccountTypes(t);
@@ -271,6 +272,20 @@ export default function ChartOfAccounts() {
     });
   };
 
+  // Fetch next available code for a given category
+  const fetchNextCode = async (category) => {
+    try {
+      const matchingType = backendAccountTypes.find(at => at.category === category);
+      if (!matchingType) return;
+      const result = await financeService.getNextAccountCode(matchingType.id);
+      if (result?.code) {
+        setFormData(prev => ({ ...prev, code: result.code }));
+      }
+    } catch (err) {
+      // Silently ignore - user can still enter code manually
+    }
+  };
+
   // Update internal type when main type changes
   const handleTypeChange = (newType) => {
     const defaultInternalType = internalTypes[newType]?.[0]?.value || newType;
@@ -280,6 +295,7 @@ export default function ChartOfAccounts() {
       internal_type: defaultInternalType,
       category: '' // Reset parent when type changes
     });
+    fetchNextCode(newType);
   };
 
   const getTypeInfo = (type) => {
@@ -452,7 +468,7 @@ export default function ChartOfAccounts() {
               </Select>
               {canCreate(MODULES.FINANCIALS) && (
                 <Button
-                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  onClick={() => { resetForm(); setShowCreateModal(true); fetchNextCode('asset'); }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
                 >
                   <Plus className="w-4 h-4 mr-2" /> {t('new_account') || 'New Account'}
@@ -484,7 +500,7 @@ export default function ChartOfAccounts() {
               </p>
               {!searchQuery && typeFilter === 'all' && canCreate(MODULES.FINANCIALS) && (
                 <Button
-                  onClick={() => { resetForm(); setShowCreateModal(true); }}
+                  onClick={() => { resetForm(); setShowCreateModal(true); fetchNextCode('asset'); }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
                   <Plus className="w-4 h-4 mr-2" /> {t('create_first_account') || 'Create First Account'}

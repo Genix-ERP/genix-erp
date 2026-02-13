@@ -124,6 +124,7 @@ export const generateDocumentPDF = (config) => {
     title,
     documentNumber,
     documentDate,
+    dateLabel = "Sana",
     headerFields = [],
     tableColumns = [],
     tableData = [],
@@ -159,20 +160,28 @@ export const generateDocumentPDF = (config) => {
   }
 
   // Company details
-  doc.setFontSize(12);
+  const companyX = templateConfig.showCompanyLogo ? margins.left + 35 : margins.left;
+  doc.setFontSize(13);
   doc.setFont(undefined, "bold");
-  doc.text(company.name, templateConfig.showCompanyLogo ? margins.left + 35 : margins.left, yPos + 5);
+  doc.text(company.name, companyX, yPos + 5);
   doc.setFontSize(8);
   doc.setFont(undefined, "normal");
-  doc.text(company.address, templateConfig.showCompanyLogo ? margins.left + 35 : margins.left, yPos + 10);
-  doc.text(`Tel: ${company.phone} | Email: ${company.email}`, templateConfig.showCompanyLogo ? margins.left + 35 : margins.left, yPos + 14);
-  doc.text(`INN: ${company.inn}`, templateConfig.showCompanyLogo ? margins.left + 35 : margins.left, yPos + 18);
+  doc.setTextColor(100);
+  doc.text(company.address, companyX, yPos + 10);
+  doc.text(`Tel: ${company.phone} | Email: ${company.email}`, companyX, yPos + 14);
+  doc.text(`INN: ${company.inn}`, companyX, yPos + 18);
+  doc.setTextColor(0);
 
-  yPos += 25;
+  yPos += 24;
 
-  // Horizontal line
-  doc.setDrawColor(200);
+  // Horizontal divider
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(0.5);
   doc.line(margins.left, yPos, pageWidth - margins.right, yPos);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.line(margins.left, yPos + 1, pageWidth - margins.right, yPos + 1);
+  doc.setLineWidth(0.1);
   yPos += 10;
 
   // Document title and number
@@ -182,34 +191,46 @@ export const generateDocumentPDF = (config) => {
   yPos += 8;
 
   if (documentNumber) {
-    doc.setFontSize(10);
+    doc.setFontSize(11);
     doc.setFont(undefined, "normal");
-    doc.text(`№ ${documentNumber}`, pageWidth / 2, yPos, { align: "center" });
-    yPos += 5;
+    doc.text(`#${documentNumber}`, pageWidth / 2, yPos, { align: "center" });
+    yPos += 6;
   }
 
   if (documentDate) {
     doc.setFontSize(9);
-    doc.text(`Sana: ${documentDate}`, pageWidth / 2, yPos, { align: "center" });
+    doc.setTextColor(100);
+    doc.text(`${dateLabel}: ${documentDate}`, pageWidth / 2, yPos, { align: "center" });
+    doc.setTextColor(0);
     yPos += 10;
   }
 
   // Header fields (2 columns)
   if (headerFields.length > 0) {
+    // Draw a light background box
+    const boxHeight = Math.ceil(headerFields.length / 2) * 7 + 4;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(margins.left, yPos - 3, contentWidth, boxHeight, 2, 2, 'FD');
+
     doc.setFontSize(9);
     const colWidth = contentWidth / 2;
     headerFields.forEach((field, index) => {
       const col = index % 2;
       const row = Math.floor(index / 2);
-      const x = margins.left + col * colWidth;
-      const y = yPos + row * 6;
+      const x = margins.left + 4 + col * colWidth;
+      const y = yPos + 3 + row * 7;
 
       doc.setFont(undefined, "bold");
+      doc.setTextColor(71, 85, 105);
       doc.text(`${field.label}:`, x, y);
+      const labelWidth = doc.getTextWidth(`${field.label}:`) + 3;
       doc.setFont(undefined, "normal");
-      doc.text(String(field.value || "-"), x + 35, y);
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(field.value || "-"), x + labelWidth, y);
     });
-    yPos += Math.ceil(headerFields.length / 2) * 6 + 5;
+    doc.setTextColor(0);
+    yPos += boxHeight + 5;
   }
 
   // Table
@@ -227,9 +248,9 @@ export const generateDocumentPDF = (config) => {
       body: tableRows,
       startY: yPos,
       margin: { left: margins.left, right: margins.right },
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: "bold" },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
+      styles: { fontSize: 8.5, cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.2 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold", cellPadding: 4 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: tableColumns.reduce((acc, col, index) => {
         if (col.align) {
           acc[index] = { halign: col.align };
@@ -241,21 +262,28 @@ export const generateDocumentPDF = (config) => {
       }, {}),
     });
 
-    yPos = doc.lastAutoTable.finalY + 10;
+    yPos = doc.lastAutoTable.finalY + 8;
   }
 
   // Totals
   if (totals.length > 0) {
-    doc.setFontSize(10);
+    const totalBoxWidth = 90;
+    const totalBoxX = pageWidth - margins.right - totalBoxWidth;
+    const totalBoxHeight = totals.length * 7 + 4;
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(totalBoxX, yPos - 3, totalBoxWidth, totalBoxHeight, 1.5, 1.5, 'FD');
+
+    doc.setFontSize(9.5);
     totals.forEach((total) => {
-      const totalWidth = 60;
-      const x = pageWidth - margins.right - totalWidth;
+      const x = totalBoxX + 4;
       doc.setFont(undefined, total.bold ? "bold" : "normal");
-      doc.text(`${total.label}:`, x, yPos);
-      doc.text(String(total.value), pageWidth - margins.right, yPos, { align: "right" });
-      yPos += 6;
+      doc.text(`${total.label}:`, x, yPos + 2);
+      doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 2, { align: "right" });
+      yPos += 7;
     });
-    yPos += 5;
+    yPos += 8;
   }
 
   // Footer fields

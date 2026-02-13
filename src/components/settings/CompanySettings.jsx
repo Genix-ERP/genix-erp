@@ -728,7 +728,7 @@ export default function CompanySettings() {
                   <Input
                     value={formData.bank_name}
                     onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                    placeholder="Kapitalbank, NBU, Ipoteka bank..."
+                    placeholder={t('bank_name_placeholder') || "Kapitalbank, NBU, Ipoteka bank..."}
                   />
                 </div>
               </div>
@@ -791,7 +791,7 @@ export default function CompanySettings() {
                   <Input
                     value={formData.business_group}
                     onChange={(e) => setFormData({ ...formData, business_group: e.target.value })}
-                    placeholder="Qurilish, Mebel, Avtosalon..."
+                    placeholder={t('business_group_placeholder') || "Qurilish, Mebel, Avtosalon..."}
                   />
                 </div>
 
@@ -800,7 +800,7 @@ export default function CompanySettings() {
                   <Input
                     value={formData.intercompany_relations}
                     onChange={(e) => setFormData({ ...formData, intercompany_relations: e.target.value })}
-                    placeholder="Bosh kompaniya yoki bog'liq kompaniyalar"
+                    placeholder={t('intercompany_placeholder') || "Bosh kompaniya yoki bog'liq kompaniyalar"}
                   />
                 </div>
               </div>
@@ -852,7 +852,7 @@ export default function CompanySettings() {
                   <Input
                     value={formData.legal_address}
                     onChange={(e) => setFormData({ ...formData, legal_address: e.target.value })}
-                    placeholder="Toshkent shahri, Chilonzor tumani, ..."
+                    placeholder={t('legal_address_placeholder') || "Toshkent shahri, Chilonzor tumani, ..."}
                   />
                 </div>
               </div>
@@ -1014,7 +1014,7 @@ export default function CompanySettings() {
                   <Input
                     value={addFormData.bank_name}
                     onChange={(e) => setAddFormData({ ...addFormData, bank_name: e.target.value })}
-                    placeholder="Kapitalbank, NBU, Ipoteka bank..."
+                    placeholder={t('bank_name_placeholder') || "Kapitalbank, NBU, Ipoteka bank..."}
                   />
                 </div>
               </div>
@@ -1077,7 +1077,7 @@ export default function CompanySettings() {
                   <Input
                     value={addFormData.business_group}
                     onChange={(e) => setAddFormData({ ...addFormData, business_group: e.target.value })}
-                    placeholder="Qurilish, Mebel, Avtosalon..."
+                    placeholder={t('business_group_placeholder') || "Qurilish, Mebel, Avtosalon..."}
                   />
                 </div>
 
@@ -1086,7 +1086,7 @@ export default function CompanySettings() {
                   <Input
                     value={addFormData.intercompany_relations}
                     onChange={(e) => setAddFormData({ ...addFormData, intercompany_relations: e.target.value })}
-                    placeholder="Bosh kompaniya yoki bog'liq kompaniyalar"
+                    placeholder={t('intercompany_placeholder') || "Bosh kompaniya yoki bog'liq kompaniyalar"}
                   />
                 </div>
               </div>
@@ -1138,7 +1138,7 @@ export default function CompanySettings() {
                   <Input
                     value={addFormData.legal_address}
                     onChange={(e) => setAddFormData({ ...addFormData, legal_address: e.target.value })}
-                    placeholder="Toshkent shahri, Chilonzor tumani, ..."
+                    placeholder={t('legal_address_placeholder') || "Toshkent shahri, Chilonzor tumani, ..."}
                   />
                 </div>
               </div>

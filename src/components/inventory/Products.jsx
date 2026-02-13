@@ -25,6 +25,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import LotTracking from "./LotTracking";
 import PriceLabelPrinting from "./PriceLabelPrinting";
@@ -82,7 +83,16 @@ export default function Products() {
     deleteCategory,
     isLoading
   } = useInventory();
+  const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+
+  const emptyCategoryAccounts = {
+    income_account_id: '',
+    expense_account_id: '',
+    stock_valuation_account_id: '',
+    stock_input_account_id: '',
+    stock_output_account_id: '',
+  };
 
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,7 +115,30 @@ export default function Products() {
   const [isSaving, setIsSaving] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editCategoryName, setEditCategoryName] = useState('');
+  const [categoryAccounts, setCategoryAccounts] = useState({ ...emptyCategoryAccounts });
   const { addAuditLog } = useAuditTrail('products');
+
+  // Format number with thousands separators for display in price inputs
+  const formatPriceDisplay = (value) => {
+    if (value === '' || value === null || value === undefined) return '';
+    const str = String(value);
+    // Allow typing decimal point
+    const parts = str.split('.');
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    if (parts.length > 1) return intPart + '.' + parts[1];
+    return intPart;
+  };
+
+  const handlePriceChange = (field, rawValue) => {
+    // Strip everything except digits and dot
+    const cleaned = rawValue.replace(/[^\d.]/g, '');
+    // Prevent multiple dots
+    const dotIndex = cleaned.indexOf('.');
+    const sanitized = dotIndex >= 0
+      ? cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, '')
+      : cleaned;
+    setFormData(prev => ({ ...prev, [field]: sanitized }));
+  };
 
   // Cleanup all modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -641,17 +674,30 @@ export default function Products() {
       name: newCategoryName.trim(),
       description: '',
       parent_id: null,
-      is_active: true
+      is_active: true,
+      income_account_id: categoryAccounts.income_account_id || null,
+      expense_account_id: categoryAccounts.expense_account_id || null,
+      stock_valuation_account_id: categoryAccounts.stock_valuation_account_id || null,
+      stock_input_account_id: categoryAccounts.stock_input_account_id || null,
+      stock_output_account_id: categoryAccounts.stock_output_account_id || null,
     };
 
     createCategory(categoryData);
     setNewCategoryName('');
+    setCategoryAccounts({ ...emptyCategoryAccounts });
     setShowCategoryModal(false);
   };
 
   const handleEditCategoryClick = (category) => {
     setSelectedCategory(category);
     setEditCategoryName(category.name);
+    setCategoryAccounts({
+      income_account_id: category.income_account_id || '',
+      expense_account_id: category.expense_account_id || '',
+      stock_valuation_account_id: category.stock_valuation_account_id || '',
+      stock_input_account_id: category.stock_input_account_id || '',
+      stock_output_account_id: category.stock_output_account_id || '',
+    });
     setShowEditCategoryModal(true);
   };
 
@@ -659,11 +705,16 @@ export default function Products() {
     if (!editCategoryName.trim() || !selectedCategory) return;
 
     updateCategory(selectedCategory.id, {
-      ...selectedCategory,
       name: editCategoryName.trim(),
-      code: editCategoryName.toUpperCase().replace(/\s+/g, '-').substring(0, 10)
+      code: editCategoryName.toUpperCase().replace(/\s+/g, '-').substring(0, 10),
+      income_account_id: categoryAccounts.income_account_id || '',
+      expense_account_id: categoryAccounts.expense_account_id || '',
+      stock_valuation_account_id: categoryAccounts.stock_valuation_account_id || '',
+      stock_input_account_id: categoryAccounts.stock_input_account_id || '',
+      stock_output_account_id: categoryAccounts.stock_output_account_id || '',
     });
     setEditCategoryName('');
+    setCategoryAccounts({ ...emptyCategoryAccounts });
     setSelectedCategory(null);
     setShowEditCategoryModal(false);
   };
@@ -1520,12 +1571,12 @@ export default function Products() {
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
                       className="pl-9"
-                      value={formData.cost_price}
-                      onChange={(e) => setFormData({...formData, cost_price: e.target.value})}
+                      value={formatPriceDisplay(formData.cost_price)}
+                      onChange={(e) => handlePriceChange('cost_price', e.target.value)}
                     />
                   </div>
                 </div>
@@ -1538,12 +1589,12 @@ export default function Products() {
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
                       className="pl-9"
-                      value={formData.list_price}
-                      onChange={(e) => setFormData({...formData, list_price: e.target.value})}
+                      value={formatPriceDisplay(formData.list_price)}
+                      onChange={(e) => handlePriceChange('list_price', e.target.value)}
                       required
                     />
                   </div>
@@ -1556,12 +1607,12 @@ export default function Products() {
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
                       className="pl-9"
-                      value={formData.min_price}
-                      onChange={(e) => setFormData({...formData, min_price: e.target.value})}
+                      value={formatPriceDisplay(formData.min_price)}
+                      onChange={(e) => handlePriceChange('min_price', e.target.value)}
                     />
                   </div>
                 </div>
@@ -2151,12 +2202,12 @@ export default function Products() {
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
                           className="pl-9"
-                          value={formData.wholesale_price}
-                          onChange={(e) => setFormData({...formData, wholesale_price: e.target.value})}
+                          value={formatPriceDisplay(formData.wholesale_price)}
+                          onChange={(e) => handlePriceChange('wholesale_price', e.target.value)}
                         />
                       </div>
                     </div>
@@ -2589,8 +2640,11 @@ export default function Products() {
       />
 
       {/* Create Category Modal */}
-      <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showCategoryModal} onOpenChange={(open) => {
+        setShowCategoryModal(open);
+        if (!open) { setNewCategoryName(''); setCategoryAccounts({ ...emptyCategoryAccounts }); }
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Tag className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -2609,15 +2663,48 @@ export default function Products() {
                 placeholder={t('category_name_placeholder')}
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
               />
             </div>
+
+            {/* GL Account Selectors */}
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-slate-800 mb-3">{t('accounting_accounts')}</h4>
+              <div className="space-y-3">
+                {[
+                  { key: 'income_account_id', label: t('income_account') },
+                  { key: 'expense_account_id', label: t('expense_account') },
+                  { key: 'stock_valuation_account_id', label: t('stock_valuation_account') },
+                  { key: 'stock_input_account_id', label: t('stock_input_account') },
+                  { key: 'stock_output_account_id', label: t('stock_output_account') },
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="text-sm font-medium text-slate-600 mb-1 block">{label}</label>
+                    <Select
+                      value={categoryAccounts[key] || 'none'}
+                      onValueChange={(v) => setCategoryAccounts(prev => ({ ...prev, [key]: v === 'none' ? '' : v }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t('select_account')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— {t('none')} —</SelectItem>
+                        {accounts.map(acc => (
+                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <Button
                 variant="outline"
                 onClick={() => {
                   setShowCategoryModal(false);
                   setNewCategoryName('');
+                  setCategoryAccounts({ ...emptyCategoryAccounts });
                 }}
                 className="flex-1"
               >
@@ -2728,8 +2815,11 @@ export default function Products() {
       </Dialog>
 
       {/* Edit Category Modal */}
-      <Dialog open={showEditCategoryModal} onOpenChange={setShowEditCategoryModal}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showEditCategoryModal} onOpenChange={(open) => {
+        setShowEditCategoryModal(open);
+        if (!open) { setEditCategoryName(''); setSelectedCategory(null); setCategoryAccounts({ ...emptyCategoryAccounts }); }
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Tag className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -2745,9 +2835,41 @@ export default function Products() {
                 placeholder={t('category_name_placeholder')}
                 value={editCategoryName}
                 onChange={(e) => setEditCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleUpdateCategory()}
               />
             </div>
+
+            {/* GL Account Selectors */}
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-slate-800 mb-3">{t('accounting_accounts')}</h4>
+              <div className="space-y-3">
+                {[
+                  { key: 'income_account_id', label: t('income_account') },
+                  { key: 'expense_account_id', label: t('expense_account') },
+                  { key: 'stock_valuation_account_id', label: t('stock_valuation_account') },
+                  { key: 'stock_input_account_id', label: t('stock_input_account') },
+                  { key: 'stock_output_account_id', label: t('stock_output_account') },
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="text-sm font-medium text-slate-600 mb-1 block">{label}</label>
+                    <Select
+                      value={categoryAccounts[key] || 'none'}
+                      onValueChange={(v) => setCategoryAccounts(prev => ({ ...prev, [key]: v === 'none' ? '' : v }))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t('select_account')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— {t('none')} —</SelectItem>
+                        {accounts.map(acc => (
+                          <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -2755,6 +2877,7 @@ export default function Products() {
                   setShowEditCategoryModal(false);
                   setEditCategoryName('');
                   setSelectedCategory(null);
+                  setCategoryAccounts({ ...emptyCategoryAccounts });
                 }}
                 className="flex-1"
               >
