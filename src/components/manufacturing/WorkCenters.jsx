@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -76,6 +77,32 @@ export default function WorkCenters() {
     is_available: true,
     notes: ''
   });
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
+
+  // Get equipment not assigned to any work center (available for assignment)
+  const getUnassignedEquipment = () => {
+    return equipment.filter(eq => !eq.work_center_id);
+  };
+
+  // Get equipment assigned to a specific work center (for editing)
+  const getEquipmentForWorkCenterEdit = (workCenterId) => {
+    return equipment.filter(eq => eq.work_center_id === workCenterId);
+  };
+
+  // Save equipment assignments to localStorage
+  const saveEquipmentAssignments = (workCenterId, equipmentIds) => {
+    const updatedEquipment = equipment.map(eq => {
+      if (equipmentIds.includes(eq.id)) {
+        return { ...eq, work_center_id: workCenterId };
+      } else if (eq.work_center_id === workCenterId) {
+        // Remove assignment if it was previously assigned to this work center but not selected now
+        return { ...eq, work_center_id: null };
+      }
+      return eq;
+    });
+    setEquipment(updatedEquipment);
+    localStorage.setItem(equipmentKey, JSON.stringify(updatedEquipment));
+  };
 
   const handleCreateWorkCenter = async () => {
     try {
@@ -97,7 +124,13 @@ export default function WorkCenters() {
         notes: newWorkCenter.notes || null
       };
 
-      await createWorkCenter(wcData);
+      const createdWC = await createWorkCenter(wcData);
+
+      // Save equipment assignments if any were selected
+      if (selectedEquipmentIds.length > 0 && createdWC?.id) {
+        saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
+      }
+
       setShowCreateModal(false);
       resetForm();
     } catch (error) {
@@ -125,6 +158,7 @@ export default function WorkCenters() {
       is_available: true,
       notes: ''
     });
+    setSelectedEquipmentIds([]);
   };
 
   const handleViewWorkCenter = (wc) => {
@@ -151,6 +185,9 @@ export default function WorkCenters() {
       is_available: wc.is_available !== false,
       notes: wc.notes || ''
     });
+    // Load currently assigned equipment IDs
+    const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
+    setSelectedEquipmentIds(assignedIds);
     setShowEditModal(true);
   };
 
@@ -176,6 +213,10 @@ export default function WorkCenters() {
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
+
+      // Update equipment assignments
+      saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
+
       setShowEditModal(false);
       setSelectedWorkCenter(null);
       resetForm();
@@ -506,6 +547,61 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            {/* Equipment Selection */}
+            <div className="space-y-2 pt-4 border-t border-slate-100">
+              <LabelWithHelp
+                label={t('assign_equipment') || 'Assign Equipment'}
+                helpText={t('help_assign_equipment') || 'Select equipment to assign to this work center'}
+              />
+              {getUnassignedEquipment().length > 0 ? (
+                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {getUnassignedEquipment().map((eq) => (
+                    <div
+                      key={eq.id}
+                      className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedEquipmentIds(prev =>
+                          prev.includes(eq.id)
+                            ? prev.filter(id => id !== eq.id)
+                            : [...prev, eq.id]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        id={`eq-${eq.id}`}
+                        checked={selectedEquipmentIds.includes(eq.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedEquipmentIds(prev =>
+                            checked
+                              ? [...prev, eq.id]
+                              : prev.filter(id => id !== eq.id)
+                          );
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{eq.name}</p>
+                        <p className="text-xs text-slate-500">{eq.code} • {t(eq.type) || eq.type}</p>
+                      </div>
+                      <Badge variant="outline" className={eq.status === 'operational' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}>
+                        {t(eq.status) || eq.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 text-center bg-slate-50">
+                  <Settings className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm text-slate-500">{t('no_unassigned_equipment') || 'No unassigned equipment available'}</p>
+                  <p className="text-xs text-slate-400 mt-1">{t('create_equipment_first') || 'Create equipment in the Equipment tab first'}</p>
+                </div>
+              )}
+              {selectedEquipmentIds.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {selectedEquipmentIds.length} {t('equipment_selected') || 'equipment selected'}
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowCreateModal(false); resetForm(); }} className="flex-1">
                 {t('cancel')}
@@ -637,6 +733,73 @@ export default function WorkCenters() {
                 />
               </div>
             </div>
+
+            {/* Equipment Selection for Edit */}
+            {selectedWorkCenter && (
+              <div className="space-y-2 pt-4 border-t border-slate-100">
+                <LabelWithHelp
+                  label={t('assign_equipment') || 'Assign Equipment'}
+                  helpText={t('help_assign_equipment') || 'Select equipment to assign to this work center'}
+                />
+                {(() => {
+                  // Get equipment assigned to this work center OR unassigned
+                  const availableEquipment = equipment.filter(
+                    eq => !eq.work_center_id || eq.work_center_id === selectedWorkCenter.id
+                  );
+
+                  if (availableEquipment.length > 0) {
+                    return (
+                      <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                        {availableEquipment.map((eq) => (
+                          <div
+                            key={eq.id}
+                            className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                            onClick={() => {
+                              setSelectedEquipmentIds(prev =>
+                                prev.includes(eq.id)
+                                  ? prev.filter(id => id !== eq.id)
+                                  : [...prev, eq.id]
+                              );
+                            }}
+                          >
+                            <Checkbox
+                              id={`edit-eq-${eq.id}`}
+                              checked={selectedEquipmentIds.includes(eq.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedEquipmentIds(prev =>
+                                  checked
+                                    ? [...prev, eq.id]
+                                    : prev.filter(id => id !== eq.id)
+                                );
+                              }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{eq.name}</p>
+                              <p className="text-xs text-slate-500">{eq.code} • {t(eq.type) || eq.type}</p>
+                            </div>
+                            <Badge variant="outline" className={eq.status === 'operational' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}>
+                              {t(eq.status) || eq.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="border rounded-lg p-4 text-center bg-slate-50">
+                      <Settings className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                      <p className="text-sm text-slate-500">{t('no_equipment_available') || 'No equipment available'}</p>
+                    </div>
+                  );
+                })()}
+                {selectedEquipmentIds.length > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {selectedEquipmentIds.length} {t('equipment_selected') || 'equipment selected'}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowEditModal(false); setSelectedWorkCenter(null); resetForm(); }} className="flex-1">

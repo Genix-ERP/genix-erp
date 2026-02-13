@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog } from 'lucide-react';
+import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog, Eye, ArrowRight, Package, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -38,8 +38,21 @@ export default function ProductionOrders() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [products, setProducts] = useState([]);
   const [boms, setBoms] = useState([]);
+
+  // Manufacturing stages for Gazablok/Plita/Beton
+  const MANUFACTURING_STAGES = [
+    { key: 'draft', label: t('stage_draft') || 'Draft', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+    { key: 'mixing', label: t('stage_mixing') || 'Mixing', color: 'bg-purple-100 text-purple-700 border-purple-300' },
+    { key: 'rising', label: t('stage_rising') || 'Rising', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+    { key: 'drying', label: t('stage_drying') || 'Drying', color: 'bg-amber-100 text-amber-700 border-amber-300' },
+    { key: 'cutting', label: t('stage_cutting') || 'Cutting', color: 'bg-orange-100 text-orange-700 border-orange-300' },
+    { key: 'packing', label: t('stage_packing') || 'Packing', color: 'bg-cyan-100 text-cyan-700 border-cyan-300' },
+    { key: 'done', label: t('stage_done') || 'Done', color: 'bg-green-100 text-green-700 border-green-300' }
+  ];
   const [productBoms, setProductBoms] = useState([]); // BOMs filtered by selected product
   const [newOrder, setNewOrder] = useState({
     name: '',
@@ -50,7 +63,10 @@ export default function ProductionOrders() {
     uom: 'units',
     priority: 5,
     scheduled_start: new Date().toISOString().split('T')[0],
-    scheduled_end: ''
+    scheduled_end: '',
+    // Manufacturing-specific fields
+    mold_count: 0,
+    shift: ''
   });
 
   // Load products and BOMs
@@ -109,11 +125,16 @@ export default function ProductionOrders() {
     try {
       const orderData = {
         ...newOrder,
-        quantity_planned: parseFloat(newOrder.quantity_planned)
+        quantity_planned: parseFloat(newOrder.quantity_planned),
+        mold_count: parseInt(newOrder.mold_count) || 0
       };
       // Only include bom_id if selected
       if (!orderData.bom_id) {
         delete orderData.bom_id;
+      }
+      // Only include shift if selected
+      if (!orderData.shift) {
+        delete orderData.shift;
       }
       await createProductionOrder(orderData);
       setShowCreateModal(false);
@@ -128,7 +149,10 @@ export default function ProductionOrders() {
         uom: 'units',
         priority: 5,
         scheduled_start: new Date().toISOString().split('T')[0],
-        scheduled_end: ''
+        scheduled_end: '',
+        // Manufacturing-specific fields
+        mold_count: 0,
+        shift: ''
       });
       setProductBoms([]);
     } catch (error) {
@@ -194,6 +218,85 @@ export default function ProductionOrders() {
 
   const getUnitLabel = (uom) => {
     return t(uom) || uom;
+  };
+
+  const getStageColor = (stage) => {
+    const colors = {
+      draft: 'bg-gray-100 text-gray-700',
+      mixing: 'bg-purple-100 text-purple-700',
+      rising: 'bg-blue-100 text-blue-700',
+      drying: 'bg-amber-100 text-amber-700',
+      cutting: 'bg-orange-100 text-orange-700',
+      packing: 'bg-cyan-100 text-cyan-700',
+      done: 'bg-green-100 text-green-700'
+    };
+    return colors[stage] || colors.draft;
+  };
+
+  const getStageLabel = (stage) => {
+    const labels = {
+      draft: t('stage_draft') || 'Draft',
+      mixing: t('stage_mixing') || 'Mixing',
+      rising: t('stage_rising') || 'Rising',
+      drying: t('stage_drying') || 'Drying',
+      cutting: t('stage_cutting') || 'Cutting',
+      packing: t('stage_packing') || 'Packing',
+      done: t('stage_done') || 'Done'
+    };
+    return labels[stage] || stage;
+  };
+
+  const getShiftLabel = (shift) => {
+    if (!shift) return '-';
+    return shift === 'day' ? (t('day_shift') || 'Day') : (t('night_shift') || 'Night');
+  };
+
+  const handleViewOrder = (order) => {
+    setSelectedOrder(order);
+    setShowViewModal(true);
+  };
+
+  const getCurrentStageIndex = (stage) => {
+    return MANUFACTURING_STAGES.findIndex(s => s.key === (stage || 'draft'));
+  };
+
+  const handleAdvanceStage = async (orderId, currentStage) => {
+    const currentIndex = getCurrentStageIndex(currentStage);
+    if (currentIndex < MANUFACTURING_STAGES.length - 1) {
+      const nextStage = MANUFACTURING_STAGES[currentIndex + 1].key;
+      try {
+        await updateProductionOrder(orderId, { current_stage: nextStage });
+        // Update selected order if viewing
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(prev => ({ ...prev, current_stage: nextStage }));
+        }
+      } catch (error) {
+        console.error('Error advancing stage:', error);
+        alert(t('error_advancing_stage') || 'Failed to advance stage');
+      }
+    }
+  };
+
+  const handleRecordOutput = async (orderId, goodQty, rejectQty, packageCount) => {
+    try {
+      await updateProductionOrder(orderId, {
+        good_quantity: parseFloat(goodQty) || 0,
+        reject_quantity: parseFloat(rejectQty) || 0,
+        package_count: parseInt(packageCount) || 0
+      });
+      // Update selected order
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          good_quantity: parseFloat(goodQty) || 0,
+          reject_quantity: parseFloat(rejectQty) || 0,
+          package_count: parseInt(packageCount) || 0
+        }));
+      }
+    } catch (error) {
+      console.error('Error recording output:', error);
+      alert(t('error_recording_output') || 'Failed to record output');
+    }
   };
 
   return (
@@ -273,10 +376,12 @@ export default function ProductionOrders() {
                     <TableHead className="font-semibold">{t('order_code') || 'Order Code'}</TableHead>
                     <TableHead className="font-semibold">{t('product') || 'Product'}</TableHead>
                     <TableHead className="font-semibold">{t('quantity') || 'Quantity'}</TableHead>
-                    <TableHead className="font-semibold">{t('planned_cost') || 'Est. Cost'}</TableHead>
+                    <TableHead className="font-semibold">{t('molds') || 'Molds'}</TableHead>
+                    <TableHead className="font-semibold">{t('stage') || 'Stage'}</TableHead>
+                    <TableHead className="font-semibold">{t('output') || 'Output'}</TableHead>
                     <TableHead className="font-semibold">{t('priority') || 'Priority'}</TableHead>
                     <TableHead className="font-semibold">{t('status') || 'Status'}</TableHead>
-                    <TableHead className="font-semibold">{t('schedule') || 'Schedule'}</TableHead>
+                    <TableHead className="font-semibold">{t('shift') || 'Shift'}</TableHead>
                     <TableHead className="font-semibold">{t('progress') || 'Progress'}</TableHead>
                     <TableHead className="font-semibold">{t('actions') || 'Actions'}</TableHead>
                   </TableRow>
@@ -302,16 +407,27 @@ export default function ProductionOrders() {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {order.planned_cost > 0 ? (
-                              <span className="font-semibold text-slate-700">{formatCurrency(order.planned_cost)}</span>
+                            {order.mold_count > 0 ? (
+                              <span className="font-semibold">{order.mold_count}</span>
                             ) : (
-                              <span className="text-slate-400 text-xs">{order.status === 'draft' ? t('confirm_to_calculate') || 'Confirm to calc' : '-'}</span>
+                              <span className="text-slate-400">-</span>
                             )}
-                            {order.work_orders?.length > 0 && (
-                              <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                <Cog className="w-3 h-3" />
-                                {order.work_orders.length} {t('operations') || 'ops'}
-                              </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStageColor(order.current_stage || 'draft')}>
+                            {getStageLabel(order.current_stage || 'draft')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs">
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-600 font-medium">{order.good_quantity || 0}</span>
+                              <span className="text-slate-400">/</span>
+                              <span className="text-red-500">{order.reject_quantity || 0}</span>
+                            </div>
+                            {order.package_count > 0 && (
+                              <p className="text-slate-500 mt-0.5">{order.package_count} {t('packages') || 'pkg'}</p>
                             )}
                           </div>
                         </TableCell>
@@ -322,14 +438,7 @@ export default function ProductionOrders() {
                           <Badge className={getStatusColor(order.status)}>{getStatusLabel(order.status)}</Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="text-xs">
-                            <p className="text-slate-600">
-                              {t('start') || 'Start'}: {order.scheduled_start ? format(new Date(order.scheduled_start), 'MMM dd') : '-'}
-                            </p>
-                            <p className="text-slate-600">
-                              {t('end') || 'End'}: {order.scheduled_end ? format(new Date(order.scheduled_end), 'MMM dd') : '-'}
-                            </p>
-                          </div>
+                          <span className="text-sm">{getShiftLabel(order.shift)}</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -344,6 +453,9 @@ export default function ProductionOrders() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleViewOrder(order)} title={t('view') || 'View'}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
                             {order.status === 'draft' && (
                               <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'confirm')} title={t('confirm') || 'Confirm'}>
                                 <CheckCircle className="w-4 h-4" />
@@ -492,6 +604,33 @@ export default function ProductionOrders() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('mold_count') || 'Mold Count'}</label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={newOrder.mold_count}
+                  onChange={(e) => setNewOrder({...newOrder, mold_count: parseInt(e.target.value) || 0})}
+                  min="0"
+                />
+                <p className="text-xs text-slate-500 mt-1">{t('mold_count_hint') || '1 mold = 12 blocks'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('shift') || 'Shift'}</label>
+                <Select value={newOrder.shift} onValueChange={(value) => setNewOrder({...newOrder, shift: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_shift') || 'Select shift'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('no_shift') || 'Not specified'}</SelectItem>
+                    <SelectItem value="day">{t('day_shift') || 'Day Shift'}</SelectItem>
+                    <SelectItem value="night">{t('night_shift') || 'Night Shift'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -527,6 +666,183 @@ export default function ProductionOrders() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Order / Stage Tracking Modal */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cog className="w-5 h-5" />
+              {selectedOrder?.code || selectedOrder?.name} - {t('stage_workflow') || 'Stage Workflow'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedOrder && (
+            <div className="space-y-6 py-4">
+              {/* Order Summary */}
+              <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-xs text-slate-500">{t('product') || 'Product'}</p>
+                  <p className="font-semibold">{selectedOrder.product_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('quantity') || 'Quantity'}</p>
+                  <p className="font-semibold">{selectedOrder.quantity_planned} {getUnitLabel(selectedOrder.uom)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('molds') || 'Molds'}</p>
+                  <p className="font-semibold">{selectedOrder.mold_count || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">{t('shift') || 'Shift'}</p>
+                  <p className="font-semibold">{getShiftLabel(selectedOrder.shift)}</p>
+                </div>
+              </div>
+
+              {/* Stage Workflow */}
+              <div>
+                <h4 className="font-semibold mb-4">{t('manufacturing_stages') || 'Manufacturing Stages'}</h4>
+                <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
+                  {MANUFACTURING_STAGES.map((stage, index) => {
+                    const currentIndex = getCurrentStageIndex(selectedOrder.current_stage);
+                    const isCompleted = index < currentIndex;
+                    const isCurrent = index === currentIndex;
+                    const isPending = index > currentIndex;
+
+                    return (
+                      <React.Fragment key={stage.key}>
+                        <div
+                          className={`
+                            flex flex-col items-center min-w-[80px] p-3 rounded-lg border-2 transition-all
+                            ${isCompleted ? 'bg-green-50 border-green-400' : ''}
+                            ${isCurrent ? stage.color + ' border-2 shadow-md' : ''}
+                            ${isPending ? 'bg-slate-50 border-slate-200 opacity-60' : ''}
+                          `}
+                        >
+                          <div className={`
+                            w-8 h-8 rounded-full flex items-center justify-center mb-2
+                            ${isCompleted ? 'bg-green-500 text-white' : ''}
+                            ${isCurrent ? 'bg-slate-700 text-white' : ''}
+                            ${isPending ? 'bg-slate-200 text-slate-400' : ''}
+                          `}>
+                            {isCompleted ? <CheckCircle className="w-5 h-5" /> : index + 1}
+                          </div>
+                          <span className="text-xs font-medium text-center">{stage.label}</span>
+                        </div>
+                        {index < MANUFACTURING_STAGES.length - 1 && (
+                          <ArrowRight className={`w-5 h-5 flex-shrink-0 ${index < currentIndex ? 'text-green-500' : 'text-slate-300'}`} />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* Advance Stage Button */}
+                {selectedOrder.current_stage !== 'done' && selectedOrder.status === 'in_progress' && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      onClick={() => handleAdvanceStage(selectedOrder.id, selectedOrder.current_stage)}
+                      className="bg-gradient-to-r from-slate-700 to-slate-800"
+                    >
+                      <ArrowRight className="w-4 h-4 mr-2" />
+                      {t('advance_to_next_stage') || 'Advance to Next Stage'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Output Recording - Visible at Cutting Stage */}
+              {(selectedOrder.current_stage === 'cutting' || selectedOrder.current_stage === 'packing' || selectedOrder.current_stage === 'done') && (
+                <div className="border-t pt-4">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2">
+                    <Package className="w-5 h-5" />
+                    {t('production_output') || 'Production Output'}
+                  </h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block text-green-700">
+                        {t('good_quantity') || 'Good Quantity'}
+                      </label>
+                      <Input
+                        type="number"
+                        value={selectedOrder.good_quantity || 0}
+                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, good_quantity: e.target.value }))}
+                        className="border-green-300 focus:border-green-500"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block text-red-700">
+                        {t('reject_quantity') || 'Reject/Brak Quantity'}
+                      </label>
+                      <Input
+                        type="number"
+                        value={selectedOrder.reject_quantity || 0}
+                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, reject_quantity: e.target.value }))}
+                        className="border-red-300 focus:border-red-500"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block text-cyan-700">
+                        {t('package_count') || 'Package Count'}
+                      </label>
+                      <Input
+                        type="number"
+                        value={selectedOrder.package_count || 0}
+                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, package_count: e.target.value }))}
+                        className="border-cyan-300 focus:border-cyan-500"
+                        min="0"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">{t('package_hint') || '40-46 blocks per package'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      onClick={() => handleRecordOutput(
+                        selectedOrder.id,
+                        selectedOrder.good_quantity,
+                        selectedOrder.reject_quantity,
+                        selectedOrder.package_count
+                      )}
+                      className="bg-gradient-to-r from-green-600 to-green-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {t('save_output') || 'Save Output'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Output Summary */}
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-3">{t('output_summary') || 'Output Summary'}</h4>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-blue-600">{t('expected_output') || 'Expected Output'}</p>
+                    <p className="text-lg font-bold text-blue-700">
+                      {(selectedOrder.mold_count || 0) * 12} {t('blocks') || 'blocks'}
+                    </p>
+                    <p className="text-xs text-blue-500">{selectedOrder.mold_count || 0} {t('molds') || 'molds'} × 12</p>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <p className="text-xs text-green-600">{t('good_quantity') || 'Good'}</p>
+                    <p className="text-lg font-bold text-green-700">{selectedOrder.good_quantity || 0}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <p className="text-xs text-red-600">{t('reject_quantity') || 'Reject/Brak'}</p>
+                    <p className="text-lg font-bold text-red-700">{selectedOrder.reject_quantity || 0}</p>
+                  </div>
+                  <div className="p-3 bg-cyan-50 rounded-lg">
+                    <p className="text-xs text-cyan-600">{t('packages') || 'Packages'}</p>
+                    <p className="text-lg font-bold text-cyan-700">{selectedOrder.package_count || 0}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
