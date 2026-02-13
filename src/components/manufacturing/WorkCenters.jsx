@@ -26,7 +26,7 @@ export default function WorkCenters() {
   const { formatCurrency } = useCurrencyFormatter();
   const { workCenters, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
   const { activeCompany } = useCompany();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -372,7 +372,7 @@ export default function WorkCenters() {
                     >
                       <Eye className="w-4 h-4 mr-1" /> {t('view')}
                     </Button>
-                    {canEdit(MODULES.MANUFACTURING) && (
+                    {canUpdate(MODULES.MANUFACTURING) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -962,7 +962,7 @@ export default function WorkCenters() {
                 <Button variant="outline" onClick={() => { setShowViewModal(false); setSelectedWorkCenter(null); }} className="flex-1">
                   {t('close')}
                 </Button>
-                {canEdit(MODULES.MANUFACTURING) && (
+                {canUpdate(MODULES.MANUFACTURING) && (
                   <Button
                     onClick={() => {
                       setShowViewModal(false);
