@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, FileText, Trash2, Edit } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, FileText, Trash2, Edit, Cog, Package, ArrowUp, ArrowDown } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { inventoryService, bomsService } from '@/api/services';
+import { inventoryService, bomsService, workCentersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BOMManagement() {
@@ -29,13 +30,15 @@ export default function BOMManagement() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [products, setProducts] = useState([]);
+  const [workCenters, setWorkCenters] = useState([]);
   const [newBom, setNewBom] = useState({
     code: '',
     name: '',
     product_id: '',
     quantity: 1,
     bom_type: 'manufacturing',
-    lines: []
+    lines: [],
+    operations: []
   });
 
   const [newComponent, setNewComponent] = useState({
@@ -44,7 +47,32 @@ export default function BOMManagement() {
     unit: 'pcs'
   });
 
-  // Load products for selection
+  const [newOperation, setNewOperation] = useState({
+    operation_name: '',
+    work_center_id: '',
+    setup_time_minutes: 0,
+    run_time_minutes: 0,
+    notes: ''
+  });
+
+  // Load products and work centers
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [productsData, workCentersData] = await Promise.all([
+          inventoryService.listProducts(),
+          workCentersService.list()
+        ]);
+        setProducts(productsData || []);
+        setWorkCenters(workCentersData || []);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Load products for selection (legacy - keep for compatibility)
   useEffect(() => {
     const loadProducts = async () => {
       try {
@@ -100,7 +128,22 @@ export default function BOMManagement() {
         lines: newBom.lines
       };
 
-      await createBOM(bomData);
+      const createdBom = await createBOM(bomData);
+
+      // Create operations if any
+      if (newBom.operations && newBom.operations.length > 0 && createdBom?.id) {
+        for (const op of newBom.operations) {
+          await bomsService.createOperation(createdBom.id, {
+            sequence: op.sequence,
+            operation_name: op.operation_name,
+            work_center_id: op.work_center_id || null,
+            setup_time_minutes: op.setup_time_minutes || 0,
+            run_time_minutes: op.run_time_minutes || 0,
+            notes: op.notes || ''
+          });
+        }
+      }
+
       setShowCreateModal(false);
       resetForm();
     } catch (error) {
@@ -131,24 +174,71 @@ export default function BOMManagement() {
     setNewBom({ ...newBom, lines: updated });
   };
 
+  // Operation management for new BOM
+  const addOperation = () => {
+    if (newOperation.operation_name) {
+      const sequence = (newBom.operations?.length || 0) * 10 + 10;
+      setNewBom({
+        ...newBom,
+        operations: [...(newBom.operations || []), { ...newOperation, sequence }]
+      });
+      setNewOperation({
+        operation_name: '',
+        work_center_id: '',
+        setup_time_minutes: 0,
+        run_time_minutes: 0,
+        notes: ''
+      });
+    }
+  };
+
+  const removeOperation = (index) => {
+    const updated = (newBom.operations || []).filter((_, i) => i !== index);
+    setNewBom({ ...newBom, operations: updated });
+  };
+
+  const moveOperation = (index, direction) => {
+    const ops = [...(newBom.operations || [])];
+    if (direction === 'up' && index > 0) {
+      [ops[index], ops[index - 1]] = [ops[index - 1], ops[index]];
+    } else if (direction === 'down' && index < ops.length - 1) {
+      [ops[index], ops[index + 1]] = [ops[index + 1], ops[index]];
+    }
+    // Update sequences
+    ops.forEach((op, i) => op.sequence = (i + 1) * 10);
+    setNewBom({ ...newBom, operations: ops });
+  };
+
   const [editComponent, setEditComponent] = useState({
     component_id: '',
     quantity: 0,
     unit: 'pcs'
   });
 
+  const [editOperation, setEditOperation] = useState({
+    operation_name: '',
+    work_center_id: '',
+    setup_time_minutes: 0,
+    run_time_minutes: 0,
+    notes: ''
+  });
+
   const handleEditBom = async (bom, e) => {
     e.stopPropagation();
     try {
-      const fullBom = await bomsService.get(bom.id);
+      const [fullBom, operations] = await Promise.all([
+        bomsService.get(bom.id),
+        bomsService.listOperations(bom.id)
+      ]);
       setEditBom({
         ...fullBom,
-        lines: fullBom.lines || []
+        lines: fullBom.lines || [],
+        operations: operations || []
       });
       setShowEditModal(true);
     } catch (error) {
       console.error('Error fetching BOM details:', error);
-      setEditBom({ ...bom, lines: bom.lines || [] });
+      setEditBom({ ...bom, lines: bom.lines || [], operations: [] });
       setShowEditModal(true);
     }
   };
@@ -158,7 +248,45 @@ export default function BOMManagement() {
 
     setIsSubmitting(true);
     try {
+      // Update BOM basic info
       await updateBOM(editBom.id, editBom);
+
+      // Handle operations CRUD
+      const bomId = editBom.id;
+
+      // 1. Delete removed operations
+      if (editBom.deletedOperations && editBom.deletedOperations.length > 0) {
+        for (const opId of editBom.deletedOperations) {
+          try {
+            await bomsService.deleteOperation(bomId, opId);
+          } catch (error) {
+            console.error('Error deleting operation:', opId, error);
+          }
+        }
+      }
+
+      // 2. Create new operations and update existing ones
+      if (editBom.operations && editBom.operations.length > 0) {
+        for (const op of editBom.operations) {
+          const opData = {
+            sequence: op.sequence,
+            operation_name: op.operation_name,
+            work_center_id: op.work_center_id || null,
+            setup_time_minutes: op.setup_time_minutes || 0,
+            run_time_minutes: op.run_time_minutes || 0,
+            notes: op.notes || ''
+          };
+
+          if (op.isNew) {
+            // Create new operation
+            await bomsService.createOperation(bomId, opData);
+          } else if (op.id) {
+            // Update existing operation
+            await bomsService.updateOperation(bomId, op.id, opData);
+          }
+        }
+      }
+
       setShowEditModal(false);
       setEditBom(null);
     } catch (error) {
@@ -188,6 +316,50 @@ export default function BOMManagement() {
     setEditBom({ ...editBom, lines: updated });
   };
 
+  // Edit operation handlers
+  const addEditOperation = () => {
+    if (editOperation.operation_name) {
+      const sequence = (editBom.operations?.length || 0) * 10 + 10;
+      setEditBom({
+        ...editBom,
+        operations: [...(editBom.operations || []), { ...editOperation, sequence, isNew: true }]
+      });
+      setEditOperation({
+        operation_name: '',
+        work_center_id: '',
+        setup_time_minutes: 0,
+        run_time_minutes: 0,
+        notes: ''
+      });
+    }
+  };
+
+  const removeEditOperation = (index) => {
+    const op = editBom.operations[index];
+    const updated = editBom.operations.filter((_, i) => i !== index);
+    // Mark for deletion if it has an ID (existing in DB)
+    if (op.id && !op.isNew) {
+      setEditBom({
+        ...editBom,
+        operations: updated,
+        deletedOperations: [...(editBom.deletedOperations || []), op.id]
+      });
+    } else {
+      setEditBom({ ...editBom, operations: updated });
+    }
+  };
+
+  const moveEditOperation = (index, direction) => {
+    const ops = [...(editBom.operations || [])];
+    if (direction === 'up' && index > 0) {
+      [ops[index], ops[index - 1]] = [ops[index - 1], ops[index]];
+    } else if (direction === 'down' && index < ops.length - 1) {
+      [ops[index], ops[index + 1]] = [ops[index + 1], ops[index]];
+    }
+    ops.forEach((op, i) => op.sequence = (i + 1) * 10);
+    setEditBom({ ...editBom, operations: ops });
+  };
+
   const resetForm = () => {
     setNewBom({
       code: '',
@@ -195,8 +367,22 @@ export default function BOMManagement() {
       product_id: '',
       quantity: 1,
       bom_type: 'manufacturing',
-      lines: []
+      lines: [],
+      operations: []
     });
+    setNewOperation({
+      operation_name: '',
+      work_center_id: '',
+      setup_time_minutes: 0,
+      run_time_minutes: 0,
+      notes: ''
+    });
+  };
+
+  // Get work center name by ID
+  const getWorkCenterName = (wcId) => {
+    const wc = workCenters.find(w => w.id === wcId);
+    return wc?.name || wcId || '-';
   };
 
   const getStatusColor = (status) => {
@@ -364,78 +550,204 @@ export default function BOMManagement() {
               </div>
             </div>
 
-            {/* Components */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-slate-900">{t('components_materials')}</h3>
+            {/* Tabs for Components and Operations */}
+            <Tabs defaultValue="components" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="components" className="flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  {t('components_materials')} ({newBom.lines.length})
+                </TabsTrigger>
+                <TabsTrigger value="operations" className="flex items-center gap-2">
+                  <Cog className="w-4 h-4" />
+                  {t('operations') || 'Operations'} ({newBom.operations?.length || 0})
+                </TabsTrigger>
+              </TabsList>
 
-              {/* Add Component Form */}
-              <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <Select
-                    value={newComponent.component_id}
-                    onValueChange={(value) => setNewComponent({...newComponent, component_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_component')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((product) => (
-                        <SelectItem key={product.id} value={product.id}>
-                          {product.name} ({product.sku || product.code || 'No SKU'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    placeholder={t('quantity')}
-                    value={newComponent.quantity || ''}
-                    onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value) || 0})}
-                  />
-                  <Input
-                    placeholder={t('unit')}
-                    value={newComponent.unit}
-                    onChange={(e) => setNewComponent({...newComponent, unit: e.target.value})}
-                  />
+              {/* Components Tab */}
+              <TabsContent value="components" className="space-y-4 mt-4">
+                {/* Add Component Form */}
+                <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <Select
+                      value={newComponent.component_id}
+                      onValueChange={(value) => setNewComponent({...newComponent, component_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_component')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id}>
+                            {product.name} ({product.sku || product.code || 'No SKU'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      placeholder={t('quantity')}
+                      value={newComponent.quantity || ''}
+                      onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value) || 0})}
+                    />
+                    <Input
+                      placeholder={t('unit')}
+                      value={newComponent.unit}
+                      onChange={(e) => setNewComponent({...newComponent, unit: e.target.value})}
+                    />
+                  </div>
+                  <Button onClick={addComponent} size="sm" className="w-full">
+                    <Plus className="w-4 h-4 mr-2" /> {t('add_component')}
+                  </Button>
                 </div>
-                <Button onClick={addComponent} size="sm" className="w-full">
-                  <Plus className="w-4 h-4 mr-2" /> {t('add_component')}
-                </Button>
-              </div>
 
-              {/* Components List */}
-              {newBom.lines.length > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50">
-                        <TableHead>{t('component')}</TableHead>
-                        <TableHead>{t('qty')}</TableHead>
-                        <TableHead>{t('unit')}</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {newBom.lines.map((line, index) => {
-                        const component = products.find(p => p.id === line.component_id);
-                        return (
+                {/* Components List */}
+                {newBom.lines.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead>{t('component')}</TableHead>
+                          <TableHead>{t('qty')}</TableHead>
+                          <TableHead>{t('unit')}</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {newBom.lines.map((line, index) => {
+                          const component = products.find(p => p.id === line.component_id);
+                          return (
+                            <TableRow key={index}>
+                              <TableCell>{component?.name || line.component_id}</TableCell>
+                              <TableCell>{line.quantity}</TableCell>
+                              <TableCell>{line.unit}</TableCell>
+                              <TableCell>
+                                <Button size="sm" variant="ghost" onClick={() => removeComponent(index)}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Operations Tab */}
+              <TabsContent value="operations" className="space-y-4 mt-4">
+                {/* Add Operation Form */}
+                <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('operation_name') || 'Operation Name'} *</label>
+                      <Input
+                        placeholder={t('operation_name') || 'Operation name'}
+                        value={newOperation.operation_name}
+                        onChange={(e) => setNewOperation({...newOperation, operation_name: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('work_center') || 'Work Center'}</label>
+                      <Select
+                        value={newOperation.work_center_id}
+                        onValueChange={(value) => setNewOperation({...newOperation, work_center_id: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select_work_center') || 'Select work center'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workCenters.map((wc) => (
+                            <SelectItem key={wc.id} value={wc.id}>
+                              {wc.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time'} ({t('minutes') || 'min'})</label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={newOperation.setup_time_minutes || ''}
+                        onChange={(e) => setNewOperation({...newOperation, setup_time_minutes: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time'} ({t('minutes') || 'min'})</label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={newOperation.run_time_minutes || ''}
+                        onChange={(e) => setNewOperation({...newOperation, run_time_minutes: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium mb-1 block">{t('notes') || 'Notes'}</label>
+                      <Input
+                        placeholder={t('operation_notes') || 'Notes about the operation'}
+                        value={newOperation.notes}
+                        onChange={(e) => setNewOperation({...newOperation, notes: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={addOperation} size="sm" className="w-full" disabled={!newOperation.operation_name}>
+                    <Plus className="w-4 h-4 mr-2" /> {t('add_operation') || 'Add Operation'}
+                  </Button>
+                </div>
+
+                {/* Operations List */}
+                {newBom.operations && newBom.operations.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="w-16">{t('seq') || '#'}</TableHead>
+                          <TableHead>{t('operation') || 'Operation'}</TableHead>
+                          <TableHead>{t('work_center') || 'Work Center'}</TableHead>
+                          <TableHead>{t('setup') || 'Setup'}</TableHead>
+                          <TableHead>{t('run') || 'Run'}</TableHead>
+                          <TableHead className="w-32"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {newBom.operations.map((op, index) => (
                           <TableRow key={index}>
-                            <TableCell>{component?.name || line.component_id}</TableCell>
-                            <TableCell>{line.quantity}</TableCell>
-                            <TableCell>{line.unit}</TableCell>
+                            <TableCell className="font-mono text-sm">{op.sequence}</TableCell>
+                            <TableCell className="font-medium">{op.operation_name}</TableCell>
+                            <TableCell>{getWorkCenterName(op.work_center_id)}</TableCell>
+                            <TableCell>{op.setup_time_minutes || 0} {t('min') || 'min'}</TableCell>
+                            <TableCell>{op.run_time_minutes || 0} {t('min') || 'min'}</TableCell>
                             <TableCell>
-                              <Button size="sm" variant="ghost" onClick={() => removeComponent(index)}>
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => moveOperation(index, 'up')} disabled={index === 0}>
+                                  <ArrowUp className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => moveOperation(index, 'down')} disabled={index === newBom.operations.length - 1}>
+                                  <ArrowDown className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => removeOperation(index)}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {(!newBom.operations || newBom.operations.length === 0) && (
+                  <div className="text-center py-8 text-slate-500">
+                    <Cog className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>{t('no_operations_added') || 'No operations added yet'}</p>
+                    <p className="text-sm">{t('add_operations_description') || 'Add operations to define the manufacturing process'}</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
 
             <div className="flex gap-3 pt-4 border-t">
               <Button variant="outline" onClick={() => { setShowCreateModal(false); resetForm(); }} className="flex-1">
@@ -501,78 +813,204 @@ export default function BOMManagement() {
                 </div>
               </div>
 
-              {/* Components */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-slate-900">{t('components_materials')}</h3>
+              {/* Tabs for Components and Operations */}
+              <Tabs defaultValue="components" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="components" className="flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    {t('components_materials')} ({editBom.lines?.length || 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="operations" className="flex items-center gap-2">
+                    <Cog className="w-4 h-4" />
+                    {t('operations') || 'Operations'} ({editBom.operations?.length || 0})
+                  </TabsTrigger>
+                </TabsList>
 
-                {/* Add Component Form */}
-                <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    <Select
-                      value={editComponent.component_id}
-                      onValueChange={(value) => setEditComponent({...editComponent, component_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_component')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.sku || product.code || 'No SKU'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      placeholder={t('quantity')}
-                      value={editComponent.quantity || ''}
-                      onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value) || 0})}
-                    />
-                    <Input
-                      placeholder={t('unit')}
-                      value={editComponent.unit}
-                      onChange={(e) => setEditComponent({...editComponent, unit: e.target.value})}
-                    />
+                {/* Components Tab */}
+                <TabsContent value="components" className="space-y-4 mt-4">
+                  {/* Add Component Form */}
+                  <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <Select
+                        value={editComponent.component_id}
+                        onValueChange={(value) => setEditComponent({...editComponent, component_id: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select_component')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name} ({product.sku || product.code || 'No SKU'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        placeholder={t('quantity')}
+                        value={editComponent.quantity || ''}
+                        onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value) || 0})}
+                      />
+                      <Input
+                        placeholder={t('unit')}
+                        value={editComponent.unit}
+                        onChange={(e) => setEditComponent({...editComponent, unit: e.target.value})}
+                      />
+                    </div>
+                    <Button onClick={addEditComponent} size="sm" className="w-full">
+                      <Plus className="w-4 h-4 mr-2" /> {t('add_component')}
+                    </Button>
                   </div>
-                  <Button onClick={addEditComponent} size="sm" className="w-full">
-                    <Plus className="w-4 h-4 mr-2" /> {t('add_component')}
-                  </Button>
-                </div>
 
-                {/* Components List */}
-                {editBom.lines && editBom.lines.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead>{t('component')}</TableHead>
-                          <TableHead>{t('qty')}</TableHead>
-                          <TableHead>{t('unit')}</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {editBom.lines.map((line, index) => {
-                          const component = products.find(p => p.id === line.component_id);
-                          return (
-                            <TableRow key={index}>
-                              <TableCell>{component?.name || line.component_id}</TableCell>
-                              <TableCell>{line.quantity}</TableCell>
-                              <TableCell>{line.unit}</TableCell>
+                  {/* Components List */}
+                  {editBom.lines && editBom.lines.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead>{t('component')}</TableHead>
+                            <TableHead>{t('qty')}</TableHead>
+                            <TableHead>{t('unit')}</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {editBom.lines.map((line, index) => {
+                            const component = products.find(p => p.id === line.component_id);
+                            return (
+                              <TableRow key={index}>
+                                <TableCell>{component?.name || line.component_id}</TableCell>
+                                <TableCell>{line.quantity}</TableCell>
+                                <TableCell>{line.unit}</TableCell>
+                                <TableCell>
+                                  <Button size="sm" variant="ghost" onClick={() => removeEditComponent(index)}>
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Operations Tab */}
+                <TabsContent value="operations" className="space-y-4 mt-4">
+                  {/* Add Operation Form */}
+                  <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('operation_name') || 'Operation Name'} *</label>
+                        <Input
+                          placeholder={t('operation_name') || 'Operation name'}
+                          value={editOperation.operation_name}
+                          onChange={(e) => setEditOperation({...editOperation, operation_name: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('work_center') || 'Work Center'}</label>
+                        <Select
+                          value={editOperation.work_center_id}
+                          onValueChange={(value) => setEditOperation({...editOperation, work_center_id: value})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('select_work_center') || 'Select work center'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {workCenters.map((wc) => (
+                              <SelectItem key={wc.id} value={wc.id}>
+                                {wc.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time'} ({t('minutes') || 'min'})</label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={editOperation.setup_time_minutes || ''}
+                          onChange={(e) => setEditOperation({...editOperation, setup_time_minutes: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time'} ({t('minutes') || 'min'})</label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={editOperation.run_time_minutes || ''}
+                          onChange={(e) => setEditOperation({...editOperation, run_time_minutes: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-sm font-medium mb-1 block">{t('notes') || 'Notes'}</label>
+                        <Input
+                          placeholder={t('operation_notes') || 'Notes about the operation'}
+                          value={editOperation.notes}
+                          onChange={(e) => setEditOperation({...editOperation, notes: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <Button onClick={addEditOperation} size="sm" className="w-full" disabled={!editOperation.operation_name}>
+                      <Plus className="w-4 h-4 mr-2" /> {t('add_operation') || 'Add Operation'}
+                    </Button>
+                  </div>
+
+                  {/* Operations List */}
+                  {editBom.operations && editBom.operations.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="w-16">{t('seq') || '#'}</TableHead>
+                            <TableHead>{t('operation') || 'Operation'}</TableHead>
+                            <TableHead>{t('work_center') || 'Work Center'}</TableHead>
+                            <TableHead>{t('setup') || 'Setup'}</TableHead>
+                            <TableHead>{t('run') || 'Run'}</TableHead>
+                            <TableHead className="w-32"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {editBom.operations.map((op, index) => (
+                            <TableRow key={op.id || index}>
+                              <TableCell className="font-mono text-sm">{op.sequence}</TableCell>
+                              <TableCell className="font-medium">{op.operation_name}</TableCell>
+                              <TableCell>{getWorkCenterName(op.work_center_id)}</TableCell>
+                              <TableCell>{op.setup_time_minutes || 0} {t('min') || 'min'}</TableCell>
+                              <TableCell>{op.run_time_minutes || 0} {t('min') || 'min'}</TableCell>
                               <TableCell>
-                                <Button size="sm" variant="ghost" onClick={() => removeEditComponent(index)}>
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button size="sm" variant="ghost" onClick={() => moveEditOperation(index, 'up')} disabled={index === 0}>
+                                    <ArrowUp className="w-4 h-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => moveEditOperation(index, 'down')} disabled={index === editBom.operations.length - 1}>
+                                    <ArrowDown className="w-4 h-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => removeEditOperation(index)}>
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {(!editBom.operations || editBom.operations.length === 0) && (
+                    <div className="text-center py-8 text-slate-500">
+                      <Cog className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>{t('no_operations_added') || 'No operations added yet'}</p>
+                      <p className="text-sm">{t('add_operations_description') || 'Add operations to define the manufacturing process'}</p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
 
               <div className="flex gap-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => { setShowEditModal(false); setEditBom(null); }} className="flex-1">

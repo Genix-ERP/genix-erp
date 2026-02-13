@@ -7,18 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw } from 'lucide-react';
+import { Plus, Search, Play, Pause, CheckCircle, X, Calendar, RefreshCw, Clock, DollarSign, Cog } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { inventoryService } from '@/api/services';
+import { inventoryService, bomsService } from '@/api/services';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const {
     productionOrders,
@@ -37,10 +39,13 @@ export default function ProductionOrders() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [products, setProducts] = useState([]);
+  const [boms, setBoms] = useState([]);
+  const [productBoms, setProductBoms] = useState([]); // BOMs filtered by selected product
   const [newOrder, setNewOrder] = useState({
     name: '',
     product_name: '',
     product_id: '',
+    bom_id: '',
     quantity_planned: 0,
     uom: 'units',
     priority: 5,
@@ -48,18 +53,39 @@ export default function ProductionOrders() {
     scheduled_end: ''
   });
 
-  // Load products
+  // Load products and BOMs
   useEffect(() => {
-    const loadProducts = async () => {
+    const loadData = async () => {
       try {
-        const productsData = await inventoryService.listProducts();
+        const [productsData, bomsData] = await Promise.all([
+          inventoryService.listProducts(),
+          bomsService.list()
+        ]);
         setProducts(productsData || []);
+        setBoms(bomsData || []);
       } catch (error) {
-        console.error('Failed to load products:', error);
+        console.error('Failed to load data:', error);
       }
     };
-    loadProducts();
+    loadData();
   }, []);
+
+  // Filter BOMs when product changes
+  useEffect(() => {
+    if (newOrder.product_id) {
+      const filtered = boms.filter(b => b.product_id === newOrder.product_id);
+      setProductBoms(filtered);
+      // Auto-select if only one BOM
+      if (filtered.length === 1) {
+        setNewOrder(prev => ({ ...prev, bom_id: filtered[0].id }));
+      } else if (filtered.length === 0) {
+        setNewOrder(prev => ({ ...prev, bom_id: '' }));
+      }
+    } else {
+      setProductBoms([]);
+      setNewOrder(prev => ({ ...prev, bom_id: '' }));
+    }
+  }, [newOrder.product_id, boms]);
 
   const filteredOrders = useMemo(() => {
     let filtered = productionOrders;
@@ -81,10 +107,15 @@ export default function ProductionOrders() {
 
   const handleCreateOrder = async () => {
     try {
-      await createProductionOrder({
+      const orderData = {
         ...newOrder,
         quantity_planned: parseFloat(newOrder.quantity_planned)
-      });
+      };
+      // Only include bom_id if selected
+      if (!orderData.bom_id) {
+        delete orderData.bom_id;
+      }
+      await createProductionOrder(orderData);
       setShowCreateModal(false);
 
       // Reset form
@@ -92,12 +123,14 @@ export default function ProductionOrders() {
         name: '',
         product_name: '',
         product_id: '',
+        bom_id: '',
         quantity_planned: 0,
         uom: 'units',
         priority: 5,
         scheduled_start: new Date().toISOString().split('T')[0],
         scheduled_end: ''
       });
+      setProductBoms([]);
     } catch (error) {
       console.error('Error creating production order:', error);
       const errorMsg = typeof error.response?.data?.error === 'string'
@@ -240,6 +273,7 @@ export default function ProductionOrders() {
                     <TableHead className="font-semibold">{t('order_code') || 'Order Code'}</TableHead>
                     <TableHead className="font-semibold">{t('product') || 'Product'}</TableHead>
                     <TableHead className="font-semibold">{t('quantity') || 'Quantity'}</TableHead>
+                    <TableHead className="font-semibold">{t('planned_cost') || 'Est. Cost'}</TableHead>
                     <TableHead className="font-semibold">{t('priority') || 'Priority'}</TableHead>
                     <TableHead className="font-semibold">{t('status') || 'Status'}</TableHead>
                     <TableHead className="font-semibold">{t('schedule') || 'Schedule'}</TableHead>
@@ -264,6 +298,21 @@ export default function ProductionOrders() {
                             <span className="font-semibold">{order.quantity_produced || 0}</span>
                             <span className="text-slate-500"> / {order.quantity_planned}</span>
                             <span className="text-xs text-slate-400 ml-1">{getUnitLabel(order.uom)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {order.planned_cost > 0 ? (
+                              <span className="font-semibold text-slate-700">{formatCurrency(order.planned_cost)}</span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">{order.status === 'draft' ? t('confirm_to_calculate') || 'Confirm to calc' : '-'}</span>
+                            )}
+                            {order.work_orders?.length > 0 && (
+                              <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Cog className="w-3 h-3" />
+                                {order.work_orders.length} {t('operations') || 'ops'}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -365,31 +414,56 @@ export default function ProductionOrders() {
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium mb-1 block">{t('product') || 'Product'} *</label>
-              <Select
-                value={newOrder.product_id}
-                onValueChange={(value) => {
-                  const product = products.find(p => p.id === value);
-                  setNewOrder({
-                    ...newOrder,
-                    product_id: value,
-                    product_name: product?.name || '',
-                    uom: product?.uom || 'units'
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_product') || 'Select a product'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.sku || product.code || 'No SKU'})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('product') || 'Product'} *</label>
+                <Select
+                  value={newOrder.product_id}
+                  onValueChange={(value) => {
+                    const product = products.find(p => p.id === value);
+                    setNewOrder({
+                      ...newOrder,
+                      product_id: value,
+                      product_name: product?.name || '',
+                      uom: product?.uom || 'units',
+                      bom_id: '' // Reset BOM when product changes
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_product') || 'Select a product'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} ({product.sku || product.code || 'No SKU'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('bill_of_materials') || 'Bill of Materials'}</label>
+                <Select
+                  value={newOrder.bom_id}
+                  onValueChange={(value) => setNewOrder({...newOrder, bom_id: value})}
+                  disabled={!newOrder.product_id || productBoms.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={productBoms.length === 0 ? (t('no_bom_available') || 'No BOM available') : (t('select_bom') || 'Select BOM')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productBoms.map((bom) => (
+                      <SelectItem key={bom.id} value={bom.id}>
+                        {bom.name || bom.code} ({bom.line_count || 0} {t('components') || 'comp.'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {newOrder.product_id && productBoms.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">{t('no_bom_for_product') || 'No BOM defined for this product'}</p>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
