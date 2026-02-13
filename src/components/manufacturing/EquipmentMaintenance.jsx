@@ -69,7 +69,7 @@ export default function EquipmentMaintenance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { activeCompany } = useCompany();
 
   const orgId = activeCompany?.id || 'default';
@@ -587,13 +587,15 @@ export default function EquipmentMaintenance() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   {t('view') || "Ko'rish"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => { setSelectedItem(eq); setShowDeleteDialog(true); }}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  {t('delete') || "O'chirish"}
-                                </DropdownMenuItem>
+                                {canDelete(MODULES.MANUFACTURING) && (
+                                  <DropdownMenuItem
+                                    onClick={() => { setSelectedItem(eq); setShowDeleteDialog(true); }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {t('delete') || "O'chirish"}
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -684,7 +686,7 @@ export default function EquipmentMaintenance() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {status !== 'completed' && (
+                              {status !== 'completed' && canUpdate(MODULES.MANUFACTURING) && (
                                 <Button
                                   size="sm"
                                   onClick={() => { setSelectedItem(task); setShowCompleteModal(true); }}

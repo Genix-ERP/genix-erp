@@ -19,7 +19,7 @@ export default function BOMManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { boms, loading, createBOM, updateBOM } = useManufacturing();
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -300,9 +300,11 @@ export default function BOMManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          {canUpdate(MODULES.MANUFACTURING) && (
+                            <Button size="sm" variant="ghost" onClick={(e) => handleEditBom(bom, e)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
