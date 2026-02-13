@@ -596,7 +596,7 @@ export default function BOMManagement() {
                       <SelectValue placeholder={t('select_product')} />
                     </SelectTrigger>
                     <SelectContent>
-                      {products.map((product) => (
+                      {products.filter(product => product.id).map((product) => (
                         <SelectItem key={product.id} value={product.id}>
                           {product.name} ({product.sku || product.code || 'No SKU'})
                         </SelectItem>
@@ -607,8 +607,12 @@ export default function BOMManagement() {
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
                   <Select
-                    value={newBom.routing_id}
+                    value={newBom.routing_id || 'none'}
                     onValueChange={(value) => {
+                      if (value === 'none') {
+                        setNewBom({...newBom, routing_id: ''});
+                        return;
+                      }
                       const selectedRouting = routings.find(r => r.id === value);
                       if (selectedRouting) {
                         // Copy operations from routing to BOM
@@ -629,8 +633,8 @@ export default function BOMManagement() {
                       <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
-                      {routings.map((routing) => (
+                      <SelectItem value="none">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
+                      {routings.filter(routing => routing.id).map((routing) => (
                         <SelectItem key={routing.id} value={routing.id}>
                           {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
                         </SelectItem>
@@ -668,7 +672,7 @@ export default function BOMManagement() {
                         <SelectValue placeholder={t('select_component')} />
                       </SelectTrigger>
                       <SelectContent>
-                        {products.map((product) => (
+                        {products.filter(product => product.id).map((product) => (
                           <SelectItem key={product.id} value={product.id}>
                             {product.name} ({product.sku || product.code || 'No SKU'})
                           </SelectItem>
@@ -756,7 +760,7 @@ export default function BOMManagement() {
                           <SelectValue placeholder={t('select_work_center') || 'Select work center'} />
                         </SelectTrigger>
                         <SelectContent>
-                          {workCenters.map((wc) => (
+                          {workCenters.filter(wc => wc.id).map((wc) => (
                             <SelectItem key={wc.id} value={wc.id}>
                               {wc.name}
                             </SelectItem>
@@ -901,7 +905,7 @@ export default function BOMManagement() {
                         <SelectValue placeholder={t('select_product')} />
                       </SelectTrigger>
                       <SelectContent>
-                        {products.map((product) => (
+                        {products.filter(product => product.id).map((product) => (
                           <SelectItem key={product.id} value={product.id}>
                             {product.name} ({product.sku || product.code || 'No SKU'})
                           </SelectItem>
@@ -912,8 +916,12 @@ export default function BOMManagement() {
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
                     <Select
-                      value={editBom.routing_id || ''}
+                      value={editBom.routing_id || 'none'}
                       onValueChange={(value) => {
+                        if (value === 'none') {
+                          setEditBom({...editBom, routing_id: ''});
+                          return;
+                        }
                         const selectedRouting = routings.find(r => r.id === value);
                         if (selectedRouting) {
                           const copiedOperations = selectedRouting.operations.map(op => ({
@@ -933,8 +941,8 @@ export default function BOMManagement() {
                         <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
-                        {routings.map((routing) => (
+                        <SelectItem value="none">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
+                        {routings.filter(routing => routing.id).map((routing) => (
                           <SelectItem key={routing.id} value={routing.id}>
                             {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
                           </SelectItem>
@@ -971,7 +979,7 @@ export default function BOMManagement() {
                           <SelectValue placeholder={t('select_component')} />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map((product) => (
+                          {products.filter(product => product.id).map((product) => (
                             <SelectItem key={product.id} value={product.id}>
                               {product.name} ({product.sku || product.code || 'No SKU'})
                             </SelectItem>
@@ -1052,7 +1060,7 @@ export default function BOMManagement() {
                             <SelectValue placeholder={t('select_work_center') || 'Select work center'} />
                           </SelectTrigger>
                           <SelectContent>
-                            {workCenters.map((wc) => (
+                            {workCenters.filter(wc => wc.id).map((wc) => (
                               <SelectItem key={wc.id} value={wc.id}>
                                 {wc.name}
                               </SelectItem>

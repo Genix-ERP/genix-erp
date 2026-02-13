@@ -779,7 +779,7 @@ export default function EquipmentMaintenance() {
                     <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {workCenters.map(wc => (
+                    {workCenters.filter(wc => wc.id).map(wc => (
                       <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -876,7 +876,7 @@ export default function EquipmentMaintenance() {
                   <SelectValue placeholder={t('select_equipment') || "Jihozni tanlang"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipment.map(eq => (
+                  {equipment.filter(eq => eq.id).map(eq => (
                     <SelectItem key={eq.id} value={eq.id}>{eq.name} ({eq.code})</SelectItem>
                   ))}
                 </SelectContent>

@@ -546,7 +546,7 @@ export default function ProductionOrders() {
                     <SelectValue placeholder={t('select_product') || 'Select a product'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {products.map((product) => (
+                    {products.filter(product => product.id).map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name} ({product.sku || product.code || 'No SKU'})
                       </SelectItem>
@@ -565,7 +565,7 @@ export default function ProductionOrders() {
                     <SelectValue placeholder={productBoms.length === 0 ? (t('no_bom_available') || 'No BOM available') : (t('select_bom') || 'Select BOM')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {productBoms.map((bom) => (
+                    {productBoms.filter(bom => bom.id).map((bom) => (
                       <SelectItem key={bom.id} value={bom.id}>
                         {bom.name || bom.code} ({bom.line_count || 0} {t('components') || 'comp.'})
                       </SelectItem>
@@ -620,12 +620,12 @@ export default function ProductionOrders() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('shift') || 'Shift'}</label>
-                <Select value={newOrder.shift} onValueChange={(value) => setNewOrder({...newOrder, shift: value})}>
+                <Select value={newOrder.shift || 'none'} onValueChange={(value) => setNewOrder({...newOrder, shift: value === 'none' ? '' : value})}>
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_shift') || 'Select shift'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('no_shift') || 'Not specified'}</SelectItem>
+                    <SelectItem value="none">{t('no_shift') || 'Not specified'}</SelectItem>
                     <SelectItem value="day">{t('day_shift') || 'Day Shift'}</SelectItem>
                     <SelectItem value="night">{t('night_shift') || 'Night Shift'}</SelectItem>
                   </SelectContent>
