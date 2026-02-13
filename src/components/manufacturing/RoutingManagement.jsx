@@ -51,7 +51,7 @@ export default function RoutingManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const [routings, setRoutings] = useState([]);
@@ -361,10 +361,12 @@ export default function RoutingManagement() {
                             <Eye className="w-4 h-4 mr-2" />
                             {t('view') || "Ko'rish"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setSelectedRouting(routing); setShowEditModal(true); }}>
-                            <Pencil className="w-4 h-4 mr-2" />
-                            {t('edit') || "Tahrirlash"}
-                          </DropdownMenuItem>
+                          {canUpdate(MODULES.MANUFACTURING) && (
+                            <DropdownMenuItem onClick={() => { setSelectedRouting(routing); setShowEditModal(true); }}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              {t('edit') || "Tahrirlash"}
+                            </DropdownMenuItem>
+                          )}
                           {canDelete(MODULES.MANUFACTURING) && (
                             <DropdownMenuItem
                               onClick={() => { setSelectedRouting(routing); setShowDeleteDialog(true); }}

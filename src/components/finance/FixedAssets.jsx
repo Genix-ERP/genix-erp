@@ -57,7 +57,7 @@ export default function FixedAssets() {
     disposeAsset,
     isLoading
   } = useFinancials();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -473,12 +473,14 @@ export default function FixedAssets() {
                   <SelectItem value="disposed">{t('disposed') || 'Disposed'}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                onClick={() => setShowDepreciationModal(true)}
-              >
-                <Calculator className="w-4 h-4 mr-2" /> {t('run_depreciation') || 'Run Depreciation'}
-              </Button>
+              {canUpdate(MODULES.ASSETS) && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDepreciationModal(true)}
+                >
+                  <Calculator className="w-4 h-4 mr-2" /> {t('run_depreciation') || 'Run Depreciation'}
+                </Button>
+              )}
               {canCreate(MODULES.ASSETS) && (
                 <Button
                   onClick={() => { resetForm(); setShowCreateModal(true); }}
@@ -568,9 +570,11 @@ export default function FixedAssets() {
                       <TableCell>{getStatusBadge(asset.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
-                            <Edit2 className="w-4 h-4 text-slate-500" />
-                          </Button>
+                          {canUpdate(MODULES.ASSETS) && (
+                            <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
+                              <Edit2 className="w-4 h-4 text-slate-500" />
+                            </Button>
+                          )}
                           {asset.status === 'active' && canDelete(MODULES.ASSETS) && (
                             <Button variant="ghost" size="sm" onClick={() => openDisposeModal(asset)} title={t('dispose') || 'Dispose'}>
                               <Trash2 className="w-4 h-4 text-red-500" />

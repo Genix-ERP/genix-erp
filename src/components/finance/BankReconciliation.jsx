@@ -398,18 +398,20 @@ export default function BankReconciliation() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReconciliationAccount(account);
-                              setShowReconciliationWorkflow(true);
-                            }}
-                            title={t('reconcile') || 'Reconcile'}
-                          >
-                            <Scale className="w-4 h-4 text-blue-600" />
-                          </Button>
+                          {canUpdate(MODULES.FINANCIALS) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReconciliationAccount(account);
+                                setShowReconciliationWorkflow(true);
+                              }}
+                              title={t('reconcile') || 'Reconcile'}
+                            >
+                              <Scale className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -421,26 +423,30 @@ export default function BankReconciliation() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditAccount({ ...account });
-                            }}
-                          >
-                            <Pencil className="w-4 h-4 text-amber-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteAccountId(account.id);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          {canUpdate(MODULES.FINANCIALS) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditAccount({ ...account });
+                              }}
+                            >
+                              <Pencil className="w-4 h-4 text-amber-600" />
+                            </Button>
+                          )}
+                          {canDelete(MODULES.FINANCIALS) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteAccountId(account.id);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

@@ -38,7 +38,7 @@ export default function BudgetManagement() {
     deleteBudgetLine,
     isLoading
   } = useFinancials();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -441,9 +441,11 @@ export default function BudgetManagement() {
                           <Button variant="ghost" size="sm" onClick={() => openLinesModal(budget)} title={t('budget_lines') || 'Budget Lines'}>
                             <BarChart3 className="w-4 h-4 text-slate-500" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openEditModal(budget)} title={t('edit') || 'Edit'}>
-                            <Edit2 className="w-4 h-4 text-slate-500" />
-                          </Button>
+                          {canUpdate(MODULES.FINANCIALS) && (
+                            <Button variant="ghost" size="sm" onClick={() => openEditModal(budget)} title={t('edit') || 'Edit'}>
+                              <Edit2 className="w-4 h-4 text-slate-500" />
+                            </Button>
+                          )}
                           {canDelete(MODULES.FINANCIALS) && (
                             <Button variant="ghost" size="sm" onClick={() => openDeleteModal(budget)} title={t('delete') || 'Delete'}>
                               <Trash2 className="w-4 h-4 text-red-500" />

@@ -543,7 +543,8 @@ export function RecurringTemplatesList({
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={template.isActive}
-                      onCheckedChange={() => onToggle(template.id)}
+                      onCheckedChange={() => onToggle?.(template.id)}
+                      disabled={!onToggle}
                     />
                     <span className="text-sm">
                       {template.isActive ? t('active') || 'Active' : t('inactive') || 'Inactive'}
@@ -562,21 +563,25 @@ export function RecurringTemplatesList({
                         <Play className="w-4 h-4" />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEdit(template)}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDelete(template.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {onEdit && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEdit(template)}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDelete(template.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -655,6 +660,9 @@ export function RecurringPanel({
   entityName,
   fields = [],
   onCreateTransaction,
+  canCreate: canCreateProp = true,
+  canEdit: canEditProp = true,
+  canRemove: canRemoveProp = true,
 }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -712,18 +720,20 @@ export function RecurringPanel({
               </Badge>
             )}
           </CardTitle>
-          <Button size="sm" onClick={() => setShowForm(true)}>
-            <Plus className="w-4 h-4 mr-1" />
-            {t('new_template') || 'New Template'}
-          </Button>
+          {canCreateProp && (
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="w-4 h-4 mr-1" />
+              {t('new_template') || 'New Template'}
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
         <RecurringTemplatesList
           templates={templates}
-          onEdit={handleEdit}
-          onDelete={deleteTemplate}
-          onToggle={toggleActive}
+          onEdit={canEditProp ? handleEdit : null}
+          onDelete={canRemoveProp ? deleteTemplate : null}
+          onToggle={canEditProp ? toggleActive : null}
           onExecute={onCreateTransaction ? handleExecute : null}
           entityName={entityName}
         />

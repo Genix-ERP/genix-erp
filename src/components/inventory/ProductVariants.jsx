@@ -19,6 +19,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import apiClient from "@/api/client";
 import { useToast } from "@/components/ui/use-toast";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ProductVariants() {
   const { language } = useLanguage();
@@ -26,6 +27,7 @@ export default function ProductVariants() {
   const { products } = useInventory();
   const { toast } = useToast();
   const { formatCurrency } = useCurrencyFormatter();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState("variants");
   const [attributes, setAttributes] = useState([]);
@@ -509,15 +511,19 @@ export default function ProductVariants() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleOpenAdjustStock(variant)} title={t('adjust_stock')}>
-                              <PackagePlus className="w-4 h-4 text-green-500" />
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button variant="ghost" size="sm" onClick={() => handleOpenAdjustStock(variant)} title={t('adjust_stock')}>
+                                <PackagePlus className="w-4 h-4 text-green-500" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" onClick={() => handleViewVariant(variant)}>
                               <Eye className="w-4 h-4 text-blue-500" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {canDelete(MODULES.INVENTORY) && (
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -533,10 +539,12 @@ export default function ProductVariants() {
         <TabsContent value="attributes" className="mt-0 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">{t('product_attributes')}</h3>
-            <Button onClick={() => setShowAttributeModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t('add_attribute')}
-            </Button>
+            {canCreate(MODULES.INVENTORY) && (
+              <Button onClick={() => setShowAttributeModal(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('add_attribute')}
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -556,19 +564,23 @@ export default function ProductVariants() {
                       >
                         <Eye className="w-4 h-4 text-blue-500" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedAttribute(attr);
-                          setShowValueModal(true);
-                        }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteAttribute(attr.id)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
+                      {canCreate(MODULES.INVENTORY) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedAttribute(attr);
+                            setShowValueModal(true);
+                          }}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {canDelete(MODULES.INVENTORY) && (
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteAttribute(attr.id)}>
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -587,12 +599,14 @@ export default function ProductVariants() {
                           />
                         )}
                         {val.name}
-                        <button
-                          onClick={() => handleDeleteValue(attr.id, val.id)}
-                          className="ml-1 text-slate-400 hover:text-red-500"
-                        >
-                          ×
-                        </button>
+                        {canDelete(MODULES.INVENTORY) && (
+                          <button
+                            onClick={() => handleDeleteValue(attr.id, val.id)}
+                            className="ml-1 text-slate-400 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        )}
                       </Badge>
                     ))}
                     {(!attr.values || attr.values.length === 0) && (
@@ -661,25 +675,29 @@ export default function ProductVariants() {
                             >
                               <Eye className="w-4 h-4 text-blue-500" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleConfigureProduct(product)}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              {t('configure')}
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedProduct(product);
-                                setShowGenerateModal(true);
-                              }}
-                              disabled={!product.has_variants && productVariantCount === 0}
-                            >
-                              <RefreshCw className="w-4 h-4 mr-1" />
-                              {t('generate')}
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleConfigureProduct(product)}
+                              >
+                                <Settings className="w-4 h-4 mr-1" />
+                                {t('configure')}
+                              </Button>
+                            )}
+                            {canCreate(MODULES.INVENTORY) && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedProduct(product);
+                                  setShowGenerateModal(true);
+                                }}
+                                disabled={!product.has_variants && productVariantCount === 0}
+                              >
+                                <RefreshCw className="w-4 h-4 mr-1" />
+                                {t('generate')}
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1050,10 +1068,12 @@ export default function ProductVariants() {
             <Button variant="outline" onClick={() => setShowVariantDetailsModal(false)}>
               {t('close')}
             </Button>
-            <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              {t('edit_variant')}
-            </Button>
+            {canUpdate(MODULES.INVENTORY) && (
+              <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                {t('edit_variant')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1192,10 +1212,12 @@ export default function ProductVariants() {
             <Button variant="outline" onClick={() => setShowAttributeDetailsModal(false)}>
               {t('close')}
             </Button>
-            <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              {t('edit_attribute')}
-            </Button>
+            {canUpdate(MODULES.INVENTORY) && (
+              <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                {t('edit_attribute')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
