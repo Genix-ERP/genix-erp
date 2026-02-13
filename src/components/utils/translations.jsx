@@ -3970,6 +3970,9 @@ export const translations = {
 
     // Work Centers
     "add_work_center": "Add Work Center",
+    "edit_work_center": "Edit Work Center",
+    "view_work_center": "Work Center Details",
+    "confirm_delete_work_center": "Are you sure you want to delete work center",
     "work_center_code": "Work Center Code",
     "work_center_name": "Work center name",
     "physical_location": "Physical location",
@@ -3987,6 +3990,10 @@ export const translations = {
     "down": "Down",
     "idle": "Idle",
     "work_center_utilization_overview": "Work Center Utilization Overview",
+    "assigned_equipment": "Assigned Equipment",
+    "no_equipment_assigned": "No equipment assigned to this work center",
+    "assign_equipment_hint": "Go to Equipment tab to assign equipment",
+    "items": "items",
 
     // Manufacturing Dashboard
     "production_trend_last_7_days": "Production Trend (Last 7 Days)",
@@ -9276,6 +9283,9 @@ export const translations = {
 
     // Work Centers
     "add_work_center": "Ish markazi qo'shish",
+    "edit_work_center": "Ish markazini tahrirlash",
+    "view_work_center": "Ish markazi tafsilotlari",
+    "confirm_delete_work_center": "Ish markazini o'chirishni tasdiqlaysizmi",
     "work_center_code": "Ish markazi kodi",
     "work_center_name": "Ish markazi nomi",
     "physical_location": "Fizik joylashuv",
@@ -9293,6 +9303,10 @@ export const translations = {
     "down": "Ishlamayapti",
     "idle": "Bo'sh",
     "work_center_utilization_overview": "Ish markazlari foydalanish ko'rinishi",
+    "assigned_equipment": "Biriktirilgan jihozlar",
+    "no_equipment_assigned": "Bu ish markaziga jihoz biriktirilmagan",
+    "assign_equipment_hint": "Jihoz biriktirish uchun Jihozlar bo'limiga o'ting",
+    "items": "dona",
 
     // Manufacturing Dashboard and Schedule (Uzbek)
     "production_trend_last_7_days": "Ishlab chiqarish tendensiyasi (oxirgi 7 kun)",
@@ -13748,6 +13762,9 @@ export const translations = {
 
     // Work Centers (Russian)
     "add_work_center": "Добавить рабочий центр",
+    "edit_work_center": "Редактировать рабочий центр",
+    "view_work_center": "Детали рабочего центра",
+    "confirm_delete_work_center": "Вы уверены, что хотите удалить рабочий центр",
     "work_center_code": "Код рабочего центра",
     "work_center_name": "Название рабочего центра",
     "physical_location": "Физическое расположение",
@@ -13765,6 +13782,10 @@ export const translations = {
     "down": "Остановлен",
     "idle": "Простой",
     "work_center_utilization_overview": "Обзор загрузки рабочих центров",
+    "assigned_equipment": "Назначенное оборудование",
+    "no_equipment_assigned": "Нет оборудования, назначенного этому рабочему центру",
+    "assign_equipment_hint": "Перейдите на вкладку Оборудование для назначения",
+    "items": "шт.",
 
     // Quality Control (Russian)
     "quality_control": "Контроль качества",
