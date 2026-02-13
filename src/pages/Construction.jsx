@@ -80,6 +80,385 @@ import {
   AlertsWidget
 } from '@/components/construction/DashboardWidgets';
 
+// Progress Tracking Tab Component
+const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
+  const [allItems, setAllItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedProgressSection, setSelectedProgressSection] = useState(null);
+  const [sectionItems, setSectionItems] = useState([]);
+  const [editingItem, setEditingItem] = useState(null);
+  const [completedQty, setCompletedQty] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Load all items from all sections
+  useEffect(() => {
+    const loadAllItems = async () => {
+      if (!sections || sections.length === 0) {
+        setAllItems([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const itemsPromises = sections.map(section =>
+          constructionService.listItems(section.id).then(items =>
+            (items || []).map(item => ({ ...item, section_name: section.name, section_code: section.code }))
+          )
+        );
+        const results = await Promise.all(itemsPromises);
+        const flatItems = results.flat();
+        setAllItems(flatItems);
+      } catch (error) {
+        console.error('Error loading items for progress:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAllItems();
+  }, [sections]);
+
+  // Load items for selected section
+  useEffect(() => {
+    const loadSectionItems = async () => {
+      if (!selectedProgressSection) {
+        setSectionItems([]);
+        return;
+      }
+      try {
+        const items = await constructionService.listItems(selectedProgressSection.id);
+        setSectionItems(items || []);
+      } catch (error) {
+        console.error('Error loading section items:', error);
+      }
+    };
+    loadSectionItems();
+  }, [selectedProgressSection]);
+
+  // Calculate overall progress
+  const calculateProgress = (items) => {
+    if (!items || items.length === 0) return { percent: 0, completed: 0, total: 0, byValue: 0 };
+
+    const totalQty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const completedQty = items.reduce((sum, item) => sum + (item.completed_quantity || 0), 0);
+    const totalValue = items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
+    const completedValue = items.reduce((sum, item) => sum + ((item.completed_quantity || 0) * (item.unit_price || 0)), 0);
+
+    return {
+      percent: totalQty > 0 ? Math.round((completedQty / totalQty) * 100) : 0,
+      completed: completedQty,
+      total: totalQty,
+      byValue: totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0,
+      completedValue,
+      totalValue
+    };
+  };
+
+  // Calculate section progress
+  const getSectionProgress = (sectionId) => {
+    const sectionItems = allItems.filter(item => item.section_id === sectionId);
+    return calculateProgress(sectionItems);
+  };
+
+  const overallProgress = calculateProgress(allItems);
+
+  // Update item progress
+  const handleUpdateProgress = async () => {
+    if (!editingItem) return;
+    setSaving(true);
+    try {
+      const newCompletedQty = parseFloat(completedQty) || 0;
+      const progressPercent = editingItem.quantity > 0
+        ? Math.min(100, Math.round((newCompletedQty / editingItem.quantity) * 100))
+        : 0;
+
+      await constructionService.updateItem(editingItem.id, {
+        completed_quantity: newCompletedQty,
+        progress_percent: progressPercent,
+        status: progressPercent >= 100 ? 'completed' : (progressPercent > 0 ? 'in_progress' : 'pending')
+      });
+
+      // Refresh data
+      if (selectedProgressSection) {
+        const items = await constructionService.listItems(selectedProgressSection.id);
+        setSectionItems(items || []);
+      }
+
+      // Update allItems
+      setAllItems(prev => prev.map(item =>
+        item.id === editingItem.id
+          ? { ...item, completed_quantity: newCompletedQty, progress_percent: progressPercent }
+          : item
+      ));
+
+      setEditingItem(null);
+      setCompletedQty('');
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error updating progress:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getProgressColor = (percent) => {
+    if (percent >= 100) return 'bg-green-500';
+    if (percent >= 75) return 'bg-blue-500';
+    if (percent >= 50) return 'bg-yellow-500';
+    if (percent >= 25) return 'bg-orange-500';
+    return 'bg-slate-300';
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-700';
+      case 'in_progress': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <div className="animate-pulse">
+            <div className="h-8 bg-slate-200 rounded w-1/3 mx-auto mb-4"></div>
+            <div className="h-4 bg-slate-200 rounded w-1/2 mx-auto"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (sections.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('work_progress') || 'Ish bajarilishi'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-12">
+            <FolderTree className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">{t('no_sections_for_progress') || "Progress kuzatish uchun avval smeta bo'limlarini yarating"}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Overall Progress Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-blue-800">{t('overall_progress') || 'Umumiy bajarilish'}</h3>
+              <TrendingUp className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="text-3xl font-bold text-blue-900 mb-2">{overallProgress.percent}%</div>
+            <Progress value={overallProgress.percent} className="h-2 mb-2" />
+            <p className="text-xs text-blue-700">
+              {t('by_quantity') || "Hajm bo'yicha"}: {overallProgress.completed.toFixed(1)} / {overallProgress.total.toFixed(1)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-green-800">{t('progress_by_value') || "Qiymat bo'yicha"}</h3>
+              <DollarSign className="w-5 h-5 text-green-600" />
+            </div>
+            <div className="text-3xl font-bold text-green-900 mb-2">{overallProgress.byValue}%</div>
+            <Progress value={overallProgress.byValue} className="h-2 mb-2" />
+            <p className="text-xs text-green-700">
+              {formatCurrency(overallProgress.completedValue)} / {formatCurrency(overallProgress.totalValue)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-purple-800">{t('work_items') || 'Ish bandlari'}</h3>
+              <ClipboardList className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="text-3xl font-bold text-purple-900 mb-2">{allItems.length}</div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 text-green-600" />
+                {allItems.filter(i => i.completed_quantity >= i.quantity).length} {t('completed') || 'bajarilgan'}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-orange-600" />
+                {allItems.filter(i => i.completed_quantity > 0 && i.completed_quantity < i.quantity).length} {t('in_progress') || 'jarayonda'}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Progress by Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('progress_by_section') || "Bo'limlar bo'yicha progress"}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {sections.map((section) => {
+              const progress = getSectionProgress(section.id);
+              const isSelected = selectedProgressSection?.id === section.id;
+              return (
+                <div
+                  key={section.id}
+                  className={`p-4 rounded-lg border cursor-pointer transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                  onClick={() => setSelectedProgressSection(isSelected ? null : section)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-slate-500">{section.code}</span>
+                      <span className="font-medium text-slate-800">{section.name}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-700">{progress.percent}%</span>
+                      <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                    </div>
+                  </div>
+                  <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`absolute left-0 top-0 h-full transition-all ${getProgressColor(progress.percent)}`}
+                      style={{ width: `${progress.percent}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+                    <span>{progress.completed.toFixed(1)} / {progress.total.toFixed(1)} ({t('quantity') || 'hajm'})</span>
+                    <span>{formatCurrency(progress.completedValue)} / {formatCurrency(progress.totalValue)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section Items Detail */}
+      {selectedProgressSection && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              {selectedProgressSection.name} - {t('items') || 'Ishlar'}
+            </CardTitle>
+            <Badge variant="outline">
+              {sectionItems.length} {t('items') || 'ta'}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {sectionItems.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                {t('no_items_in_section') || "Bu bo'limda ishlar yo'q"}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sectionItems.map((item) => {
+                  const itemProgress = item.quantity > 0
+                    ? Math.round((item.completed_quantity / item.quantity) * 100)
+                    : 0;
+                  const isEditing = editingItem?.id === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-lg border border-slate-200 hover:border-slate-300 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            {item.code && (
+                              <span className="text-xs font-mono text-slate-500">{item.code}</span>
+                            )}
+                            <Badge className={`text-xs ${getStatusColor(item.status)}`}>
+                              {item.status === 'completed' ? (t('completed') || 'Bajarilgan')
+                                : item.status === 'in_progress' ? (t('in_progress') || 'Jarayonda')
+                                : (t('pending') || 'Kutilmoqda')}
+                            </Badge>
+                          </div>
+                          <p className="font-medium text-slate-800 truncate">{item.name}</p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {item.quantity} {item.unit} × {formatCurrency(item.unit_price || 0)} = {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-slate-800">{itemProgress}%</p>
+                            <p className="text-xs text-slate-500">
+                              {item.completed_quantity || 0} / {item.quantity} {item.unit}
+                            </p>
+                          </div>
+                          {!isEditing ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingItem(item);
+                                setCompletedQty(item.completed_quantity?.toString() || '0');
+                              }}
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              {t('update') || 'Yangilash'}
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                value={completedQty}
+                                onChange={(e) => setCompletedQty(e.target.value)}
+                                className="w-24 h-8 text-sm"
+                                min="0"
+                                max={item.quantity}
+                                step="0.01"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={handleUpdateProgress}
+                                disabled={saving}
+                              >
+                                {saving ? '...' : (t('save') || 'Saqlash')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingItem(null);
+                                  setCompletedQty('');
+                                }}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`absolute left-0 top-0 h-full transition-all ${getProgressColor(itemProgress)}`}
+                            style={{ width: `${itemProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
 // Tab Components
 const ProjectsTab = ({
   projects,
@@ -1088,7 +1467,7 @@ const ProjectDetailView = ({
           </TabsTrigger>
           <TabsTrigger value="progress" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <TrendingUp className="w-4 h-4 mr-2" />
-            {t('progress') || 'Progress'}
+            {t('progress') || 'Jarayon'}
           </TabsTrigger>
           <TabsTrigger value="activity" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Clock className="w-4 h-4 mr-2" />
@@ -1997,18 +2376,16 @@ const ProjectDetailView = ({
 
         {/* Progress Tab */}
         <TabsContent value="progress" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('work_progress') || 'Ish bajarilishi'}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <TrendingUp className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">{t('progress_tracking') || 'Progress kuzatuvi'}</p>
-                <p className="text-sm text-slate-400 mt-2">{t('coming_soon') || 'Tez orada'}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <ProgressTrackingTab
+            project={project}
+            sections={sections}
+            t={t}
+            formatCurrency={formatCurrency}
+            onRefresh={async () => {
+              const sectionsData = await constructionService.listSections(project.id);
+              setSections(sectionsData || []);
+            }}
+          />
         </TabsContent>
 
         {/* Activity Log Tab */}
@@ -2508,7 +2885,7 @@ const ProjectDetailView = ({
                 {t('cancel') || 'Bekor qilish'}
               </Button>
               <Button type="submit" disabled={!vendorForm.vendor_id && !vendorForm.vendor_name}>
-                {t('add') || "Qo'shish"}
+                {vendorForm.id ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}
               </Button>
             </DialogFooter>
           </form>
@@ -3013,7 +3390,7 @@ const ProjectDetailView = ({
 export default function Construction() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const {
     projects,
@@ -3232,7 +3609,7 @@ export default function Construction() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('contract_total') || 'Shartnoma summasi'}</p>
-                  <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(stats.totalContractAmount)}</p>
+                  <p className="text-lg font-bold text-slate-900">{formatCurrencyCompact(stats.totalContractAmount)}</p>
                 </div>
               </div>
             </CardContent>
@@ -3246,7 +3623,7 @@ export default function Construction() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('total_smeta') || 'Jami smeta'}</p>
-                  <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(stats.totalSmeta)}</p>
+                  <p className="text-lg font-bold text-slate-900">{formatCurrencyCompact(stats.totalSmeta)}</p>
                 </div>
               </div>
             </CardContent>
