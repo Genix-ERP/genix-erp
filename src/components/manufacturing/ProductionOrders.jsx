@@ -461,12 +461,12 @@ export default function ProductionOrders() {
                                 <CheckCircle className="w-4 h-4" />
                               </Button>
                             )}
-                            {(order.status === 'confirmed' || order.status === 'paused') && (
+                            {canUpdate(MODULES.MANUFACTURING) && (order.status === 'confirmed' || order.status === 'paused') && (
                               <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'start')} title={t('start') || 'Start'}>
                                 <Play className="w-4 h-4" />
                               </Button>
                             )}
-                            {order.status === 'in_progress' && (
+                            {canUpdate(MODULES.MANUFACTURING) && order.status === 'in_progress' && (
                               <>
                                 <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'pause')} title={t('paused') || 'Pause'}>
                                   <Pause className="w-4 h-4" />
@@ -476,7 +476,7 @@ export default function ProductionOrders() {
                                 </Button>
                               </>
                             )}
-                            {!['completed', 'cancelled', 'closed'].includes(order.status) && (
+                            {canUpdate(MODULES.MANUFACTURING) && !['completed', 'cancelled', 'closed'].includes(order.status) && (
                               <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'cancel')} title={t('cancel') || 'Cancel'}>
                                 <X className="w-4 h-4 text-red-500" />
                               </Button>
