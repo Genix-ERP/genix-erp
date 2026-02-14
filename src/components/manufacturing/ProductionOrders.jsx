@@ -43,16 +43,53 @@ export default function ProductionOrders() {
   const [products, setProducts] = useState([]);
   const [boms, setBoms] = useState([]);
 
-  // Manufacturing stages for Gazablok/Plita/Beton
-  const MANUFACTURING_STAGES = [
-    { key: 'draft', label: t('stage_draft') || 'Draft', color: 'bg-gray-100 text-gray-700 border-gray-300' },
-    { key: 'mixing', label: t('stage_mixing') || 'Mixing', color: 'bg-purple-100 text-purple-700 border-purple-300' },
-    { key: 'rising', label: t('stage_rising') || 'Rising', color: 'bg-blue-100 text-blue-700 border-blue-300' },
-    { key: 'drying', label: t('stage_drying') || 'Drying', color: 'bg-amber-100 text-amber-700 border-amber-300' },
-    { key: 'cutting', label: t('stage_cutting') || 'Cutting', color: 'bg-orange-100 text-orange-700 border-orange-300' },
-    { key: 'packing', label: t('stage_packing') || 'Packing', color: 'bg-cyan-100 text-cyan-700 border-cyan-300' },
-    { key: 'done', label: t('stage_done') || 'Done', color: 'bg-green-100 text-green-700 border-green-300' }
+  // Default manufacturing stages (used when no BOM/routing available)
+  const DEFAULT_STAGES = [
+    { key: 'draft', label: t('stage_draft') || 'Qoralama', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+    { key: 'in_progress', label: t('in_progress') || 'Jarayonda', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+    { key: 'done', label: t('stage_done') || 'Tayyor', color: 'bg-green-100 text-green-700 border-green-300' }
   ];
+
+  // Stage color palette for dynamic stages
+  const STAGE_COLORS = [
+    'bg-purple-100 text-purple-700 border-purple-300',
+    'bg-blue-100 text-blue-700 border-blue-300',
+    'bg-amber-100 text-amber-700 border-amber-300',
+    'bg-orange-100 text-orange-700 border-orange-300',
+    'bg-cyan-100 text-cyan-700 border-cyan-300',
+    'bg-pink-100 text-pink-700 border-pink-300',
+    'bg-indigo-100 text-indigo-700 border-indigo-300'
+  ];
+
+  // Get stages for a production order (from BOM operations or default)
+  const getOrderStages = (order) => {
+    if (!order) return DEFAULT_STAGES;
+
+    // If order has a BOM, get operations from the BOM
+    if (order.bom_id) {
+      const bom = boms.find(b => b.id === order.bom_id);
+      if (bom && bom.operations && bom.operations.length > 0) {
+        // Convert BOM operations to stages
+        const stages = [
+          { key: 'draft', label: t('stage_draft') || 'Qoralama', color: 'bg-gray-100 text-gray-700 border-gray-300' }
+        ];
+
+        bom.operations.forEach((op, index) => {
+          stages.push({
+            key: `op_${op.sequence || index}`,
+            label: op.name || op.operation_name || `${t('operation')} ${op.sequence || index + 1}`,
+            color: STAGE_COLORS[index % STAGE_COLORS.length],
+            operation: op
+          });
+        });
+
+        stages.push({ key: 'done', label: t('stage_done') || 'Tayyor', color: 'bg-green-100 text-green-700 border-green-300' });
+        return stages;
+      }
+    }
+
+    return DEFAULT_STAGES;
+  };
   const [productBoms, setProductBoms] = useState([]); // BOMs filtered by selected product
   const [newOrder, setNewOrder] = useState({
     name: '',
@@ -256,14 +293,15 @@ export default function ProductionOrders() {
     setShowViewModal(true);
   };
 
-  const getCurrentStageIndex = (stage) => {
-    return MANUFACTURING_STAGES.findIndex(s => s.key === (stage || 'draft'));
+  const getCurrentStageIndex = (stage, stages) => {
+    return stages.findIndex(s => s.key === (stage || 'draft'));
   };
 
-  const handleAdvanceStage = async (orderId, currentStage) => {
-    const currentIndex = getCurrentStageIndex(currentStage);
-    if (currentIndex < MANUFACTURING_STAGES.length - 1) {
-      const nextStage = MANUFACTURING_STAGES[currentIndex + 1].key;
+  const handleAdvanceStage = async (orderId, currentStage, order) => {
+    const stages = getOrderStages(order);
+    const currentIndex = getCurrentStageIndex(currentStage, stages);
+    if (currentIndex < stages.length - 1) {
+      const nextStage = stages[currentIndex + 1].key;
       try {
         await updateProductionOrder(orderId, { current_stage: nextStage });
         // Update selected order if viewing
@@ -703,10 +741,11 @@ export default function ProductionOrders() {
 
               {/* Stage Workflow */}
               <div>
-                <h4 className="font-semibold mb-4">{t('manufacturing_stages') || 'Manufacturing Stages'}</h4>
+                <h4 className="font-semibold mb-4">{t('manufacturing_stages') || 'Ishlab chiqarish bosqichlari'}</h4>
                 <div className="flex items-center justify-between gap-2 overflow-x-auto pb-2">
-                  {MANUFACTURING_STAGES.map((stage, index) => {
-                    const currentIndex = getCurrentStageIndex(selectedOrder.current_stage);
+                  {getOrderStages(selectedOrder).map((stage, index) => {
+                    const stages = getOrderStages(selectedOrder);
+                    const currentIndex = getCurrentStageIndex(selectedOrder.current_stage, stages);
                     const isCompleted = index < currentIndex;
                     const isCurrent = index === currentIndex;
                     const isPending = index > currentIndex;
@@ -731,7 +770,7 @@ export default function ProductionOrders() {
                           </div>
                           <span className="text-xs font-medium text-center">{stage.label}</span>
                         </div>
-                        {index < MANUFACTURING_STAGES.length - 1 && (
+                        {index < stages.length - 1 && (
                           <ArrowRight className={`w-5 h-5 flex-shrink-0 ${index < currentIndex ? 'text-green-500' : 'text-slate-300'}`} />
                         )}
                       </React.Fragment>
@@ -743,11 +782,11 @@ export default function ProductionOrders() {
                 {selectedOrder.current_stage !== 'done' && selectedOrder.status === 'in_progress' && (
                   <div className="mt-4 flex justify-center">
                     <Button
-                      onClick={() => handleAdvanceStage(selectedOrder.id, selectedOrder.current_stage)}
+                      onClick={() => handleAdvanceStage(selectedOrder.id, selectedOrder.current_stage, selectedOrder)}
                       className="bg-gradient-to-r from-slate-700 to-slate-800"
                     >
                       <ArrowRight className="w-4 h-4 mr-2" />
-                      {t('advance_to_next_stage') || 'Advance to Next Stage'}
+                      {t('advance_to_next_stage') || "Keyingi bosqichga o'tish"}
                     </Button>
                   </div>
                 )}
