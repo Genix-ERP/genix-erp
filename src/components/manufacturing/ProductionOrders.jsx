@@ -65,27 +65,32 @@ export default function ProductionOrders() {
   const getOrderStages = (order) => {
     if (!order) return DEFAULT_STAGES;
 
-    // If order has a BOM, get operations from the BOM
-    if (order.bom_id) {
+    // First, check if order has bom_operations directly (from backend)
+    let operations = order.bom_operations;
+
+    // If not, try to find the BOM in the boms array
+    if (!operations && order.bom_id) {
       const bom = boms.find(b => b.id === order.bom_id);
-      if (bom && bom.operations && bom.operations.length > 0) {
-        // Convert BOM operations to stages
-        const stages = [
-          { key: 'draft', label: t('stage_draft') || 'Qoralama', color: 'bg-gray-100 text-gray-700 border-gray-300' }
-        ];
+      operations = bom?.operations;
+    }
 
-        bom.operations.forEach((op, index) => {
-          stages.push({
-            key: `op_${op.sequence || index}`,
-            label: op.name || op.operation_name || `${t('operation')} ${op.sequence || index + 1}`,
-            color: STAGE_COLORS[index % STAGE_COLORS.length],
-            operation: op
-          });
+    // If we have operations, convert them to stages
+    if (operations && operations.length > 0) {
+      const stages = [
+        { key: 'draft', label: t('stage_draft') || 'Qoralama', color: 'bg-gray-100 text-gray-700 border-gray-300' }
+      ];
+
+      operations.forEach((op, index) => {
+        stages.push({
+          key: `op_${op.sequence || index}`,
+          label: op.name || op.operation_name || `${t('operation')} ${op.sequence || index + 1}`,
+          color: STAGE_COLORS[index % STAGE_COLORS.length],
+          operation: op
         });
+      });
 
-        stages.push({ key: 'done', label: t('stage_done') || 'Tayyor', color: 'bg-green-100 text-green-700 border-green-300' });
-        return stages;
-      }
+      stages.push({ key: 'done', label: t('stage_done') || 'Tayyor', color: 'bg-green-100 text-green-700 border-green-300' });
+      return stages;
     }
 
     return DEFAULT_STAGES;
