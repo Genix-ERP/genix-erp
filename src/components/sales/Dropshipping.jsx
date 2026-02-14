@@ -33,7 +33,10 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { dropshippingService } from '@/api/services/dropshipping';
+import { contactsService } from '@/api/services/contacts';
+import { inventoryService } from '@/api/services/inventory';
 import { toast } from 'sonner';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -56,6 +59,7 @@ const statusLabels = {
 export default function Dropshipping() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
@@ -63,6 +67,8 @@ export default function Dropshipping() {
   const [productVendors, setProductVendors] = useState([]);
   const [products, setProducts] = useState([]);
   const [stats, setStats] = useState(null);
+  const [allVendorsList, setAllVendorsList] = useState([]);
+  const [allProductsList, setAllProductsList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -103,6 +109,8 @@ export default function Dropshipping() {
   useEffect(() => {
     fetchOrders();
     fetchStats();
+    fetchAllVendors();
+    fetchAllProducts();
   }, []);
 
   useEffect(() => {
@@ -160,6 +168,24 @@ export default function Dropshipping() {
       setProductVendors(data || []);
     } catch (error) {
       console.error('Failed to fetch product vendors:', error);
+    }
+  };
+
+  const fetchAllVendors = async () => {
+    try {
+      const data = await contactsService.list({ contact_type: 'vendor' });
+      setAllVendorsList(data?.items || data || []);
+    } catch (error) {
+      console.error('Failed to fetch vendors list:', error);
+    }
+  };
+
+  const fetchAllProducts = async () => {
+    try {
+      const data = await inventoryService.listProducts();
+      setAllProductsList(data?.items || data || []);
+    } catch (error) {
+      console.error('Failed to fetch products list:', error);
     }
   };
 
@@ -262,7 +288,17 @@ export default function Dropshipping() {
   // Save product-vendor link
   const handleSaveProductVendor = async () => {
     try {
-      await dropshippingService.createProductVendor(productVendorData);
+      const payload = {
+        product_id: productVendorData.product_id,
+        vendor_id: productVendorData.vendor_id,
+        vendor_sku: productVendorData.vendor_sku || undefined,
+        lead_time_days: productVendorData.lead_time_days || undefined,
+        priority: productVendorData.priority || undefined,
+      };
+      if (productVendorData.vendor_price !== '' && productVendorData.vendor_price != null) {
+        payload.vendor_price = parseFloat(productVendorData.vendor_price);
+      }
+      await dropshippingService.createProductVendor(payload);
       toast.success(t('product_vendor_linked'));
       setShowProductVendorModal(false);
       fetchProducts();
@@ -278,11 +314,6 @@ export default function Dropshipping() {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to link product');
     }
-  };
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ').format(amount || 0) + ' UZS';
   };
 
   return (
@@ -540,8 +571,9 @@ export default function Dropshipping() {
                         <TableCell>{vendor.notification_email || '-'}</TableCell>
                         <TableCell>{vendor.default_lead_time_days} {t('days')}</TableCell>
                         <TableCell>
-                          {vendor.default_markup}
-                          {vendor.markup_type === 'percentage' ? '%' : ' UZS'}
+                          {vendor.markup_type === 'percentage'
+                            ? `${vendor.default_markup}%`
+                            : formatCurrency(vendor.default_markup)}
                         </TableCell>
                         <TableCell>
                           {vendor.auto_send_orders ? (
@@ -856,12 +888,20 @@ export default function Dropshipping() {
 
           <div className="space-y-4">
             <div>
-              <Label>{t('vendor_id')} *</Label>
-              <Input
+              <Label>{t('vendor')} *</Label>
+              <Select
                 value={vendorSettings.vendor_id}
-                onChange={(e) => setVendorSettings({ ...vendorSettings, vendor_id: e.target.value })}
-                placeholder={t('enter_vendor_id')}
-              />
+                onValueChange={(value) => setVendorSettings({ ...vendorSettings, vendor_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_vendor')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {allVendorsList.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>{t('notification_email')}</Label>
@@ -918,20 +958,36 @@ export default function Dropshipping() {
 
           <div className="space-y-4">
             <div>
-              <Label>{t('product_id')} *</Label>
-              <Input
+              <Label>{t('product')} *</Label>
+              <Select
                 value={productVendorData.product_id}
-                onChange={(e) => setProductVendorData({ ...productVendorData, product_id: e.target.value })}
-                placeholder={t('enter_product_id')}
-              />
+                onValueChange={(value) => setProductVendorData({ ...productVendorData, product_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_product')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {allProductsList.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label>{t('vendor_id')} *</Label>
-              <Input
+              <Label>{t('vendor')} *</Label>
+              <Select
                 value={productVendorData.vendor_id}
-                onChange={(e) => setProductVendorData({ ...productVendorData, vendor_id: e.target.value })}
-                placeholder={t('enter_vendor_id')}
-              />
+                onValueChange={(value) => setProductVendorData({ ...productVendorData, vendor_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_vendor')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {allVendorsList.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

@@ -147,18 +147,43 @@ export const workOrdersService = {
     return true;
   },
 
-  async start(id) {
-    const response = await apiClient.post(`/work-orders/${id}/start`);
+  async start(id, data = {}) {
+    const response = await apiClient.post(`/work-orders/${id}/start`, data);
     return response.data.data;
   },
 
-  async complete(id) {
-    const response = await apiClient.post(`/work-orders/${id}/complete`);
+  async pause(id) {
+    const response = await apiClient.post(`/work-orders/${id}/pause`);
+    return response.data.data;
+  },
+
+  async complete(id, data) {
+    const response = await apiClient.post(`/work-orders/${id}/complete`, data);
     return response.data.data;
   },
 
   async recordTime(id, data) {
     const response = await apiClient.post(`/work-orders/${id}/time`, data);
+    return response.data.data;
+  }
+};
+
+// =====================================================
+// MANUFACTURING TRANSFERS SERVICE
+// =====================================================
+export const manufacturingTransfersService = {
+  async list(params = {}) {
+    const response = await apiClient.get('/manufacturing-transfers', { params });
+    return response.data.data || [];
+  },
+
+  async get(id) {
+    const response = await apiClient.get(`/manufacturing-transfers/${id}`);
+    return response.data.data;
+  },
+
+  async validate(id, data = {}) {
+    const response = await apiClient.post(`/manufacturing-transfers/${id}/validate`, data);
     return response.data.data;
   }
 };
@@ -224,6 +249,27 @@ export const bomsService = {
 
   async delete(id) {
     await apiClient.delete(`/boms/${id}`);
+    return true;
+  },
+
+  // BOM Operations (routing)
+  async listOperations(bomId) {
+    const response = await apiClient.get(`/boms/${bomId}/operations`);
+    return response.data.data || [];
+  },
+
+  async createOperation(bomId, data) {
+    const response = await apiClient.post(`/boms/${bomId}/operations`, data);
+    return response.data.data;
+  },
+
+  async updateOperation(bomId, operationId, data) {
+    const response = await apiClient.put(`/boms/${bomId}/operations/${operationId}`, data);
+    return response.data.data;
+  },
+
+  async deleteOperation(bomId, operationId) {
+    await apiClient.delete(`/boms/${bomId}/operations/${operationId}`);
     return true;
   }
 };

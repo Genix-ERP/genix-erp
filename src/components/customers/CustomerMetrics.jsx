@@ -2,10 +2,12 @@ import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserPlus, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function CustomerMetrics({ customers, leads, opportunities, language = 'en' }) {
   const { t } = useTranslation(language);
-  
+  const { formatCurrency } = useCurrencyFormatter();
+
   const metrics = React.useMemo(() => {
     const totalCustomers = customers.length;
     const activeCustomers = customers.filter(c => c.status === 'active').length;
@@ -49,7 +51,7 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
     },
     {
       title: t('annual_revenue'),
-      value: `$${metrics.totalRevenue.toLocaleString()}`,
+      value: formatCurrency(metrics.totalRevenue),
       change: "+15%",
       changeText: t('vs_last_month'),
       icon: DollarSign,
@@ -59,7 +61,7 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
     },
     {
       title: t('avg_deal_size'),
-      value: `$${Math.round(metrics.avgDealSize).toLocaleString()}`,
+      value: formatCurrency(Math.round(metrics.avgDealSize)),
       change: "+5%",
       changeText: t('vs_last_month'),
       icon: TrendingUp,

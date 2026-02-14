@@ -456,6 +456,10 @@ export function CustomersProvider({ children }) {
       setLeads(prev => [newLead, ...prev]);
       return newLead;
     } catch (error) {
+      // Re-throw duplicate detection errors so UI can handle them
+      if (error.response?.status === 409) {
+        throw error;
+      }
       console.error('Failed to create lead:', error);
       // Fallback to local storage
       const storageKey = getStorageKey(LEADS_STORAGE_KEY, companyId);

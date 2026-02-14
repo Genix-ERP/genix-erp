@@ -111,7 +111,8 @@ export default function Warehouses() {
     is_active: true,
     is_default: false,
     reception_steps: 1,  // 1=Direct, 2=Input+Stock, 3=Input+QC+Stock
-    delivery_steps: 1    // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
+    delivery_steps: 1,   // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
+    manufacturing_steps: 1  // 1=Simple, 2=Pick+Produce, 3=Pick+Produce+Store
   });
 
   const [locationForm, setLocationForm] = useState({
@@ -181,7 +182,8 @@ export default function Warehouses() {
       is_active: true,
       is_default: false,
       reception_steps: 1,
-      delivery_steps: 1
+      delivery_steps: 1,
+      manufacturing_steps: 1
     });
   };
 
@@ -234,7 +236,8 @@ export default function Warehouses() {
       is_active: warehouse.is_active !== false,
       is_default: warehouse.is_default || false,
       reception_steps: warehouse.reception_steps || 1,
-      delivery_steps: warehouse.delivery_steps || 1
+      delivery_steps: warehouse.delivery_steps || 1,
+      manufacturing_steps: warehouse.manufacturing_steps || 1
     });
     setShowEditModal(true);
   };
@@ -869,7 +872,7 @@ export default function Warehouses() {
                 {t('warehouse_operations') || 'Warehouse Operations'}
                 <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
               </h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <LabelWithHelp
                     label={t('reception_steps') || 'Incoming Shipments'}
@@ -886,7 +889,7 @@ export default function Warehouses() {
                       <SelectItem value="1">
                         <div className="flex items-center gap-2">
                           <Package className="w-4 h-4" />
-                          {t('reception_1_step') || '1-step: Receive goods directly (stock)'}
+                          {t('reception_1_step') || '1-step: Direct to Stock'}
                         </div>
                       </SelectItem>
                       <SelectItem value="2">
@@ -898,7 +901,7 @@ export default function Warehouses() {
                       <SelectItem value="3">
                         <div className="flex items-center gap-2">
                           <ClipboardCheck className="w-4 h-4" />
-                          {t('reception_3_step') || '3-step: Input → Quality → Stock'}
+                          {t('reception_3_step') || '3-step: Input → QC → Stock'}
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -920,7 +923,7 @@ export default function Warehouses() {
                       <SelectItem value="1">
                         <div className="flex items-center gap-2">
                           <PackageCheck className="w-4 h-4" />
-                          {t('delivery_1_step') || '1-step: Ship directly from stock'}
+                          {t('delivery_1_step') || '1-step: Direct from Stock'}
                         </div>
                       </SelectItem>
                       <SelectItem value="2">
@@ -938,9 +941,43 @@ export default function Warehouses() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <LabelWithHelp
+                    label={t('manufacturing_steps') || 'Manufacturing'}
+                    helpText={t('help_manufacturing_steps') || "Ishlab chiqarish bosqichlari: 1-bosqich = oddiy, 2-bosqich = komponentlarni yig'ish + ishlab chiqarish, 3-bosqich = yig'ish + ishlab chiqarish + saqlash"}
+                  />
+                  <Select
+                    value={String(formData.manufacturing_steps)}
+                    onValueChange={(value) => setFormData({...formData, manufacturing_steps: parseInt(value)})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          {t('mfg_1_step') || '1-step: Simple (no transfers)'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="2">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4" />
+                          {t('mfg_2_step') || '2-step: Pick → Produce'}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="3">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4" />
+                          {t('mfg_3_step') || '3-step: Pick → Produce → Store'}
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                {t('warehouse_operations_desc') || 'Configure multi-step operations for receiving and shipping. More steps provide better tracking and quality control.'}
+                {t('warehouse_operations_desc') || 'Configure multi-step operations for receiving, shipping, and manufacturing. More steps provide better tracking.'}
               </p>
             </div>
 
@@ -1650,27 +1687,38 @@ export default function Warehouses() {
               </div>
 
               {/* Warehouse Operations Steps */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="p-3 bg-orange-50 rounded-lg">
                   <p className="text-xs text-orange-600 mb-1 flex items-center gap-1">
-                    <Truck className="w-3 h-3" /> {t('reception_steps') || 'Incoming Shipments'}
+                    <Truck className="w-3 h-3" /> {t('reception_steps') || 'Incoming'}
                   </p>
                   <p className="text-sm font-medium text-orange-700">
-                    {selectedWarehouse.reception_steps === 1 && (t('reception_1_step') || '1-step: Direct to Stock')}
+                    {selectedWarehouse.reception_steps === 1 && (t('reception_1_step') || '1-step: Direct')}
                     {selectedWarehouse.reception_steps === 2 && (t('reception_2_step') || '2-step: Input → Stock')}
                     {selectedWarehouse.reception_steps === 3 && (t('reception_3_step') || '3-step: Input → QC → Stock')}
-                    {!selectedWarehouse.reception_steps && (t('reception_1_step') || '1-step: Direct to Stock')}
+                    {!selectedWarehouse.reception_steps && (t('reception_1_step') || '1-step: Direct')}
                   </p>
                 </div>
                 <div className="p-3 bg-purple-50 rounded-lg">
                   <p className="text-xs text-purple-600 mb-1 flex items-center gap-1">
-                    <PackageCheck className="w-3 h-3" /> {t('delivery_steps') || 'Outgoing Shipments'}
+                    <PackageCheck className="w-3 h-3" /> {t('delivery_steps') || 'Outgoing'}
                   </p>
                   <p className="text-sm font-medium text-purple-700">
-                    {selectedWarehouse.delivery_steps === 1 && (t('delivery_1_step') || '1-step: Direct from Stock')}
+                    {selectedWarehouse.delivery_steps === 1 && (t('delivery_1_step') || '1-step: Direct')}
                     {selectedWarehouse.delivery_steps === 2 && (t('delivery_2_step') || '2-step: Pick → Ship')}
                     {selectedWarehouse.delivery_steps === 3 && (t('delivery_3_step') || '3-step: Pick → Pack → Ship')}
-                    {!selectedWarehouse.delivery_steps && (t('delivery_1_step') || '1-step: Direct from Stock')}
+                    {!selectedWarehouse.delivery_steps && (t('delivery_1_step') || '1-step: Direct')}
+                  </p>
+                </div>
+                <div className="p-3 bg-cyan-50 rounded-lg">
+                  <p className="text-xs text-cyan-600 mb-1 flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> {t('manufacturing_steps') || 'Manufacturing'}
+                  </p>
+                  <p className="text-sm font-medium text-cyan-700">
+                    {selectedWarehouse.manufacturing_steps === 1 && (t('mfg_1_step') || '1-step: Simple')}
+                    {selectedWarehouse.manufacturing_steps === 2 && (t('mfg_2_step') || '2-step: Pick → Produce')}
+                    {selectedWarehouse.manufacturing_steps === 3 && (t('mfg_3_step') || '3-step: Pick → Produce → Store')}
+                    {!selectedWarehouse.manufacturing_steps && (t('mfg_1_step') || '1-step: Simple')}
                   </p>
                 </div>
               </div>

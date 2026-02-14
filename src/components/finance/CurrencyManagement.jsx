@@ -17,6 +17,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function CurrencyManagement() {
   const { language } = useLanguage();
@@ -36,6 +37,7 @@ export default function CurrencyManagement() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRevaluing, setIsRevaluing] = useState(false);
@@ -131,13 +133,6 @@ export default function CurrencyManagement() {
     }
   };
 
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-  };
-
   // Get rates history for a currency
   const getRateHistory = (currencyCode) => {
     return exchangeRates
@@ -210,9 +205,8 @@ export default function CurrencyManagement() {
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-2xl font-bold">
-                      {latestRate ? new Intl.NumberFormat('uz-UZ').format(latestRate.rate) : '-'}
+                      {latestRate ? formatCurrency(latestRate.rate) : '-'}
                     </p>
-                    <p className="text-xs text-slate-500">so'm</p>
                   </div>
                   {rateChange && (
                     <Badge className={parseFloat(rateChange) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
@@ -384,7 +378,7 @@ export default function CurrencyManagement() {
                           {currency.is_base ? (
                             <Badge variant="outline">{t('base_currency') || 'Base currency'}</Badge>
                           ) : (
-                            latestRate ? `${new Intl.NumberFormat('uz-UZ').format(latestRate.rate)} so'm` : '-'
+                            latestRate ? formatCurrency(latestRate.rate) : '-'
                           )}
                         </TableCell>
                         <TableCell>
@@ -451,7 +445,7 @@ export default function CurrencyManagement() {
                           </div>
                         </TableCell>
                         <TableCell className="font-semibold">
-                          {new Intl.NumberFormat('uz-UZ').format(rate.rate)} so'm
+                          {formatCurrency(rate.rate)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{rate.source}</Badge>
@@ -470,71 +464,6 @@ export default function CurrencyManagement() {
             </CardContent>
           </Card>
         </TabsContent>
-
-      {/* Create Currency Modal */}
-      <Dialog open={showCreateCurrencyModal} onOpenChange={setShowCreateCurrencyModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('new_currency') || 'New Currency'}</DialogTitle>
-            <DialogDescription>{t('add_new_currency') || 'Add new currency'}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">{t('code') || 'Code'}</label>
-                <Input
-                  value={newCurrency.code}
-                  onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value.toUpperCase() })}
-                  placeholder="USD"
-                  maxLength={3}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">{t('symbol') || 'Symbol'}</label>
-                <Input
-                  value={newCurrency.symbol}
-                  onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
-                  placeholder="$"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">{t('currency_name') || 'Name'}</label>
-              <Input
-                value={newCurrency.name}
-                onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
-                placeholder="US Dollar"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">{t('decimal_places') || 'Decimal places'}</label>
-              <Select
-                value={String(newCurrency.decimal_places)}
-                onValueChange={(v) => setNewCurrency({ ...newCurrency, decimal_places: parseInt(v) })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0</SelectItem>
-                  <SelectItem value="2">2</SelectItem>
-                  <SelectItem value="3">3</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateCurrencyModal(false)}>{t('cancel') || 'Cancel'}</Button>
-              <Button
-                onClick={handleCreateCurrency}
-                disabled={isSaving || !newCurrency.code || !newCurrency.name}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              >
-                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
         {/* Exchange Diffs Tab */}
         <TabsContent value="exchange_diffs">
@@ -641,6 +570,71 @@ export default function CurrencyManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Create Currency Modal */}
+      <Dialog open={showCreateCurrencyModal} onOpenChange={setShowCreateCurrencyModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('new_currency') || 'New Currency'}</DialogTitle>
+            <DialogDescription>{t('add_new_currency') || 'Add new currency'}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">{t('code') || 'Code'}</label>
+                <Input
+                  value={newCurrency.code}
+                  onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value.toUpperCase() })}
+                  placeholder="USD"
+                  maxLength={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t('symbol') || 'Symbol'}</label>
+                <Input
+                  value={newCurrency.symbol}
+                  onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
+                  placeholder="$"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('currency_name') || 'Name'}</label>
+              <Input
+                value={newCurrency.name}
+                onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
+                placeholder="US Dollar"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t('decimal_places') || 'Decimal places'}</label>
+              <Select
+                value={String(newCurrency.decimal_places)}
+                onValueChange={(v) => setNewCurrency({ ...newCurrency, decimal_places: parseInt(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0</SelectItem>
+                  <SelectItem value="2">2</SelectItem>
+                  <SelectItem value="3">3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 justify-end mt-6">
+              <Button variant="outline" onClick={() => setShowCreateCurrencyModal(false)}>{t('cancel') || 'Cancel'}</Button>
+              <Button
+                onClick={handleCreateCurrency}
+                disabled={isSaving || !newCurrency.code || !newCurrency.name}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
+                {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Revaluation Modal */}
       <Dialog open={showRevalueModal} onOpenChange={setShowRevalueModal}>

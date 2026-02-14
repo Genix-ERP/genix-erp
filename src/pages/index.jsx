@@ -31,6 +31,7 @@ import Attendance from "./Attendance";
 import EmployeeContracts from "./EmployeeContracts";
 import Cargo from "./Cargo";
 import POS from "./POS";
+import Construction from "./Construction";
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
@@ -66,6 +67,7 @@ const PAGES = {
     Attendance: Attendance,
     EmployeeContracts: EmployeeContracts,
     Cargo: Cargo,
+    Construction: Construction,
 }
 
 function _getCurrentPage(url) {
@@ -182,6 +184,7 @@ function PagesContent() {
                 <Route path="attendance" element={<ModuleRoute moduleId="hr"><Attendance /></ModuleRoute>} />
                 <Route path="employee-contracts" element={<ModuleRoute moduleId="hr"><EmployeeContracts /></ModuleRoute>} />
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
+                <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
                 <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
                 <Route path="customers" element={<ModuleRoute moduleId="customers"><Customers /></ModuleRoute>} />
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />

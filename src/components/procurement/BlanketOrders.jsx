@@ -61,12 +61,14 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { procurementService } from "@/api/services/procurement";
 import { inventoryService } from "@/api/services/inventory";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BlanketOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { suppliers } = useProcurement();
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // State
   const [blanketOrders, setBlanketOrders] = useState([]);
@@ -169,27 +171,18 @@ export default function BlanketOrders() {
   // Status badge
   const getStatusBadge = (status) => {
     const statusConfig = {
-      draft: { color: "bg-gray-100 text-gray-800", label: "Draft" },
-      active: { color: "bg-green-100 text-green-800", label: "Active" },
-      on_hold: { color: "bg-yellow-100 text-yellow-800", label: "On Hold" },
-      completed: { color: "bg-blue-100 text-blue-800", label: "Completed" },
-      expired: { color: "bg-red-100 text-red-800", label: "Expired" },
-      cancelled: { color: "bg-red-100 text-red-800", label: "Cancelled" },
-      confirmed: { color: "bg-purple-100 text-purple-800", label: "Confirmed" },
-      shipped: { color: "bg-indigo-100 text-indigo-800", label: "Shipped" },
-      received: { color: "bg-teal-100 text-teal-800", label: "Received" },
+      draft: { color: "bg-gray-100 text-gray-800", label: t("draft") },
+      active: { color: "bg-green-100 text-green-800", label: t("active") },
+      on_hold: { color: "bg-yellow-100 text-yellow-800", label: t("on_hold") },
+      completed: { color: "bg-blue-100 text-blue-800", label: t("completed") },
+      expired: { color: "bg-red-100 text-red-800", label: t("expired") },
+      cancelled: { color: "bg-red-100 text-red-800", label: t("cancelled") },
+      confirmed: { color: "bg-purple-100 text-purple-800", label: t("confirmed") },
+      shipped: { color: "bg-indigo-100 text-indigo-800", label: t("shipped") },
+      received: { color: "bg-teal-100 text-teal-800", label: t("received") },
     };
     const config = statusConfig[status] || statusConfig.draft;
     return <Badge className={config.color}>{config.label}</Badge>;
-  };
-
-  // Format currency
-  const formatCurrency = (amount, currency = "UZS") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
-      minimumFractionDigits: 0,
-    }).format(amount || 0);
   };
 
   // Reset form
@@ -429,15 +422,15 @@ export default function BlanketOrders() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Blanket Orders</h2>
+          <h2 className="text-2xl font-bold">{t('blanket_orders')}</h2>
           <p className="text-muted-foreground text-sm">
-            Long-term purchase agreements with scheduled releases
+            {t('blanket_orders_description')}
           </p>
         </div>
         {canCreate("purchase", "contract") && (
           <Button onClick={() => { resetForm(); setShowForm(true); }}>
             <Plus className="w-4 h-4 mr-2" />
-            New Blanket Order
+            {t('new_blanket_order')}
           </Button>
         )}
       </div>
@@ -449,7 +442,7 @@ export default function BlanketOrders() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input
-                placeholder="Search blanket orders..."
+                placeholder={t('search_blanket_orders')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -457,15 +450,15 @@ export default function BlanketOrders() {
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Filter by status" />
+                <SelectValue placeholder={t('filter_by_status')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="expired">Expired</SelectItem>
+                <SelectItem value="all">{t('all_statuses')}</SelectItem>
+                <SelectItem value="draft">{t('draft')}</SelectItem>
+                <SelectItem value="active">{t('active')}</SelectItem>
+                <SelectItem value="on_hold">{t('on_hold')}</SelectItem>
+                <SelectItem value="completed">{t('completed')}</SelectItem>
+                <SelectItem value="expired">{t('expired')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -478,26 +471,26 @@ export default function BlanketOrders() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Order #</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Utilization</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('order_number')}</TableHead>
+                <TableHead>{t('title')}</TableHead>
+                <TableHead>{t('vendor')}</TableHead>
+                <TableHead>{t('period')}</TableHead>
+                <TableHead>{t('utilization')}</TableHead>
+                <TableHead>{t('status')}</TableHead>
+                <TableHead className="text-right">{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    Loading...
+                    {t('loading')}
                   </TableCell>
                 </TableRow>
               ) : filteredOrders.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No blanket orders found
+                    {t('no_blanket_orders_found')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -511,7 +504,7 @@ export default function BlanketOrders() {
                         {order.start_date} - {order.end_date}
                         {order.days_remaining > 0 && (
                           <span className="text-muted-foreground ml-2">
-                            ({order.days_remaining} days left)
+                            ({order.days_remaining} {t('days_left')})
                           </span>
                         )}
                       </div>
@@ -583,7 +576,7 @@ export default function BlanketOrders() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingOrder ? "Edit Blanket Order" : "New Blanket Order"}
+              {editingOrder ? t('edit_blanket_order') : t('new_blanket_order')}
             </DialogTitle>
           </DialogHeader>
 
@@ -591,15 +584,15 @@ export default function BlanketOrders() {
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Title *</Label>
+                <Label>{t('title')} *</Label>
                 <Input
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="Enter title"
+                  placeholder={t('enter_title')}
                 />
               </div>
               <div>
-                <Label>Vendor *</Label>
+                <Label>{t('vendor')} *</Label>
                 <Select
                   value={formData.vendor_id}
                   onValueChange={(value) => {
@@ -612,7 +605,7 @@ export default function BlanketOrders() {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select vendor" />
+                    <SelectValue placeholder={t('select_vendor')} />
                   </SelectTrigger>
                   <SelectContent>
                     {suppliers.map((s) => (
@@ -624,13 +617,13 @@ export default function BlanketOrders() {
                 </Select>
               </div>
               <div>
-                <Label>Warehouse</Label>
+                <Label>{t('warehouse')}</Label>
                 <Select
                   value={formData.warehouse_id}
                   onValueChange={(value) => setFormData({ ...formData, warehouse_id: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select warehouse" />
+                    <SelectValue placeholder={t('select_warehouse')} />
                   </SelectTrigger>
                   <SelectContent>
                     {warehouses.map((w) => (
@@ -642,7 +635,7 @@ export default function BlanketOrders() {
                 </Select>
               </div>
               <div>
-                <Label>Start Date *</Label>
+                <Label>{t('start_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.start_date}
@@ -650,7 +643,7 @@ export default function BlanketOrders() {
                 />
               </div>
               <div>
-                <Label>End Date *</Label>
+                <Label>{t('end_date')} *</Label>
                 <Input
                   type="date"
                   value={formData.end_date}
@@ -658,7 +651,7 @@ export default function BlanketOrders() {
                 />
               </div>
               <div>
-                <Label>Release Frequency</Label>
+                <Label>{t('release_frequency')}</Label>
                 <Select
                   value={formData.release_frequency}
                   onValueChange={(value) => setFormData({ ...formData, release_frequency: value })}
@@ -667,15 +660,15 @@ export default function BlanketOrders() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="as_needed">As Needed</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="as_needed">{t('as_needed')}</SelectItem>
+                    <SelectItem value="weekly">{t('weekly')}</SelectItem>
+                    <SelectItem value="monthly">{t('monthly')}</SelectItem>
+                    <SelectItem value="quarterly">{t('quarterly')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Currency</Label>
+                <Label>{t('currency')}</Label>
                 <Select
                   value={formData.currency}
                   onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -691,7 +684,7 @@ export default function BlanketOrders() {
                 </Select>
               </div>
               <div className="col-span-2">
-                <Label>Description</Label>
+                <Label>{t('description')}</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -703,20 +696,20 @@ export default function BlanketOrders() {
             {/* Lines */}
             <div>
               <div className="flex justify-between items-center mb-2">
-                <Label className="text-base font-semibold">Items</Label>
+                <Label className="text-base font-semibold">{t('items')}</Label>
                 <Button variant="outline" size="sm" onClick={addLine}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Add Item
+                  {t('add_item')}
                 </Button>
               </div>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Discount %</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>{t('product')}</TableHead>
+                    <TableHead>{t('quantity')}</TableHead>
+                    <TableHead>{t('unit_price')}</TableHead>
+                    <TableHead>{t('discount_percent')}</TableHead>
+                    <TableHead>{t('total')}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -729,7 +722,7 @@ export default function BlanketOrders() {
                           onValueChange={(value) => updateLine(index, "product_id", value)}
                         >
                           <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Select product" />
+                            <SelectValue placeholder={t('select_product')} />
                           </SelectTrigger>
                           <SelectContent>
                             {products.map((p) => (
@@ -782,7 +775,7 @@ export default function BlanketOrders() {
               {formData.lines.length > 0 && (
                 <div className="flex justify-end mt-2">
                   <span className="font-semibold">
-                    Total: {formatCurrency(calculateTotalValue(), formData.currency)}
+                    {t('total')}: {formatCurrency(calculateTotalValue(), formData.currency)}
                   </span>
                 </div>
               )}
@@ -790,7 +783,7 @@ export default function BlanketOrders() {
 
             {/* Notes */}
             <div>
-              <Label>Notes</Label>
+              <Label>{t('notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -801,10 +794,10 @@ export default function BlanketOrders() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { resetForm(); setShowForm(false); }}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button onClick={handleSubmit} disabled={!formData.title || !formData.vendor_id || !formData.end_date}>
-              {editingOrder ? "Update" : "Create"}
+              {editingOrder ? t('update') : t('create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -823,9 +816,9 @@ export default function BlanketOrders() {
           {selectedOrder && (
             <Tabs defaultValue="overview">
               <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="lines">Items</TabsTrigger>
-                <TabsTrigger value="releases">Releases ({selectedOrder.release_count || 0})</TabsTrigger>
+                <TabsTrigger value="overview">{t('overview')}</TabsTrigger>
+                <TabsTrigger value="lines">{t('items')}</TabsTrigger>
+                <TabsTrigger value="releases">{t('releases')} ({selectedOrder.release_count || 0})</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -833,7 +826,7 @@ export default function BlanketOrders() {
                 <div className="grid grid-cols-4 gap-4">
                   <Card>
                     <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Total Value</div>
+                      <div className="text-sm text-muted-foreground">{t('total_value')}</div>
                       <div className="text-2xl font-bold">
                         {formatCurrency(selectedOrder.total_value, selectedOrder.currency)}
                       </div>
@@ -841,7 +834,7 @@ export default function BlanketOrders() {
                   </Card>
                   <Card>
                     <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Released</div>
+                      <div className="text-sm text-muted-foreground">{t('released')}</div>
                       <div className="text-2xl font-bold">
                         {formatCurrency(selectedOrder.released_value, selectedOrder.currency)}
                       </div>
@@ -849,7 +842,7 @@ export default function BlanketOrders() {
                   </Card>
                   <Card>
                     <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Remaining</div>
+                      <div className="text-sm text-muted-foreground">{t('remaining')}</div>
                       <div className="text-2xl font-bold text-green-600">
                         {formatCurrency(selectedOrder.remaining_value, selectedOrder.currency)}
                       </div>
@@ -857,7 +850,7 @@ export default function BlanketOrders() {
                   </Card>
                   <Card>
                     <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Utilization</div>
+                      <div className="text-sm text-muted-foreground">{t('utilization')}</div>
                       <div className="text-2xl font-bold">
                         {(selectedOrder.utilization_percent || 0).toFixed(1)}%
                       </div>
@@ -870,29 +863,29 @@ export default function BlanketOrders() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status</span>
+                      <span className="text-muted-foreground">{t('status')}</span>
                       {getStatusBadge(selectedOrder.status)}
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Vendor</span>
+                      <span className="text-muted-foreground">{t('vendor')}</span>
                       <span>{selectedOrder.vendor_name}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Warehouse</span>
+                      <span className="text-muted-foreground">{t('warehouse')}</span>
                       <span>{selectedOrder.warehouse_name || "-"}</span>
                     </div>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Start Date</span>
+                      <span className="text-muted-foreground">{t('start_date')}</span>
                       <span>{selectedOrder.start_date}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">End Date</span>
+                      <span className="text-muted-foreground">{t('end_date')}</span>
                       <span>{selectedOrder.end_date}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Days Remaining</span>
+                      <span className="text-muted-foreground">{t('days_remaining')}</span>
                       <span>{selectedOrder.days_remaining}</span>
                     </div>
                   </div>
@@ -903,7 +896,7 @@ export default function BlanketOrders() {
                   <div className="flex gap-2 pt-4">
                     <Button onClick={() => openReleaseForm(selectedOrder)}>
                       <Send className="w-4 h-4 mr-2" />
-                      Create Release
+                      {t('create_release')}
                     </Button>
                   </div>
                 )}
@@ -911,11 +904,11 @@ export default function BlanketOrders() {
                   <div className="flex gap-2 pt-4">
                     <Button onClick={() => handleActivate(selectedOrder)}>
                       <Play className="w-4 h-4 mr-2" />
-                      Activate
+                      {t('activate')}
                     </Button>
                     <Button variant="outline" onClick={() => handleEdit(selectedOrder)}>
                       <Edit2 className="w-4 h-4 mr-2" />
-                      Edit
+                      {t('edit')}
                     </Button>
                   </div>
                 )}
@@ -925,12 +918,12 @@ export default function BlanketOrders() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Agreed</TableHead>
-                      <TableHead className="text-right">Released</TableHead>
-                      <TableHead className="text-right">Remaining</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Line Value</TableHead>
+                      <TableHead>{t('product')}</TableHead>
+                      <TableHead className="text-right">{t('agreed')}</TableHead>
+                      <TableHead className="text-right">{t('released')}</TableHead>
+                      <TableHead className="text-right">{t('remaining')}</TableHead>
+                      <TableHead className="text-right">{t('unit_price')}</TableHead>
+                      <TableHead className="text-right">{t('line_value')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -961,19 +954,19 @@ export default function BlanketOrders() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Release #</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>PO #</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>{t('release_number')}</TableHead>
+                      <TableHead>{t('date')}</TableHead>
+                      <TableHead>{t('po_number')}</TableHead>
+                      <TableHead className="text-right">{t('amount')}</TableHead>
+                      <TableHead>{t('status')}</TableHead>
+                      <TableHead className="text-right">{t('actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(selectedOrder.releases || []).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          No releases yet
+                          {t('no_releases_yet')}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -1021,16 +1014,16 @@ export default function BlanketOrders() {
       <Dialog open={showReleaseForm} onOpenChange={setShowReleaseForm}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Release</DialogTitle>
+            <DialogTitle>{t('create_release')}</DialogTitle>
             <DialogDescription>
-              Select items and quantities to release from the blanket order
+              {t('release_form_description')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Release Date</Label>
+                <Label>{t('release_date')}</Label>
                 <Input
                   type="date"
                   value={releaseData.release_date}
@@ -1038,7 +1031,7 @@ export default function BlanketOrders() {
                 />
               </div>
               <div>
-                <Label>Expected Delivery Date</Label>
+                <Label>{t('expected_delivery_date')}</Label>
                 <Input
                   type="date"
                   value={releaseData.expected_date}
@@ -1055,17 +1048,17 @@ export default function BlanketOrders() {
                 onChange={(e) => setReleaseData({ ...releaseData, create_po: e.target.checked })}
                 className="rounded"
               />
-              <Label htmlFor="create_po">Create Purchase Order automatically</Label>
+              <Label htmlFor="create_po">{t('create_po_automatically')}</Label>
             </div>
 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Available</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Unit Price</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>{t('product')}</TableHead>
+                  <TableHead className="text-right">{t('available')}</TableHead>
+                  <TableHead className="text-right">{t('quantity')}</TableHead>
+                  <TableHead className="text-right">{t('unit_price')}</TableHead>
+                  <TableHead className="text-right">{t('total')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1102,7 +1095,7 @@ export default function BlanketOrders() {
 
             <div className="flex justify-end">
               <span className="font-semibold">
-                Release Total:{" "}
+                {t('release_total')}:{" "}
                 {formatCurrency(
                   releaseData.lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0),
                   selectedOrder?.currency
@@ -1111,7 +1104,7 @@ export default function BlanketOrders() {
             </div>
 
             <div>
-              <Label>Notes</Label>
+              <Label>{t('notes')}</Label>
               <Textarea
                 value={releaseData.notes}
                 onChange={(e) => setReleaseData({ ...releaseData, notes: e.target.value })}
@@ -1122,14 +1115,14 @@ export default function BlanketOrders() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReleaseForm(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleSubmitRelease}
               disabled={releaseData.lines.every((l) => l.quantity <= 0)}
             >
               <Send className="w-4 h-4 mr-2" />
-              Create Release
+              {t('create_release')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1139,18 +1132,18 @@ export default function BlanketOrders() {
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogTitle>{t('confirm_delete')}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this blanket order? This action cannot be undone.
+              {t('confirm_delete_blanket_order')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               <Trash2 className="w-4 h-4 mr-2" />
-              Delete
+              {t('delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

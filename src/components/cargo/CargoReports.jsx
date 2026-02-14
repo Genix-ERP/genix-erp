@@ -10,11 +10,13 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 
 export default function CargoReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     shipments,
     calculateShipmentCosts,
@@ -170,7 +172,7 @@ export default function CargoReports() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-slate-900">
-                  ${stats.totalGoodsValue.toLocaleString()}
+                  {formatCurrency(stats.totalGoodsValue)}
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-green-600">
                   <TrendingUp className="w-3 h-3" />
@@ -185,7 +187,7 @@ export default function CargoReports() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-slate-900">
-                  ${stats.totalCosts.toLocaleString()}
+                  {formatCurrency(stats.totalCosts)}
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-red-600">
                   <DollarSign className="w-3 h-3" />
@@ -273,7 +275,7 @@ export default function CargoReports() {
                 <div className="p-4 border rounded-lg">
                   <div className="text-sm text-slate-600 mb-1">{t('transport')}</div>
                   <div className="text-2xl font-bold text-slate-900">
-                    ${stats.transportCosts.toLocaleString()}
+                    {formatCurrency(stats.transportCosts)}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     {stats.totalCosts ? ((stats.transportCosts / stats.totalCosts) * 100).toFixed(1) : 0}%
@@ -283,7 +285,7 @@ export default function CargoReports() {
                 <div className="p-4 border rounded-lg">
                   <div className="text-sm text-slate-600 mb-1">{t('customs')}</div>
                   <div className="text-2xl font-bold text-slate-900">
-                    ${stats.customsCosts.toLocaleString()}
+                    {formatCurrency(stats.customsCosts)}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     {stats.totalCosts ? ((stats.customsCosts / stats.totalCosts) * 100).toFixed(1) : 0}%
@@ -293,7 +295,7 @@ export default function CargoReports() {
                 <div className="p-4 border rounded-lg">
                   <div className="text-sm text-slate-600 mb-1">{t('other')}</div>
                   <div className="text-2xl font-bold text-slate-900">
-                    ${stats.otherCosts.toLocaleString()}
+                    {formatCurrency(stats.otherCosts)}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     {stats.totalCosts ? ((stats.otherCosts / stats.totalCosts) * 100).toFixed(1) : 0}%
@@ -349,10 +351,10 @@ export default function CargoReports() {
                         <TableCell>
                           <Badge className={config?.color}>{config?.label}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">${goodsValue.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-red-600">${costs.total.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(goodsValue)}</TableCell>
+                        <TableCell className="text-right text-red-600">{formatCurrency(costs.total)}</TableCell>
                         <TableCell className="text-right font-semibold">
-                          ${(goodsValue + costs.total).toLocaleString()}
+                          {formatCurrency(goodsValue + costs.total)}
                         </TableCell>
                       </TableRow>
                     );
@@ -396,11 +398,11 @@ export default function CargoReports() {
                     return (
                       <TableRow key={shipment.id}>
                         <TableCell className="font-medium">{shipment.tracking_number}</TableCell>
-                        <TableCell className="text-right">${costs.transport.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">${costs.customs.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">${costs.other.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(costs.transport)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(costs.customs)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(costs.other)}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">
-                          ${costs.total.toLocaleString()}
+                          {formatCurrency(costs.total)}
                         </TableCell>
                       </TableRow>
                     );

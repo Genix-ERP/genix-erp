@@ -17,6 +17,7 @@ import { useEmployeePermissions } from '@/components/contexts/EmployeePermission
 import { contactsService, aiService } from '@/api/services';
 import { financeService } from '@/api/services/finance';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -61,6 +62,7 @@ export default function AccountsPayable() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,9 +100,9 @@ export default function AccountsPayable() {
   const [extractionError, setExtractionError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Load vendors when create modal opens
+  // Load vendors when create modal opens or recurring tab is active
   useEffect(() => {
-    if (showCreateModal && vendors.length === 0) {
+    if ((showCreateModal || activeTab === 'recurring') && vendors.length === 0) {
       setVendorsLoading(true);
       contactsService.list({ contact_type: 'vendor' })
         .then(data => {
@@ -115,7 +117,7 @@ export default function AccountsPayable() {
           setVendorsLoading(false);
         });
     }
-  }, [showCreateModal, vendors.length]);
+  }, [showCreateModal, activeTab, vendors.length]);
 
   // Handle file selection for AI extraction
   const handleFileSelect = (e) => {
@@ -184,11 +186,11 @@ export default function AccountsPayable() {
   // Export columns configuration
   const exportColumns = [
     { key: 'invoice_number', label: t('invoice_number') || 'Invoice Number' },
-    { key: 'partner_id', label: t('vendor') || 'Vendor' },
+    { key: 'partner_name', label: t('vendor') || 'Vendor' },
     { key: 'invoice_date', label: t('date') || 'Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
     { key: 'due_date', label: t('due_date') || 'Due Date', render: (v) => v ? format(new Date(v), 'dd.MM.yyyy') : '-' },
-    { key: 'total_amount', label: t('amount') || 'Amount', render: (v) => `${(v || 0).toLocaleString()} UZS` },
-    { key: 'status', label: t('status') || 'Status' },
+    { key: 'total_amount', label: t('amount') || 'Amount', render: (v) => formatCurrency(v || 0) },
+    { key: 'status', label: t('status') || 'Status', render: (v) => t(v) || v },
   ];
 
   // Import columns configuration
@@ -316,28 +318,76 @@ export default function AccountsPayable() {
     addAuditLog('create', 'batch', `${data.length} bills imported`);
   };
 
-  const generatePrintConfig = (bill) => ({
-    template: 'invoice',
-    title: t('vendor_bill') || 'Vendor Bill',
-    documentNumber: bill.invoice_number || `VB-${bill.id}`,
-    documentDate: bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy') : '',
-    headerFields: [
-      { label: t('vendor') || 'Vendor', value: bill.partner_id },
-      { label: t('due_date') || 'Due Date', value: bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-' },
-      { label: t('status') || 'Status', value: bill.status },
-    ],
-    tableColumns: [
-      { key: 'description', label: t('description') || 'Description' },
-      { key: 'amount', label: t('amount') || 'Amount', align: 'right' },
-    ],
-    tableData: [
-      { description: t('subtotal') || 'Subtotal', amount: `${(bill.subtotal || 0).toLocaleString()} UZS` },
-      { description: t('tax') + ' (12%)' || 'Tax (12%)', amount: `${(bill.tax_amount || 0).toLocaleString()} UZS` },
-    ],
-    totals: [
-      { label: t('total') || 'Total', value: `${(bill.total_amount || 0).toLocaleString()} UZS`, bold: true },
-    ],
-  });
+  const generatePrintConfig = (bill) => {
+    const statusMap = {
+      draft: t('draft') || 'Draft',
+      confirmed: t('confirmed') || 'Confirmed',
+      posted: t('posted') || 'Posted',
+      paid: t('paid') || 'Paid',
+      partial: t('partial') || 'Partial',
+      overdue: t('overdue') || 'Overdue',
+      cancelled: t('cancelled') || 'Cancelled',
+    };
+
+    // Build table: show line items if available, otherwise summary
+    const tableData = [];
+    if (bill.lines && bill.lines.length > 0) {
+      bill.lines.forEach(line => {
+        tableData.push({
+          description: line.description || line.product_name || '-',
+          quantity: line.quantity || 1,
+          unit_price: formatCurrency(line.unit_price || 0),
+          amount: formatCurrency(line.line_total || (line.quantity * line.unit_price) || 0),
+        });
+      });
+    } else {
+      tableData.push(
+        { description: t('subtotal') || 'Subtotal', quantity: '', unit_price: '', amount: formatCurrency(bill.subtotal || bill.total_amount || 0) },
+      );
+      if (bill.tax_amount > 0) {
+        tableData.push(
+          { description: t('tax') || 'Tax', quantity: '', unit_price: '', amount: formatCurrency(bill.tax_amount) },
+        );
+      }
+    }
+
+    const hasLines = bill.lines && bill.lines.length > 0;
+
+    return {
+      template: 'invoice',
+      title: t('vendor_bill') || 'Vendor Bill',
+      documentNumber: bill.invoice_number || `VB-${bill.id}`,
+      documentDate: bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy') : '',
+      dateLabel: t('date') || 'Date',
+      headerFields: [
+        { label: t('vendor') || 'Vendor', value: bill.partner_name || bill.vendor_name || '-' },
+        { label: t('due_date') || 'Due Date', value: bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-' },
+        { label: t('status') || 'Status', value: statusMap[bill.status] || bill.status || '-' },
+        { label: t('po_reference') || 'PO Reference', value: bill.po_number || bill.purchase_order_id || '-' },
+      ],
+      tableColumns: hasLines ? [
+        { key: 'description', label: t('description') || 'Description', width: 70 },
+        { key: 'quantity', label: t('quantity') || 'Qty', align: 'right', width: 20 },
+        { key: 'unit_price', label: t('unit_price') || 'Unit Price', align: 'right', width: 35 },
+        { key: 'amount', label: t('amount') || 'Amount', align: 'right', width: 35 },
+      ] : [
+        { key: 'description', label: t('description') || 'Description' },
+        { key: 'amount', label: t('amount') || 'Amount', align: 'right' },
+      ],
+      tableData,
+      totals: [
+        ...(bill.tax_amount > 0 && hasLines ? [
+          { label: t('subtotal') || 'Subtotal', value: formatCurrency(bill.subtotal || 0) },
+          { label: t('tax') || 'Tax', value: formatCurrency(bill.tax_amount || 0) },
+        ] : []),
+        { label: t('total') || 'Total', value: formatCurrency(bill.total_amount || 0), bold: true },
+        ...(bill.amount_paid > 0 ? [
+          { label: t('amount_paid') || 'Paid', value: formatCurrency(bill.amount_paid || 0) },
+          { label: t('amount_due') || 'Due', value: formatCurrency(bill.amount_due ?? (bill.total_amount - (bill.amount_paid || 0))), bold: true },
+        ] : []),
+      ],
+    };
+  };
 
   const getStatusColor = (status) => {
     const colors = {
@@ -418,7 +468,7 @@ export default function AccountsPayable() {
                 <DollarSign className="w-6 h-6 text-red-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-slate-900">${metrics.totalPayable.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalPayable)}</p>
             <p className="text-sm text-slate-600">{t('total_payable')}</p>
           </CardContent>
         </Card>
@@ -605,7 +655,7 @@ export default function AccountsPayable() {
                       <TableCell className="text-sm">
                         {bill.due_date ? format(new Date(bill.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
-                      <TableCell className="font-semibold">${(bill.total_amount || 0).toLocaleString()}</TableCell>
+                      <TableCell className="font-semibold">{formatCurrency(bill.total_amount || 0)}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bill.status)}>{t(bill.status) || bill.status}</Badge>
                       </TableCell>
@@ -622,7 +672,7 @@ export default function AccountsPayable() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {bill.status === 'draft' && (
+                          {canUpdate('financials') && bill.status === 'draft' && (
                             <>
                               <Button
                                 size="sm"
@@ -638,17 +688,17 @@ export default function AccountsPayable() {
                               </Button>
                             </>
                           )}
-                          {(bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
+                          {canUpdate('financials') && (bill.status === 'confirmed' || bill.status === 'posted') && (bill.invoice_type || 'invoice') === 'invoice' && (
                             <Button size="sm" variant="ghost" onClick={() => payBill(bill.id)} title={t('pay') || 'Record Payment'}>
                               <DollarSign className="w-4 h-4" />
                             </Button>
                           )}
-                          {(bill.invoice_type || 'invoice') === 'invoice' && bill.status !== 'draft' && bill.status !== 'cancelled' && (
+                          {canCreate('financials') && (bill.invoice_type || 'invoice') === 'invoice' && bill.status !== 'draft' && bill.status !== 'cancelled' && (
                             <Button size="sm" variant="ghost" onClick={() => handleCreateDebitNote(bill)} title={t('create_debit_note')} className="text-orange-600 hover:text-orange-700">
                               <RotateCcw className="w-4 h-4" />
                             </Button>
                           )}
-                          {bill.invoice_type === 'debit_note' && bill.status === 'draft' && (
+                          {canUpdate('financials') && bill.invoice_type === 'debit_note' && bill.status === 'draft' && (
                             <Button size="sm" variant="ghost" onClick={() => handleConfirmDebitNote(bill.id)} title={t('confirm_debit_note')} className="text-green-600 hover:text-green-700">
                               <CheckCircle className="w-4 h-4" />
                             </Button>
@@ -670,8 +720,11 @@ export default function AccountsPayable() {
           <RecurringPanel
             entityType="vendor_bills"
             entityName={t('payment') || 'Payment'}
+            canCreate={canCreate('financials')}
+            canEdit={canUpdate('financials')}
+            canRemove={canDelete('financials')}
             fields={[
-              { key: 'partner_id', label: t('vendor') || 'Vendor', required: true },
+              { key: 'partner_id', label: t('vendor') || 'Vendor', type: 'select', required: true, options: vendors.map(v => ({ value: v.id, label: v.name })) },
               { key: 'amount', label: t('amount') || 'Amount', type: 'number', required: true },
               { key: 'description', label: t('description') || 'Description' },
             ]}
@@ -1054,7 +1107,7 @@ export default function AccountsPayable() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t('amount')}:</span>
-                  <span className="font-semibold">${(debitNoteBill.total_amount || 0).toLocaleString()}</span>
+                  <span className="font-semibold">{formatCurrency(debitNoteBill.total_amount || 0)}</span>
                 </div>
               </div>
               <div className="space-y-2">
@@ -1117,7 +1170,7 @@ export default function AccountsPayable() {
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
                   <p className="text-sm font-bold text-slate-900">
-                    ${(selectedBill.total_amount || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.total_amount || 0)}
                   </p>
                 </div>
               </div>
@@ -1145,19 +1198,19 @@ export default function AccountsPayable() {
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('subtotal')}</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    ${(selectedBill.subtotal || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.subtotal || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('tax')}</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    ${(selectedBill.tax_amount || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.tax_amount || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('amount_due')}</p>
                   <p className="text-sm font-semibold text-red-600">
-                    ${(selectedBill.amount_due || 0).toLocaleString()}
+                    {formatCurrency(selectedBill.amount_due || 0)}
                   </p>
                 </div>
               </div>

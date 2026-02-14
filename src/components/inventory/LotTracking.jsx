@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -52,27 +54,20 @@ const LabelWithHelp = ({ label, helpText, required }) => (
   </label>
 );
 
-// SAP Quality Status options
-const qualityStatuses = [
-  { value: 'released', label: 'Released', color: 'bg-green-100 text-green-700 border-green-200' },
-  { value: 'blocked', label: 'Blocked', color: 'bg-red-100 text-red-700 border-red-200' },
-  { value: 'in_qc', label: 'In QC', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  { value: 'quarantine', label: 'Quarantine', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { value: 'rejected', label: 'Rejected', color: 'bg-gray-100 text-gray-700 border-gray-200' },
-];
-
-// Lot grades (SAP)
-const lotGrades = [
-  { value: 'A', label: 'Grade A (Premium)' },
-  { value: 'B', label: 'Grade B (Standard)' },
-  { value: 'C', label: 'Grade C (Economy)' },
-  { value: 'X', label: 'Grade X (Defective)' },
-];
+// SAP Quality Status options (colors only, labels use t())
+const qualityStatusColors = {
+  released: 'bg-green-100 text-green-700 border-green-200',
+  blocked: 'bg-red-100 text-red-700 border-red-200',
+  in_qc: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+  quarantine: 'bg-orange-100 text-orange-700 border-orange-200',
+  rejected: 'bg-gray-100 text-gray-700 border-gray-200',
+};
 
 export default function LotTracking() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     lots,
     products,
@@ -84,6 +79,41 @@ export default function LotTracking() {
     getExpiringLots,
     isLoading
   } = useInventory();
+
+  const qualityStatuses = [
+    { value: 'released', label: t('released'), color: qualityStatusColors.released },
+    { value: 'blocked', label: t('blocked'), color: qualityStatusColors.blocked },
+    { value: 'in_qc', label: t('in_qc'), color: qualityStatusColors.in_qc },
+    { value: 'quarantine', label: t('quarantine'), color: qualityStatusColors.quarantine },
+    { value: 'rejected', label: t('rejected'), color: qualityStatusColors.rejected },
+  ];
+
+  const lotGrades = [
+    { value: 'A', label: `A (${t('premium')})` },
+    { value: 'B', label: `B (${t('standard')})` },
+    { value: 'C', label: `C (${t('economy')})` },
+    { value: 'X', label: `X (${t('defective')})` },
+  ];
+
+  // Dynamic product attributes from variant system
+  const [productAttributes, setProductAttributes] = useState([]);
+  const [lotAttributeValues, setLotAttributeValues] = useState({});
+
+  const fetchProductAttributes = useCallback(async (productId) => {
+    if (!productId) {
+      setProductAttributes([]);
+      setLotAttributeValues({});
+      return;
+    }
+    try {
+      const response = await apiClient.get(`/products/${productId}/attributes`);
+      const attrs = response.data?.data || response.data || [];
+      setProductAttributes(attrs);
+    } catch (error) {
+      console.error('Error fetching product attributes:', error);
+      setProductAttributes([]);
+    }
+  }, []);
 
   const [filteredLots, setFilteredLots] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,8 +155,6 @@ export default function LotTracking() {
     gs1_batch: '', // GS1-128 batch code
     // Lot Attributes (SAP)
     lot_grade: '', // A, B, C grades
-    lot_color: '',
-    lot_size: '',
     // Certificate tracking (SAP QM)
     certificate_of_analysis: '', // COA document URL
     test_results: '',
@@ -177,7 +205,8 @@ export default function LotTracking() {
         ...newLot,
         quantity: parseInt(newLot.quantity) || 0,
         unit_cost: parseFloat(newLot.unit_cost) || 0,
-        serial_numbers: serialNumbers
+        serial_numbers: serialNumbers,
+        variant_attributes: lotAttributeValues
       });
 
       setNewLot({
@@ -192,16 +221,14 @@ export default function LotTracking() {
         received_date: new Date().toISOString().split('T')[0],
         serial_numbers: ''
       });
+      setLotAttributeValues({});
+      setProductAttributes([]);
       setShowCreateModal(false);
     } catch (err) {
       console.error('Error creating lot:', err);
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
   const getExpiryStatus = (expiryDate) => {
@@ -234,8 +261,14 @@ export default function LotTracking() {
       expiry_date: lot.expiry_date || '',
       supplier: lot.supplier || '',
       received_date: lot.received_date || '',
-      serial_numbers: lot.serial_numbers?.join(', ') || ''
+      serial_numbers: lot.serial_numbers?.join(', ') || '',
+      lot_grade: lot.lot_grade || '',
+      country_of_origin: lot.country_of_origin || ''
     });
+    setLotAttributeValues(lot.variant_attributes || {});
+    if (lot.product_id) {
+      fetchProductAttributes(lot.product_id);
+    }
     setShowEditModal(true);
   };
 
@@ -257,7 +290,8 @@ export default function LotTracking() {
         expiry_date: newLot.expiry_date,
         supplier: newLot.supplier,
         received_date: newLot.received_date,
-        serial_numbers: serialNumbers
+        serial_numbers: serialNumbers,
+        variant_attributes: lotAttributeValues
       });
 
       setShowEditModal(false);
@@ -568,14 +602,14 @@ export default function LotTracking() {
             {/* Basic Information */}
             <div className="p-3 bg-slate-50 rounded-lg border">
               <p className="text-xs font-medium text-slate-600 mb-3 flex items-center gap-1">
-                <Package className="w-3 h-3" /> {t('basic_information') || 'Basic Information'}
+                <Package className="w-3 h-3" /> {t('basic_information')}
               </p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <LabelWithHelp
                     label={t('lot_number')}
                     required
-                    helpText={t('help_lot_number') || "Partiya raqami. FIFO/FEFO hisob-kitobi va kuzatuv uchun ishlatiladi. Noyob bo'lishi kerak."}
+                    helpText={t('help_lot_number')}
                   />
                   <Input
                     value={newLot.lot_number}
@@ -586,7 +620,7 @@ export default function LotTracking() {
                 <div>
                   <LabelWithHelp
                     label={t('received_date')}
-                    helpText={t('help_received_date') || "Partiya qabul qilingan sana. Inventar harakati va hisobotlar uchun muhim."}
+                    helpText={t('help_received_date')}
                   />
                   <Input
                     type="date"
@@ -596,8 +630,8 @@ export default function LotTracking() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('quality_status') || 'Quality Status'}
-                    helpText={t('help_quality_status') || "Sifat holati: Released - sotishga tayyor, Blocked - to'xtatilgan, In QC - tekshiruvda, Quarantine - karantinda."}
+                    label={t('quality_status')}
+                    helpText={t('help_quality_status')}
                   />
                   <Select
                     value={newLot.quality_status}
@@ -622,11 +656,15 @@ export default function LotTracking() {
                   <LabelWithHelp
                     label={t('product')}
                     required
-                    helpText={t('help_lot_product') || "Partiya tegishli bo'lgan mahsulot. Faqat zaxira qilinadigan mahsulotlar ko'rsatiladi."}
+                    helpText={t('help_lot_product')}
                   />
                   <Select
                     value={newLot.product_id}
-                    onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
+                    onValueChange={(v) => {
+                      setNewLot({ ...newLot, product_id: v });
+                      setLotAttributeValues({});
+                      fetchProductAttributes(v);
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_product')} />
@@ -642,7 +680,7 @@ export default function LotTracking() {
                   <LabelWithHelp
                     label={t('warehouse')}
                     required
-                    helpText={t('help_lot_warehouse') || "Partiya saqlanadigan ombor. Ko'chirish operatsiyalari bilan o'zgartirilishi mumkin."}
+                    helpText={t('help_lot_warehouse')}
                   />
                   <Select
                     value={newLot.warehouse_id}
@@ -665,7 +703,7 @@ export default function LotTracking() {
                   <LabelWithHelp
                     label={t('quantity')}
                     required
-                    helpText={t('help_lot_quantity') || "Partiyadagi mahsulotlar soni. Sotish va ko'chirish bilan kamayadi."}
+                    helpText={t('help_lot_quantity')}
                   />
                   <Input
                     type="number"
@@ -677,7 +715,7 @@ export default function LotTracking() {
                 <div>
                   <LabelWithHelp
                     label={t('unit_cost')}
-                    helpText={t('help_lot_unit_cost') || "Bir birlik tannarxi. FIFO/WAC hisob-kitoblarida ishlatiladi."}
+                    helpText={t('help_lot_unit_cost')}
                   />
                   <Input
                     type="number"
@@ -692,13 +730,13 @@ export default function LotTracking() {
             {/* GS1 Standards Section */}
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xs font-medium text-blue-700 mb-3 flex items-center gap-1">
-                <QrCode className="w-3 h-3" /> {t('gs1_standards') || 'GS1 Standards'}
+                <QrCode className="w-3 h-3" /> {t('gs1_standards')}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <LabelWithHelp
-                    label={t('gtin') || 'GTIN (Barcode)'}
-                    helpText={t('help_gtin') || "Global Trade Item Number - xalqaro mahsulot identifikatori. Shtrix kod skanerlash uchun ishlatiladi."}
+                    label={t('gtin')}
+                    helpText={t('help_gtin')}
                   />
                   <Input
                     value={newLot.gtin}
@@ -708,8 +746,8 @@ export default function LotTracking() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('gs1_batch') || 'GS1-128 Batch'}
-                    helpText={t('help_gs1_batch') || "GS1-128 partiya kodi. Logistika va zanjir kuzatuvi uchun xalqaro standart."}
+                    label={t('gs1_batch')}
+                    helpText={t('help_gs1_batch')}
                   />
                   <Input
                     value={newLot.gs1_batch}
@@ -723,23 +761,23 @@ export default function LotTracking() {
             {/* Lot Attributes (SAP) */}
             <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
               <p className="text-xs font-medium text-purple-700 mb-3 flex items-center gap-1">
-                <Award className="w-3 h-3" /> {t('lot_attributes') || 'Lot Attributes'} (SAP)
+                <Award className="w-3 h-3" /> {t('lot_attributes')}
               </p>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <LabelWithHelp
-                    label={t('grade') || 'Grade'}
-                    helpText={t('help_lot_grade') || "Sifat darajasi: A - premium, B - standart, C - iqtisodiy, X - nuqsonli."}
+                    label={t('lot_grade')}
+                    helpText={t('help_lot_grade')}
                   />
                   <Select
                     value={newLot.lot_grade || '__none__'}
                     onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v === '__none__' ? '' : v })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('select') || 'Select'} />
+                      <SelectValue placeholder={t('select')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">{t('none') || 'None'}</SelectItem>
+                      <SelectItem value="__none__">{t('none')}</SelectItem>
                       {lotGrades.map(g => (
                         <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
                       ))}
@@ -748,38 +786,51 @@ export default function LotTracking() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('color') || 'Color'}
-                    helpText={t('help_lot_color') || "Partiya rangi. Bir xil mahsulotning turli ranglarini ajratish uchun."}
-                  />
-                  <Input
-                    value={newLot.lot_color}
-                    onChange={(e) => setNewLot({ ...newLot, lot_color: e.target.value })}
-                    placeholder="e.g., Red"
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('size') || 'Size'}
-                    helpText={t('help_lot_size') || "Partiya o'lchami. S, M, L yoki raqamli o'lchamlar."}
-                  />
-                  <Input
-                    value={newLot.lot_size}
-                    onChange={(e) => setNewLot({ ...newLot, lot_size: e.target.value })}
-                    placeholder="e.g., Large"
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('country_of_origin') || 'Origin'}
-                    helpText={t('help_country_of_origin') || "Kelib chiqish mamlakatي. Bojxona va muvofiqlik hisob-kitoblari uchun muhim."}
+                    label={t('country_of_origin')}
+                    helpText={t('help_country_of_origin')}
                   />
                   <Input
                     value={newLot.country_of_origin}
                     onChange={(e) => setNewLot({ ...newLot, country_of_origin: e.target.value })}
-                    placeholder="e.g., USA"
+                    placeholder="e.g., Uzbekistan"
                   />
                 </div>
+                {productAttributes.map(attr => (
+                  <div key={attr.attribute_id}>
+                    <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+                      {attr.attribute_name}
+                    </label>
+                    <Select
+                      value={lotAttributeValues[attr.attribute_id] || '__none__'}
+                      onValueChange={(v) => setLotAttributeValues(prev => ({
+                        ...prev,
+                        [attr.attribute_id]: v === '__none__' ? '' : v
+                      }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t('none')}</SelectItem>
+                        {(attr.values || []).filter(v => v.is_active).map(val => (
+                          <SelectItem key={val.value_id} value={val.value_name}>
+                            {val.html_color && (
+                              <span
+                                className="inline-block w-3 h-3 rounded-full mr-2 border"
+                                style={{ backgroundColor: val.html_color }}
+                              />
+                            )}
+                            {val.value_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
               </div>
+              {productAttributes.length === 0 && newLot.product_id && (
+                <p className="text-xs text-purple-500 mt-2">{t('no_variant_attributes')}</p>
+              )}
             </div>
 
             {/* Dates Section */}
@@ -787,7 +838,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('manufacture_date')}
-                  helpText={t('help_manufacture_date') || "Ishlab chiqarilgan sana. FEFO (First Expired, First Out) uchun muhim."}
+                  helpText={t('help_manufacture_date')}
                 />
                 <Input
                   type="date"
@@ -798,7 +849,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('expiry_date')}
-                  helpText={t('help_expiry_date') || "Yaroqlilik muddati. Muddati yaqinlashganda tizim ogohlantirish beradi."}
+                  helpText={t('help_expiry_date')}
                 />
                 <Input
                   type="date"
@@ -811,13 +862,13 @@ export default function LotTracking() {
             {/* Certificate Tracking (SAP QM) */}
             <div className="p-3 bg-green-50 rounded-lg border border-green-200">
               <p className="text-xs font-medium text-green-700 mb-3 flex items-center gap-1">
-                <FileCheck className="w-3 h-3" /> {t('certificate_tracking') || 'Certificate Tracking'} (QM)
+                <FileCheck className="w-3 h-3" /> {t('certificate_tracking')}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <LabelWithHelp
-                    label={t('coa_url') || 'Certificate of Analysis URL'}
-                    helpText={t('help_coa_url') || "Tahlil sertifikati havolasi. Sifat tekshiruvi hujjatini saqlash uchun."}
+                    label={t('coa_url')}
+                    helpText={t('help_coa_url')}
                   />
                   <Input
                     value={newLot.certificate_of_analysis}
@@ -827,21 +878,21 @@ export default function LotTracking() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('test_results') || 'Test Results'}
-                    helpText={t('help_test_results') || "Sifat testi natijalari. O'tdi/O'tmadi yoki batafsil ma'lumot."}
+                    label={t('test_results')}
+                    helpText={t('help_test_results')}
                   />
                   <Input
                     value={newLot.test_results}
                     onChange={(e) => setNewLot({ ...newLot, test_results: e.target.value })}
-                    placeholder={t('test_results_placeholder') || 'Pass/Fail or details'}
+                    placeholder={t('test_results_placeholder')}
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
                   <LabelWithHelp
-                    label={t('inspection_date') || 'Inspection Date'}
-                    helpText={t('help_inspection_date') || "Tekshiruv o'tkazilgan sana. Sifat nazorati tarixi uchun."}
+                    label={t('inspection_date')}
+                    helpText={t('help_inspection_date')}
                   />
                   <Input
                     type="date"
@@ -851,13 +902,13 @@ export default function LotTracking() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('inspector_name') || 'Inspector Name'}
-                    helpText={t('help_inspector_name') || "Tekshiruvchi ismi. Mas'uliyat va audit izlari uchun."}
+                    label={t('inspector_name')}
+                    helpText={t('help_inspector_name')}
                   />
                   <Input
                     value={newLot.inspector_name}
                     onChange={(e) => setNewLot({ ...newLot, inspector_name: e.target.value })}
-                    placeholder={t('inspector_name_placeholder') || 'Name of inspector'}
+                    placeholder={t('inspector_name_placeholder')}
                   />
                 </div>
               </div>
@@ -866,7 +917,7 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('supplier')}
-                helpText={t('help_lot_supplier') || "Partiya yetkazib beruvchisi. Kuzatuv va sifat muammolarini aniqlash uchun."}
+                helpText={t('help_lot_supplier')}
               />
               <Input
                 value={newLot.supplier}
@@ -878,7 +929,7 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('serial_numbers_comma_separated')}
-                helpText={t('help_serial_numbers') || "Seriya raqamlari vergul bilan ajratilgan. Har bir birlikni alohida kuzatish uchun."}
+                helpText={t('help_serial_numbers')}
               />
               <Input
                 value={newLot.serial_numbers}
@@ -987,6 +1038,36 @@ export default function LotTracking() {
                 </div>
               )}
 
+              {(selectedLot.lot_grade || selectedLot.country_of_origin || (selectedLot.variant_attributes && Object.keys(selectedLot.variant_attributes).length > 0)) && (
+                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                  <p className="text-xs font-medium text-purple-700 mb-2 flex items-center gap-1">
+                    <Award className="w-3 h-3" /> {t('lot_attributes')}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedLot.lot_grade && (
+                      <div>
+                        <p className="text-xs text-slate-500">{t('lot_grade')}</p>
+                        <p className="font-medium">{selectedLot.lot_grade}</p>
+                      </div>
+                    )}
+                    {selectedLot.country_of_origin && (
+                      <div>
+                        <p className="text-xs text-slate-500">{t('country_of_origin')}</p>
+                        <p className="font-medium">{selectedLot.country_of_origin}</p>
+                      </div>
+                    )}
+                    {selectedLot.variant_attributes && Object.entries(selectedLot.variant_attributes).map(([attrId, value]) => (
+                      value && (
+                        <div key={attrId}>
+                          <p className="text-xs text-slate-500">{attrId}</p>
+                          <p className="font-medium">{value}</p>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 justify-end pt-4">
                 <Button variant="outline" onClick={() => setShowViewModal(false)}>
                   {t('close')}
@@ -1015,7 +1096,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('lot_number')}
-                  helpText={t('help_lot_number') || "Partiya raqami. FIFO/FEFO hisob-kitobi va kuzatuv uchun ishlatiladi."}
+                  helpText={t('help_lot_number')}
                 />
                 <Input
                   value={newLot.lot_number}
@@ -1026,7 +1107,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('received_date')}
-                  helpText={t('help_received_date') || "Partiya qabul qilingan sana. Inventar harakati va hisobotlar uchun muhim."}
+                  helpText={t('help_received_date')}
                 />
                 <Input
                   type="date"
@@ -1039,11 +1120,15 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('product')}
-                helpText={t('help_lot_product') || "Partiya tegishli bo'lgan mahsulot."}
+                helpText={t('help_lot_product')}
               />
               <Select
                 value={newLot.product_id}
-                onValueChange={(v) => setNewLot({ ...newLot, product_id: v })}
+                onValueChange={(v) => {
+                  setNewLot({ ...newLot, product_id: v });
+                  setLotAttributeValues({});
+                  fetchProductAttributes(v);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_product')} />
@@ -1059,7 +1144,7 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('warehouse')}
-                helpText={t('help_lot_warehouse') || "Partiya saqlanadigan ombor."}
+                helpText={t('help_lot_warehouse')}
               />
               <Select
                 value={newLot.warehouse_id}
@@ -1080,7 +1165,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('quantity')}
-                  helpText={t('help_lot_quantity') || "Partiyadagi mahsulotlar soni."}
+                  helpText={t('help_lot_quantity')}
                 />
                 <Input
                   type="number"
@@ -1092,7 +1177,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('unit_cost')}
-                  helpText={t('help_lot_unit_cost') || "Bir birlik tannarxi."}
+                  helpText={t('help_lot_unit_cost')}
                 />
                 <Input
                   type="number"
@@ -1103,11 +1188,85 @@ export default function LotTracking() {
               </div>
             </div>
 
+            {/* Lot Attributes */}
+            {(productAttributes.length > 0 || newLot.lot_grade || newLot.country_of_origin) && (
+              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-xs font-medium text-purple-700 mb-3 flex items-center gap-1">
+                  <Award className="w-3 h-3" /> {t('lot_attributes')}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <LabelWithHelp
+                      label={t('lot_grade')}
+                      helpText={t('help_lot_grade')}
+                    />
+                    <Select
+                      value={newLot.lot_grade || '__none__'}
+                      onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v === '__none__' ? '' : v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t('none')}</SelectItem>
+                        {lotGrades.map(g => (
+                          <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <LabelWithHelp
+                      label={t('country_of_origin')}
+                      helpText={t('help_country_of_origin')}
+                    />
+                    <Input
+                      value={newLot.country_of_origin}
+                      onChange={(e) => setNewLot({ ...newLot, country_of_origin: e.target.value })}
+                      placeholder="e.g., Uzbekistan"
+                    />
+                  </div>
+                  {productAttributes.map(attr => (
+                    <div key={attr.attribute_id}>
+                      <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
+                        {attr.attribute_name}
+                      </label>
+                      <Select
+                        value={lotAttributeValues[attr.attribute_id] || '__none__'}
+                        onValueChange={(v) => setLotAttributeValues(prev => ({
+                          ...prev,
+                          [attr.attribute_id]: v === '__none__' ? '' : v
+                        }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">{t('none')}</SelectItem>
+                          {(attr.values || []).filter(v => v.is_active).map(val => (
+                            <SelectItem key={val.value_id} value={val.value_name}>
+                              {val.html_color && (
+                                <span
+                                  className="inline-block w-3 h-3 rounded-full mr-2 border"
+                                  style={{ backgroundColor: val.html_color }}
+                                />
+                              )}
+                              {val.value_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <LabelWithHelp
                   label={t('manufacture_date')}
-                  helpText={t('help_manufacture_date') || "Ishlab chiqarilgan sana."}
+                  helpText={t('help_manufacture_date')}
                 />
                 <Input
                   type="date"
@@ -1118,7 +1277,7 @@ export default function LotTracking() {
               <div>
                 <LabelWithHelp
                   label={t('expiry_date')}
-                  helpText={t('help_expiry_date') || "Yaroqlilik muddati."}
+                  helpText={t('help_expiry_date')}
                 />
                 <Input
                   type="date"
@@ -1131,7 +1290,7 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('supplier')}
-                helpText={t('help_lot_supplier') || "Partiya yetkazib beruvchisi."}
+                helpText={t('help_lot_supplier')}
               />
               <Input
                 value={newLot.supplier}
@@ -1143,7 +1302,7 @@ export default function LotTracking() {
             <div>
               <LabelWithHelp
                 label={t('serial_numbers_comma_separated')}
-                helpText={t('help_serial_numbers') || "Seriya raqamlari vergul bilan ajratilgan."}
+                helpText={t('help_serial_numbers')}
               />
               <Input
                 value={newLot.serial_numbers}

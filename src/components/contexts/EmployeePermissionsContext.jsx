@@ -29,6 +29,7 @@ export const AVAILABLE_MODULES = [
   { id: 'payroll', nameKey: 'payroll', appId: 'payroll' },
   { id: 'contracts', nameKey: 'contracts', appId: 'contracts' },
   { id: 'cargo', nameKey: 'cargo', appId: 'cargo' },
+  { id: 'construction', nameKey: 'construction', appId: 'construction' },
 ];
 
 export function EmployeePermissionsProvider({ children }) {

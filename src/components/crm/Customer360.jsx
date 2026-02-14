@@ -17,8 +17,10 @@ import {
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Customer360({ customers, selectedCustomer, onSelectCustomer, communications, callLogs }) {
+  const { formatCurrency } = useCurrencyFormatter();
   const getCustomerCommunications = (customerId) => {
     return communications.filter(comm => comm.customer_id === customerId);
   };
@@ -76,7 +78,7 @@ export default function Customer360({ customers, selectedCustomer, onSelectCusto
                   <div className="flex items-center gap-1 mt-1">
                     <DollarSign className="w-3 h-3 text-green-600" />
                     <span className="text-xs text-green-600">
-                      ${(customer.monthly_value || 0).toLocaleString()}/mo
+                      {formatCurrency(customer.monthly_value || 0)}/mo
                     </span>
                   </div>
                 </div>
@@ -104,7 +106,7 @@ export default function Customer360({ customers, selectedCustomer, onSelectCusto
                     {getCustomerHealth(selectedCustomer).status}
                   </Badge>
                   <p className="text-lg font-bold text-green-600 mt-1">
-                    ${(selectedCustomer.monthly_value || 0).toLocaleString()}/mo
+                    {formatCurrency(selectedCustomer.monthly_value || 0)}/mo
                   </p>
                 </div>
               </div>
@@ -139,7 +141,7 @@ export default function Customer360({ customers, selectedCustomer, onSelectCusto
                       <div className="flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-slate-400" />
                         <span className="text-sm">
-                          Annual Revenue: ${(selectedCustomer.annual_revenue || 0).toLocaleString()}
+                          Annual Revenue: {formatCurrency(selectedCustomer.annual_revenue || 0)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

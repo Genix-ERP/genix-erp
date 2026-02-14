@@ -66,6 +66,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { useToast } from "@/components/ui/use-toast";
 import apiClient from "@/api/client";
 
@@ -74,6 +75,7 @@ const Replenishment = () => {
   const { t } = useTranslation(language);
   const { products, warehouses } = useInventory();
   const { canCreate, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -238,14 +240,6 @@ const Replenishment = () => {
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(value || 0);
   };
 
   // Get unique vendors for filter
