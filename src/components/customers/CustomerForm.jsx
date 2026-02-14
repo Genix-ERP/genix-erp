@@ -16,17 +16,13 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     email: customer?.email || "",
     phone: customer?.phone || "",
     industry: customer?.industry || "technology",
-    status: customer?.status || "prospect",
     annual_revenue: customer?.annual_revenue || 0,
     employee_count: customer?.employee_count || 0,
-    monthly_value: customer?.monthly_value || 0,
-    subscription_tier: customer?.subscription_tier || "freemium",
     address: customer?.address || {
       street: "",
       city: "",
       state: "",
-      zip: "",
-      country: "USA"
+      country: "Uzbekistan"
     }
   });
 
@@ -35,8 +31,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     onSave({
       ...formData,
       annual_revenue: Number(formData.annual_revenue),
-      employee_count: Number(formData.employee_count),
-      monthly_value: Number(formData.monthly_value)
+      employee_count: Number(formData.employee_count)
     });
   };
 
@@ -89,13 +84,12 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="email" label={t('email')} helpText={t('help_customer_email')} required />
+                  <LabelWithHelp htmlFor="email" label={t('email')} helpText={t('help_customer_email')} />
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
-                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -127,27 +121,13 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <LabelWithHelp htmlFor="status" label={t('status')} helpText={t('help_customer_status')} />
-                  <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="prospect">{t('prospect')}</SelectItem>
-                      <SelectItem value="active">{t('active')}</SelectItem>
-                      <SelectItem value="inactive">{t('inactive')}</SelectItem>
-                      <SelectItem value="churned">{t('churned')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </div>
 
             {/* Business Details */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('business_details')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <LabelWithHelp htmlFor="annual_revenue" label={t('annual_revenue_field')} helpText={t('help_customer_annual_revenue')} />
                   <Input
@@ -168,33 +148,8 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                     onChange={(e) => handleChange("employee_count", e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <LabelWithHelp htmlFor="monthly_value" label={t('monthly_value')} helpText={t('help_customer_monthly_value')} />
-                  <Input
-                    id="monthly_value"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.monthly_value}
-                    onChange={(e) => handleChange("monthly_value", e.target.value)}
-                  />
-                </div>
               </div>
 
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="subscription_tier" label={t('subscription_tier')} helpText={t('help_customer_subscription')} />
-                <Select value={formData.subscription_tier} onValueChange={(value) => handleChange("subscription_tier", value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="freemium">{t('freemium')}</SelectItem>
-                    <SelectItem value="basic">{t('basic')}</SelectItem>
-                    <SelectItem value="professional">{t('professional')}</SelectItem>
-                    <SelectItem value="enterprise">{t('enterprise')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             {/* Address */}
@@ -208,7 +163,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   onChange={(e) => handleChange("address.street", e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <LabelWithHelp htmlFor="city" label={t('city')} helpText={t('help_customer_city')} />
                   <Input
@@ -223,14 +178,6 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                     id="state"
                     value={formData.address.state}
                     onChange={(e) => handleChange("address.state", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <LabelWithHelp htmlFor="zip" label={t('zip_code')} helpText={t('help_customer_zip')} />
-                  <Input
-                    id="zip"
-                    value={formData.address.zip}
-                    onChange={(e) => handleChange("address.zip", e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
