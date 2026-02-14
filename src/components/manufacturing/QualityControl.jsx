@@ -13,7 +13,11 @@ const COLORS = { pass: '#10b981', fail: '#ef4444', conditional_pass: '#f59e0b' }
 export default function QualityControl() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { qualityChecks, loading } = useManufacturing();
+  const context = useManufacturing();
+
+  // Extra safety: ensure we have valid context data
+  const qualityChecks = context?.qualityChecks;
+  const loading = context?.loading;
 
   // Ensure qualityChecks is always an array
   const checksArray = Array.isArray(qualityChecks) ? qualityChecks : [];
