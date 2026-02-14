@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCargoContext } from '@/components/contexts/CargoContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,6 +25,7 @@ import CargoCashRegister from '@/components/cargo/CargoCashRegister';
 import CargoReports from '@/components/cargo/CargoReports';
 
 export default function Cargo() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
@@ -34,7 +36,8 @@ export default function Cargo() {
     SHIPMENT_STATUS
   } = useCargoContext();
 
-  const [activeTab, setActiveTab] = useState('shipments');
+  const activeTab = searchParams.get("tab") || "shipments";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
   // Calculate metrics
   const metrics = {

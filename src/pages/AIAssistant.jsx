@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useAI } from "@/components/contexts/AIContext";
-import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/components/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, Sparkles, Loader2, Search, Zap, TrendingUp, Users, Package, DollarSign, ArrowRight, Wifi, WifiOff } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Bot, Send, Sparkles, Loader2, Search, Zap, TrendingUp,
+  Users, Package, DollarSign, ArrowRight, Copy, Check
+} from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { AIUsageIndicator } from "@/components/subscription/SubscriptionStatus";
@@ -14,6 +19,7 @@ import ReactMarkdown from 'react-markdown';
 export default function AIAssistant() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { user } = useAuth();
   const {
     messages,
     isLoading,
@@ -34,9 +40,11 @@ export default function AIAssistant() {
 
   const [input, setInput] = useState("");
   const [showChat, setShowChat] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -47,7 +55,6 @@ export default function AIAssistant() {
   }, [messages]);
 
   useEffect(() => {
-    // Initialize conversation on mount
     if (!activeConversation) {
       createConversation({
         name: "Business AI Copilot Session",
@@ -56,15 +63,44 @@ export default function AIAssistant() {
     }
   }, []);
 
+  const getUserInitials = () => {
+    if (user?.first_name && user?.last_name) {
+      return `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase();
+    }
+    if (user?.full_name) {
+      const parts = user.full_name.split(' ');
+      return parts.map(p => p.charAt(0)).slice(0, 2).join('').toUpperCase();
+    }
+    return 'U';
+  };
+
+  const formatMessageTime = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleCopyMessage = async (messageId, content) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
   const handleSendMessage = async (messageText = input) => {
     if (!messageText.trim() || isLoading) return;
-
     setInput("");
     setShowChat(true);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     await sendMessage(messageText);
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -72,7 +108,7 @@ export default function AIAssistant() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
       {/* Decorative Elements */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
         <div className="absolute top-20 left-10 w-72 h-72 bg-blue-100/30 rounded-full blur-3xl"></div>
@@ -80,14 +116,27 @@ export default function AIAssistant() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-50/20 to-purple-50/20 rounded-full blur-3xl"></div>
       </div>
 
-      <div className="relative z-10">
+      <div className="relative z-10 flex-1 flex flex-col min-h-0">
         {!showChat ? (
           /* Landing View */
-          <div className="flex flex-col items-center justify-center min-h-screen p-6">
-            <div className="w-full max-w-4xl mx-auto space-y-12 animate-fadeIn">
+          <div className="flex flex-col items-center justify-center flex-1 p-6 animate-[fadeInUp_0.5s_ease-out]">
+            <div className="w-full max-w-4xl mx-auto space-y-10">
+
+              {/* Hero Title */}
+              <div className="text-center space-y-4 animate-[fadeInUp_0.6s_ease-out]">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl shadow-xl shadow-blue-500/25 animate-[scaleIn_0.5s_ease-out_0.2s_both]">
+                  <Bot className="w-10 h-10 text-white" />
+                </div>
+                <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  {t('ai_assistant') || 'AI Yordamchi'}
+                </h1>
+                <p className="text-lg text-slate-500 max-w-xl mx-auto">
+                  {t('ai_assistant_description') || "Biznesingiz haqida biror narsa so'rang..."}
+                </p>
+              </div>
 
               {/* Search Box */}
-              <div className="relative group">
+              <div className="relative group animate-[fadeInUp_0.5s_ease-out_0.3s_both]">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-xl opacity-0 group-hover:opacity-20 transition-all duration-500"></div>
                 <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/50 p-2 transition-all duration-300 hover:shadow-3xl">
                   <div className="flex items-center gap-3">
@@ -98,8 +147,8 @@ export default function AIAssistant() {
                       ref={inputRef}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder={t('ask_anything') || 'Ask me anything about your business...'}
+                      onKeyDown={handleKeyDown}
+                      placeholder={t('ask_anything') || "Biznesingiz haqida biror narsa so'rang..."}
                       className="border-0 text-lg h-16 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                       disabled={isLoading}
                     />
@@ -113,7 +162,7 @@ export default function AIAssistant() {
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
                         <>
-                          <span className="mr-2">{t('ask_ai') || 'Ask AI'}</span>
+                          <span className="mr-2">{t('ask_ai') || "AI'dan so'rang"}</span>
                           <ArrowRight className="w-5 h-5" />
                         </>
                       )}
@@ -125,7 +174,7 @@ export default function AIAssistant() {
               {/* Suggested Queries */}
               <div className="space-y-4">
                 <p className="text-center text-sm font-medium text-slate-500 uppercase tracking-wider">
-                  {t('ai_insights') || 'AI Insights'} - Try asking:
+                  {t('ai_insights') || 'AI TAHLILLARI'} - Try asking:
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
                   {suggestedQueries.map((query, index) => (
@@ -133,7 +182,8 @@ export default function AIAssistant() {
                       key={index}
                       onClick={() => handleSendMessage(query.text)}
                       disabled={isLoading}
-                      className="group relative bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-xl p-5 hover:shadow-xl hover:border-blue-300/50 transition-all duration-300 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="group relative bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-xl p-5 hover:shadow-xl hover:border-blue-300/50 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 text-left disabled:opacity-50 disabled:cursor-not-allowed animate-[fadeInUp_0.4s_ease-out_both]"
+                      style={{ animationDelay: `${0.4 + index * 0.1}s` }}
                     >
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${
@@ -157,14 +207,18 @@ export default function AIAssistant() {
               </div>
 
               {/* Features Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-12 max-w-4xl mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-8 max-w-4xl mx-auto">
                 {[
-                  { icon: TrendingUp, label: t('revenue_analysis') || 'Revenue Analysis', color: 'from-green-500 to-emerald-500' },
-                  { icon: Users, label: t('customer_insights') || 'Customer Insights', color: 'from-blue-500 to-cyan-500' },
-                  { icon: Package, label: t('inventory_optimization') || 'Inventory Optimization', color: 'from-orange-500 to-amber-500' },
-                  { icon: DollarSign, label: t('financial_planning') || 'Financial Planning', color: 'from-purple-500 to-pink-500' }
+                  { icon: TrendingUp, label: t('revenue_analysis') || 'Daromad tahlili', color: 'from-green-500 to-emerald-500' },
+                  { icon: Users, label: t('customer_insights') || 'Mijozlar tushunchalari', color: 'from-blue-500 to-cyan-500' },
+                  { icon: Package, label: t('inventory_optimization') || 'Ombor optimallashtirish', color: 'from-orange-500 to-amber-500' },
+                  { icon: DollarSign, label: t('financial_planning') || 'Moliyaviy rejalashtirish', color: 'from-purple-500 to-pink-500' }
                 ].map((feature, index) => (
-                  <div key={index} className="group text-center space-y-3">
+                  <div
+                    key={index}
+                    className="group text-center space-y-3 animate-[fadeInUp_0.4s_ease-out_both]"
+                    style={{ animationDelay: `${0.5 + index * 0.1}s` }}
+                  >
                     <div className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${feature.color} p-4 shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300`}>
                       <feature.icon className="w-full h-full text-white" />
                     </div>
@@ -185,11 +239,11 @@ export default function AIAssistant() {
           </div>
         ) : (
           /* Chat View */
-          <div className="p-6 md:p-8 min-h-screen">
-            <div className="max-w-5xl mx-auto space-y-6">
+          <div className="flex flex-col flex-1 min-h-0 p-4 md:p-6 animate-[fadeInUp_0.4s_ease-out]">
+            <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0 space-y-4">
 
               {/* Header */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
@@ -204,7 +258,10 @@ export default function AIAssistant() {
                     </div>
                     <div>
                       <h2 className="font-bold text-slate-900">{t('ai_copilot') || 'AI Copilot'}</h2>
-                      <p className="text-xs text-slate-500">{t('powered_by_ai') || 'Powered by AI'}</p>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                        <p className="text-xs text-slate-500">{t('online') || 'Online'}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -213,40 +270,56 @@ export default function AIAssistant() {
                 </div>
               </div>
 
-              {/* Chat Interface */}
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl">
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[500px] p-6">
-                    <div className="space-y-4">
-                      {messages.length === 0 && !isLoading && (
-                        <div className="text-center py-12">
-                          <Bot className="w-16 h-16 mx-auto mb-4 text-purple-500" />
-                          <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                            Ready to assist
-                          </h3>
-                          <p className="text-sm text-slate-500 max-w-md mx-auto">
-                            I can analyze your data and provide insights automatically
-                          </p>
-                        </div>
-                      )}
+              {/* Chat Area */}
+              <div className="flex-1 flex flex-col min-h-0 bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-2xl shadow-xl overflow-hidden">
 
-                      {messages.map((message, index) => (
-                        <div
-                          key={message.id || index}
-                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
+                {/* Messages */}
+                <ScrollArea className="flex-1 p-6">
+                  <div className="space-y-5">
+                    {messages.length === 0 && !isLoading && (
+                      <div className="text-center py-16 animate-[fadeIn_0.4s_ease-out]">
+                        <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center">
+                          <Bot className="w-8 h-8 text-purple-500" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                          {t('ready_to_assist') || 'Yordam berishga tayyorman'}
+                        </h3>
+                        <p className="text-sm text-slate-500 max-w-md mx-auto">
+                          {t('ai_empty_state_description') || "Ma'lumotlaringizni tahlil qilib, tushunchalar beraman"}
+                        </p>
+                      </div>
+                    )}
+
+                    {messages.map((message, index) => (
+                      <div
+                        key={message.id || index}
+                        className={`flex items-start gap-3 animate-[fadeInUp_0.3s_ease-out] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                      >
+                        {/* Avatar */}
+                        {message.role === 'assistant' ? (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md">
+                            <Bot className="w-4 h-4 text-white" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center flex-shrink-0 shadow-md">
+                            <span className="text-xs font-semibold text-white">{getUserInitials()}</span>
+                          </div>
+                        )}
+
+                        {/* Bubble + meta */}
+                        <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'} max-w-[80%]`}>
                           <div
-                            className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                            className={`rounded-2xl px-4 py-3 ${
                               message.role === 'user'
-                                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
-                                : 'bg-slate-100 text-slate-900'
+                                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-tr-sm'
+                                : 'bg-slate-100 text-slate-900 rounded-tl-sm'
                             }`}
                           >
                             {message.role === 'assistant' ? (
                               <div>
-                                <ReactMarkdown className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-table:border-collapse prose-th:border prose-th:border-slate-300 prose-th:p-2 prose-th:bg-slate-50 prose-td:border prose-td:border-slate-300 prose-td:p-2">
-                                  {message.content}
-                                </ReactMarkdown>
+                                <div className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-table:border-collapse prose-th:border prose-th:border-slate-300 prose-th:p-2 prose-th:bg-slate-50 prose-td:border prose-td:border-slate-300 prose-td:p-2">
+                                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                                </div>
 
                                 {message.tool_calls && message.tool_calls.length > 0 && (
                                   <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
@@ -270,63 +343,111 @@ export default function AIAssistant() {
                               <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                             )}
                           </div>
-                        </div>
-                      ))}
 
-                      {isLoading && (
-                        <div className="flex justify-start">
-                          <div className="bg-slate-100 rounded-2xl px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                              <span className="text-sm text-slate-600">{t('analyzing_data') || 'Analyzing your data...'}</span>
-                            </div>
+                          {/* Timestamp + Copy */}
+                          <div className={`flex items-center gap-2 mt-1.5 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <span className="text-[10px] text-slate-400">
+                              {formatMessageTime(message.created_at)}
+                            </span>
+                            {message.role === 'assistant' && (
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => handleCopyMessage(message.id, message.content)}
+                                      className="text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded"
+                                    >
+                                      {copiedMessageId === message.id ? (
+                                        <Check className="w-3.5 h-3.5 text-green-500" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{copiedMessageId === message.id ? (t('copied') || 'Nusxalandi') : (t('copy') || 'Nusxalash')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </div>
-                      )}
+                      </div>
+                    ))}
 
-                      <div ref={messagesEndRef} />
-                    </div>
-                  </ScrollArea>
+                    {/* Typing Indicator */}
+                    {isLoading && (
+                      <div className="flex items-start gap-3 animate-[fadeInUp_0.3s_ease-out]">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md">
+                          <Bot className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-5 py-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-slate-400 animate-[typingDot_1.4s_ease-in-out_infinite]"></span>
+                            <span className="w-2 h-2 rounded-full bg-slate-400 animate-[typingDot_1.4s_ease-in-out_0.2s_infinite]"></span>
+                            <span className="w-2 h-2 rounded-full bg-slate-400 animate-[typingDot_1.4s_ease-in-out_0.4s_infinite]"></span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="border-t border-slate-200/60 p-4">
-                    <div className="flex gap-2">
-                      <Input
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder={t('ask_anything') || 'Ask me anything...'}
-                        className="h-12"
-                        disabled={isLoading}
-                      />
-                      <Button
-                        onClick={() => handleSendMessage()}
-                        disabled={!input.trim() || isLoading}
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-12 px-6"
-                      >
-                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      </Button>
-                    </div>
+                    <div ref={messagesEndRef} />
                   </div>
-                </CardContent>
-              </Card>
+                </ScrollArea>
+
+                {/* Input Area */}
+                <div className="border-t border-slate-200/60 p-4 flex-shrink-0">
+                  <div className="relative">
+                    <Textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={t('ask_anything') || "Savolingizni yozing..."}
+                      className="min-h-[48px] max-h-[160px] resize-none pr-14 rounded-xl border-slate-200 focus:border-blue-400 focus:ring-blue-400/20"
+                      disabled={isLoading}
+                      rows={1}
+                      onInput={(e) => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+                      }}
+                    />
+                    <Button
+                      onClick={() => handleSendMessage()}
+                      disabled={!input.trim() || isLoading}
+                      size="icon"
+                      className="absolute right-2 bottom-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 h-9 w-9 rounded-lg shadow-md disabled:opacity-40"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-        .animate-fadeIn {
-          animation: fadeIn 0.8s ease-out;
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.8); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes typingDot {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-6px); opacity: 1; }
         }
       `}</style>
     </div>

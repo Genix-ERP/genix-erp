@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
 import { hrService } from '@/api/services/hr';
@@ -3388,6 +3389,7 @@ const ProjectDetailView = ({
 
 // Main Component
 export default function Construction() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
@@ -3404,7 +3406,8 @@ export default function Construction() {
     getProjectStats
   } = useConstructionContext();
 
-  const [activeTab, setActiveTab] = useState('projects');
+  const activeTab = searchParams.get("tab") || "projects";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showProjectModal, setShowProjectModal] = useState(false);

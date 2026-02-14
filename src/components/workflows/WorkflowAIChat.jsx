@@ -119,9 +119,9 @@ export default function WorkflowAIChat({ onWorkflowUpdate }) {
                     }`}
                   >
                     {message.role === 'assistant' ? (
-                      <ReactMarkdown className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                        {message.content}
-                      </ReactMarkdown>
+                      <div className="text-sm prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
                     ) : (
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     )}
