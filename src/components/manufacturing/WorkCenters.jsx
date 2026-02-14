@@ -61,7 +61,6 @@ export default function WorkCenters() {
   }, [equipment]);
 
   const [newWorkCenter, setNewWorkCenter] = useState({
-    code: '',
     name: '',
     description: '',
     department: '',
@@ -142,7 +141,6 @@ export default function WorkCenters() {
 
   const resetForm = () => {
     setNewWorkCenter({
-      code: '',
       name: '',
       description: '',
       department: '',
@@ -169,7 +167,6 @@ export default function WorkCenters() {
   const handleEditWorkCenter = (wc) => {
     setSelectedWorkCenter(wc);
     setNewWorkCenter({
-      code: wc.code || '',
       name: wc.name || '',
       description: wc.description || '',
       department: wc.department || '',
@@ -438,26 +435,15 @@ export default function WorkCenters() {
             <DialogTitle>{t('add_work_center')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_code" label={t('work_center_code')} helpText={t('help_workcenter_code')} />
-                <Input
-                  id="wc_code"
-                  placeholder={t('auto_generated_if_empty')}
-                  value={newWorkCenter.code}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, code: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_name" label={t('name')} helpText={t('help_workcenter_name')} required />
-                <Input
-                  id="wc_name"
-                  placeholder={t('work_center_name')}
-                  value={newWorkCenter.name}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
-                  required
-                />
-              </div>
+            <div className="space-y-2">
+              <LabelWithHelp htmlFor="wc_name" label={t('name')} helpText={t('help_workcenter_name')} required />
+              <Input
+                id="wc_name"
+                placeholder={t('work_center_name')}
+                value={newWorkCenter.name}
+                onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
+                required
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -625,26 +611,15 @@ export default function WorkCenters() {
             <DialogTitle>{t('edit_work_center')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_code" label={t('work_center_code')} helpText={t('help_workcenter_code')} />
-                <Input
-                  id="edit_wc_code"
-                  placeholder={t('auto_generated_if_empty')}
-                  value={newWorkCenter.code}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, code: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_name" label={t('name')} helpText={t('help_workcenter_name')} required />
-                <Input
-                  id="edit_wc_name"
-                  placeholder={t('work_center_name')}
-                  value={newWorkCenter.name}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
-                  required
-                />
-              </div>
+            <div className="space-y-2">
+              <LabelWithHelp htmlFor="edit_wc_name" label={t('name')} helpText={t('help_workcenter_name')} required />
+              <Input
+                id="edit_wc_name"
+                placeholder={t('work_center_name')}
+                value={newWorkCenter.name}
+                onChange={(e) => setNewWorkCenter({...newWorkCenter, name: e.target.value})}
+                required
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -100,7 +100,6 @@ export default function EquipmentMaintenance() {
 
   const [newEquipment, setNewEquipment] = useState({
     name: '',
-    code: '',
     type: 'machine',
     work_center_id: '',
     manufacturer: '',
@@ -283,6 +282,7 @@ export default function EquipmentMaintenance() {
     const eq = {
       id: `EQ-${Date.now()}`,
       ...newEquipment,
+      code: `EQ-${Date.now()}`, // Auto-generate code
       created_at: new Date().toISOString(),
     };
 
@@ -382,7 +382,6 @@ export default function EquipmentMaintenance() {
   const resetEquipmentForm = () => {
     setNewEquipment({
       name: '',
-      code: '',
       type: 'machine',
       work_center_id: '',
       manufacturer: '',
@@ -731,23 +730,13 @@ export default function EquipmentMaintenance() {
             <DialogTitle>{t('new_equipment') || "Yangi jihoz"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t('equipment_name') || "Jihoz nomi"} *</Label>
-                <Input
-                  value={newEquipment.name}
-                  onChange={e => setNewEquipment({ ...newEquipment, name: e.target.value })}
-                  placeholder={t('enter_equipment_name') || "Jihoz nomini kiriting"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('code') || "Kod"} *</Label>
-                <Input
-                  value={newEquipment.code}
-                  onChange={e => setNewEquipment({ ...newEquipment, code: e.target.value })}
-                  placeholder="EQ-001"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>{t('equipment_name') || "Jihoz nomi"} *</Label>
+              <Input
+                value={newEquipment.name}
+                onChange={e => setNewEquipment({ ...newEquipment, name: e.target.value })}
+                placeholder={t('enter_equipment_name') || "Jihoz nomini kiriting"}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -849,7 +838,7 @@ export default function EquipmentMaintenance() {
               </Button>
               <Button
                 onClick={handleCreateEquipment}
-                disabled={isSubmitting || !newEquipment.name || !newEquipment.code}
+                disabled={isSubmitting || !newEquipment.name}
                 className="bg-gradient-to-r from-blue-600 to-purple-600"
               >
                 {t('create_equipment') || "Jihozni qo'shish"}
