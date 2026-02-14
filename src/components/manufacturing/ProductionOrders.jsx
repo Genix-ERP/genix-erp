@@ -19,7 +19,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 export default function ProductionOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
   const {
@@ -537,7 +537,7 @@ export default function ProductionOrders() {
                       ...newOrder,
                       product_id: value,
                       product_name: product?.name || '',
-                      uom: product?.uom || 'units',
+                      uom: product?.unit_of_measure || product?.uom || 'units',
                       bom_id: '' // Reset BOM when product changes
                     });
                   }}

@@ -659,7 +659,14 @@ export default function BOMManagement() {
                   <div className="grid grid-cols-3 gap-3">
                     <Select
                       value={newComponent.component_id}
-                      onValueChange={(value) => setNewComponent({...newComponent, component_id: value})}
+                      onValueChange={(value) => {
+                        const selectedProduct = products.find(p => p.id === value);
+                        setNewComponent({
+                          ...newComponent,
+                          component_id: value,
+                          unit: selectedProduct?.unit_of_measure || selectedProduct?.uom || newComponent.unit
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={t('select_component')} />
@@ -959,7 +966,14 @@ export default function BOMManagement() {
                     <div className="grid grid-cols-3 gap-3">
                       <Select
                         value={editComponent.component_id}
-                        onValueChange={(value) => setEditComponent({...editComponent, component_id: value})}
+                        onValueChange={(value) => {
+                          const selectedProduct = products.find(p => p.id === value);
+                          setEditComponent({
+                            ...editComponent,
+                            component_id: value,
+                            unit: selectedProduct?.unit_of_measure || selectedProduct?.uom || editComponent.unit
+                          });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder={t('select_component')} />
