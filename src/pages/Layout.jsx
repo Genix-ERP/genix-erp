@@ -90,7 +90,7 @@ function NavLink({ item, isActive }) {
   return (
     <Link
       to={item.url}
-      className={`flex items-center justify-between px-3 py-3 w-full ${
+      className={`flex items-center justify-between px-3 py-3 w-full cursor-pointer ${
         isActive ? '!bg-gradient-to-r !from-[var(--genix-blue)]/20 !to-[var(--genix-purple)]/20 !text-[var(--genix-blue)] !font-semibold !shadow-md !border-l-4 !border-[var(--genix-blue)]' : ''
       }`}
       onClick={handleClick}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Inventory() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -71,7 +73,8 @@ export default function Inventory() {
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [compliance, setCompliance] = useState(null);
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const activeTab = searchParams.get("tab") || "dashboard";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
   // Cleanup on unmount to prevent blocking navigation
   useEffect(() => {
