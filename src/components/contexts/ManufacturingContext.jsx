@@ -641,11 +641,11 @@ export function ManufacturingProvider({ children }) {
   return (
     <ManufacturingContext.Provider value={{
       // State
-      workCenters,
-      productionOrders,
-      workOrders,
-      qualityChecks,
-      boms,
+      workCenters: Array.isArray(workCenters) ? workCenters : [],
+      productionOrders: Array.isArray(productionOrders) ? productionOrders : [],
+      workOrders: Array.isArray(workOrders) ? workOrders : [],
+      qualityChecks: Array.isArray(qualityChecks) ? qualityChecks : [],
+      boms: Array.isArray(boms) ? boms : [],
       manufacturingStats,
       isLoading,
       loading: isLoading,
