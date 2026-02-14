@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Customers() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
@@ -76,7 +78,8 @@ export default function Customers() {
   const [industryFilter, setIndustryFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [activeTab, setActiveTab] = useState("customers");
+  const activeTab = searchParams.get("tab") || "customers";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [showOpportunityForm, setShowOpportunityForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
@@ -120,16 +123,13 @@ export default function Customers() {
       );
     }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(customer => customer.status === statusFilter);
-    }
 
     if (industryFilter !== "all") {
       filtered = filtered.filter(customer => customer.industry === industryFilter);
     }
 
     setFilteredCustomers(filtered);
-  }, [customers, searchQuery, statusFilter, industryFilter]);
+  }, [customers, searchQuery, industryFilter]);
 
   const handleSave = async (customerData) => {
     try {
@@ -314,18 +314,6 @@ export default function Customers() {
                       className="pl-9"
                     />
                   </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full md:w-48">
-                      <SelectValue placeholder={t('status')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('all')} {t('status')}</SelectItem>
-                      <SelectItem value="prospect">{t('prospect')}</SelectItem>
-                      <SelectItem value="active">{t('active')}</SelectItem>
-                      <SelectItem value="inactive">{t('inactive')}</SelectItem>
-                      <SelectItem value="churned">{t('churned')}</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <Select value={industryFilter} onValueChange={setIndustryFilter}>
                     <SelectTrigger className="w-full md:w-48">
                       <SelectValue placeholder={t('industry')} />
@@ -368,8 +356,7 @@ export default function Customers() {
                         <TableHead>{t('company_name')}</TableHead>
                         <TableHead>{t('contact')}</TableHead>
                         <TableHead>{t('industry')}</TableHead>
-                        <TableHead>{t('status')}</TableHead>
-                        <TableHead>{t('value')}</TableHead>
+                        <TableHead>{t('annual_revenue')}</TableHead>
                         <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -407,23 +394,13 @@ export default function Customers() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge className={getStatusColor(customer.status)}>
-                              {t(customer.status)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              {customer.monthly_value && (
-                                <p className="font-medium text-green-600">
-                                  {formatCurrency(customer.monthly_value)}/mo
-                                </p>
-                              )}
-                              {customer.annual_revenue && (
-                                <p className="text-sm text-slate-500">
-                                  {formatCurrency(customer.annual_revenue)} annual
-                                </p>
-                              )}
-                            </div>
+                            {customer.annual_revenue ? (
+                              <p className="font-medium text-slate-900">
+                                {formatCurrency(customer.annual_revenue)}
+                              </p>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">

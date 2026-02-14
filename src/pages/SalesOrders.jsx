@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
@@ -56,6 +57,7 @@ import {
 import { useCompany } from '@/components/contexts/CompanyContext';
 
 export default function SalesOrders() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
@@ -76,7 +78,8 @@ export default function SalesOrders() {
     useDiscountCode,
   } = useSales();
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const activeTab = searchParams.get("tab") || "dashboard";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');

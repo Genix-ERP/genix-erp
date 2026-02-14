@@ -10,17 +10,15 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
 
   const metrics = React.useMemo(() => {
     const totalCustomers = customers.length;
-    const activeCustomers = customers.filter(c => c.status === 'active').length;
     const totalLeads = leads.length;
     const qualifiedLeads = leads.filter(l => l.status === 'qualified').length;
-    const totalRevenue = customers.reduce((sum, c) => sum + (c.monthly_value || 0), 0) * 12;
+    const totalRevenue = customers.reduce((sum, c) => sum + (c.annual_revenue || 0), 0);
     const avgDealSize = opportunities.length > 0 
       ? opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0) / opportunities.length 
       : 0;
 
     return {
       totalCustomers,
-      activeCustomers,
       totalLeads,
       qualifiedLeads,
       totalRevenue,
@@ -40,8 +38,8 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
       gradient: "from-blue-50 to-blue-100/50"
     },
     {
-      title: t('active_customers'),
-      value: metrics.activeCustomers.toLocaleString(),
+      title: t('total_leads'),
+      value: metrics.totalLeads.toLocaleString(),
       change: "+8%",
       changeText: t('vs_last_month'),
       icon: UserPlus,

@@ -5939,7 +5939,7 @@ export const translations = {
     "churned": "Yo'qolgan",
     "contact_name": "Aloqa shaxsi",
     "contact": "Aloqa",
-    "customers_directory": "Mijozlar katalogi",
+    "customers_directory": "Mijozlar",
     "ai_crm_insights": "AI CRM tahlillari",
     "monthly_recurring": "Oylik daromad",
     "pipeline_value": "Savdo qiymati",

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ import GoodsReceipt from '@/components/procurement/GoodsReceipt';
 import PurchaseOrders from '@/components/procurement/PurchaseOrders';
 
 export default function Procurement() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -71,7 +73,8 @@ export default function Procurement() {
     isLoading,
   } = useProcurement();
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const activeTab = searchParams.get("tab") || "dashboard";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
