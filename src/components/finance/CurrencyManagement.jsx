@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, RefreshCw, TrendingUp, TrendingDown, Globe, DollarSign,
-  Euro, Coins, History, Calendar, ArrowRightLeft, Edit, Trash2, Check
+  Euro, Coins, History, Calendar, ArrowRightLeft, Edit, Trash2, Check,
+  AlertTriangle, BarChart3, Download
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -29,9 +30,17 @@ export default function CurrencyManagement() {
     setExchangeRate,
     getLatestExchangeRate,
     convertCurrency,
+    exchangeDiffs = [],
+    syncExchangeRates,
+    revalueCurrency,
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isRevaluing, setIsRevaluing] = useState(false);
+  const [showRevalueModal, setShowRevalueModal] = useState(false);
+  const [revalueDate, setRevalueDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [activeTab, setActiveTab] = useState("currencies");
   const [showCreateCurrencyModal, setShowCreateCurrencyModal] = useState(false);
@@ -143,6 +152,38 @@ export default function CurrencyManagement() {
     const current = history[0].rate;
     const previous = history[1].rate;
     return ((current - previous) / previous * 100).toFixed(2);
+  };
+
+  // Handle CBU sync
+  const handleSyncRates = async () => {
+    setIsSyncing(true);
+    try {
+      await syncExchangeRates();
+    } catch (err) {
+      console.error('Error syncing rates:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Handle revaluation
+  const handleRevalue = async () => {
+    setIsRevaluing(true);
+    try {
+      await revalueCurrency({ date: revalueDate });
+      setShowRevalueModal(false);
+    } catch (err) {
+      console.error('Error revaluing currency:', err);
+    } finally {
+      setIsRevaluing(false);
+    }
+  };
+
+  // Exchange diff stats
+  const diffStats = {
+    totalPositive: exchangeDiffs.filter(d => d.type === 'positive').reduce((s, d) => s + (d.amount_uzs || 0), 0),
+    totalNegative: exchangeDiffs.filter(d => d.type === 'negative').reduce((s, d) => s + (d.amount_uzs || 0), 0),
+    total: exchangeDiffs.length
   };
 
   return (
@@ -259,9 +300,24 @@ export default function CurrencyManagement() {
               <History className="w-4 h-4 mr-2" />
               {t('rates_history') || 'Rate History'}
             </TabsTrigger>
+            <TabsTrigger value="exchange_diffs" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              {t('exchange_diffs') || 'Exchange Diffs'}
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
+            {canCreate(MODULES.FINANCIALS) && (
+              <Button
+                onClick={handleSyncRates}
+                disabled={isSyncing}
+                variant="outline"
+                className="border-blue-300 text-blue-600 hover:bg-blue-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? (t('loading') || 'Syncing...') : (t('sync_from_cbu') || 'Sync from CBU')}
+              </Button>
+            )}
             {activeTab === 'currencies' && canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={() => setShowCreateCurrencyModal(true)}
@@ -278,6 +334,15 @@ export default function CurrencyManagement() {
               >
                 <Plus className="w-4 h-4 mr-2" />
                 {t('set_rate') || 'Set Rate'}
+              </Button>
+            )}
+            {activeTab === 'exchange_diffs' && canCreate(MODULES.FINANCIALS) && (
+              <Button
+                onClick={() => setShowRevalueModal(true)}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                {t('revaluation') || 'Revaluation'}
               </Button>
             )}
           </div>
@@ -405,7 +470,6 @@ export default function CurrencyManagement() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
       {/* Create Currency Modal */}
       <Dialog open={showCreateCurrencyModal} onOpenChange={setShowCreateCurrencyModal}>
@@ -466,6 +530,142 @@ export default function CurrencyManagement() {
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
               >
                 {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+        {/* Exchange Diffs Tab */}
+        <TabsContent value="exchange_diffs">
+          {/* Diff Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-green-600 font-medium">{t('positive_diff') || 'Positive Diff'}</p>
+                    <p className="text-xl font-bold text-green-800">
+                      {new Intl.NumberFormat('uz-UZ').format(diffStats.totalPositive)} so'm
+                    </p>
+                    <p className="text-xs text-green-500 mt-1">Kt 9540</p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-green-400" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-red-600 font-medium">{t('negative_diff') || 'Negative Diff'}</p>
+                    <p className="text-xl font-bold text-red-800">
+                      {new Intl.NumberFormat('uz-UZ').format(diffStats.totalNegative)} so'm
+                    </p>
+                    <p className="text-xs text-red-500 mt-1">Dt 9620</p>
+                  </div>
+                  <TrendingDown className="w-8 h-8 text-red-400" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-600 font-medium">{t('exchange_diff') || 'Net Diff'}</p>
+                    <p className={`text-xl font-bold ${diffStats.totalPositive - diffStats.totalNegative >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                      {new Intl.NumberFormat('uz-UZ').format(diffStats.totalPositive - diffStats.totalNegative)} so'm
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">{diffStats.total} {t('total') || 'total'}</p>
+                  </div>
+                  <BarChart3 className="w-8 h-8 text-slate-400" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead>{t('currency') || 'Currency'}</TableHead>
+                    <TableHead>{t('period') || 'Period'}</TableHead>
+                    <TableHead>{t('type') || 'Type'}</TableHead>
+                    <TableHead className="text-right">{t('amount') || 'Amount'} (UZS)</TableHead>
+                    <TableHead>{t('accounting_account') || 'Account'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {exchangeDiffs.map((diff) => (
+                    <TableRow key={diff.id} className="hover:bg-slate-50">
+                      <TableCell>
+                        <Badge variant="outline">{diff.currency_code || diff.currency_id}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {diff.period_start && diff.period_end ? (
+                          `${format(new Date(diff.period_start), 'dd.MM.yyyy')} — ${format(new Date(diff.period_end), 'dd.MM.yyyy')}`
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {diff.type === 'positive' ? (
+                          <Badge className="bg-green-100 text-green-700">
+                            <TrendingUp className="w-3 h-3 mr-1" />
+                            {t('positive_diff') || 'Positive'}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-100 text-red-700">
+                            <TrendingDown className="w-3 h-3 mr-1" />
+                            {t('negative_diff') || 'Negative'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className={`text-right font-semibold ${diff.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                        {diff.type === 'positive' ? '+' : '-'}{new Intl.NumberFormat('uz-UZ').format(diff.amount_uzs)} so'm
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {diff.type === 'positive' ? 'Kt 9540' : 'Dt 9620'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {exchangeDiffs.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                        {t('no_transactions') || 'No exchange differences found'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Revaluation Modal */}
+      <Dialog open={showRevalueModal} onOpenChange={setShowRevalueModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('currency_revaluation') || 'Currency Revaluation'}</DialogTitle>
+            <DialogDescription>{t('revaluation') || 'Calculate exchange differences for the period end'}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium">{t('date') || 'Date'}</label>
+              <Input
+                type="date"
+                value={revalueDate}
+                onChange={(e) => setRevalueDate(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowRevalueModal(false)}>{t('cancel') || 'Cancel'}</Button>
+              <Button
+                onClick={handleRevalue}
+                disabled={isRevaluing}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+              >
+                {isRevaluing ? (t('loading') || 'Processing...') : (t('revaluation') || 'Revalue')}
               </Button>
             </div>
           </div>

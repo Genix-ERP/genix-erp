@@ -23,6 +23,10 @@ const BUDGETS_KEY = 'genix_budgets';
 const BUDGET_LINES_KEY = 'genix_budget_lines';
 const FIXED_ASSETS_KEY = 'genix_fixed_assets';
 const DEPRECIATION_ENTRIES_KEY = 'genix_depreciation_entries';
+const CASH_REGISTERS_KEY = 'genix_cash_registers';
+const CASH_ORDERS_KEY = 'genix_cash_orders';
+const RECONCILIATION_ACTS_KEY = 'genix_reconciliation_acts';
+const EXCHANGE_DIFFS_KEY = 'genix_exchange_diffs';
 
 const FinancialsContext = createContext();
 
@@ -161,6 +165,30 @@ const sampleDepreciationEntries = [
   { id: 'de_3', asset_id: 'fa_3', period: '2025-01', amount: 2083333, depreciation_date: '2025-01-31', method: 'straight_line' },
 ];
 
+const sampleCashRegisters = [
+  { id: 'cr_1', name: 'Asosiy kassa', code: 'KASSA-01', currency: 'UZS', limit_amount: 50000000, current_balance: 12500000, is_active: true },
+  { id: 'cr_2', name: 'Filial kassa', code: 'KASSA-02', currency: 'UZS', limit_amount: 30000000, current_balance: 5000000, is_active: true },
+  { id: 'cr_3', name: 'Valyuta kassa', code: 'KASSA-USD', currency: 'USD', limit_amount: 10000, current_balance: 2500, is_active: true },
+];
+
+const sampleCashOrders = [
+  { id: 'co_1', cash_register_id: 'cr_1', order_number: 'PKO-2026-00001', order_type: 'pko', order_date: new Date().toISOString().split('T')[0], amount: 5000000, currency: 'UZS', partner_name: 'Abdullayev M.', account_code: '4010', description: 'Tovar sotishdan tushum', status: 'confirmed', created_at: new Date().toISOString() },
+  { id: 'co_2', cash_register_id: 'cr_1', order_number: 'RKO-2026-00001', order_type: 'rko', order_date: new Date().toISOString().split('T')[0], amount: 2000000, currency: 'UZS', partner_name: 'Karimov S.', account_code: '7110', description: 'Xo\'jalik xarajatlari', status: 'confirmed', created_at: new Date().toISOString() },
+  { id: 'co_3', cash_register_id: 'cr_1', order_number: 'PKO-2026-00002', order_type: 'pko', order_date: new Date(Date.now() - 86400000).toISOString().split('T')[0], amount: 10000000, currency: 'UZS', partner_name: 'Raximov A.', account_code: '4010', description: 'Xizmat ko\'rsatishdan tushum', status: 'confirmed', created_at: new Date().toISOString() },
+  { id: 'co_4', cash_register_id: 'cr_1', order_number: 'RKO-2026-00002', order_type: 'rko', order_date: new Date().toISOString().split('T')[0], amount: 3500000, currency: 'UZS', partner_name: '', account_code: '6710', description: 'Ish haqi to\'lash', status: 'draft', created_at: new Date().toISOString() },
+];
+
+const sampleReconciliationActs = [
+  { id: 'ra_1', partner_id: 'c_1', partner_name: 'Tech Solutions LLC', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 5000000, our_debit_total: 15000000, our_credit_total: 8500000, our_balance: 11500000, partner_debit_total: 8500000, partner_credit_total: 15000000, partner_balance: 11500000, difference: 0, status: 'confirmed', created_at: new Date().toISOString() },
+  { id: 'ra_2', partner_id: 'c_2', partner_name: 'Global Industries', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 0, our_debit_total: 25000000, our_credit_total: 20000000, our_balance: 5000000, partner_debit_total: 20000000, partner_credit_total: 24500000, partner_balance: 4500000, difference: 500000, status: 'disputed', created_at: new Date().toISOString() },
+  { id: 'ra_3', partner_id: 'c_3', partner_name: 'Qurilish Materials', period_start: '2026-01-01', period_end: '2026-03-31', opening_balance: 3000000, our_debit_total: 8000000, our_credit_total: 10000000, our_balance: 1000000, partner_debit_total: 10000000, partner_credit_total: 8000000, partner_balance: 1000000, difference: 0, status: 'draft', created_at: new Date().toISOString() },
+];
+
+const sampleExchangeDiffs = [
+  { id: 'ed_1', currency_code: 'USD', amount_uzs: 3500000, diff_type: 'positive', period_start: '2026-01-01', period_end: '2026-01-31', description: 'USD kurs farqi — Yanvar 2026' },
+  { id: 'ed_2', currency_code: 'EUR', amount_uzs: -1200000, diff_type: 'negative', period_start: '2026-01-01', period_end: '2026-01-31', description: 'EUR kurs farqi — Yanvar 2026' },
+];
+
 export function FinancialsProvider({ children }) {
   const { activeCompany } = useCompany();
   const { getSetting } = useAdminSettings();
@@ -185,6 +213,10 @@ export function FinancialsProvider({ children }) {
   const [budgetLines, setBudgetLines] = useState([]);
   const [fixedAssets, setFixedAssets] = useState([]);
   const [depreciationEntries, setDepreciationEntries] = useState([]);
+  const [cashRegisters, setCashRegisters] = useState([]);
+  const [cashOrders, setCashOrders] = useState([]);
+  const [reconciliationActs, setReconciliationActs] = useState([]);
+  const [exchangeDiffs, setExchangeDiffs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
@@ -254,6 +286,11 @@ export function FinancialsProvider({ children }) {
     setBudgetLines(getData(BUDGET_LINES_KEY, sampleBudgetLines));
     setFixedAssets(getData(FIXED_ASSETS_KEY, sampleFixedAssets));
     setDepreciationEntries(getData(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries));
+    // Finance extra modules
+    setCashRegisters(getData(CASH_REGISTERS_KEY, sampleCashRegisters));
+    setCashOrders(getData(CASH_ORDERS_KEY, sampleCashOrders));
+    setReconciliationActs(getData(RECONCILIATION_ACTS_KEY, sampleReconciliationActs));
+    setExchangeDiffs(getData(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs));
 
     // Only initialize localStorage with sample data in demo mode
     if (demoMode) {
@@ -284,6 +321,11 @@ export function FinancialsProvider({ children }) {
       initIfEmpty(BUDGET_LINES_KEY, sampleBudgetLines);
       initIfEmpty(FIXED_ASSETS_KEY, sampleFixedAssets);
       initIfEmpty(DEPRECIATION_ENTRIES_KEY, sampleDepreciationEntries);
+      // Finance extra modules
+      initIfEmpty(CASH_REGISTERS_KEY, sampleCashRegisters);
+      initIfEmpty(CASH_ORDERS_KEY, sampleCashOrders);
+      initIfEmpty(RECONCILIATION_ACTS_KEY, sampleReconciliationActs);
+      initIfEmpty(EXCHANGE_DIFFS_KEY, sampleExchangeDiffs);
     }
   }, [activeCompany]);
 
@@ -296,7 +338,7 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData] = await Promise.all([
             financeService.listJournalEntries().catch(() => []),
             salesService.listInvoices().catch(() => []),
             financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
@@ -313,7 +355,11 @@ export function FinancialsProvider({ children }) {
             financeService.listBudgets().catch(() => []),
             financeService.listBudgetLines().catch(() => []),
             financeService.listFixedAssets().catch(() => []),
-            financeService.listJournals().catch(() => [])
+            financeService.listJournals().catch(() => []),
+            financeService.listCashRegisters().catch(() => []),
+            financeService.listCashOrders().catch(() => []),
+            financeService.listReconciliationActs().catch(() => []),
+            financeService.listExchangeDiffs().catch(() => [])
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -364,6 +410,11 @@ export function FinancialsProvider({ children }) {
           setBudgetLines(budgetLinesData || []);
           // Set fixed assets from backend
           setFixedAssets(fixedAssetsData || []);
+          // Finance extra modules
+          setCashRegisters(cashRegistersData || []);
+          setCashOrders(cashOrdersData || []);
+          setReconciliationActs(reconciliationActsData || []);
+          setExchangeDiffs(exchangeDiffsData || []);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -1399,6 +1450,115 @@ export function FinancialsProvider({ children }) {
     }
   }, []);
 
+  // ========== Cash Registers (Kassa) ==========
+  const createCashRegister = useCallback(async (data) => {
+    if (backendAvailable) {
+      const result = await financeService.createCashRegister(data);
+      setCashRegisters(prev => [...prev, result]);
+      return result;
+    }
+    const newItem = { id: `cr_${Date.now()}`, ...data, current_balance: 0, is_active: true, created_at: new Date().toISOString() };
+    setCashRegisters(prev => { const updated = [...prev, newItem]; localStorage.setItem(getStorageKey(CASH_REGISTERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+    return newItem;
+  }, [backendAvailable, activeCompany]);
+
+  // ========== Cash Orders (PKO/RKO) ==========
+  const createCashOrder = useCallback(async (data) => {
+    if (backendAvailable) {
+      const result = await financeService.createCashOrder(data);
+      setCashOrders(prev => [...prev, result]);
+      return result;
+    }
+    const prefix = data.order_type === 'pko' ? 'PKO' : 'RKO';
+    const num = String(cashOrders.filter(o => o.order_type === data.order_type).length + 1).padStart(5, '0');
+    const newItem = { id: `co_${Date.now()}`, order_number: `${prefix}-2026-${num}`, status: 'draft', created_at: new Date().toISOString(), ...data };
+    setCashOrders(prev => { const updated = [...prev, newItem]; localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+    return newItem;
+  }, [backendAvailable, activeCompany, cashOrders]);
+
+  const confirmCashOrder = useCallback(async (id) => {
+    if (backendAvailable) {
+      const result = await financeService.confirmCashOrder(id);
+      setCashOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'confirmed' } : o));
+      return result;
+    }
+    setCashOrders(prev => { const updated = prev.map(o => o.id === id ? { ...o, status: 'confirmed' } : o); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+  }, [backendAvailable, activeCompany]);
+
+  const deleteCashOrder = useCallback(async (id) => {
+    if (backendAvailable) {
+      await financeService.updateCashOrder(id, { status: 'cancelled' });
+    }
+    setCashOrders(prev => { const updated = prev.filter(o => o.id !== id); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+  }, [backendAvailable, activeCompany]);
+
+  const getCashBook = useCallback(async (params) => {
+    if (backendAvailable) {
+      return await financeService.getCashBook(params);
+    }
+    return [];
+  }, [backendAvailable]);
+
+  // ========== Reconciliation Acts (Akt sverka) ==========
+  const createReconciliationAct = useCallback(async (data) => {
+    if (backendAvailable) {
+      const result = await financeService.createReconciliationAct(data);
+      setReconciliationActs(prev => [...prev, result]);
+      return result;
+    }
+    const newItem = { id: `ra_${Date.now()}`, status: 'draft', difference: 0, our_balance: 0, partner_balance: 0, opening_balance: 0, our_debit_total: 0, our_credit_total: 0, partner_debit_total: 0, partner_credit_total: 0, created_at: new Date().toISOString(), ...data };
+    setReconciliationActs(prev => { const updated = [...prev, newItem]; localStorage.setItem(getStorageKey(RECONCILIATION_ACTS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+    return newItem;
+  }, [backendAvailable, activeCompany]);
+
+  const updateReconciliationAct = useCallback(async (id, data) => {
+    if (backendAvailable) {
+      const result = await financeService.updateReconciliationAct(id, data);
+      setReconciliationActs(prev => prev.map(a => a.id === id ? { ...a, ...result } : a));
+      return result;
+    }
+    setReconciliationActs(prev => { const updated = prev.map(a => a.id === id ? { ...a, ...data } : a); localStorage.setItem(getStorageKey(RECONCILIATION_ACTS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+  }, [backendAvailable, activeCompany]);
+
+  const deleteReconciliationAct = useCallback(async (id) => {
+    if (backendAvailable) {
+      await financeService.deleteReconciliationAct(id);
+    }
+    setReconciliationActs(prev => { const updated = prev.filter(a => a.id !== id); localStorage.setItem(getStorageKey(RECONCILIATION_ACTS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
+  }, [backendAvailable, activeCompany]);
+
+  const bulkGenerateReconciliation = useCallback(async (data) => {
+    if (backendAvailable) {
+      return await financeService.bulkGenerateReconciliation(data);
+    }
+    return { count: 0, message: 'Backend not available' };
+  }, [backendAvailable]);
+
+  const exportReconciliationAct = useCallback(async (id, format) => {
+    if (backendAvailable) {
+      return await financeService.exportReconciliationAct(id, format);
+    }
+    return null;
+  }, [backendAvailable]);
+
+  // ========== Exchange Diffs (Kurs farqi) ==========
+  const syncExchangeRates = useCallback(async (data) => {
+    if (backendAvailable) {
+      return await financeService.syncExchangeRates(data);
+    }
+    return { message: 'Backend not available' };
+  }, [backendAvailable]);
+
+  const revalueCurrency = useCallback(async (data) => {
+    if (backendAvailable) {
+      const result = await financeService.revalueCurrency(data);
+      const diffs = await financeService.listExchangeDiffs();
+      setExchangeDiffs(diffs || []);
+      return result;
+    }
+    return { message: 'Backend not available' };
+  }, [backendAvailable]);
+
   return (
     <FinancialsContext.Provider value={{
       journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
@@ -1427,6 +1587,13 @@ export function FinancialsProvider({ children }) {
       // Fixed Assets & Depreciation
       fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset,
       depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
+      // Cash Registers & Orders (Kassa PKO/RKO)
+      cashRegisters, createCashRegister,
+      cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
+      // Reconciliation Acts (Akt sverka)
+      reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, exportReconciliationAct,
+      // Exchange Diffs (Kurs farqi)
+      exchangeDiffs, syncExchangeRates, revalueCurrency,
       // Reports
       getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
       isLoading, backendAvailable, error, refreshData: loadData,

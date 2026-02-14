@@ -239,6 +239,14 @@ export default function BudgetManagement() {
         return <Badge className="bg-red-100 text-red-700"><TrendingDown className="w-3 h-3 mr-1" /> {t('expense') || 'Expense'}</Badge>;
       case 'revenue':
         return <Badge className="bg-green-100 text-green-700"><TrendingUp className="w-3 h-3 mr-1" /> {t('revenue') || 'Revenue'}</Badge>;
+      case 'income':
+        return <Badge className="bg-emerald-100 text-emerald-700"><TrendingUp className="w-3 h-3 mr-1" /> {t('income_budget') || 'Income'}</Badge>;
+      case 'cashflow':
+        return <Badge className="bg-blue-100 text-blue-700"><BarChart3 className="w-3 h-3 mr-1" /> {t('cashflow_budget') || 'Cash Flow'}</Badge>;
+      case 'investment':
+        return <Badge className="bg-purple-100 text-purple-700"><Target className="w-3 h-3 mr-1" /> {t('investment_budget') || 'Investment'}</Badge>;
+      case 'production':
+        return <Badge className="bg-amber-100 text-amber-700"><PieChart className="w-3 h-3 mr-1" /> {t('production_budget') || 'Production'}</Badge>;
       case 'both':
         return <Badge className="bg-blue-100 text-blue-700"><BarChart3 className="w-3 h-3 mr-1" /> {t('both') || 'Both'}</Badge>;
       default:
@@ -251,7 +259,10 @@ export default function BudgetManagement() {
     const totalPlanned = lines.reduce((sum, l) => sum + (l.planned_amount || 0), 0);
     const totalActual = lines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
     const percentage = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
-    return { totalPlanned, totalActual, percentage };
+    const warningThreshold = budget.warning_threshold || 80;
+    const isWarning = percentage >= warningThreshold && percentage < 100;
+    const isOverBudget = percentage >= 100;
+    return { totalPlanned, totalActual, percentage, warningThreshold, isWarning, isOverBudget };
   };
 
   const formatCurrency = (amount) => {
@@ -349,7 +360,10 @@ export default function BudgetManagement() {
                   <SelectItem value="all">{t('all_types') || 'All Types'}</SelectItem>
                   <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
                   <SelectItem value="revenue">{t('revenue') || 'Revenue'}</SelectItem>
-                  <SelectItem value="both">{t('both') || 'Both'}</SelectItem>
+                  <SelectItem value="income">{t('income_budget') || 'Income'}</SelectItem>
+                  <SelectItem value="cashflow">{t('cashflow_budget') || 'Cash Flow'}</SelectItem>
+                  <SelectItem value="investment">{t('investment_budget') || 'Investment'}</SelectItem>
+                  <SelectItem value="production">{t('production_budget') || 'Production'}</SelectItem>
                 </SelectContent>
               </Select>
               {canCreate(MODULES.FINANCIALS) && (
@@ -400,7 +414,6 @@ export default function BudgetManagement() {
               <TableBody>
                 {filteredBudgets.map((budget) => {
                   const usage = calculateBudgetUsage(budget);
-                  const isOverBudget = usage.percentage > 100;
 
                   return (
                     <TableRow key={budget.id} className="hover:bg-slate-50">
@@ -424,7 +437,7 @@ export default function BudgetManagement() {
                       <TableCell>
                         <div className="w-32">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className={isOverBudget ? 'text-red-600 font-medium' : 'text-slate-600'}>
+                            <span className={usage.isOverBudget ? 'text-red-600 font-medium' : usage.isWarning ? 'text-amber-600 font-medium' : 'text-slate-600'}>
                               {usage.percentage.toFixed(0)}%
                             </span>
                             <span className="text-slate-400">
@@ -433,8 +446,14 @@ export default function BudgetManagement() {
                           </div>
                           <Progress
                             value={Math.min(usage.percentage, 100)}
-                            className={`h-2 ${isOverBudget ? '[&>div]:bg-red-500' : '[&>div]:bg-green-500'}`}
+                            className={`h-2 ${usage.isOverBudget ? '[&>div]:bg-red-500' : usage.isWarning ? '[&>div]:bg-amber-500' : '[&>div]:bg-green-500'}`}
                           />
+                          {usage.isWarning && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <AlertTriangle className="w-3 h-3 text-amber-500" />
+                              <span className="text-[10px] text-amber-600">{t('budget_warning') || 'Warning'} ({usage.warningThreshold}%)</span>
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(budget.status)}</TableCell>
@@ -498,7 +517,10 @@ export default function BudgetManagement() {
                   <SelectContent>
                     <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
                     <SelectItem value="revenue">{t('revenue') || 'Revenue'}</SelectItem>
-                    <SelectItem value="both">{t('both') || 'Both'}</SelectItem>
+                    <SelectItem value="income">{t('income_budget') || 'Income'}</SelectItem>
+                    <SelectItem value="cashflow">{t('cashflow_budget') || 'Cash Flow'}</SelectItem>
+                    <SelectItem value="investment">{t('investment_budget') || 'Investment'}</SelectItem>
+                    <SelectItem value="production">{t('production_budget') || 'Production'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

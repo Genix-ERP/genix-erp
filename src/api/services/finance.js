@@ -585,6 +585,111 @@ export const financeService = {
     const response = await apiClient.get('/recurring-journals/pending');
     return response.data.data;
   },
+
+  // ========== Cash Registers (Kassa) ==========
+  async listCashRegisters(params = {}) {
+    const response = await apiClient.get('/cash/registers', { params });
+    return response.data.data;
+  },
+
+  async createCashRegister(data) {
+    const response = await apiClient.post('/cash/registers', data);
+    return response.data.data;
+  },
+
+  async updateCashRegister(id, data) {
+    const response = await apiClient.put(`/cash/registers/${id}`, data);
+    return response.data.data;
+  },
+
+  // ========== Cash Orders (PKO/RKO) ==========
+  async listCashOrders(params = {}) {
+    const response = await apiClient.get('/cash/orders', { params });
+    return response.data.data;
+  },
+
+  async getCashOrder(id) {
+    const response = await apiClient.get(`/cash/orders/${id}`);
+    return response.data.data;
+  },
+
+  async createCashOrder(data) {
+    const response = await apiClient.post('/cash/orders', data);
+    return response.data.data;
+  },
+
+  async updateCashOrder(id, data) {
+    const response = await apiClient.put(`/cash/orders/${id}`, data);
+    return response.data.data;
+  },
+
+  async confirmCashOrder(id) {
+    const response = await apiClient.post(`/cash/orders/${id}/confirm`);
+    return response.data.data;
+  },
+
+  // ========== Cash Book (Kassa kitob) ==========
+  async getCashBook(params = {}) {
+    const response = await apiClient.get('/cash/book', { params });
+    return response.data.data;
+  },
+
+  // ========== Currency Rate Sync & Revaluation ==========
+  async syncExchangeRates(data = {}) {
+    const response = await apiClient.post('/currency/rates/sync', data);
+    return response.data.data;
+  },
+
+  async revalueCurrency(data) {
+    const response = await apiClient.post('/currency/revalue', data);
+    return response.data.data;
+  },
+
+  async listExchangeDiffs(params = {}) {
+    const response = await apiClient.get('/currency/rates', { params });
+    return response.data.data;
+  },
+
+  // ========== Reconciliation Acts (Akt sverka) ==========
+  async listReconciliationActs(params = {}) {
+    const response = await apiClient.get('/reconciliation', { params });
+    return response.data.data;
+  },
+
+  async getReconciliationAct(id) {
+    const response = await apiClient.get(`/reconciliation/${id}`);
+    return response.data.data;
+  },
+
+  async createReconciliationAct(data) {
+    const response = await apiClient.post('/reconciliation', data);
+    return response.data.data;
+  },
+
+  async updateReconciliationAct(id, data) {
+    const response = await apiClient.put(`/reconciliation/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteReconciliationAct(id) {
+    await apiClient.delete(`/reconciliation/${id}`);
+  },
+
+  async bulkGenerateReconciliation(data) {
+    const response = await apiClient.post('/reconciliation/bulk-generate', data);
+    return response.data.data;
+  },
+
+  async exportReconciliationAct(id, format = 'pdf') {
+    const response = await apiClient.get(`/reconciliation/${id}/export`, { params: { format } });
+    return response.data.data;
+  },
+
+  // ========== Budget Consolidated ==========
+  async getBudgetConsolidated(params = {}) {
+    const response = await apiClient.get('/budget/consolidated', { params });
+    return response.data.data;
+  },
 };
 
 export default financeService;
