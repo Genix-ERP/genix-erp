@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,12 +82,14 @@ const getDefaultLeaveBalances = () => ({
 });
 
 export default function LeaveManagement() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { employees } = useHR();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
-  const [activeTab, setActiveTab] = useState('requests');
+  const activeTab = searchParams.get("tab") || "requests";
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [leaveBalances, setLeaveBalances] = useState({});
   const [searchQuery, setSearchQuery] = useState('');

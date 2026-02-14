@@ -28,12 +28,9 @@ const sampleCustomers = [
     email: 'john@techsolutions.com',
     phone: '+1 555-0101',
     industry: 'technology',
-    status: 'active',
     annual_revenue: 500000,
     employee_count: 25,
-    monthly_value: 2500,
-    subscription_tier: 'professional',
-    address: { street: '123 Tech Ave', city: 'San Francisco', state: 'CA', zip: '94105', country: 'USA' },
+    address: { street: '123 Tech Ave', city: 'San Francisco', state: 'CA', country: 'USA' },
     created_date: new Date().toISOString()
   },
   {
@@ -43,12 +40,9 @@ const sampleCustomers = [
     email: 'sarah@healthcareplus.com',
     phone: '+1 555-0102',
     industry: 'healthcare',
-    status: 'active',
     annual_revenue: 1200000,
     employee_count: 50,
-    monthly_value: 5000,
-    subscription_tier: 'enterprise',
-    address: { street: '456 Medical Dr', city: 'Boston', state: 'MA', zip: '02101', country: 'USA' },
+    address: { street: '456 Medical Dr', city: 'Boston', state: 'MA', country: 'USA' },
     created_date: new Date().toISOString()
   },
   {
@@ -58,12 +52,9 @@ const sampleCustomers = [
     email: 'mike@retailmasters.com',
     phone: '+1 555-0103',
     industry: 'retail',
-    status: 'prospect',
     annual_revenue: 300000,
     employee_count: 15,
-    monthly_value: 1000,
-    subscription_tier: 'basic',
-    address: { street: '789 Shop St', city: 'New York', state: 'NY', zip: '10001', country: 'USA' },
+    address: { street: '789 Shop St', city: 'New York', state: 'NY', country: 'USA' },
     created_date: new Date().toISOString()
   }
 ];
@@ -193,7 +184,6 @@ export function CustomersProvider({ children }) {
                 street: billingAddr.street1 || billingAddr.street || '',
                 city: billingAddr.city || '',
                 state: billingAddr.state || '',
-                zip: billingAddr.postal_code || billingAddr.zip || '',
                 country: billingAddr.country || ''
               };
               return {
@@ -203,11 +193,8 @@ export function CustomersProvider({ children }) {
                 email: c.email || '',
                 phone: c.phone || '',
                 industry: c.industry || (c.tags && c.tags[0]) || 'other',
-                status: customFields.status || (c.tags && c.tags.find(t => ['prospect', 'active', 'inactive', 'churned'].includes(t))) || (c.is_active ? 'active' : 'inactive'),
                 annual_revenue: customFields.annual_revenue || c.annual_revenue || 0,
                 employee_count: customFields.employee_count || c.employee_count || 0,
-                monthly_value: customFields.monthly_value || c.monthly_value || 0,
-                subscription_tier: customFields.subscription_tier || c.subscription_tier || 'freemium',
                 address: address,
                 created_date: c.created_at || new Date().toISOString()
               };
@@ -337,18 +324,12 @@ export function CustomersProvider({ children }) {
         street1: customerData.address.street || '',
         city: customerData.address.city || '',
         state: customerData.address.state || '',
-        postal_code: customerData.address.zip || '',
         country: customerData.address.country || ''
       } : null,
       notes: customerData.notes || '',
-      tags: customerData.status ? [customerData.status] : [],
-      // Store additional CRM fields in custom_fields
       custom_fields: {
         annual_revenue: customerData.annual_revenue || 0,
-        employee_count: customerData.employee_count || 0,
-        monthly_value: customerData.monthly_value || 0,
-        subscription_tier: customerData.subscription_tier || 'freemium',
-        status: customerData.status || 'prospect'
+        employee_count: customerData.employee_count || 0
       }
     };
 
@@ -363,11 +344,8 @@ export function CustomersProvider({ children }) {
         email: result.email || '',
         phone: result.phone || '',
         industry: customerData.industry || '',
-        status: customerData.status || 'prospect',
         annual_revenue: customerData.annual_revenue || 0,
         employee_count: customerData.employee_count || 0,
-        monthly_value: customerData.monthly_value || 0,
-        subscription_tier: customerData.subscription_tier || 'freemium',
         address: customerData.address || {},
         company_id: companyId,
         created_date: result.created_at || new Date().toISOString()
@@ -402,7 +380,6 @@ export function CustomersProvider({ children }) {
             street1: customerData.address.street || '',
             city: customerData.address.city || '',
             state: customerData.address.state || '',
-            postal_code: customerData.address.zip || '',
             country: customerData.address.country || ''
           };
         }
@@ -411,9 +388,6 @@ export function CustomersProvider({ children }) {
         const customFields = {};
         if (customerData.annual_revenue !== undefined) customFields.annual_revenue = customerData.annual_revenue;
         if (customerData.employee_count !== undefined) customFields.employee_count = customerData.employee_count;
-        if (customerData.monthly_value !== undefined) customFields.monthly_value = customerData.monthly_value;
-        if (customerData.subscription_tier !== undefined) customFields.subscription_tier = customerData.subscription_tier;
-        if (customerData.status !== undefined) customFields.status = customerData.status;
 
         if (Object.keys(customFields).length > 0) {
           backendData.custom_fields = customFields;
