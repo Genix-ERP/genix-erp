@@ -18,6 +18,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { financeService } from "@/api/services";
 import { format, parseISO, addDays, addWeeks, addMonths, addYears } from "date-fns";
@@ -46,6 +47,7 @@ export default function RecurringJournalEntries() {
   const { journals = [], accounts = [] } = useFinancials();
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [templates, setTemplates] = useState([]);
   const [pendingEntries, setPendingEntries] = useState([]);
@@ -425,7 +427,7 @@ export default function RecurringJournalEntries() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{t('monthly_total')}</p>
-                <p className="text-2xl font-bold">${stats.totalMonthly.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatCurrency(stats.totalMonthly)}</p>
               </div>
               <RefreshCw className="h-8 w-8 text-blue-500" />
             </div>
@@ -551,7 +553,7 @@ export default function RecurringJournalEntries() {
                       )}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${(template.total_debit || 0).toLocaleString()}
+                      {formatCurrency(template.total_debit || 0)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={template.is_active ? "default" : "secondary"}>
@@ -846,10 +848,10 @@ export default function RecurringJournalEntries() {
                       {t('totals')}:
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${formTotals.totalDebit.toFixed(2)}
+                      {formatCurrency(formTotals.totalDebit)}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${formTotals.totalCredit.toFixed(2)}
+                      {formatCurrency(formTotals.totalCredit)}
                     </TableCell>
                     <TableCell>
                       {formTotals.isBalanced ? (
@@ -864,7 +866,7 @@ export default function RecurringJournalEntries() {
 
               {!formTotals.isBalanced && (
                 <p className="text-sm text-red-500">
-                  {t('debits_credits_must_equal')} ({t('difference')}: ${Math.abs(formTotals.totalDebit - formTotals.totalCredit).toFixed(2)})
+                  {t('debits_credits_must_equal')} ({t('difference')}: {formatCurrency(Math.abs(formTotals.totalDebit - formTotals.totalCredit))})
                 </p>
               )}
             </div>
@@ -952,10 +954,10 @@ export default function RecurringJournalEntries() {
                       <TableRow key={i}>
                         <TableCell>{getAccountName(line.account_id)}</TableCell>
                         <TableCell className="text-right">
-                          {line.debit_amount > 0 ? `$${line.debit_amount.toLocaleString()}` : '-'}
+                          {line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-'}
                         </TableCell>
                         <TableCell className="text-right">
-                          {line.credit_amount > 0 ? `$${line.credit_amount.toLocaleString()}` : '-'}
+                          {line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-'}
                         </TableCell>
                       </TableRow>
                     ))}

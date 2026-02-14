@@ -55,10 +55,12 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Discounts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     discounts,
     createDiscount,
@@ -216,7 +218,7 @@ export default function Discounts() {
     if (result && result.messageKey) {
       result.message = t(result.messageKey);
       if (result.minAmount) {
-        result.message = `${t('min_order_amount')}: ${result.minAmount.toLocaleString()}`;
+        result.message = `${t('min_order_amount')}: ${formatCurrency(result.minAmount)}`;
       }
     }
     setTestData({ ...testData, result });
@@ -256,10 +258,6 @@ export default function Discounts() {
       vip: t('vip_customers'),
     };
     return labels[appliesTo] || appliesTo;
-  };
-
-  const formatCurrency = (amount) => {
-    return `${(amount || 0).toLocaleString()} ${t('currency_symbol')}`;
   };
 
   const getUsageProgress = (discount) => {

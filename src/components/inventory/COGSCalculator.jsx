@@ -7,10 +7,12 @@ import { Calculator, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function COGSCalculator({ items, movements }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const [cogsCalculations, setCogsCalculations] = useState([]);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -21,9 +23,9 @@ export default function COGSCalculator({ items, movements }) {
       method: 'FIFO',
       unitCost: avgCost,
       totalCost: avgCost * saleQuantity,
-      explanation: `FIFO: Using oldest stock first at $${avgCost.toFixed(2)} per unit`
+      explanation: `FIFO: Using oldest stock first at ${formatCurrency(avgCost)} per unit`
     };
-  }, []); // No external dependencies
+  }, [formatCurrency]); // formatCurrency dependency
 
   const calculateWACCOGS = useCallback((item, saleQuantity) => {
     // Simulate WAC calculation for demo
@@ -32,9 +34,9 @@ export default function COGSCalculator({ items, movements }) {
       method: 'WAC',
       unitCost: avgCost,
       totalCost: avgCost * saleQuantity,
-      explanation: `Weighted Average: $${avgCost.toFixed(2)} per unit based on inventory pool`
+      explanation: `Weighted Average: ${formatCurrency(avgCost)} per unit based on inventory pool`
     };
-  }, []); // No external dependencies
+  }, [formatCurrency]); // formatCurrency dependency
 
   const calculateLIFOCOGS = useCallback((item, saleQuantity) => {
     // Simulate LIFO calculation for demo
@@ -43,9 +45,9 @@ export default function COGSCalculator({ items, movements }) {
       method: 'LIFO',
       unitCost: avgCost,
       totalCost: avgCost * saleQuantity,
-      explanation: `LIFO: Using newest stock first at $${avgCost.toFixed(2)} per unit`
+      explanation: `LIFO: Using newest stock first at ${formatCurrency(avgCost)} per unit`
     };
-  }, []); // No external dependencies
+  }, [formatCurrency]); // formatCurrency dependency
 
   const calculateCOGS = useCallback(() => {
     setIsCalculating(true);
@@ -182,20 +184,20 @@ export default function COGSCalculator({ items, movements }) {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">${calc.calculations.fifo.totalCost.toFixed(2)}</div>
-                          <div className="text-xs text-slate-500">${calc.calculations.fifo.unitCost.toFixed(2)}/unit</div>
+                          <div className="font-medium">{formatCurrency(calc.calculations.fifo.totalCost)}</div>
+                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.fifo.unitCost)}/unit</div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">${calc.calculations.wac.totalCost.toFixed(2)}</div>
-                          <div className="text-xs text-slate-500">${calc.calculations.wac.unitCost.toFixed(2)}/unit</div>
+                          <div className="font-medium">{formatCurrency(calc.calculations.wac.totalCost)}</div>
+                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.wac.unitCost)}/unit</div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">${calc.calculations.lifo.totalCost.toFixed(2)}</div>
-                          <div className="text-xs text-slate-500">${calc.calculations.lifo.unitCost.toFixed(2)}/unit</div>
+                          <div className="font-medium">{formatCurrency(calc.calculations.lifo.totalCost)}</div>
+                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.lifo.unitCost)}/unit</div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -208,7 +210,7 @@ export default function COGSCalculator({ items, movements }) {
                             
                             return (
                               <div className={`${diff > 0 ? 'text-red-600' : diff < 0 ? 'text-green-600' : 'text-slate-600'}`}>
-                                {diff > 0 ? '+' : ''}${diff.toFixed(2)}
+                                {diff > 0 ? '+' : ''}{formatCurrency(diff)}
                                 <div className="text-xs">({pctDiff.toFixed(1)}%)</div>
                               </div>
                             );
@@ -232,19 +234,19 @@ export default function COGSCalculator({ items, movements }) {
                 <div>
                   <div className="font-medium">{t('total_fifo_cogs')}</div>
                   <div className="text-lg text-green-600">
-                    ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.fifo.totalCost, 0).toFixed(2)}
+                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.fifo.totalCost, 0))}
                   </div>
                 </div>
                 <div>
                   <div className="font-medium">{t('total_wac_cogs')}</div>
                   <div className="text-lg text-blue-600">
-                    ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.wac.totalCost, 0).toFixed(2)}
+                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.wac.totalCost, 0))}
                   </div>
                 </div>
                 <div>
                   <div className="font-medium">{t('total_lifo_cogs')}</div>
                   <div className="text-lg text-orange-600">
-                    ${cogsCalculations.reduce((sum, calc) => sum + calc.calculations.lifo.totalCost, 0).toFixed(2)}
+                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.lifo.totalCost, 0))}
                   </div>
                 </div>
               </div>

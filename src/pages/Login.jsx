@@ -4,6 +4,7 @@ import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
+import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
 import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
 
@@ -15,7 +16,8 @@ export default function Login() {
   const [tenants, setTenants] = useState(null);
   const [selectedTenantId, setSelectedTenantId] = useState(null);
   const [shouldNavigate, setShouldNavigate] = useState(false);
-  const { login, backendAvailable, isAuthenticated, user } = useAuth();
+  const [googleCredential, setGoogleCredential] = useState(null);
+  const { login, loginWithGoogle, backendAvailable, isAuthenticated, user } = useAuth();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const navigate = useNavigate();
@@ -50,7 +52,10 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password, tenantId);
+    // Use Google auth if we have a stored credential
+    const result = googleCredential
+      ? await loginWithGoogle(googleCredential, tenantId)
+      : await login(email, password, tenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -60,9 +65,33 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async (credential) => {
+    setError('');
+    setIsLoading(true);
+
+    const result = await loginWithGoogle(credential);
+
+    if (result.success) {
+      setShouldNavigate(true);
+    } else if (result.tenantSelectionRequired) {
+      setGoogleCredential(credential);
+      setTenants(result.tenants);
+      setError('');
+      setIsLoading(false);
+    } else if (result.needsCompletion) {
+      // New Google user — redirect to register page (they'll need to provide company name)
+      navigate('/register?google=1');
+      setIsLoading(false);
+    } else {
+      setError(result.error);
+      setIsLoading(false);
+    }
+  };
+
   const handleBackToLogin = () => {
     setTenants(null);
     setSelectedTenantId(null);
+    setGoogleCredential(null);
     setError('');
   };
 
@@ -195,6 +224,12 @@ export default function Login() {
               )}
             </button>
           </form>
+
+          <div className="login-divider">
+            <span>{t('or_continue_with') || 'Or continue with'}</span>
+          </div>
+
+          <GoogleSignInButton onSuccess={handleGoogleLogin} text="signin_with" />
 
           {backendAvailable && (
             <p className="login-register">

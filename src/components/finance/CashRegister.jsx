@@ -19,6 +19,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // O'zbekiston BHMS accounting accounts for cash operations
 const ACCOUNTING_ACCOUNTS = [
@@ -52,6 +53,7 @@ export default function CashRegister() {
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredTransactions, setFilteredTransactions] = useState([]);
@@ -179,13 +181,6 @@ export default function CashRegister() {
     } catch (err) {
       console.error('Error confirming order:', err);
     }
-  };
-
-  const formatCurrency = (amount, currency = 'UZS') => {
-    if (currency === 'UZS') {
-      return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-    }
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
   };
 
   const getStatusBadge = (status) => {

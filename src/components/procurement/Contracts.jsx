@@ -50,6 +50,7 @@ import { useProcurement } from "@/components/contexts/ProcurementContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 
 export default function Contracts() {
@@ -64,6 +65,7 @@ export default function Contracts() {
     isLoading,
   } = useProcurement();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -269,13 +271,6 @@ export default function Contracts() {
         icon: CheckCircle2,
       };
     }
-  };
-
-  const formatCurrency = (amount, currency) => {
-    if (currency === "UZS") {
-      return `${(amount || 0).toLocaleString()} so'm`;
-    }
-    return `$${(amount || 0).toLocaleString()}`;
   };
 
   return (

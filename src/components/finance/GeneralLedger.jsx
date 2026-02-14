@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,7 +13,10 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
+import financeService from "@/api/services/finance";
+import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -27,6 +30,7 @@ export default function GeneralLedger() {
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,16 +59,33 @@ export default function GeneralLedger() {
     if (searchQuery) {
       filtered = journalEntries.filter(entry =>
         entry.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        entry.journal_number?.toLowerCase().includes(searchQuery.toLowerCase())
+        entry.entry_number?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     setFilteredEntries(filtered);
   }, [searchQuery, journalEntries]);
 
-  const handleSelectEntry = (entry) => {
+  const [isLoadingLines, setIsLoadingLines] = useState(false);
+
+  const handleSelectEntry = async (entry) => {
     setSelectedEntry(entry);
-    const lines = getJournalLines(entry.id);
-    setSelectedJournalLines(lines);
+    setSelectedJournalLines([]);
+    setIsLoadingLines(true);
+    try {
+      const fullEntry = await financeService.getJournalEntry(entry.id);
+      if (fullEntry?.lines) {
+        setSelectedJournalLines(fullEntry.lines);
+      } else {
+        const lines = getJournalLines(entry.id);
+        setSelectedJournalLines(lines);
+      }
+    } catch (err) {
+      console.error('Failed to fetch journal entry lines:', err);
+      const lines = getJournalLines(entry.id);
+      setSelectedJournalLines(lines);
+    } finally {
+      setIsLoadingLines(false);
+    }
   };
 
   const handleCreateEntry = async () => {
@@ -72,7 +93,7 @@ export default function GeneralLedger() {
     try {
       // Filter out empty lines and validate
       const validLines = newEntry.lines.filter(line =>
-        line.account_id && (line.debit_amount > 0 || line.credit_amount > 0)
+        line.account_id && (parseFloat(line.debit_amount) > 0 || parseFloat(line.credit_amount) > 0)
       );
 
       if (validLines.length < 2) {
@@ -91,17 +112,47 @@ export default function GeneralLedger() {
         return;
       }
 
+      // Split lines that have both debit and credit into two separate backend lines
+      const processedLines = [];
+      for (const line of validLines) {
+        const debit = parseFloat(line.debit_amount) || 0;
+        const credit = parseFloat(line.credit_amount) || 0;
+        if (debit > 0 && credit > 0) {
+          // Split into two lines with the same account
+          processedLines.push({
+            account_id: line.account_id,
+            description: line.description || '',
+            debit_amount: debit,
+            credit_amount: 0
+          });
+          processedLines.push({
+            account_id: line.account_id,
+            description: line.description || '',
+            debit_amount: 0,
+            credit_amount: credit
+          });
+        } else if (debit > 0 || credit > 0) {
+          processedLines.push({
+            account_id: line.account_id,
+            description: line.description || '',
+            debit_amount: debit,
+            credit_amount: credit
+          });
+        }
+      }
+
+      if (processedLines.length < 2) {
+        alert(t('minimum_two_lines_required'));
+        setIsSaving(false);
+        return;
+      }
+
       const entryData = {
         journal_id: newEntry.journal_id,
         entry_date: newEntry.entry_date,
         description: newEntry.description,
         reference: newEntry.reference,
-        lines: validLines.map(line => ({
-          account_id: line.account_id,
-          description: line.description || '',
-          debit_amount: parseFloat(line.debit_amount) || 0,
-          credit_amount: parseFloat(line.credit_amount) || 0
-        }))
+        lines: processedLines
       };
 
       await createJournalEntry(entryData);
@@ -121,6 +172,8 @@ export default function GeneralLedger() {
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating journal entry:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to create journal entry';
+      alert(msg);
     } finally {
       setIsSaving(false);
     }
@@ -148,6 +201,75 @@ export default function GeneralLedger() {
         i === index ? { ...line, [field]: value } : line
       )
     }));
+  };
+
+  const handleEditEntry = () => {
+    if (!selectedEntry) return;
+    if (selectedEntry.status === 'posted') {
+      alert(t('cannot_edit_posted_entry') || 'Posted entries cannot be edited. Reverse the entry first.');
+      return;
+    }
+    setNewEntry({
+      journal_id: selectedEntry.journal_id || '',
+      entry_date: selectedEntry.entry_date ? new Date(selectedEntry.entry_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      description: selectedEntry.description || '',
+      reference: selectedEntry.reference || '',
+      lines: selectedJournalLines.length > 0
+        ? selectedJournalLines.map(line => ({
+            account_id: line.account_id || '',
+            description: line.description || '',
+            debit_amount: line.debit_amount || 0,
+            credit_amount: line.credit_amount || 0,
+          }))
+        : [
+            { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+            { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
+          ]
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleViewPDF = () => {
+    if (!selectedEntry) return;
+    const lines = selectedJournalLines.map(line => ({
+      account: line.account ? `${line.account.code} - ${line.account.name}` : (line.account_code ? `${line.account_code} - ${line.account_name}` : '-'),
+      description: line.description || '-',
+      debit: line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-',
+      credit: line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-',
+    }));
+
+    const statusMap = {
+      posted: t('posted') || 'Posted',
+      draft: t('draft') || 'Draft',
+      cancelled: t('cancelled') || 'Cancelled',
+      reversed: t('reversed') || 'Reversed',
+    };
+
+    const doc = generateDocumentPDF({
+      template: 'invoice',
+      title: t('journal_entry') || 'Buxgalteriya yozuvi',
+      documentNumber: selectedEntry.entry_number,
+      documentDate: selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'dd.MM.yyyy') : '',
+      dateLabel: t('date') || 'Date',
+      headerFields: [
+        { label: t('description') || 'Description', value: selectedEntry.description || '-' },
+        { label: t('status') || 'Status', value: statusMap[selectedEntry.status] || selectedEntry.status || '-' },
+        { label: t('reference') || 'Reference', value: selectedEntry.reference || '-' },
+        { label: t('total') || 'Total', value: formatCurrency(selectedEntry.total_debit || 0) },
+      ],
+      tableColumns: [
+        { key: 'account', label: t('account') || 'Account', width: 55 },
+        { key: 'description', label: t('description') || 'Description', width: 55 },
+        { key: 'debit', label: t('debit') || 'Debit', align: 'right', width: 35 },
+        { key: 'credit', label: t('credit') || 'Credit', align: 'right', width: 35 },
+      ],
+      tableData: lines,
+      totals: [
+        { label: `${t('total')} ${t('debit')}`, value: formatCurrency(selectedEntry.total_debit || 0), bold: true },
+        { label: `${t('total')} ${t('credit')}`, value: formatCurrency(selectedEntry.total_credit || 0), bold: true },
+      ],
+    });
+    doc.save(`${selectedEntry.entry_number || 'journal-entry'}.pdf`);
   };
 
   // Calculate totals for display
@@ -277,12 +399,12 @@ export default function GeneralLedger() {
                         }`}
                       >
                         <TableCell className="font-medium text-slate-700">
-                          {entry.posting_date ? format(new Date(entry.posting_date), 'MMM dd, yyyy') : '-'}
+                          {entry.entry_date ? format(new Date(entry.entry_date), 'MMM dd, yyyy') : '-'}
                         </TableCell>
-                        <TableCell className="font-mono text-sm text-slate-600">{entry.journal_number}</TableCell>
+                        <TableCell className="font-mono text-sm text-slate-600">{entry.entry_number}</TableCell>
                         <TableCell className="text-slate-700">{entry.description}</TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                          ${(entry.total_debit || 0).toLocaleString()}
+                          {formatCurrency(entry.total_debit || 0)}
                         </TableCell>
                         <TableCell>
                           <Badge className={`${getStatusColor(entry.status)} flex items-center gap-1 w-fit`}>
@@ -319,7 +441,7 @@ export default function GeneralLedger() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-lg text-slate-900 truncate">{selectedEntry.description}</h3>
-                      <p className="text-sm text-slate-500 font-mono mt-1">#{selectedEntry.journal_number}</p>
+                      <p className="text-sm text-slate-500 font-mono mt-1">#{selectedEntry.entry_number}</p>
                     </div>
                     <Badge className={getStatusColor(selectedEntry.status)}>
                       {selectedEntry.status}
@@ -329,13 +451,13 @@ export default function GeneralLedger() {
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-xs text-slate-500 mb-1">{t('date')}</p>
                       <p className="text-sm font-semibold text-slate-900">
-                        {selectedEntry.posting_date ? format(new Date(selectedEntry.posting_date), 'MMM dd, yyyy') : '-'}
+                        {selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'MMM dd, yyyy') : '-'}
                       </p>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
                       <p className="text-sm font-semibold text-slate-900 tabular-nums">
-                        ${(selectedEntry.total_debit || 0).toLocaleString()}
+                        {formatCurrency(selectedEntry.total_debit || 0)}
                       </p>
                     </div>
                   </div>
@@ -348,23 +470,29 @@ export default function GeneralLedger() {
                     {t('journal_lines')}
                   </h4>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {selectedJournalLines.length > 0 ? (
+                    {isLoadingLines ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                      </div>
+                    ) : selectedJournalLines.length > 0 ? (
                       selectedJournalLines.map(line => (
                         <div key={line.id} className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                           <div className="flex justify-between items-start mb-2">
-                            <p className="text-sm font-medium text-slate-700 flex-1 pr-2">{line.description}</p>
+                            <p className="text-sm font-medium text-slate-700 flex-1 pr-2">
+                              {line.account ? `${line.account.code} - ${line.account.name}` : line.description}
+                            </p>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <p className="text-xs text-slate-500 mb-1">{t('debit')}</p>
                               <p className="text-sm font-semibold text-green-600 tabular-nums">
-                                {line.debit_amount > 0 ? `$${line.debit_amount.toLocaleString()}` : '-'}
+                                {line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-'}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-slate-500 mb-1">{t('credit')}</p>
                               <p className="text-sm font-semibold text-red-600 tabular-nums">
-                                {line.credit_amount > 0 ? `$${line.credit_amount.toLocaleString()}` : '-'}
+                                {line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-'}
                               </p>
                             </div>
                           </div>
@@ -383,17 +511,29 @@ export default function GeneralLedger() {
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-slate-900">{t('total')} {t('debit')}/{t('credit')}</span>
                     <span className="text-lg font-bold text-[var(--genix-blue)] tabular-nums">
-                      ${(selectedEntry.total_debit || 0).toLocaleString()}
+                      {formatCurrency(selectedEntry.total_debit || 0)}
                     </span>
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1 text-sm">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-sm"
+                    onClick={handleEditEntry}
+                    disabled={selectedEntry.status === 'posted'}
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
                     {t('edit')}
                   </Button>
-                  <Button variant="outline" className="flex-1 text-sm">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-sm"
+                    onClick={handleViewPDF}
+                    disabled={isLoadingLines}
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
                     {t('view')} PDF
                   </Button>
                 </div>
@@ -544,10 +684,7 @@ export default function GeneralLedger() {
                             type="number"
                             placeholder="0.00"
                             value={line.debit_amount || ''}
-                            onChange={(e) => {
-                              updateLine(index, 'debit_amount', e.target.value);
-                              if (e.target.value > 0) updateLine(index, 'credit_amount', 0);
-                            }}
+                            onChange={(e) => updateLine(index, 'debit_amount', e.target.value)}
                           />
                         </TableCell>
                         <TableCell className="p-2">
@@ -556,10 +693,7 @@ export default function GeneralLedger() {
                             type="number"
                             placeholder="0.00"
                             value={line.credit_amount || ''}
-                            onChange={(e) => {
-                              updateLine(index, 'credit_amount', e.target.value);
-                              if (e.target.value > 0) updateLine(index, 'debit_amount', 0);
-                            }}
+                            onChange={(e) => updateLine(index, 'credit_amount', e.target.value)}
                           />
                         </TableCell>
                         <TableCell className="p-2">

@@ -100,11 +100,13 @@ export function AuthProvider({ children }) {
       const userData = { ...apiUser, role: deriveRole(apiUser) };
       setUser(userData);
       setIsAuthenticated(true);
+      localStorage.setItem('genixerp_user', JSON.stringify(userData));
       return userData;
     } catch (err) {
       // Token invalid or expired - clear auth state
       setUser(null);
       setIsAuthenticated(false);
+      localStorage.removeItem('genixerp_user');
       throw err;
     }
   }, []);
@@ -172,6 +174,7 @@ export function AuthProvider({ children }) {
         const userData = { ...data.user, role: deriveRole(data.user) };
         setUser(userData);
         setIsAuthenticated(true);
+        localStorage.setItem('genixerp_user', JSON.stringify(userData));
         return { success: true, data };
       } else {
         // Fallback to demo users when backend unavailable
@@ -294,6 +297,49 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential, tenantId = null, companyName = null) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const isAvailable = await checkBackendAvailable();
+      setBackendAvailable(isAvailable);
+
+      if (!isAvailable) {
+        throw new Error('Backend is not available for Google authentication');
+      }
+
+      const data = await authService.googleAuth(credential, tenantId, companyName);
+
+      // If needs_completion, return so frontend can show company name form
+      if (data.needs_completion) {
+        return { success: false, needsCompletion: true, googleUser: data.google_user };
+      }
+
+      const userData = { ...data.user, role: deriveRole(data.user) };
+      setUser(userData);
+      setIsAuthenticated(true);
+      localStorage.setItem('genixerp_user', JSON.stringify(userData));
+      return { success: true, data, isNewUser: !!data.is_new_user };
+    } catch (err) {
+      // Handle tenant selection required (same as login)
+      if (err.response?.status === 409 && err.response?.data?.data?.tenants) {
+        return {
+          success: false,
+          tenantSelectionRequired: true,
+          tenants: err.response.data.data.tenants,
+          error: 'Please select a company to continue'
+        };
+      }
+      const message = err.response?.data?.error?.message || err.message || 'Google authentication failed';
+      setError(message);
+      setIsAuthenticated(false);
+      return { success: false, error: message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -303,8 +349,9 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setIsAuthenticated(false);
-      // Clear demo session and tenant info
+      // Clear demo session, user data and tenant info
       localStorage.removeItem('demo_session');
+      localStorage.removeItem('genixerp_user');
       localStorage.removeItem('tenantId');
       setIsLoading(false);
     }
@@ -445,6 +492,7 @@ export function AuthProvider({ children }) {
     login,
     register,
     registerWithOTP,
+    loginWithGoogle,
     logout,
     updateUser,
     changePassword,

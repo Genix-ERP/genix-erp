@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
@@ -21,6 +22,7 @@ import { contactsService } from "@/api/services";
 export default function Payments() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     payments,
     accounts,
@@ -51,6 +53,7 @@ export default function Payments() {
     reference: '',
     description: '',
     contact_id: '',
+    account_id: '',
     bill_id: '', // Link to vendor bill
   });
 
@@ -127,6 +130,7 @@ export default function Payments() {
         amount: parseFloat(newPayment.amount) || 0,
         reference: newPayment.reference,
         notes: newPayment.description,
+        bank_account_id: newPayment.account_id || undefined,
         // Keep frontend fields for UI display
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
@@ -147,6 +151,7 @@ export default function Payments() {
         reference: '',
         description: '',
         contact_id: '',
+        account_id: '',
         bill_id: '',
       });
 
@@ -222,7 +227,7 @@ export default function Payments() {
               <div>
                 <p className="text-sm text-slate-500">{t('total_received')}</p>
                 <p className="text-2xl font-bold text-green-600">
-                  ${summaryStats.totalInbound.toLocaleString()}
+                  {formatCurrency(summaryStats.totalInbound)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -238,7 +243,7 @@ export default function Payments() {
               <div>
                 <p className="text-sm text-slate-500">{t('total_paid')}</p>
                 <p className="text-2xl font-bold text-red-600">
-                  ${summaryStats.totalOutbound.toLocaleString()}
+                  {formatCurrency(summaryStats.totalOutbound)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -439,7 +444,7 @@ export default function Payments() {
                         <TableCell className={`text-right font-semibold tabular-nums ${
                           payment.payment_type === 'inbound' ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {payment.payment_type === 'inbound' ? '+' : '-'}${(payment.amount || 0).toLocaleString()}
+                          {payment.payment_type === 'inbound' ? '+' : '-'}{formatCurrency(payment.amount || 0)}
                         </TableCell>
                         <TableCell>
                           <Badge className={`${getStatusColor(payment.status)} flex items-center gap-1 w-fit`}>
@@ -570,6 +575,10 @@ export default function Payments() {
                 <Select
                   value={newPayment.bill_id}
                   onValueChange={(value) => {
+                    if (value === '__none__') {
+                      setNewPayment({...newPayment, bill_id: ''});
+                      return;
+                    }
                     const selectedBill = unpaidBills.find(b => b.id === value);
                     if (selectedBill) {
                       setNewPayment({
@@ -588,7 +597,7 @@ export default function Payments() {
                     <SelectValue placeholder={t('select_bill') || 'Select a bill to pay'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">
+                    <SelectItem value="__none__">
                       <span className="text-slate-500">{t('no_bill') || 'No specific bill'}</span>
                     </SelectItem>
                     {unpaidBills.map(bill => (
@@ -599,7 +608,7 @@ export default function Payments() {
                             {bill.partner_name || bill.vendor_name}
                           </span>
                           <span className="font-semibold text-red-600">
-                            ${(bill.amount_due || bill.total_amount || 0).toLocaleString()}
+                            {formatCurrency(bill.amount_due || bill.total_amount || 0)}
                           </span>
                         </div>
                       </SelectItem>
@@ -744,7 +753,7 @@ export default function Payments() {
                     <p className={`text-2xl font-bold ${
                       selectedPayment.payment_type === 'inbound' ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      ${(selectedPayment.amount || 0).toLocaleString()}
+                      {formatCurrency(selectedPayment.amount || 0)}
                     </p>
                   </div>
                 </div>

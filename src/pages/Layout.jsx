@@ -25,7 +25,8 @@ import {
   Shield,
   LogOut,
   Cog,
-  Ship
+  Ship,
+  Building2
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ import { HRProvider } from "@/components/contexts/HRContext";
 import { ProjectsProvider } from "@/components/contexts/ProjectsContext";
 import { AdminSettingsProvider } from "@/components/contexts/AdminSettingsContext";
 import { CargoProvider } from "@/components/contexts/CargoContext";
+import { ConstructionProvider } from "@/components/contexts/ConstructionContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
@@ -267,6 +269,13 @@ function LayoutContent({ children, currentPageName }) {
       icon: Ship,
       badge: null,
       moduleId: 'cargo'
+    },
+    'construction': {
+      title: t("construction") || 'Qurilish',
+      url: createPageUrl("Construction"),
+      icon: Building2,
+      badge: null,
+      moduleId: 'construction'
     }
   }), [t]);
 
@@ -521,9 +530,11 @@ export default function Layout({ children, currentPageName }) {
                               <HRProvider>
                                 <ProjectsProvider>
                                   <CargoProvider>
-                                    <AIProvider>
-                                      <LayoutContent children={children} currentPageName={currentPageName} />
-                                    </AIProvider>
+                                    <ConstructionProvider>
+                                      <AIProvider>
+                                        <LayoutContent children={children} currentPageName={currentPageName} />
+                                      </AIProvider>
+                                    </ConstructionProvider>
                                   </CargoProvider>
                                 </ProjectsProvider>
                               </HRProvider>

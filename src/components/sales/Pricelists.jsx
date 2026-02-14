@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { pricelistsService } from '@/api/services/pricelists';
 import { inventoryService } from '@/api/services/inventory';
 import { format } from 'date-fns';
@@ -33,6 +34,7 @@ import { format } from 'date-fns';
 export default function Pricelists() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [pricelists, setPricelists] = useState([]);
   const [products, setProducts] = useState([]);
@@ -93,7 +95,7 @@ export default function Pricelists() {
     try {
       const [productsData, categoriesData] = await Promise.all([
         inventoryService.listProducts({ limit: 500 }),
-        inventoryService.listProductCategories()
+        inventoryService.listCategories()
       ]);
       setProducts(Array.isArray(productsData) ? productsData : productsData?.items || []);
       setCategories(Array.isArray(categoriesData) ? categoriesData : categoriesData?.items || []);
@@ -281,7 +283,7 @@ export default function Pricelists() {
   const getComputePriceLabel = (item) => {
     switch (item.compute_price) {
       case 'fixed_price':
-        return `${(item.fixed_price || 0).toLocaleString()} UZS`;
+        return formatCurrency(item.fixed_price || 0);
       case 'percentage':
         return `${item.percent_price}% ${t('discount') || 'discount'}`;
       case 'formula':

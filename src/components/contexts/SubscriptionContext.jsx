@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthContext';
 
 const SUBSCRIPTION_KEY = 'genix_company_subscription';
 const AI_USAGE_KEY = 'genix_ai_usage';
@@ -166,6 +167,7 @@ const FEATURE_DESCRIPTIONS = {
 const SubscriptionContext = createContext();
 
 export function SubscriptionProvider({ children }) {
+  const { user: authUser } = useAuth();
   const [subscription, setSubscription] = useState(null);
   const [aiUsage, setAiUsage] = useState({ count: 0, month: null });
   const [companyUsers, setCompanyUsers] = useState([]);
@@ -173,57 +175,50 @@ export function SubscriptionProvider({ children }) {
 
   // Check if current user is a site admin (full system access)
   const isSystemAdmin = useCallback(() => {
-    try {
-      // Check both possible localStorage keys
-      const userData = localStorage.getItem('user') || localStorage.getItem('genixerp_user');
-      if (!userData) return false;
+    // First check auth context user (source of truth)
+    const user = authUser || (() => {
+      try {
+        const stored = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
+        return stored ? JSON.parse(stored) : null;
+      } catch { return null; }
+    })();
+    if (!user) return false;
 
-      const user = JSON.parse(userData);
-
-      // Check various site admin indicators
-      if (user.is_system_admin) return true;
-      if (user.role === 'site_admin' || user.role === 'system_admin') return true;
-      if (user.roles && Array.isArray(user.roles)) {
-        const hasSiteAdminRole = user.roles.some(r =>
-          r.code === 'site_admin' || r.code === 'system_admin'
-        );
-        if (hasSiteAdminRole) return true;
-      }
-      // Fallback for known admin email
-      if (user.email === 'admin@genixerp.com') return true;
-
-      return false;
-    } catch {
-      return false;
+    if (user.is_system_admin) return true;
+    if (user.role === 'site_admin' || user.role === 'system_admin') return true;
+    if (user.roles && Array.isArray(user.roles)) {
+      const hasSiteAdminRole = user.roles.some(r =>
+        r.code === 'site_admin' || r.code === 'system_admin'
+      );
+      if (hasSiteAdminRole) return true;
     }
-  }, []);
+    if (user.email === 'admin@genixerp.com') return true;
+
+    return false;
+  }, [authUser]);
 
   // Check if current user is an owner (company owner with subscription control)
   const isOwner = useCallback(() => {
-    try {
-      const userData = localStorage.getItem('user') || localStorage.getItem('genixerp_user');
-      if (!userData) return false;
+    const user = authUser || (() => {
+      try {
+        const stored = localStorage.getItem('genixerp_user') || localStorage.getItem('user');
+        return stored ? JSON.parse(stored) : null;
+      } catch { return null; }
+    })();
+    if (!user) return false;
 
-      const user = JSON.parse(userData);
-
-      // Site admins are also owners (they have all permissions)
-      if (user.is_system_admin || user.role === 'site_admin') return true;
-      // Check owner role
-      if (user.role === 'owner' || user.role === 'company_owner') return true;
-      if (user.roles && Array.isArray(user.roles)) {
-        const hasOwnerRole = user.roles.some(r =>
-          r.code === 'owner' || r.code === 'company_owner'
-        );
-        if (hasOwnerRole) return true;
-      }
-      // Owner demo account
-      if (user.email === 'owner@genixerp.com') return true;
-
-      return false;
-    } catch {
-      return false;
+    if (user.is_system_admin || user.role === 'site_admin') return true;
+    if (user.role === 'owner' || user.role === 'company_owner') return true;
+    if (user.roles && Array.isArray(user.roles)) {
+      const hasOwnerRole = user.roles.some(r =>
+        r.code === 'owner' || r.code === 'company_owner'
+      );
+      if (hasOwnerRole) return true;
     }
-  }, []);
+    if (user.email === 'owner@genixerp.com') return true;
+
+    return false;
+  }, [authUser]);
 
   // Load subscription from storage
   const loadSubscription = useCallback(() => {

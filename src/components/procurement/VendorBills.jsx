@@ -48,6 +48,7 @@ import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services/inventory';
 
@@ -55,6 +56,7 @@ export default function VendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -1023,7 +1025,7 @@ export default function VendorBills() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span>{t('total_variance') || 'Total Variance'}:</span>
-                    <Badge variant="success">0 UZS</Badge>
+                    <Badge variant="success">{formatCurrency(0)}</Badge>
                   </div>
                 </div>
               </div>

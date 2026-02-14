@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useModules } from '@/components/contexts/ModulesContext';
-import { useAuth } from '@/components/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +15,7 @@ import { analyzeExpenses } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
@@ -23,9 +23,9 @@ const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 export default function Expenses() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { user } = useAuth();
-  const { expenses, createExpense, updateExpense, isLoading } = useModules();
+  const { expenses, createExpense, updateExpense, isLoading, employees } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   // AI Analysis
   const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
@@ -41,7 +41,7 @@ export default function Expenses() {
 
   const [newClaim, setNewClaim] = useState({
     claim_number: '',
-    employee_name: user?.full_name || '',
+    employee_name: '',
     expense_date: new Date().toISOString().split('T')[0],
     category: 'travel',
     amount: 0,
@@ -78,7 +78,7 @@ export default function Expenses() {
 
       setNewClaim({
         claim_number: '',
-        employee_name: user?.full_name || '',
+        employee_name: '',
         expense_date: new Date().toISOString().split('T')[0],
         category: 'travel',
         amount: 0,
@@ -278,7 +278,7 @@ export default function Expenses() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('total_amount')}</p>
-                  <p className="text-2xl font-bold text-slate-900">${metrics.totalAmount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalAmount)}</p>
                 </div>
               </div>
             </CardContent>
@@ -388,7 +388,7 @@ export default function Expenses() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Legend
                     layout="horizontal"
                     align="center"
@@ -485,7 +485,7 @@ export default function Expenses() {
                           <TableCell>
                             <Badge variant="outline">{t(claim.category)}</Badge>
                           </TableCell>
-                          <TableCell className="font-semibold">${(claim.amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(claim.amount || 0)}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(claim.status)}>{t(claim.status)}</Badge>
                           </TableCell>
@@ -553,12 +553,19 @@ export default function Expenses() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('employee_name')}</label>
-                  <Input
-                    value={newClaim.employee_name}
-                    disabled
-                    className="bg-slate-50 text-slate-600"
-                  />
+                  <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
+                  <Select value={newClaim.employee_name} onValueChange={(value) => setNewClaim({...newClaim, employee_name: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_employee')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(employees || []).map((emp) => (
+                        <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                          {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -617,7 +624,7 @@ export default function Expenses() {
                 <Button
                   onClick={handleCreateClaim}
                   className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  disabled={!newClaim.amount || isSubmitting}
+                  disabled={!newClaim.amount || !newClaim.employee_name || isSubmitting}
                 >
                   {isSubmitting ? t('submitting') : t('submit_claim')}
                 </Button>
@@ -665,10 +672,18 @@ export default function Expenses() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
-                    <Input
-                      value={editClaim.employee_name}
-                      onChange={(e) => setEditClaim({...editClaim, employee_name: e.target.value})}
-                    />
+                    <Select value={editClaim.employee_name} onValueChange={(value) => setEditClaim({...editClaim, employee_name: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_employee')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(employees || []).map((emp) => (
+                          <SelectItem key={emp.id} value={emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}>
+                            {emp.full_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 

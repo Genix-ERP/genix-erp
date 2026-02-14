@@ -14,17 +14,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import financeService from '@/api/services/finance';
-
-// Helper to format currency
-const formatCurrency = (amount, decimals = 2) => {
-  if (amount === null || amount === undefined) return '$0.00';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
-  }).format(amount);
-};
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Helper to get date range for period filter
 const getDateParams = (period) => {
@@ -73,6 +63,7 @@ const getPeriodLabel = (period, language) => {
 export default function FinancialReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const reportRef = useRef(null);
 
   const [period, setPeriod] = useState('current_month');

@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { 
   DollarSign,
   Calendar,
@@ -31,6 +32,7 @@ export default function KanbanCard({
   onAddNote,
   onEdit 
 }) {
+  const { formatCurrency } = useCurrencyFormatter();
   const getProbabilityColor = (probability) => {
     if (probability >= 80) return 'text-green-600';
     if (probability >= 50) return 'text-yellow-600';
@@ -81,7 +83,7 @@ export default function KanbanCard({
         <div className="flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-green-600" />
           <span className="font-medium text-green-600">
-            ${card.amount.toLocaleString()}
+            {formatCurrency(card.amount)}
           </span>
         </div>
 

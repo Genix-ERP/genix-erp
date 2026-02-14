@@ -64,6 +64,47 @@ export const authService = {
     return response.data.data;
   },
 
+  // Google authentication (sign-in or sign-up)
+  async googleAuth(credential, tenantId = null, companyName = null) {
+    const payload = { credential };
+    if (tenantId) payload.tenant_id = tenantId;
+    if (companyName) payload.company_name = companyName;
+
+    const res = await apiClient.post('/auth/google', payload);
+    const data = res.data.data;
+
+    // If needs_completion, return early (no tokens yet)
+    if (data.needs_completion) {
+      return data;
+    }
+
+    const { access_token, refresh_token, user } = data;
+    setTokens(access_token, refresh_token);
+    if (user.tenant_id) {
+      localStorage.setItem('tenantId', user.tenant_id);
+    }
+
+    // If new user, create initial organization
+    if (data.is_new_user) {
+      try {
+        const cName = companyName || `${user.first_name}'s Company`;
+        const cCode = cName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'MAIN';
+        await apiClient.post('/organizations', {
+          code: cCode,
+          name: cName,
+          type: 'company',
+          country: 'Uzbekistan',
+          currency: 'UZS',
+          accounting_standard: 'LOCAL_GAAP'
+        });
+      } catch (orgError) {
+        console.error('Error creating initial organization:', orgError);
+      }
+    }
+
+    return data;
+  },
+
   // Logout
   async logout() {
     try {

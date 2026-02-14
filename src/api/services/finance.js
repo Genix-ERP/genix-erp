@@ -133,6 +133,11 @@ export const financeService = {
     await apiClient.delete(`/accounts/${id}`);
   },
 
+  async getNextAccountCode(accountTypeId) {
+    const response = await apiClient.get(`/accounts/next-code`, { params: { account_type_id: accountTypeId } });
+    return response.data.data;
+  },
+
   async getAccountTransactions(accountId, params = {}) {
     const response = await apiClient.get(`/accounts/${accountId}/transactions`, { params });
     return response.data.data;

@@ -57,6 +57,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -96,6 +97,7 @@ export default function ScrapManagement() {
     isLoading
   } = useInventory();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [showForm, setShowForm] = useState(false);
   const [viewingScrap, setViewingScrap] = useState(null);
@@ -325,7 +327,7 @@ export default function ScrapManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-500">{t('cost_impact') || 'Cost Impact'}</p>
-                <p className="text-2xl font-bold text-red-600">${summary.totalCost.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalCost)}</p>
               </div>
               <DollarSign className="w-8 h-8 text-red-600" />
             </div>
@@ -434,7 +436,7 @@ export default function ScrapManagement() {
                           <Badge variant="outline">{getReasonLabel(order.reason)}</Badge>
                         </TableCell>
                         <TableCell className="text-right text-red-600">
-                          ${(order.cost_impact || 0).toLocaleString()}
+                          {formatCurrency(order.cost_impact || 0)}
                         </TableCell>
                         <TableCell>{order.scrap_date}</TableCell>
                         <TableCell>{getStatusBadge(order.status)}</TableCell>
@@ -524,7 +526,7 @@ export default function ScrapManagement() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-red-700">{t('total_financial_loss') || 'Total Financial Loss'}</span>
                       <span className="text-2xl font-bold text-red-700">
-                        ${summary.totalCost.toLocaleString()}
+                        {formatCurrency(summary.totalCost)}
                       </span>
                     </div>
                   </div>
@@ -542,7 +544,7 @@ export default function ScrapManagement() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-blue-700">{t('avg_per_order') || 'Avg per Order'}</span>
                       <span className="text-2xl font-bold text-blue-700">
-                        ${summary.totalOrders > 0 ? Math.round(summary.totalCost / summary.totalOrders).toLocaleString() : 0}
+                        {formatCurrency(summary.totalOrders > 0 ? Math.round(summary.totalCost / summary.totalOrders) : 0)}
                       </span>
                     </div>
                   </div>
@@ -748,7 +750,7 @@ export default function ScrapManagement() {
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500">{t('cost_impact') || 'Cost Impact'}</Label>
-                  <p className="font-medium text-red-600">${(viewingScrap.cost_impact || 0).toLocaleString()}</p>
+                  <p className="font-medium text-red-600">{formatCurrency(viewingScrap.cost_impact || 0)}</p>
                 </div>
               </div>
 

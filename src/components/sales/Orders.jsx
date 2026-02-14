@@ -32,6 +32,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import Returns from './Returns';
 import PaymentTerms from './PaymentTerms';
 import {
@@ -59,6 +60,7 @@ export default function Orders({
 }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { salesOrders = [], isLoading: ordersLoading } = useModules();
   const {
@@ -109,13 +111,6 @@ export default function Orders({
       cancelled: 'bg-red-100 text-red-800'
     };
     return statusColors[status] || 'bg-slate-100 text-slate-800';
-  };
-
-  const formatCurrency = (amount, currency = 'USD') => {
-    if (currency === 'UZS') {
-      return `${(amount || 0).toLocaleString()} so'm`;
-    }
-    return `${(amount || 0).toLocaleString()} ${currency}`;
   };
 
   const handleDeleteConfirm = async () => {
@@ -246,7 +241,7 @@ export default function Orders({
                           <TableCell className="text-sm">
                             {order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(order.total_amount, order.currency)}</TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(order.total_amount)}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(order.status)}>{t(order.status) || order.status}</Badge>
                           </TableCell>
@@ -347,7 +342,7 @@ export default function Orders({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('amount') || 'Amount'}:</span>
-                <span className="font-medium">{formatCurrency(orderToDelete.total_amount, orderToDelete.currency)}</span>
+                <span className="font-medium">{formatCurrency(orderToDelete.total_amount)}</span>
               </div>
             </div>
           )}

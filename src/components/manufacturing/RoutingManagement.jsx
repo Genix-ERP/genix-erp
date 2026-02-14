@@ -45,12 +45,14 @@ import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function RoutingManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [routings, setRoutings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,7 +65,6 @@ export default function RoutingManagement() {
 
   const [newRouting, setNewRouting] = useState({
     name: '',
-    code: '',
     product_id: '',
     description: '',
     operations: [],
@@ -171,6 +172,7 @@ export default function RoutingManagement() {
     const routing = {
       id: `RT-${Date.now()}`,
       ...newRouting,
+      code: `RT-${Date.now()}`, // Auto-generate code
       status: 'active',
       created_at: new Date().toISOString(),
     };
@@ -257,7 +259,6 @@ export default function RoutingManagement() {
   const resetForm = () => {
     setNewRouting({
       name: '',
-      code: '',
       product_id: '',
       description: '',
       operations: [],
@@ -359,10 +360,12 @@ export default function RoutingManagement() {
                             <Eye className="w-4 h-4 mr-2" />
                             {t('view') || "Ko'rish"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setSelectedRouting(routing); setShowEditModal(true); }}>
-                            <Pencil className="w-4 h-4 mr-2" />
-                            {t('edit') || "Tahrirlash"}
-                          </DropdownMenuItem>
+                          {canUpdate(MODULES.MANUFACTURING) && (
+                            <DropdownMenuItem onClick={() => { setSelectedRouting(routing); setShowEditModal(true); }}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              {t('edit') || "Tahrirlash"}
+                            </DropdownMenuItem>
+                          )}
                           {canDelete(MODULES.MANUFACTURING) && (
                             <DropdownMenuItem
                               onClick={() => { setSelectedRouting(routing); setShowDeleteDialog(true); }}
@@ -418,23 +421,13 @@ export default function RoutingManagement() {
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t('routing_name') || "Nomi"} *</Label>
-                <Input
-                  value={newRouting.name}
-                  onChange={e => setNewRouting({ ...newRouting, name: e.target.value })}
-                  placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('routing_code') || "Kod"} *</Label>
-                <Input
-                  value={newRouting.code}
-                  onChange={e => setNewRouting({ ...newRouting, code: e.target.value })}
-                  placeholder="RT-001"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>{t('routing_name') || "Nomi"} *</Label>
+              <Input
+                value={newRouting.name}
+                onChange={e => setNewRouting({ ...newRouting, name: e.target.value })}
+                placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
+              />
             </div>
 
             <div className="space-y-2">
@@ -519,7 +512,7 @@ export default function RoutingManagement() {
                         <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {workCenters.map(wc => (
+                        {workCenters.filter(wc => wc.id).map(wc => (
                           <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -585,7 +578,7 @@ export default function RoutingManagement() {
               </Button>
               <Button
                 onClick={handleCreateRouting}
-                disabled={isSubmitting || !newRouting.name || !newRouting.code || newRouting.operations.length === 0}
+                disabled={isSubmitting || !newRouting.name || newRouting.operations.length === 0}
                 className="bg-gradient-to-r from-blue-600 to-purple-600"
               >
                 {t('create_routing') || "Texjarayon yaratish"}
@@ -657,7 +650,7 @@ export default function RoutingManagement() {
                           </TableCell>
                           <TableCell className="text-right">{op.duration_minutes} {t('min')}</TableCell>
                           <TableCell className="text-right">{op.setup_time_minutes} {t('min')}</TableCell>
-                          <TableCell className="text-right">${opCost.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(opCost)}</TableCell>
                         </TableRow>
                       );
                     })}
@@ -675,7 +668,7 @@ export default function RoutingManagement() {
                 <div>
                   <p className="text-sm text-slate-500">{t('total_cost') || "Jami narx"}</p>
                   <p className="text-xl font-bold">
-                    ${calculateRoutingTotals(selectedRouting).totalCost.toFixed(2)}
+                    {formatCurrency(calculateRoutingTotals(selectedRouting).totalCost)}
                   </p>
                 </div>
               </div>
@@ -693,23 +686,13 @@ export default function RoutingManagement() {
           {selectedRouting && (
             <div className="space-y-6 py-4">
               {/* Basic Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('routing_name') || "Nomi"} *</Label>
-                  <Input
-                    value={selectedRouting.name}
-                    onChange={e => setSelectedRouting({ ...selectedRouting, name: e.target.value })}
-                    placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('routing_code') || "Kod"} *</Label>
-                  <Input
-                    value={selectedRouting.code}
-                    onChange={e => setSelectedRouting({ ...selectedRouting, code: e.target.value })}
-                    placeholder="RT-001"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('routing_name') || "Nomi"} *</Label>
+                <Input
+                  value={selectedRouting.name}
+                  onChange={e => setSelectedRouting({ ...selectedRouting, name: e.target.value })}
+                  placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
+                />
               </div>
 
               <div className="space-y-2">
@@ -811,7 +794,7 @@ export default function RoutingManagement() {
                           <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {workCenters.map(wc => (
+                          {workCenters.filter(wc => wc.id).map(wc => (
                             <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -898,7 +881,7 @@ export default function RoutingManagement() {
                 </Button>
                 <Button
                   onClick={handleUpdateRouting}
-                  disabled={isSubmitting || !selectedRouting.name || !selectedRouting.code || !selectedRouting.operations || selectedRouting.operations.length === 0}
+                  disabled={isSubmitting || !selectedRouting.name || !selectedRouting.operations || selectedRouting.operations.length === 0}
                   className="bg-gradient-to-r from-blue-600 to-purple-600"
                 >
                   {t('update') || "Yangilash"}

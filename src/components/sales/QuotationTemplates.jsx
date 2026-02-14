@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { quotationTemplatesService } from '@/api/services/quotationTemplates';
 import { paymentTermsService } from '@/api/services/paymentTerms';
 import { pricelistsService } from '@/api/services/pricelists';
@@ -34,6 +35,7 @@ import { inventoryService } from '@/api/services/inventory';
 export default function QuotationTemplates() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [templates, setTemplates] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
@@ -653,7 +655,7 @@ export default function QuotationTemplates() {
                     <TableRow key={line.id || index}>
                       <TableCell className="font-medium">{line.product_name || line.product?.name}</TableCell>
                       <TableCell>{line.quantity}</TableCell>
-                      <TableCell>{line.unit_price ? `${line.unit_price.toLocaleString()} UZS` : '-'}</TableCell>
+                      <TableCell>{line.unit_price ? formatCurrency(line.unit_price) : '-'}</TableCell>
                       <TableCell>
                         {line.section_id ? (
                           formData.sections.find(s => s.id === line.section_id)?.name || '-'
@@ -749,7 +751,7 @@ export default function QuotationTemplates() {
                     <TableRow key={opt.id || index}>
                       <TableCell className="font-medium">{opt.product_name || opt.product?.name}</TableCell>
                       <TableCell>{opt.quantity}</TableCell>
-                      <TableCell>{opt.unit_price ? `${opt.unit_price.toLocaleString()} UZS` : '-'}</TableCell>
+                      <TableCell>{opt.unit_price ? formatCurrency(opt.unit_price) : '-'}</TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"

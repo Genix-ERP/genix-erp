@@ -118,16 +118,13 @@ const sampleCashTransactions = [
 const sampleCurrencies = [
   { code: 'UZS', name: 'Uzbek Som', symbol: "so'm", is_base: true, is_active: true, decimal_places: 0 },
   { code: 'USD', name: 'US Dollar', symbol: '$', is_base: false, is_active: true, decimal_places: 2 },
-  { code: 'EUR', name: 'Euro', symbol: '€', is_base: false, is_active: true, decimal_places: 2 },
   { code: 'RUB', name: 'Russian Ruble', symbol: '₽', is_base: false, is_active: true, decimal_places: 2 },
 ];
 
 const sampleExchangeRates = [
   { id: 'er_1', from_currency: 'USD', to_currency: 'UZS', rate: 12650, date: new Date().toISOString().split('T')[0], source: 'CBU' },
-  { id: 'er_2', from_currency: 'EUR', to_currency: 'UZS', rate: 13750, date: new Date().toISOString().split('T')[0], source: 'CBU' },
-  { id: 'er_3', from_currency: 'RUB', to_currency: 'UZS', rate: 135, date: new Date().toISOString().split('T')[0], source: 'CBU' },
-  { id: 'er_4', from_currency: 'USD', to_currency: 'UZS', rate: 12600, date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], source: 'CBU' },
-  { id: 'er_5', from_currency: 'EUR', to_currency: 'UZS', rate: 13700, date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], source: 'CBU' },
+  { id: 'er_2', from_currency: 'RUB', to_currency: 'UZS', rate: 135, date: new Date().toISOString().split('T')[0], source: 'CBU' },
+  { id: 'er_3', from_currency: 'USD', to_currency: 'UZS', rate: 12600, date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], source: 'CBU' },
 ];
 
 const sampleFiscalYears = [
@@ -415,6 +412,17 @@ export function FinancialsProvider({ children }) {
           setCashOrders(cashOrdersData || []);
           setReconciliationActs(reconciliationActsData || []);
           setExchangeDiffs(exchangeDiffsData || []);
+
+          // Derive financialTransactions from real payments for dashboard metrics
+          const derivedTransactions = mappedPayments.map(p => ({
+            id: p.id,
+            transaction_type: p.payment_type === 'inbound' ? 'income' : 'expense',
+            amount: p.amount || 0,
+            category: p.payment_type === 'inbound' ? 'sales' : 'operations',
+            description: p.memo || p.reference || p.payment_number || '',
+            date: p.payment_date || p.created_at,
+          }));
+          setFinancialTransactions(derivedTransactions);
         } catch (apiError) {
           console.warn('API call failed, falling back to localStorage:', apiError);
           loadFromLocalStorage();
@@ -544,6 +552,7 @@ export function FinancialsProvider({ children }) {
           amount: paymentData.amount,
           reference: paymentData.reference || '',
           notes: paymentData.notes || paymentData.description || '',
+          bank_account_id: paymentData.bank_account_id || undefined,
         });
         // Map backend response to frontend format for UI consistency
         const newPayment = {
@@ -573,9 +582,9 @@ export function FinancialsProvider({ children }) {
     const storageKey = getStorageKey(PAYMENTS_KEY, companyId);
     if (backendAvailable) {
       try {
-        const confirmed = await financeService.confirmPayment(id);
-        setPayments(prev => prev.map(p => p.id === id ? confirmed : p));
-        return confirmed;
+        await financeService.confirmPayment(id);
+        setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'confirmed' } : p));
+        return;
       } catch (err) { console.error('API error:', err); }
     }
     const updated = payments.map(p => p.id === id ? { ...p, status: 'confirmed' } : p);
@@ -862,10 +871,13 @@ export function FinancialsProvider({ children }) {
     const storageKey = getStorageKey(JOURNAL_ENTRIES_KEY, companyId);
     if (backendAvailable) {
       try {
-        const newEntry = await financeService.createJournalEntry({ ...entryData, company_id: companyId });
+        const newEntry = await financeService.createJournalEntry({ ...entryData, organization_id: companyId });
         setJournalEntries(prev => [newEntry, ...prev]);
         return newEntry;
-      } catch (err) { console.error('API error, falling back to local:', err); }
+      } catch (err) {
+          console.error('API error creating journal entry:', err?.response?.data || err);
+          throw err;
+        }
     }
     const newEntry = { id: `je_${Date.now()}`, journal_number: entryData.journal_number || `JE-${new Date().getFullYear()}-${String(journalEntries.length + 1).padStart(3, '0')}`, ...entryData, company_id: companyId, created_date: new Date().toISOString() };
     const updated = [newEntry, ...journalEntries];
@@ -1040,7 +1052,9 @@ export function FinancialsProvider({ children }) {
         if (paymentsData) {
           const mappedPayments = (paymentsData.data || paymentsData || []).map(p => ({
             ...p,
-            payment_type: p.payment_type || (p.amount >= 0 ? 'inbound' : 'outbound'),
+            payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
+            party_name: p.contact_name || '',
+            payment_method: p.payment_method || 'bank_transfer',
           }));
           setPayments(mappedPayments);
         }

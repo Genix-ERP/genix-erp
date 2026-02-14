@@ -18,6 +18,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { format, differenceInMonths, addMonths } from "date-fns";
 
@@ -34,11 +35,11 @@ const assetCategories = [
 
 // Depreciation methods
 const depreciationMethods = [
-  { value: 'straight_line', label: 'Straight Line' },
-  { value: 'declining_balance', label: 'Declining Balance' },
-  { value: 'double_declining', label: 'Double Declining Balance' },
-  { value: 'sum_of_years', label: 'Sum of Years Digits' },
-  { value: 'units_of_production', label: 'Units of Production' },
+  { value: 'straight_line', labelKey: 'straight_line' },
+  { value: 'declining_balance', labelKey: 'declining_balance' },
+  { value: 'double_declining', labelKey: 'double_declining' },
+  { value: 'sum_of_years', labelKey: 'sum_of_years' },
+  { value: 'units_of_production', labelKey: 'units_of_production' },
 ];
 
 export default function FixedAssets() {
@@ -56,7 +57,8 @@ export default function FixedAssets() {
     disposeAsset,
     isLoading
   } = useFinancials();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -348,10 +350,6 @@ export default function FixedAssets() {
     return assetCategories.find(c => c.value === categoryValue) || assetCategories[0];
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ').format(amount) + " so'm";
-  };
-
   const getStatusBadge = (status) => {
     switch (status) {
       case 'active':
@@ -475,12 +473,14 @@ export default function FixedAssets() {
                   <SelectItem value="disposed">{t('disposed') || 'Disposed'}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                onClick={() => setShowDepreciationModal(true)}
-              >
-                <Calculator className="w-4 h-4 mr-2" /> {t('run_depreciation') || 'Run Depreciation'}
-              </Button>
+              {canUpdate(MODULES.ASSETS) && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDepreciationModal(true)}
+                >
+                  <Calculator className="w-4 h-4 mr-2" /> {t('run_depreciation') || 'Run Depreciation'}
+                </Button>
+              )}
               {canCreate(MODULES.ASSETS) && (
                 <Button
                   onClick={() => { resetForm(); setShowCreateModal(true); }}
@@ -570,9 +570,11 @@ export default function FixedAssets() {
                       <TableCell>{getStatusBadge(asset.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
-                            <Edit2 className="w-4 h-4 text-slate-500" />
-                          </Button>
+                          {canUpdate(MODULES.ASSETS) && (
+                            <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
+                              <Edit2 className="w-4 h-4 text-slate-500" />
+                            </Button>
+                          )}
                           {asset.status === 'active' && canDelete(MODULES.ASSETS) && (
                             <Button variant="ghost" size="sm" onClick={() => openDisposeModal(asset)} title={t('dispose') || 'Dispose'}>
                               <Trash2 className="w-4 h-4 text-red-500" />
@@ -598,7 +600,7 @@ export default function FixedAssets() {
           resetForm();
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-[var(--genix-blue)]" />
@@ -611,7 +613,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
                 <Input
-                  placeholder="e.g., FA-001"
+                  placeholder={t('asset_code_placeholder')}
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 />
@@ -654,7 +656,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('serial_number') || 'Serial Number'}</label>
                 <Input
-                  placeholder="Optional"
+                  placeholder={t('optional')}
                   value={formData.serial_number}
                   onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
                 />
@@ -662,7 +664,7 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('location') || 'Location'}</label>
                 <Input
-                  placeholder="e.g., Office Building A"
+                  placeholder={t('location_placeholder')}
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 />
@@ -719,7 +721,7 @@ export default function FixedAssets() {
                     </SelectTrigger>
                     <SelectContent>
                       {depreciationMethods.map(m => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value}>{t(m.labelKey)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

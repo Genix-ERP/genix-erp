@@ -69,7 +69,7 @@ export default function EquipmentMaintenance() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
-  const { canCreate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const { activeCompany } = useCompany();
 
   const orgId = activeCompany?.id || 'default';
@@ -100,7 +100,6 @@ export default function EquipmentMaintenance() {
 
   const [newEquipment, setNewEquipment] = useState({
     name: '',
-    code: '',
     type: 'machine',
     work_center_id: '',
     manufacturer: '',
@@ -283,6 +282,7 @@ export default function EquipmentMaintenance() {
     const eq = {
       id: `EQ-${Date.now()}`,
       ...newEquipment,
+      code: `EQ-${Date.now()}`, // Auto-generate code
       created_at: new Date().toISOString(),
     };
 
@@ -382,7 +382,6 @@ export default function EquipmentMaintenance() {
   const resetEquipmentForm = () => {
     setNewEquipment({
       name: '',
-      code: '',
       type: 'machine',
       work_center_id: '',
       manufacturer: '',
@@ -587,13 +586,15 @@ export default function EquipmentMaintenance() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   {t('view') || "Ko'rish"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => { setSelectedItem(eq); setShowDeleteDialog(true); }}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  {t('delete') || "O'chirish"}
-                                </DropdownMenuItem>
+                                {canDelete(MODULES.MANUFACTURING) && (
+                                  <DropdownMenuItem
+                                    onClick={() => { setSelectedItem(eq); setShowDeleteDialog(true); }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {t('delete') || "O'chirish"}
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -684,7 +685,7 @@ export default function EquipmentMaintenance() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {status !== 'completed' && (
+                              {status !== 'completed' && canUpdate(MODULES.MANUFACTURING) && (
                                 <Button
                                   size="sm"
                                   onClick={() => { setSelectedItem(task); setShowCompleteModal(true); }}
@@ -729,23 +730,13 @@ export default function EquipmentMaintenance() {
             <DialogTitle>{t('new_equipment') || "Yangi jihoz"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t('equipment_name') || "Jihoz nomi"} *</Label>
-                <Input
-                  value={newEquipment.name}
-                  onChange={e => setNewEquipment({ ...newEquipment, name: e.target.value })}
-                  placeholder={t('enter_equipment_name') || "Jihoz nomini kiriting"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('code') || "Kod"} *</Label>
-                <Input
-                  value={newEquipment.code}
-                  onChange={e => setNewEquipment({ ...newEquipment, code: e.target.value })}
-                  placeholder="EQ-001"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>{t('equipment_name') || "Jihoz nomi"} *</Label>
+              <Input
+                value={newEquipment.name}
+                onChange={e => setNewEquipment({ ...newEquipment, name: e.target.value })}
+                placeholder={t('enter_equipment_name') || "Jihoz nomini kiriting"}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -777,7 +768,7 @@ export default function EquipmentMaintenance() {
                     <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {workCenters.map(wc => (
+                    {workCenters.filter(wc => wc.id).map(wc => (
                       <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -847,7 +838,7 @@ export default function EquipmentMaintenance() {
               </Button>
               <Button
                 onClick={handleCreateEquipment}
-                disabled={isSubmitting || !newEquipment.name || !newEquipment.code}
+                disabled={isSubmitting || !newEquipment.name}
                 className="bg-gradient-to-r from-blue-600 to-purple-600"
               >
                 {t('create_equipment') || "Jihozni qo'shish"}
@@ -874,7 +865,7 @@ export default function EquipmentMaintenance() {
                   <SelectValue placeholder={t('select_equipment') || "Jihozni tanlang"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipment.map(eq => (
+                  {equipment.filter(eq => eq.id).map(eq => (
                     <SelectItem key={eq.id} value={eq.id}>{eq.name} ({eq.code})</SelectItem>
                   ))}
                 </SelectContent>

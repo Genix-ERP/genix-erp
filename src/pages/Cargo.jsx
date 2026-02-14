@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 // Import Cargo components
 import CargoShipments from '@/components/cargo/CargoShipments';
@@ -25,6 +26,7 @@ import CargoReports from '@/components/cargo/CargoReports';
 export default function Cargo() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     shipments,
     cargoCash,
@@ -115,9 +117,9 @@ export default function Cargo() {
                   <DollarSign className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-600">UZS {t('balance') || 'Balans'}</p>
+                  <p className="text-xs text-slate-600">{t('balance') || 'Balans'}</p>
                   <p className="text-lg font-bold text-slate-900 truncate">
-                    {metrics.uzsBalance.toLocaleString()}
+                    {formatCurrency(metrics.uzsBalance)}
                   </p>
                 </div>
               </div>
@@ -133,7 +135,7 @@ export default function Cargo() {
                 <div>
                   <p className="text-xs text-slate-600">USD {t('balance') || 'Balans'}</p>
                   <p className="text-lg font-bold text-slate-900">
-                    ${metrics.usdBalance.toLocaleString()}
+                    {formatCurrency(metrics.usdBalance, 'USD')}
                   </p>
                 </div>
               </div>
@@ -163,7 +165,7 @@ export default function Cargo() {
                 <div>
                   <p className="text-xs text-slate-600">{t('total_debt') || 'Jami qarz'}</p>
                   <p className="text-lg font-bold text-slate-900 truncate">
-                    {metrics.totalDebt.toLocaleString()}
+                    {formatCurrency(metrics.totalDebt)}
                   </p>
                 </div>
               </div>

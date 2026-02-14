@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import LanguageSelector from '@/components/ui/language-selector';
+import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
 import { Loader2, Mail, Lock, User, Building2, ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
 import { authService } from '@/api/services/auth';
 
@@ -29,7 +30,8 @@ export default function Register() {
   const [isSendingOTP, setIsSendingOTP] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [shouldNavigate, setShouldNavigate] = useState(false);
-  const { registerWithOTP, backendAvailable, isAuthenticated, user } = useAuth();
+  const [googleStep, setGoogleStep] = useState(null); // null or { credential, user }
+  const { registerWithOTP, loginWithGoogle, backendAvailable, isAuthenticated, user } = useAuth();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const navigate = useNavigate();
@@ -85,6 +87,50 @@ export default function Register() {
       const newOtp = pastedData.split('');
       setOtpCode(newOtp);
       otpInputRefs.current[5]?.focus();
+    }
+  };
+
+  const handleGoogleRegister = async (credential) => {
+    setError('');
+    setIsLoading(true);
+
+    const result = await loginWithGoogle(credential);
+
+    if (result.success) {
+      setShouldNavigate(true);
+    } else if (result.needsCompletion) {
+      // Show company name step
+      setGoogleStep({ credential, user: result.googleUser });
+      setFormData(prev => ({
+        ...prev,
+        firstName: result.googleUser.first_name || '',
+        lastName: result.googleUser.last_name || '',
+        email: result.googleUser.email || '',
+      }));
+      setIsLoading(false);
+    } else if (result.tenantSelectionRequired) {
+      setError(t('email_multiple_companies') || 'This email is associated with multiple accounts. Please sign in instead.');
+      setIsLoading(false);
+    } else {
+      setError(result.error);
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleComplete = async (e) => {
+    e.preventDefault();
+    if (!googleStep || !formData.companyName.trim()) return;
+
+    setError('');
+    setIsLoading(true);
+
+    const result = await loginWithGoogle(googleStep.credential, null, formData.companyName.trim());
+
+    if (result.success) {
+      setShouldNavigate(true);
+    } else {
+      setError(result.error);
+      setIsLoading(false);
     }
   };
 
@@ -199,10 +245,12 @@ export default function Register() {
             className="h-20 w-auto object-contain mx-auto mb-4"
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
-            {step === 1 ? t('create_account') : t('verify_email')}
+            {googleStep ? t('complete_registration') || 'Complete Registration' : step === 1 ? t('create_account') : t('verify_email')}
           </CardTitle>
           <CardDescription className="text-slate-500">
-            {step === 1 ? (
+            {googleStep ? (
+              <>{t('enter_company_name') || 'Enter your company name to get started'}</>
+            ) : step === 1 ? (
               backendAvailable
                 ? t('sign_up_to_start')
                 : t('demo_mode_register')
@@ -213,7 +261,55 @@ export default function Register() {
         </CardHeader>
 
         <CardContent className="pt-4">
-          {step === 1 ? (
+          {googleStep ? (
+            <form onSubmit={handleGoogleComplete} className="space-y-4">
+              {error && (
+                <Alert variant="destructive" className="bg-red-50 border-red-200">
+                  <AlertDescription className="text-red-700">
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
+                <p className="font-medium text-slate-800">{googleStep.user.first_name} {googleStep.user.last_name}</p>
+                <p>{googleStep.user.email}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="text-slate-700">{t('company_name')}</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="companyName"
+                    name="companyName"
+                    placeholder={t('enter_company_name_placeholder') || 'Your Company Inc.'}
+                    value={formData.companyName}
+                    onChange={handleChange}
+                    className="pl-10 h-10 bg-slate-50/50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)]"
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading || !formData.companyName.trim()}
+                className="w-full h-11 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:from-[var(--genix-blue)]/90 hover:to-[var(--genix-purple)]/90 text-white font-medium transition-all duration-200"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('creating_account')}
+                  </>
+                ) : (
+                  t('create_account')
+                )}
+              </Button>
+
+            </form>
+          ) : step === 1 ? (
             <form onSubmit={handleSubmitForm} className="space-y-4">
               {error && (
                 <Alert variant="destructive" className="bg-red-50 border-red-200">
@@ -338,6 +434,14 @@ export default function Register() {
                   t('continue_btn')
                 )}
               </Button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0', color: '#94a3b8', fontSize: '0.75rem' }}>
+                <span style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+                <span>{t('or_continue_with') || 'Or continue with'}</span>
+                <span style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
+              </div>
+
+              <GoogleSignInButton onSuccess={handleGoogleRegister} />
             </form>
           ) : (
             <form onSubmit={handleVerifyAndRegister} className="space-y-6">
@@ -438,7 +542,7 @@ export default function Register() {
             </form>
           )}
 
-          {step === 1 && (
+          {(step === 1 || googleStep) && (
             <div className="mt-4 text-center">
               <Link
                 to="/login"

@@ -27,11 +27,13 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { followupsService, followupLevelsService } from '@/api/services/followups';
 
 export default function CustomerFollowups() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('customers');
   const [isLoading, setIsLoading] = useState(true);
@@ -82,14 +84,6 @@ export default function CustomerFollowups() {
   });
 
   const [isSaving, setIsSaving] = useState(false);
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('uz-UZ', {
-      style: 'decimal',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount || 0) + ' UZS';
-  };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);

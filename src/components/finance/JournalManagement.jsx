@@ -80,6 +80,17 @@ export default function JournalManagement() {
     setFilteredJournals(filtered);
   }, [searchQuery, typeFilter, journals]);
 
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
+
+  const generateCodeFromName = (name) => {
+    return name
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s]/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 20);
+  };
+
   const resetForm = () => {
     setFormData({
       code: '',
@@ -89,6 +100,7 @@ export default function JournalManagement() {
       auto_sequence: true,
       number_prefix: '',
     });
+    setCodeManuallyEdited(false);
   };
 
   const handleCreate = async () => {
@@ -108,6 +120,7 @@ export default function JournalManagement() {
 
   const handleEdit = (journal) => {
     setSelectedJournal(journal);
+    setCodeManuallyEdited(true);
     setFormData({
       code: journal.code || '',
       name: journal.name || '',
@@ -168,7 +181,18 @@ export default function JournalManagement() {
     types: [...new Set(journals.map(j => j.type))].length,
   };
 
-  const FormFields = ({ isEdit = false }) => (
+  const typeHints = {
+    general: { name: 'General Journal', code: 'GENERAL' },
+    sales: { name: 'Sales Journal', code: 'SALES' },
+    purchase: { name: 'Purchase Journal', code: 'PURCHASE' },
+    cash: { name: 'Cash Journal', code: 'CASH' },
+    bank: { name: 'Bank Journal', code: 'BANK' },
+    miscellaneous: { name: 'Miscellaneous Journal', code: 'MISC' },
+  };
+
+  const renderFormFields = (isEdit = false) => {
+    const hint = typeHints[formData.type] || typeHints.miscellaneous;
+    return (
     <div className="space-y-4 py-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -176,9 +200,12 @@ export default function JournalManagement() {
             {t('code') || 'Code'} *
           </label>
           <Input
-            placeholder="e.g., MISC"
+            placeholder={t('auto_generated') || 'Auto-generated from name'}
             value={formData.code}
-            onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
+            onChange={(e) => {
+              setCodeManuallyEdited(true);
+              setFormData({...formData, code: e.target.value.toUpperCase()});
+            }}
             disabled={isEdit}
             maxLength={20}
           />
@@ -217,9 +244,16 @@ export default function JournalManagement() {
           {t('name')} *
         </label>
         <Input
-          placeholder="e.g., Miscellaneous Journal"
+          placeholder={`e.g., ${hint.name}`}
           value={formData.name}
-          onChange={(e) => setFormData({...formData, name: e.target.value})}
+          onChange={(e) => {
+            const name = e.target.value;
+            const updates = { name };
+            if (!codeManuallyEdited && !isEdit) {
+              updates.code = generateCodeFromName(name);
+            }
+            setFormData(prev => ({...prev, ...updates}));
+          }}
         />
       </div>
 
@@ -239,7 +273,7 @@ export default function JournalManagement() {
           {t('number_prefix') || 'Number Prefix'}
         </label>
         <Input
-          placeholder="e.g., MISC-"
+          placeholder={`e.g., ${hint.code}-`}
           value={formData.number_prefix}
           onChange={(e) => setFormData({...formData, number_prefix: e.target.value})}
           maxLength={10}
@@ -271,6 +305,7 @@ export default function JournalManagement() {
       )}
     </div>
   );
+  };
 
   return (
     <div className="space-y-6">
@@ -506,7 +541,7 @@ export default function JournalManagement() {
               {t('create_journal_desc') || 'Create a new accounting journal'}
             </DialogDescription>
           </DialogHeader>
-          <FormFields />
+          {renderFormFields()}
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
@@ -536,7 +571,7 @@ export default function JournalManagement() {
               {t('edit_journal') || 'Edit Journal'}
             </DialogTitle>
           </DialogHeader>
-          <FormFields isEdit />
+          {renderFormFields(true)}
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"

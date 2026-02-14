@@ -18,12 +18,16 @@ import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import apiClient from "@/api/client";
 import { useToast } from "@/components/ui/use-toast";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ProductVariants() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { products } = useInventory();
   const { toast } = useToast();
+  const { formatCurrency } = useCurrencyFormatter();
+  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState("variants");
   const [attributes, setAttributes] = useState([]);
@@ -494,10 +498,10 @@ export default function ProductVariants() {
                         <TableCell>{variant.sku || '-'}</TableCell>
                         <TableCell>{variant.barcode || '-'}</TableCell>
                         <TableCell className="text-right">
-                          {variant.cost_price ? `$${Number(variant.cost_price).toFixed(2)}` : '-'}
+                          {variant.cost_price ? formatCurrency(Number(variant.cost_price)) : '-'}
                         </TableCell>
                         <TableCell className="text-right">
-                          {variant.list_price ? `$${Number(variant.list_price).toFixed(2)}` : '-'}
+                          {variant.list_price ? formatCurrency(Number(variant.list_price)) : '-'}
                         </TableCell>
                         <TableCell className="text-right">{variant.stock_quantity || 0}</TableCell>
                         <TableCell>
@@ -507,15 +511,19 @@ export default function ProductVariants() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleOpenAdjustStock(variant)} title={t('adjust_stock')}>
-                              <PackagePlus className="w-4 h-4 text-green-500" />
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button variant="ghost" size="sm" onClick={() => handleOpenAdjustStock(variant)} title={t('adjust_stock')}>
+                                <PackagePlus className="w-4 h-4 text-green-500" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" onClick={() => handleViewVariant(variant)}>
                               <Eye className="w-4 h-4 text-blue-500" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {canDelete(MODULES.INVENTORY) && (
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteVariant(variant.id)}>
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -531,10 +539,12 @@ export default function ProductVariants() {
         <TabsContent value="attributes" className="mt-0 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">{t('product_attributes')}</h3>
-            <Button onClick={() => setShowAttributeModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t('add_attribute')}
-            </Button>
+            {canCreate(MODULES.INVENTORY) && (
+              <Button onClick={() => setShowAttributeModal(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('add_attribute')}
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -554,19 +564,23 @@ export default function ProductVariants() {
                       >
                         <Eye className="w-4 h-4 text-blue-500" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedAttribute(attr);
-                          setShowValueModal(true);
-                        }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteAttribute(attr.id)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
+                      {canCreate(MODULES.INVENTORY) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedAttribute(attr);
+                            setShowValueModal(true);
+                          }}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {canDelete(MODULES.INVENTORY) && (
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteAttribute(attr.id)}>
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -585,12 +599,14 @@ export default function ProductVariants() {
                           />
                         )}
                         {val.name}
-                        <button
-                          onClick={() => handleDeleteValue(attr.id, val.id)}
-                          className="ml-1 text-slate-400 hover:text-red-500"
-                        >
-                          ×
-                        </button>
+                        {canDelete(MODULES.INVENTORY) && (
+                          <button
+                            onClick={() => handleDeleteValue(attr.id, val.id)}
+                            className="ml-1 text-slate-400 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        )}
                       </Badge>
                     ))}
                     {(!attr.values || attr.values.length === 0) && (
@@ -659,25 +675,29 @@ export default function ProductVariants() {
                             >
                               <Eye className="w-4 h-4 text-blue-500" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleConfigureProduct(product)}
-                            >
-                              <Settings className="w-4 h-4 mr-1" />
-                              {t('configure')}
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedProduct(product);
-                                setShowGenerateModal(true);
-                              }}
-                              disabled={!product.has_variants && productVariantCount === 0}
-                            >
-                              <RefreshCw className="w-4 h-4 mr-1" />
-                              {t('generate')}
-                            </Button>
+                            {canUpdate(MODULES.INVENTORY) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleConfigureProduct(product)}
+                              >
+                                <Settings className="w-4 h-4 mr-1" />
+                                {t('configure')}
+                              </Button>
+                            )}
+                            {canCreate(MODULES.INVENTORY) && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedProduct(product);
+                                  setShowGenerateModal(true);
+                                }}
+                                disabled={!product.has_variants && productVariantCount === 0}
+                              >
+                                <RefreshCw className="w-4 h-4 mr-1" />
+                                {t('generate')}
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -839,7 +859,7 @@ export default function ProductVariants() {
                               <span className="w-2 h-2 rounded-full mr-1" style={{ backgroundColor: v.html_color }} />
                             )}
                             {v.value_name}
-                            {v.price_extra > 0 && ` (+$${v.price_extra})`}
+                            {v.price_extra > 0 && ` (+${formatCurrency(v.price_extra)})`}
                           </Badge>
                         ))}
                       </div>
@@ -1026,13 +1046,13 @@ export default function ProductVariants() {
                 <div>
                   <label className="text-sm text-slate-500">{t('cost_price')}</label>
                   <p className="font-medium text-lg">
-                    {selectedVariant.cost_price ? `$${Number(selectedVariant.cost_price).toFixed(2)}` : '-'}
+                    {selectedVariant.cost_price ? formatCurrency(Number(selectedVariant.cost_price)) : '-'}
                   </p>
                 </div>
                 <div>
                   <label className="text-sm text-slate-500">{t('list_price')}</label>
                   <p className="font-medium text-lg text-green-600">
-                    {selectedVariant.list_price ? `$${Number(selectedVariant.list_price).toFixed(2)}` : '-'}
+                    {selectedVariant.list_price ? formatCurrency(Number(selectedVariant.list_price)) : '-'}
                   </p>
                 </div>
               </div>
@@ -1048,10 +1068,12 @@ export default function ProductVariants() {
             <Button variant="outline" onClick={() => setShowVariantDetailsModal(false)}>
               {t('close')}
             </Button>
-            <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              {t('edit_variant')}
-            </Button>
+            {canUpdate(MODULES.INVENTORY) && (
+              <Button onClick={() => handleOpenEditVariant(selectedVariant)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                {t('edit_variant')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1175,7 +1197,7 @@ export default function ProductVariants() {
                       {val.name}
                       {val.code && <span className="text-slate-400 ml-1">({val.code})</span>}
                       {val.price_extra > 0 && (
-                        <span className="text-green-600 ml-1">(+${Number(val.price_extra).toFixed(2)})</span>
+                        <span className="text-green-600 ml-1">(+{formatCurrency(Number(val.price_extra))})</span>
                       )}
                     </Badge>
                   ))}
@@ -1190,10 +1212,12 @@ export default function ProductVariants() {
             <Button variant="outline" onClick={() => setShowAttributeDetailsModal(false)}>
               {t('close')}
             </Button>
-            <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              {t('edit_attribute')}
-            </Button>
+            {canUpdate(MODULES.INVENTORY) && (
+              <Button onClick={() => handleOpenEditAttribute(selectedAttribute)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                {t('edit_attribute')}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1303,11 +1327,11 @@ export default function ProductVariants() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-slate-500">{t('cost_price')}</label>
-                  <p className="font-medium">{selectedProduct.cost_price ? `$${Number(selectedProduct.cost_price).toFixed(2)}` : '-'}</p>
+                  <p className="font-medium">{selectedProduct.cost_price ? formatCurrency(Number(selectedProduct.cost_price)) : '-'}</p>
                 </div>
                 <div>
                   <label className="text-sm text-slate-500">{t('list_price')}</label>
-                  <p className="font-medium text-green-600">{selectedProduct.list_price ? `$${Number(selectedProduct.list_price).toFixed(2)}` : '-'}</p>
+                  <p className="font-medium text-green-600">{selectedProduct.list_price ? formatCurrency(Number(selectedProduct.list_price)) : '-'}</p>
                 </div>
               </div>
 
@@ -1335,7 +1359,7 @@ export default function ProductVariants() {
                                 )}
                                 {v.value_name}
                                 {v.price_extra > 0 && (
-                                  <span className="text-green-600 ml-1">(+${Number(v.price_extra).toFixed(2)})</span>
+                                  <span className="text-green-600 ml-1">(+{formatCurrency(Number(v.price_extra))})</span>
                                 )}
                               </Badge>
                             ))}
