@@ -15,6 +15,9 @@ export default function QualityControl() {
   const { t } = useTranslation(language);
   const { qualityChecks, loading } = useManufacturing();
 
+  // Ensure qualityChecks is always an array
+  const checksArray = Array.isArray(qualityChecks) ? qualityChecks : [];
+
   const getResultColor = (result) => {
     const colors = {
       pass: 'bg-green-100 text-green-800 border-green-200',
@@ -31,10 +34,10 @@ export default function QualityControl() {
   };
 
   const qualityStats = {
-    total: qualityChecks.length,
-    passed: qualityChecks.filter(q => q.result === 'pass').length,
-    failed: qualityChecks.filter(q => q.result === 'fail').length,
-    conditional: qualityChecks.filter(q => q.result === 'conditional_pass').length
+    total: checksArray.length,
+    passed: checksArray.filter(q => q.result === 'pass').length,
+    failed: checksArray.filter(q => q.result === 'fail').length,
+    conditional: checksArray.filter(q => q.result === 'conditional_pass').length
   };
 
   const chartData = [
@@ -145,7 +148,7 @@ export default function QualityControl() {
                   <p className="text-slate-600">{t('loading') || 'Loading'}...</p>
                 </div>
               </div>
-            ) : qualityChecks.length === 0 ? (
+            ) : checksArray.length === 0 ? (
               <div className="text-center py-16">
                 <PackageCheck className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500">{t('no_quality_checks_recorded_yet') || 'No quality checks recorded yet'}</p>
@@ -164,7 +167,7 @@ export default function QualityControl() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {qualityChecks.slice(0, 10).map((check) => (
+                    {checksArray.slice(0, 10).map((check) => (
                       <TableRow key={check.id} className="hover:bg-slate-50">
                         <TableCell className="font-mono text-sm">{check.check_number}</TableCell>
                         <TableCell className="font-medium">{check.product_name}</TableCell>

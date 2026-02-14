@@ -66,10 +66,8 @@ export default function WorkCenters() {
     department: '',
     capacity_per_hour: 1,
     efficiency_factor: 100,
-    oee_target: 85,
     working_hours_per_day: 8,
     hourly_cost: 0,
-    setup_cost: 0,
     overhead_cost: 0,
     currency: 'USD',
     status: 'active',
@@ -112,10 +110,8 @@ export default function WorkCenters() {
         department: newWorkCenter.department || null,
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
-        oee_target: parseFloat(newWorkCenter.oee_target) || 85,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
         hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
-        setup_cost: parseFloat(newWorkCenter.setup_cost) || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -146,10 +142,8 @@ export default function WorkCenters() {
       department: '',
       capacity_per_hour: 1,
       efficiency_factor: 100,
-      oee_target: 85,
       working_hours_per_day: 8,
       hourly_cost: 0,
-      setup_cost: 0,
       overhead_cost: 0,
       currency: 'USD',
       status: 'active',
@@ -172,10 +166,8 @@ export default function WorkCenters() {
       department: wc.department || '',
       capacity_per_hour: wc.capacity_per_hour || 1,
       efficiency_factor: wc.efficiency_factor || 100,
-      oee_target: wc.oee_target || 85,
       working_hours_per_day: wc.working_hours_per_day || 8,
       hourly_cost: wc.hourly_cost || 0,
-      setup_cost: wc.setup_cost || 0,
       overhead_cost: wc.overhead_cost || 0,
       currency: wc.currency || 'USD',
       status: wc.status || 'active',
@@ -198,10 +190,8 @@ export default function WorkCenters() {
         department: newWorkCenter.department || null,
         capacity_per_hour: parseFloat(newWorkCenter.capacity_per_hour) || 1,
         efficiency_factor: parseFloat(newWorkCenter.efficiency_factor) || 100,
-        oee_target: parseFloat(newWorkCenter.oee_target) || 85,
         working_hours_per_day: parseFloat(newWorkCenter.working_hours_per_day) || 8,
         hourly_cost: parseFloat(newWorkCenter.hourly_cost) || 0,
-        setup_cost: parseFloat(newWorkCenter.setup_cost) || 0,
         overhead_cost: parseFloat(newWorkCenter.overhead_cost) || 0,
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
@@ -320,15 +310,9 @@ export default function WorkCenters() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
-                      <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-purple-600 font-medium">{t('oee_target')}</p>
-                      <p className="text-lg font-bold text-purple-900">{Math.round(wc.oee_target || 0)}%</p>
-                    </div>
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
+                    <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
                   </div>
 
                   <div className="space-y-2 text-xs">
@@ -511,26 +495,6 @@ export default function WorkCenters() {
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
                 />
               </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_setup_cost" label={t('setup_cost')} helpText={t('help_workcenter_setup_cost')} />
-                <Input
-                  id="wc_setup_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.setup_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, setup_cost: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="wc_oee" label={t('oee_target')} helpText={t('help_workcenter_oee')} />
-                <Input
-                  id="wc_oee"
-                  type="number"
-                  placeholder="85"
-                  value={newWorkCenter.oee_target || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, oee_target: e.target.value})}
-                />
-              </div>
             </div>
 
             {/* Equipment Selection */}
@@ -687,26 +651,6 @@ export default function WorkCenters() {
                   onChange={(e) => setNewWorkCenter({...newWorkCenter, hourly_cost: e.target.value})}
                 />
               </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_setup_cost" label={t('setup_cost')} helpText={t('help_workcenter_setup_cost')} />
-                <Input
-                  id="edit_wc_setup_cost"
-                  type="number"
-                  placeholder="0"
-                  value={newWorkCenter.setup_cost || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, setup_cost: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <LabelWithHelp htmlFor="edit_wc_oee" label={t('oee_target')} helpText={t('help_workcenter_oee')} />
-                <Input
-                  id="edit_wc_oee"
-                  type="number"
-                  placeholder="85"
-                  value={newWorkCenter.oee_target || ''}
-                  onChange={(e) => setNewWorkCenter({...newWorkCenter, oee_target: e.target.value})}
-                />
-              </div>
             </div>
 
             {/* Equipment Selection for Edit */}
@@ -838,7 +782,7 @@ export default function WorkCenters() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                 <div className="p-3 bg-blue-50 rounded-lg text-center">
                   <p className="text-xs text-blue-600 font-medium">{t('capacity_per_hour')}</p>
                   <p className="text-lg font-bold text-blue-900">{selectedWorkCenter.capacity_per_hour || 0}</p>
@@ -847,20 +791,12 @@ export default function WorkCenters() {
                   <p className="text-xs text-purple-600 font-medium">{t('efficiency_percent')}</p>
                   <p className="text-lg font-bold text-purple-900">{selectedWorkCenter.efficiency_factor || 0}%</p>
                 </div>
-                <div className="p-3 bg-green-50 rounded-lg text-center">
-                  <p className="text-xs text-green-600 font-medium">{t('oee_target')}</p>
-                  <p className="text-lg font-bold text-green-900">{selectedWorkCenter.oee_target || 0}%</p>
-                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-amber-50 rounded-lg text-center">
                   <p className="text-xs text-amber-600 font-medium">{t('hourly_cost')}</p>
                   <p className="text-lg font-bold text-amber-900">{formatCurrency(selectedWorkCenter.hourly_cost || 0)}</p>
-                </div>
-                <div className="p-3 bg-rose-50 rounded-lg text-center">
-                  <p className="text-xs text-rose-600 font-medium">{t('setup_cost')}</p>
-                  <p className="text-lg font-bold text-rose-900">{formatCurrency(selectedWorkCenter.setup_cost || 0)}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg text-center">
                   <p className="text-xs text-slate-600 font-medium">{t('working_hours_per_day')}</p>
