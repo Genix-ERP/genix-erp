@@ -92,6 +92,7 @@ export default function EquipmentMaintenance() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateEquipmentModal, setShowCreateEquipmentModal] = useState(false);
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -305,6 +306,23 @@ export default function EquipmentMaintenance() {
 
     setMaintenanceTasks(prev => [task, ...prev]);
     setShowCreateTaskModal(false);
+    resetTaskForm();
+    setIsSubmitting(false);
+  };
+
+  // Handle edit task
+  const handleEditTask = () => {
+    if (!selectedItem) return;
+    setIsSubmitting(true);
+
+    setMaintenanceTasks(prev => prev.map(t =>
+      t.id === selectedItem.id
+        ? { ...t, ...newTask }
+        : t
+    ));
+
+    setShowEditTaskModal(false);
+    setSelectedItem(null);
     resetTaskForm();
     setIsSubmitting(false);
   };
@@ -685,6 +703,27 @@ export default function EquipmentMaintenance() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              {canUpdate(MODULES.MANUFACTURING) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedItem(task);
+                                    setNewTask({
+                                      equipment_id: task.equipment_id,
+                                      type: task.type,
+                                      priority: task.priority,
+                                      description: task.description,
+                                      scheduled_date: task.scheduled_date,
+                                      estimated_duration: task.estimated_duration,
+                                      assigned_to: task.assigned_to || '',
+                                    });
+                                    setShowEditTaskModal(true);
+                                  }}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              )}
                               {status !== 'completed' && canUpdate(MODULES.MANUFACTURING) && (
                                 <Button
                                   size="sm"
@@ -693,6 +732,16 @@ export default function EquipmentMaintenance() {
                                 >
                                   <CheckCircle className="w-4 h-4 mr-1" />
                                   {t('complete') || "Tugat"}
+                                </Button>
+                              )}
+                              {canDelete(MODULES.MANUFACTURING) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => { setSelectedItem(task); setShowDeleteDialog(true); }}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
                                 </Button>
                               )}
                             </div>
@@ -956,6 +1005,120 @@ export default function EquipmentMaintenance() {
                 className="bg-gradient-to-r from-blue-600 to-purple-600"
               >
                 {t('create_task') || "Vazifa yaratish"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Task Modal */}
+      <Dialog open={showEditTaskModal} onOpenChange={setShowEditTaskModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('edit_maintenance_task') || "Ta'mirlash vazifasini tahrirlash"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>{t('equipment') || "Jihoz"} *</Label>
+              <Select
+                value={newTask.equipment_id}
+                onValueChange={value => setNewTask({ ...newTask, equipment_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_equipment') || "Jihozni tanlang"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {equipment.filter(eq => eq.id).map(eq => (
+                    <SelectItem key={eq.id} value={eq.id}>{eq.name} ({eq.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('maintenance_type') || "Ta'mir turi"} *</Label>
+                <Select
+                  value={newTask.type}
+                  onValueChange={value => setNewTask({ ...newTask, type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(MAINTENANCE_TYPE).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>{t(label) || label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('priority') || "Muhimlik"}</Label>
+                <Select
+                  value={newTask.priority}
+                  onValueChange={value => setNewTask({ ...newTask, priority: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">{t('low') || "Past"}</SelectItem>
+                    <SelectItem value="medium">{t('medium') || "O'rta"}</SelectItem>
+                    <SelectItem value="high">{t('high') || "Yuqori"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('description') || "Tavsif"} *</Label>
+              <Textarea
+                value={newTask.description}
+                onChange={e => setNewTask({ ...newTask, description: e.target.value })}
+                placeholder={t('enter_task_description') || "Vazifa tavsifini kiriting..."}
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('scheduled_date') || "Rejalashtirilgan sana"} *</Label>
+                <Input
+                  type="date"
+                  value={newTask.scheduled_date}
+                  onChange={e => setNewTask({ ...newTask, scheduled_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('estimated_duration_min') || "Taxminiy vaqt (daq)"}</Label>
+                <Input
+                  type="number"
+                  value={newTask.estimated_duration}
+                  onChange={e => setNewTask({ ...newTask, estimated_duration: parseInt(e.target.value) || 60 })}
+                  placeholder="60"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('assigned_to') || "Javobgar"}</Label>
+              <Input
+                value={newTask.assigned_to}
+                onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                placeholder={t('enter_assignee') || "Javobgar nomini kiriting"}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => { setShowEditTaskModal(false); setSelectedItem(null); resetTaskForm(); }}>
+                {t('cancel') || "Bekor qilish"}
+              </Button>
+              <Button
+                onClick={handleEditTask}
+                disabled={isSubmitting || !newTask.equipment_id || !newTask.description || !newTask.scheduled_date}
+                className="bg-gradient-to-r from-blue-600 to-purple-600"
+              >
+                {t('save_changes') || "O'zgarishlarni saqlash"}
               </Button>
             </div>
           </div>

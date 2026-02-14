@@ -80,24 +80,35 @@ export default function RoutingManagement() {
     cost_per_hour: 0,
   });
 
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Load routings from localStorage
   useEffect(() => {
     const stored = localStorage.getItem('genix_routings');
     if (stored) {
-      setRoutings(JSON.parse(stored));
+      try {
+        const parsed = JSON.parse(stored);
+        setRoutings(parsed);
+      } catch (error) {
+        console.error('Error parsing stored routings:', error);
+        const sampleRoutings = generateSampleRoutings();
+        setRoutings(sampleRoutings);
+        localStorage.setItem('genix_routings', JSON.stringify(sampleRoutings));
+      }
     } else {
       const sampleRoutings = generateSampleRoutings();
       setRoutings(sampleRoutings);
       localStorage.setItem('genix_routings', JSON.stringify(sampleRoutings));
     }
+    setIsInitialized(true);
   }, []);
 
-  // Save to localStorage
+  // Save to localStorage (only after initial load)
   useEffect(() => {
-    if (routings.length > 0) {
+    if (isInitialized) {
       localStorage.setItem('genix_routings', JSON.stringify(routings));
     }
-  }, [routings]);
+  }, [routings, isInitialized]);
 
   // Generate sample routings
   const generateSampleRoutings = () => {
@@ -506,7 +517,15 @@ export default function RoutingManagement() {
                     <Label>{t('work_center') || "Ish markazi"}</Label>
                     <Select
                       value={newOperation.work_center_id}
-                      onValueChange={value => setNewOperation({ ...newOperation, work_center_id: value })}
+                      onValueChange={value => {
+                        const selectedWC = workCenters.find(wc => wc.id === value);
+                        setNewOperation({
+                          ...newOperation,
+                          work_center_id: value,
+                          name: selectedWC?.name || newOperation.name,
+                          cost_per_hour: selectedWC?.hourly_cost || newOperation.cost_per_hour
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
@@ -788,7 +807,15 @@ export default function RoutingManagement() {
                       <Label>{t('work_center') || "Ish markazi"}</Label>
                       <Select
                         value={newOperation.work_center_id}
-                        onValueChange={value => setNewOperation({ ...newOperation, work_center_id: value })}
+                        onValueChange={value => {
+                          const selectedWC = workCenters.find(wc => wc.id === value);
+                          setNewOperation({
+                            ...newOperation,
+                            work_center_id: value,
+                            name: selectedWC?.name || newOperation.name,
+                            cost_per_hour: selectedWC?.hourly_cost || newOperation.cost_per_hour
+                          });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder={t('select_work_center') || "Tanlang"} />

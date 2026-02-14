@@ -107,12 +107,15 @@ export default function BOMManagement() {
 
   // Helper function to get product code from product_id
   const getProductCode = (bom) => {
-    if (bom.product_code) return bom.product_code;
-    if (bom.product_id) {
+    let code = '';
+    if (bom.product_code) {
+      code = bom.product_code;
+    } else if (bom.product_id) {
       const product = products.find(p => p.id === bom.product_id);
-      return product?.sku || product?.code || '';
+      code = product?.sku || product?.code || '';
     }
-    return '';
+    // Translate "no barcode" if present
+    return code === 'no barcode' ? t('no barcode') : code;
   };
 
   // Filter BOMs based on search query
