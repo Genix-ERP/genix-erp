@@ -65,7 +65,6 @@ export default function RoutingManagement() {
 
   const [newRouting, setNewRouting] = useState({
     name: '',
-    code: '',
     product_id: '',
     description: '',
     operations: [],
@@ -173,6 +172,7 @@ export default function RoutingManagement() {
     const routing = {
       id: `RT-${Date.now()}`,
       ...newRouting,
+      code: `RT-${Date.now()}`, // Auto-generate code
       status: 'active',
       created_at: new Date().toISOString(),
     };
@@ -259,7 +259,6 @@ export default function RoutingManagement() {
   const resetForm = () => {
     setNewRouting({
       name: '',
-      code: '',
       product_id: '',
       description: '',
       operations: [],
@@ -422,23 +421,13 @@ export default function RoutingManagement() {
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{t('routing_name') || "Nomi"} *</Label>
-                <Input
-                  value={newRouting.name}
-                  onChange={e => setNewRouting({ ...newRouting, name: e.target.value })}
-                  placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('routing_code') || "Kod"} *</Label>
-                <Input
-                  value={newRouting.code}
-                  onChange={e => setNewRouting({ ...newRouting, code: e.target.value })}
-                  placeholder="RT-001"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>{t('routing_name') || "Nomi"} *</Label>
+              <Input
+                value={newRouting.name}
+                onChange={e => setNewRouting({ ...newRouting, name: e.target.value })}
+                placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
+              />
             </div>
 
             <div className="space-y-2">
@@ -589,7 +578,7 @@ export default function RoutingManagement() {
               </Button>
               <Button
                 onClick={handleCreateRouting}
-                disabled={isSubmitting || !newRouting.name || !newRouting.code || newRouting.operations.length === 0}
+                disabled={isSubmitting || !newRouting.name || newRouting.operations.length === 0}
                 className="bg-gradient-to-r from-blue-600 to-purple-600"
               >
                 {t('create_routing') || "Texjarayon yaratish"}
@@ -697,23 +686,13 @@ export default function RoutingManagement() {
           {selectedRouting && (
             <div className="space-y-6 py-4">
               {/* Basic Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('routing_name') || "Nomi"} *</Label>
-                  <Input
-                    value={selectedRouting.name}
-                    onChange={e => setSelectedRouting({ ...selectedRouting, name: e.target.value })}
-                    placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('routing_code') || "Kod"} *</Label>
-                  <Input
-                    value={selectedRouting.code}
-                    onChange={e => setSelectedRouting({ ...selectedRouting, code: e.target.value })}
-                    placeholder="RT-001"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('routing_name') || "Nomi"} *</Label>
+                <Input
+                  value={selectedRouting.name}
+                  onChange={e => setSelectedRouting({ ...selectedRouting, name: e.target.value })}
+                  placeholder={t('enter_routing_name') || "Texjarayon nomini kiriting"}
+                />
               </div>
 
               <div className="space-y-2">
@@ -902,7 +881,7 @@ export default function RoutingManagement() {
                 </Button>
                 <Button
                   onClick={handleUpdateRouting}
-                  disabled={isSubmitting || !selectedRouting.name || !selectedRouting.code || !selectedRouting.operations || selectedRouting.operations.length === 0}
+                  disabled={isSubmitting || !selectedRouting.name || !selectedRouting.operations || selectedRouting.operations.length === 0}
                   className="bg-gradient-to-r from-blue-600 to-purple-600"
                 >
                   {t('update') || "Yangilash"}

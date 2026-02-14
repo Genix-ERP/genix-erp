@@ -36,7 +36,6 @@ export default function BOMManagement() {
   const [workCenters, setWorkCenters] = useState([]);
   const [routings, setRoutings] = useState([]);
   const [newBom, setNewBom] = useState({
-    code: '',
     name: '',
     product_id: '',
     quantity: 1,
@@ -409,7 +408,6 @@ export default function BOMManagement() {
 
   const resetForm = () => {
     setNewBom({
-      code: '',
       name: '',
       product_id: '',
       quantity: 1,
@@ -569,14 +567,6 @@ export default function BOMManagement() {
             <div className="space-y-4">
               <h3 className="font-semibold text-slate-900">{t('product_information')}</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('bom_code')}</label>
-                  <Input
-                    placeholder={t('auto_generated_if_empty')}
-                    value={newBom.code}
-                    onChange={(e) => setNewBom({...newBom, code: e.target.value})}
-                  />
-                </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('bom_name')} *</label>
                   <Input
@@ -881,13 +871,6 @@ export default function BOMManagement() {
               <div className="space-y-4">
                 <h3 className="font-semibold text-slate-900">{t('product_information')}</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('bom_code')}</label>
-                    <Input
-                      value={editBom.code || ''}
-                      onChange={(e) => setEditBom({...editBom, code: e.target.value})}
-                    />
-                  </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('bom_name')} *</label>
                     <Input
