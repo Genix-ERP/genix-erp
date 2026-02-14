@@ -6172,7 +6172,7 @@ export const translations = {
     // Stocktake Tab
     "total_stocktakes": "Jami inventarizatsiyalar",
     "total_variance": "Jami farq",
-    "units": "dona",
+    "units": "birlik",
     "hours": "soat",
     "list": "Ro'yxat",
     "count": "Hisob",
@@ -9517,6 +9517,8 @@ export const translations = {
     "create_bom_description": "Mahsulot retseptlarini belgilash uchun birinchi materiallar ro'yxatini yarating",
     "create_first_bom": "Birinchi BOM yaratish",
     "bom_reference": "BOM havolasi",
+    "bom_code": "BOM kodi",
+    "bom_name": "BOM nomi",
     "bom_type": "BOM turi",
     "product_information": "Mahsulot ma'lumotlari",
     "final_product_name": "Tayyor mahsulot nomi",
@@ -9526,6 +9528,7 @@ export const translations = {
     "qty": "Son",
     "add_component": "Komponent qo'shish",
     "create_bom": "BOM yaratish",
+    "edit_bom": "BOM tahrirlash",
     "update_bom": "BOM yangilash",
     "loading_boms": "BOMlar yuklanmoqda...",
 
