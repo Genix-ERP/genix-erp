@@ -18,6 +18,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 export default function CurrencyManagement() {
   const { language } = useLanguage();
@@ -38,6 +40,7 @@ export default function CurrencyManagement() {
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { modal, showError, close } = useAlertModal();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRevaluing, setIsRevaluing] = useState(false);
@@ -105,7 +108,7 @@ export default function CurrencyManagement() {
     } catch (err) {
       console.error('Error creating currency:', err);
       const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to create currency';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -665,6 +668,8 @@ export default function CurrencyManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertModal modal={modal} close={close} />
 
       {/* Set Rate Modal */}
       <Dialog open={showSetRateModal} onOpenChange={setShowSetRateModal}>

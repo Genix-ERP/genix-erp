@@ -17,6 +17,8 @@ import { useCustomers } from '@/components/contexts/CustomersContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 const AGING_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
@@ -42,6 +44,7 @@ export default function AccountsReceivable() {
   } = useFinancials();
   const { canCreate, canUpdate, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
   const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
 
@@ -147,7 +150,7 @@ export default function AccountsReceivable() {
     } catch (err) {
       const errorMsg = err.response?.data?.error?.message || err.response?.data?.error || err.message || 'Failed to create invoice';
       console.error('Invoice creation error:', err.response?.data || err);
-      alert(`Error creating invoice: ${errorMsg}`);
+      showError(errorMsg, 'Invoice yaratish xatosi');
     }
   };
 
@@ -160,7 +163,7 @@ export default function AccountsReceivable() {
       last_dunning_date: new Date().toISOString().split('T')[0]
     });
 
-    alert(`Reminder sent for invoice ${invoice.invoice_number}. Dunning level increased.`);
+    showSuccess(`Reminder sent for invoice ${invoice.invoice_number}. Dunning level increased.`);
   };
 
   const markAsPaid = async (invoiceId) => {
@@ -168,7 +171,7 @@ export default function AccountsReceivable() {
     const amountDue = (invoice.total_amount || 0) - (invoice.amount_paid || 0);
 
     if (amountDue <= 0) {
-      alert('Invoice is already paid');
+      showAlert('Invoice is already paid');
       return;
     }
 
@@ -186,7 +189,7 @@ export default function AccountsReceivable() {
     } catch (err) {
       const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to record payment';
       console.error('Mark as paid error:', err.response?.data || err);
-      alert(`Error marking invoice as paid: ${errorMsg}`);
+      showError(errorMsg, 'To\'lov xatosi');
     }
   };
 
@@ -584,6 +587,7 @@ export default function AccountsReceivable() {
         </DialogContent>
       </Dialog>
 
+      <AlertModal modal={modal} close={close} />
     </div>
   );
 }
