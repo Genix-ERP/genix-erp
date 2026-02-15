@@ -13,7 +13,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { inventoryService, bomsService } from '@/api/services';
+import { inventoryService, bomsService, productionOrdersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function ProductionOrders() {
@@ -293,9 +293,18 @@ export default function ProductionOrders() {
     return shift === 'day' ? (t('day_shift') || 'Day') : (t('night_shift') || 'Night');
   };
 
-  const handleViewOrder = (order) => {
-    setSelectedOrder(order);
-    setShowViewModal(true);
+  const handleViewOrder = async (order) => {
+    try {
+      // Fetch full order details including BOM operations
+      const fullOrder = await productionOrdersService.get(order.id);
+      setSelectedOrder(fullOrder);
+      setShowViewModal(true);
+    } catch (error) {
+      console.error('Failed to fetch production order:', error);
+      // Fallback to cached order if fetch fails
+      setSelectedOrder(order);
+      setShowViewModal(true);
+    }
   };
 
   const getCurrentStageIndex = (stage, stages) => {
