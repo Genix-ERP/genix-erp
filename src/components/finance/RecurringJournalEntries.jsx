@@ -22,6 +22,8 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { financeService } from "@/api/services";
 import { format, parseISO, addDays, addWeeks, addMonths, addYears } from "date-fns";
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 const FREQUENCIES = [
   { value: 'daily', labelKey: 'daily' },
@@ -48,6 +50,7 @@ export default function RecurringJournalEntries() {
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
   const [templates, setTemplates] = useState([]);
   const [pendingEntries, setPendingEntries] = useState([]);
@@ -165,12 +168,12 @@ export default function RecurringJournalEntries() {
     const totalCredit = formData.lines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0);
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-      alert(t('debits_credits_must_equal'));
+      showError(t('debits_credits_must_equal'));
       return;
     }
 
     if (!formData.name || !formData.journal_id) {
-      alert(t('required_fields_missing'));
+      showError(t('required_fields_missing'));
       return;
     }
 
@@ -196,7 +199,7 @@ export default function RecurringJournalEntries() {
       resetForm();
     } catch (error) {
       console.error('Error creating template:', error);
-      alert('Failed to create template');
+      showError('Failed to create template');
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +212,7 @@ export default function RecurringJournalEntries() {
     const totalCredit = formData.lines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0);
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-      alert(t('debits_credits_must_equal'));
+      showError(t('debits_credits_must_equal'));
       return;
     }
 
@@ -236,7 +239,7 @@ export default function RecurringJournalEntries() {
       resetForm();
     } catch (error) {
       console.error('Error updating template:', error);
-      alert('Failed to update template');
+      showError('Failed to update template');
     } finally {
       setIsSaving(false);
     }
@@ -253,7 +256,7 @@ export default function RecurringJournalEntries() {
       setTemplateToDelete(null);
     } catch (error) {
       console.error('Error deleting template:', error);
-      alert('Failed to delete template');
+      showError('Failed to delete template');
     } finally {
       setIsSaving(false);
     }
@@ -263,10 +266,10 @@ export default function RecurringJournalEntries() {
     try {
       await financeService.generateRecurringEntry(template.id);
       await fetchData();
-      alert('Journal entry generated successfully');
+      showSuccess('Journal entry generated successfully');
     } catch (error) {
       console.error('Error generating entry:', error);
-      alert('Failed to generate entry');
+      showError('Failed to generate entry');
     }
   };
 
@@ -307,7 +310,7 @@ export default function RecurringJournalEntries() {
       setShowEditModal(true);
     } catch (error) {
       console.error('Error fetching template details:', error);
-      alert('Failed to load template details');
+      showError('Failed to load template details');
     }
   };
 
@@ -324,7 +327,7 @@ export default function RecurringJournalEntries() {
       setShowViewModal(true);
     } catch (error) {
       console.error('Error fetching template details:', error);
-      alert('Failed to load template details');
+      showError('Failed to load template details');
     }
   };
 
@@ -1004,6 +1007,8 @@ export default function RecurringJournalEntries() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertModal modal={modal} close={close} />
     </div>
   );
 }

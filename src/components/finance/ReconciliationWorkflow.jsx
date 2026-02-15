@@ -16,11 +16,14 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import financeService from "@/api/services/finance";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 export default function ReconciliationWorkflow({ bankAccount, onClose }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
+  const { modal, showError, close } = useAlertModal();
 
   const [reconciliations, setReconciliations] = useState([]);
   const [activeReconciliation, setActiveReconciliation] = useState(null);
@@ -103,7 +106,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       loadReconciliation(result.id);
     } catch (error) {
       console.error('Failed to create reconciliation:', error);
-      alert(error.response?.data?.error?.message || 'Failed to create reconciliation');
+      showError(error.response?.data?.error?.message || 'Failed to create reconciliation');
     } finally {
       setIsSaving(false);
     }
@@ -145,7 +148,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliation(activeReconciliation.id);
     } catch (error) {
       console.error('Failed to save reconciliation:', error);
-      alert('Failed to save reconciliation');
+      showError('Failed to save reconciliation');
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +173,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliations();
     } catch (error) {
       console.error('Failed to complete reconciliation:', error);
-      alert(error.response?.data?.error?.message || 'Failed to complete reconciliation');
+      showError(error.response?.data?.error?.message || 'Failed to complete reconciliation');
     } finally {
       setIsSaving(false);
     }
@@ -187,7 +190,7 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
       await loadReconciliations();
     } catch (error) {
       console.error('Failed to delete reconciliation:', error);
-      alert(error.response?.data?.error?.message || 'Failed to delete');
+      showError(error.response?.data?.error?.message || 'Failed to delete');
     }
   };
 
@@ -297,6 +300,8 @@ export default function ReconciliationWorkflow({ bankAccount, onClose }) {
             )}
           </CardContent>
         </Card>
+
+        <AlertModal modal={modal} close={close} />
 
         {/* New Reconciliation Modal */}
         <Dialog open={showNewReconciliationModal} onOpenChange={setShowNewReconciliationModal}>
