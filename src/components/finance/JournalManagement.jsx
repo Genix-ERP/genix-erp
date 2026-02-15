@@ -16,6 +16,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 const JOURNAL_TYPES = [
   { value: 'general', labelKey: 'general', icon: BookOpen, color: 'bg-slate-100 text-slate-800 border-slate-200' },
@@ -40,6 +42,7 @@ export default function JournalManagement() {
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { activeCompany } = useCompany();
+  const { modal, showError, close } = useAlertModal();
 
   const [filteredJournals, setFilteredJournals] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -112,7 +115,7 @@ export default function JournalManagement() {
     } catch (error) {
       console.error('Error creating journal:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create journal';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -149,7 +152,7 @@ export default function JournalManagement() {
     } catch (error) {
       console.error('Error updating journal:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to update journal';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -169,7 +172,7 @@ export default function JournalManagement() {
     } catch (error) {
       console.error('Error deleting journal:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to delete journal';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -635,6 +638,8 @@ export default function JournalManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertModal modal={modal} close={close} />
     </div>
   );
 }

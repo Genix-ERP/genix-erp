@@ -14,6 +14,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 import { MODULES } from "@/config/permissions";
 import financeService from "@/api/services/finance";
 import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
@@ -31,6 +33,7 @@ export default function GeneralLedger() {
   } = useFinancials();
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,7 +100,7 @@ export default function GeneralLedger() {
       );
 
       if (validLines.length < 2) {
-        alert(t('minimum_two_lines_required'));
+        showError(t('minimum_two_lines_required'));
         setIsSaving(false);
         return;
       }
@@ -107,7 +110,7 @@ export default function GeneralLedger() {
       const totalCredit = validLines.reduce((sum, line) => sum + parseFloat(line.credit_amount || 0), 0);
 
       if (Math.abs(totalDebit - totalCredit) > 0.01) {
-        alert(t('debits_must_equal_credits'));
+        showError(t('debits_must_equal_credits'));
         setIsSaving(false);
         return;
       }
@@ -142,7 +145,7 @@ export default function GeneralLedger() {
       }
 
       if (processedLines.length < 2) {
-        alert(t('minimum_two_lines_required'));
+        showError(t('minimum_two_lines_required'));
         setIsSaving(false);
         return;
       }
@@ -172,8 +175,8 @@ export default function GeneralLedger() {
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating journal entry:', error);
-      const msg = error?.response?.data?.message || error?.message || 'Failed to create journal entry';
-      alert(msg);
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to create journal entry';
+      showError(msg);
     } finally {
       setIsSaving(false);
     }
@@ -197,16 +200,24 @@ export default function GeneralLedger() {
   const updateLine = (index, field, value) => {
     setNewEntry(prev => ({
       ...prev,
-      lines: prev.lines.map((line, i) =>
-        i === index ? { ...line, [field]: value } : line
-      )
+      lines: prev.lines.map((line, i) => {
+        if (i !== index) return line;
+        const updated = { ...line, [field]: value };
+        // Debit va credit bir vaqtda bo'lmasligi kerak
+        if (field === 'debit_amount' && parseFloat(value) > 0) {
+          updated.credit_amount = 0;
+        } else if (field === 'credit_amount' && parseFloat(value) > 0) {
+          updated.debit_amount = 0;
+        }
+        return updated;
+      })
     }));
   };
 
   const handleEditEntry = () => {
     if (!selectedEntry) return;
     if (selectedEntry.status === 'posted') {
-      alert(t('cannot_edit_posted_entry') || 'Posted entries cannot be edited. Reverse the entry first.');
+      showError(t('cannot_edit_posted_entry') || 'Posted entries cannot be edited. Reverse the entry first.');
       return;
     }
     setNewEntry({
@@ -765,6 +776,8 @@ export default function GeneralLedger() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertModal modal={modal} close={close} />
     </div>
   );
 }

@@ -17,6 +17,8 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import TaxReports from "./TaxReports";
+import { useAlertModal } from "@/hooks/useAlertModal";
+import AlertModal from "@/components/shared/AlertModal";
 
 export default function TaxRates() {
   const { language } = useLanguage();
@@ -29,6 +31,7 @@ export default function TaxRates() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { modal, showError, close } = useAlertModal();
 
   const [filteredTaxRates, setFilteredTaxRates] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,7 +110,7 @@ export default function TaxRates() {
     } catch (error) {
       console.error('Error creating tax rate:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create tax rate';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -142,7 +145,7 @@ export default function TaxRates() {
     } catch (error) {
       console.error('Error updating tax rate:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to update tax rate';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -162,7 +165,7 @@ export default function TaxRates() {
     } catch (error) {
       console.error('Error deleting tax rate:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to delete tax rate';
-      alert(`Error: ${errorMsg}`);
+      showError(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -757,6 +760,8 @@ export default function TaxRates() {
           <TaxReports />
         </TabsContent>
       </Tabs>
+
+      <AlertModal modal={modal} close={close} />
     </div>
   );
 }
