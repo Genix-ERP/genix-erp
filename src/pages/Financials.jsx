@@ -7,9 +7,7 @@ import {
   ArrowUpCircle,
   ListTree,
   CreditCard,
-  Percent,
   Landmark,
-  Building2,
   Bell,
   RefreshCw,
   Receipt,
@@ -17,7 +15,8 @@ import {
   Wallet,
   Globe,
   FileCheck,
-  Target
+  Target,
+  Percent
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -26,15 +25,14 @@ import AccountsPayable from "@/components/finance/AccountsPayable";
 import AccountsReceivable from "@/components/finance/AccountsReceivable";
 import ChartOfAccounts from "@/components/finance/ChartOfAccounts";
 import Payments from "@/components/finance/Payments";
-import TaxRates from "@/components/finance/TaxRates";
 import BankReconciliation from "@/components/finance/BankReconciliation";
-import FixedAssets from "@/components/finance/FixedAssets";
 import RecurringJournalEntries from "@/components/finance/RecurringJournalEntries";
 import FinancialReports from "@/components/finance/FinancialReports";
 import CashRegister from "@/components/finance/CashRegister";
 import CurrencyManagement from "@/components/finance/CurrencyManagement";
 import BudgetManagement from "@/components/finance/BudgetManagement";
 import ActSverka from "@/components/finance/ActSverka";
+import TaxReports from "@/components/finance/TaxReports";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -103,23 +101,10 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('currency_operations') || 'Valyuta'}</span>
             </TabsTrigger>
 
-            {/* 8. Soliq stavkalari */}
-            <TabsTrigger value="taxes" className={tabTriggerClass}>
-              <Percent className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('tax_rates') || 'Soliq'}</span>
-            </TabsTrigger>
-
-            {/* 9. Bank */}
+            {/* 8. Bank */}
             <TabsTrigger value="bank" className={tabTriggerClass}>
               <Landmark className="w-4 h-4" />
               <span className="hidden sm:inline">{t('bank')}</span>
-            </TabsTrigger>
-
-            {/* 10. Asosiy vositalar */}
-            <TabsTrigger value="assets" className={tabTriggerClass}>
-              <Building2 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('fixed_assets') || 'Asosiy vositalar'}</span>
-              <span className="sm:hidden">AV</span>
             </TabsTrigger>
 
             {/* 11. Byudjetlashtirish (YANGI) */}
@@ -134,7 +119,13 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('recurring') || 'Qaytariladigan'}</span>
             </TabsTrigger>
 
-            {/* 13. Hisobotlar */}
+            {/* 13. Soliq hisobotlari */}
+            <TabsTrigger value="tax-reports" className={tabTriggerClass}>
+              <Percent className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('tax_reports') || 'Soliq hisobotlari'}</span>
+            </TabsTrigger>
+
+            {/* 14. Hisobotlar */}
             <TabsTrigger value="reports" className={tabTriggerClass}>
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reports') || 'Hisobotlar'}</span>
@@ -195,20 +186,17 @@ export default function Financials() {
           <TabsContent value="currency" className="mt-6">
             <CurrencyManagement />
           </TabsContent>
-          <TabsContent value="taxes" className="mt-6">
-            <TaxRates />
-          </TabsContent>
           <TabsContent value="bank" className="mt-6">
             <BankReconciliation />
-          </TabsContent>
-          <TabsContent value="assets" className="mt-6">
-            <FixedAssets />
           </TabsContent>
           <TabsContent value="budget" className="mt-6">
             <BudgetManagement />
           </TabsContent>
           <TabsContent value="recurring" className="mt-6">
             <RecurringJournalEntries />
+          </TabsContent>
+          <TabsContent value="tax-reports" className="mt-6">
+            <TaxReports />
           </TabsContent>
           <TabsContent value="reports" className="mt-6">
             <FinancialReports />

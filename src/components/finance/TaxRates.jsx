@@ -20,7 +20,7 @@ import TaxReports from "./TaxReports";
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 
-export default function TaxRates() {
+export default function TaxRates({ hideReports = false }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
@@ -181,146 +181,43 @@ export default function TaxRates() {
       : 'bg-purple-100 text-purple-800 border-purple-200';
   };
 
-  return (
-    <div className="space-y-6">
-      <Tabs defaultValue="rates" className="w-full">
-        <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200/60 shadow-sm">
-          <TabsTrigger
-            value="rates"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Percent className="w-4 h-4" />
-            {t('tax_rates') || 'Tax Rates'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="reports"
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
-          >
-            <Receipt className="w-4 h-4" />
-            {t('tax_reports') || 'Tax Reports'}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="rates" className="mt-4 space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('active_rates')}</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  {summaryStats.totalActive}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('sales_taxes')}</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {summaryStats.salesTaxes}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('purchase_taxes')}</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {summaryStats.purchaseTaxes}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <Package className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('average_rate')}</p>
-                <p className="text-2xl font-bold text-slate-900">
-                  {summaryStats.avgRate}%
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
-                <Calculator className="w-6 h-6 text-slate-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tax Rates Table */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardHeader className="border-b border-slate-100 pb-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[var(--genix-blue)]/10 rounded-xl flex items-center justify-center">
-                <Percent className="w-5 h-5 text-[var(--genix-blue)]" />
-              </div>
-              <div>
-                <CardTitle className="text-xl font-bold text-slate-900">
-                  {t('tax_rates')}
-                </CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
-                  {filteredTaxRates.length} {t('tax_rates_configured')}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder={t('search_tax_rates')}
-                  className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[160px] bg-slate-50">
-                  <SelectValue placeholder={t('tax_type')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_types')}</SelectItem>
-                  <SelectItem value="sales">{t('sales_tax')}</SelectItem>
-                  <SelectItem value="purchase">{t('purchase_tax')}</SelectItem>
-                </SelectContent>
-              </Select>
-              {canCreate(MODULES.FINANCIALS) && (
-                <Button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_tax_rate')}
-                </Button>
-              )}
-            </div>
+  const searchAndFilter = (
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder={t('search_tax_rates')}
+              className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-[160px] bg-slate-50">
+              <SelectValue placeholder={t('tax_type')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('all_types')}</SelectItem>
+              <SelectItem value="sales">{t('sales_tax')}</SelectItem>
+              <SelectItem value="purchase">{t('purchase_tax')}</SelectItem>
+            </SelectContent>
+          </Select>
+          {canCreate(MODULES.FINANCIALS) && (
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowCreateModal(true);
+              }}
+              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+            >
+              <Plus className="w-4 h-4 mr-2" /> {t('new_tax_rate')}
+            </Button>
+          )}
+        </div>
+  );
+
+  const taxTable = (
+        <div>
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
@@ -446,9 +343,11 @@ export default function TaxRates() {
               </Table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+  );
 
+  const modals = (
+      <>
       {/* Create Tax Rate Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-lg">
@@ -754,6 +653,173 @@ export default function TaxRates() {
           </div>
         </DialogContent>
       </Dialog>
+      </>
+  );
+
+  if (hideReports) {
+    return (
+      <div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <div className="w-5 h-5 border-2 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : taxRates.length === 0 ? (
+          <div className="text-center py-6 text-slate-500">
+            <p className="text-sm mb-3">{t('no_tax_rates_configured')}</p>
+            {canCreate(MODULES.FINANCIALS) && (
+              <Button size="sm" variant="outline" onClick={() => { resetForm(); setShowCreateModal(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> {t('new_tax_rate')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="border rounded-lg overflow-hidden">
+              {taxRates.map((taxRate, index) => {
+                const TypeIcon = getTaxTypeIcon(taxRate.tax_type);
+                return (
+                  <div
+                    key={taxRate.id}
+                    className={`flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors ${
+                      index !== taxRates.length - 1 ? 'border-b' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className="font-medium text-sm text-slate-900 truncate">{taxRate.name}</span>
+                      <Badge variant="outline" className={`${getTaxTypeColor(taxRate.tax_type)} text-xs flex-shrink-0`}>
+                        <TypeIcon className="w-3 h-3 mr-1" />
+                        {taxRate.tax_type === 'sales' ? (t('sales') || 'Sales') : (t('purchase') || 'Purchase')}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="font-semibold text-sm tabular-nums text-slate-700">{taxRate.rate}%</span>
+                      <div className="flex items-center gap-0.5">
+                        {canUpdate(MODULES.FINANCIALS) && (
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(taxRate)} className="h-7 w-7 p-0">
+                            <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                          </Button>
+                        )}
+                        {canDelete(MODULES.FINANCIALS) && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(taxRate)} className="h-7 w-7 p-0">
+                            <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {canCreate(MODULES.FINANCIALS) && (
+              <Button size="sm" variant="outline" onClick={() => { resetForm(); setShowCreateModal(true); }} className="mt-3">
+                <Plus className="w-4 h-4 mr-1" /> {t('new_tax_rate')}
+              </Button>
+            )}
+          </>
+        )}
+
+        {modals}
+        <AlertModal modal={modal} close={close} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="rates" className="w-full">
+        <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-lg border border-slate-200/60 shadow-sm">
+          <TabsTrigger
+            value="rates"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Percent className="w-4 h-4" />
+            {t('tax_rates') || 'Tax Rates'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="reports"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Receipt className="w-4 h-4" />
+            {t('tax_reports') || 'Tax Reports'}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="rates" className="mt-4 space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">{t('active_rates')}</p>
+                    <p className="text-2xl font-bold text-slate-900">{summaryStats.totalActive}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                    <CheckCircle className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">{t('sales_taxes')}</p>
+                    <p className="text-2xl font-bold text-blue-600">{summaryStats.salesTaxes}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <ShoppingCart className="w-6 h-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">{t('purchase_taxes')}</p>
+                    <p className="text-2xl font-bold text-purple-600">{summaryStats.purchaseTaxes}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                    <Package className="w-6 h-6 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">{t('average_rate')}</p>
+                    <p className="text-2xl font-bold text-slate-900">{summaryStats.avgRate}%</p>
+                  </div>
+                  <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                    <Calculator className="w-6 h-6 text-slate-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardHeader className="border-b border-slate-100 pb-6">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[var(--genix-blue)]/10 rounded-xl flex items-center justify-center">
+                    <Percent className="w-5 h-5 text-[var(--genix-blue)]" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-slate-900">{t('tax_rates')}</CardTitle>
+                    <p className="text-sm text-slate-500 mt-1">{filteredTaxRates.length} {t('tax_rates_configured')}</p>
+                  </div>
+                </div>
+                {searchAndFilter}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {taxTable}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="reports" className="mt-4">
@@ -761,6 +827,7 @@ export default function TaxRates() {
         </TabsContent>
       </Tabs>
 
+      {modals}
       <AlertModal modal={modal} close={close} />
     </div>
   );

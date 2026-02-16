@@ -6,6 +6,7 @@ import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './S
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, FileText, Percent, Coins, Landmark, BookOpen, Lock } from 'lucide-react';
+import TaxRates from '@/components/finance/TaxRates';
 
 // Arrays are defined inside component to use translations
 
@@ -167,33 +168,13 @@ export default function FinanceSettings() {
         </div>
       </SettingsSection>
 
-      {/* Tax Configuration */}
+      {/* Tax Rates */}
       <SettingsSection
-        title={t('tax_configuration')}
+        title={t('tax_rates') || 'Tax Rates'}
         description={t('tax_configuration_desc')}
         icon={Percent}
       >
         <SettingsRow>
-          <SettingsField label={t('default_sales_tax_percent')}>
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              value={finance.tax?.default_sales_tax || 12}
-              onChange={(e) => updateSetting('finance.tax.default_sales_tax', parseFloat(e.target.value) || 0)}
-            />
-          </SettingsField>
-          <SettingsField label={t('default_purchase_tax_percent')}>
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              value={finance.tax?.default_purchase_tax || 12}
-              onChange={(e) => updateSetting('finance.tax.default_purchase_tax', parseFloat(e.target.value) || 0)}
-            />
-          </SettingsField>
           <SettingsField label={t('tax_rounding')}>
             <Select
               value={finance.tax?.tax_rounding || 'line'}
@@ -211,13 +192,15 @@ export default function FinanceSettings() {
           </SettingsField>
         </SettingsRow>
 
-        <div className="mt-4">
-          <SettingsToggle
-            label={t('price_includes_tax')}
-            description={t('price_includes_tax_desc')}
-            checked={finance.tax?.price_includes_tax ?? false}
-            onChange={(checked) => updateSetting('finance.tax.price_includes_tax', checked)}
-          />
+        <SettingsToggle
+          label={t('price_includes_tax')}
+          description={t('price_includes_tax_desc')}
+          checked={finance.tax?.price_includes_tax ?? false}
+          onChange={(checked) => updateSetting('finance.tax.price_includes_tax', checked)}
+        />
+
+        <div className="mt-4 border-t pt-4">
+          <TaxRates hideReports />
         </div>
       </SettingsSection>
 
