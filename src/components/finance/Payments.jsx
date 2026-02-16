@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Search, CreditCard, Calendar, DollarSign, CheckCircle, Clock,
   AlertCircle, ArrowUpRight, ArrowDownLeft, Building2, User, Wallet,
@@ -33,9 +34,8 @@ export default function Payments() {
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
-  const [filteredPayments, setFilteredPayments] = useState([]);
+  const [activeTab, setActiveTab] = useState("customer");
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -45,7 +45,7 @@ export default function Payments() {
   const [contactsLoading, setContactsLoading] = useState(false);
 
   const [newPayment, setNewPayment] = useState({
-    payment_type: 'outbound',
+    payment_type: 'inbound',
     payment_method: 'bank_transfer',
     payment_date: new Date().toISOString().split('T')[0],
     amount: '',
@@ -54,7 +54,7 @@ export default function Payments() {
     description: '',
     contact_id: '',
     account_id: '',
-    bill_id: '', // Link to vendor bill
+    bill_id: '',
   });
 
   // Get unpaid vendor bills for bill selector
@@ -79,20 +79,18 @@ export default function Payments() {
     }
   }, [showCreateModal, contacts.length]);
 
-  // Summary calculations
-  const summaryStats = {
-    totalInbound: payments.filter(p => p.payment_type === 'inbound').reduce((sum, p) => sum + (p.amount || 0), 0),
-    totalOutbound: payments.filter(p => p.payment_type === 'outbound').reduce((sum, p) => sum + (p.amount || 0), 0),
-    pendingCount: payments.filter(p => p.status === 'draft' || p.status === 'pending').length,
-    confirmedCount: payments.filter(p => p.status === 'confirmed' || p.status === 'posted').length,
-  };
+  // Split payments by type
+  const customerPayments = useMemo(() =>
+    payments.filter(p => p.payment_type === 'inbound'), [payments]);
+  const vendorPayments = useMemo(() =>
+    payments.filter(p => p.payment_type === 'outbound'), [payments]);
 
-  useEffect(() => {
-    setFilteredPayments(payments);
-  }, [payments]);
+  // Get current tab's payments
+  const currentPayments = activeTab === 'customer' ? customerPayments : vendorPayments;
 
-  useEffect(() => {
-    let filtered = payments;
+  // Filter payments
+  const filteredPayments = useMemo(() => {
+    let filtered = currentPayments;
 
     if (searchQuery) {
       filtered = filtered.filter(payment =>
@@ -102,25 +100,43 @@ export default function Payments() {
       );
     }
 
-    if (typeFilter !== "all") {
-      filtered = filtered.filter(payment => payment.payment_type === typeFilter);
-    }
-
     if (statusFilter !== "all") {
       filtered = filtered.filter(payment => payment.status === statusFilter);
     }
 
-    setFilteredPayments(filtered);
-  }, [searchQuery, typeFilter, statusFilter, payments]);
+    return filtered;
+  }, [currentPayments, searchQuery, statusFilter]);
+
+  // Summary stats per tab
+  const summaryStats = useMemo(() => {
+    const tabPayments = currentPayments;
+    return {
+      totalAmount: tabPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
+      pendingCount: tabPayments.filter(p => p.status === 'draft' || p.status === 'pending').length,
+      confirmedCount: tabPayments.filter(p => p.status === 'confirmed' || p.status === 'posted').length,
+    };
+  }, [currentPayments]);
+
+  const handleOpenCreate = () => {
+    setNewPayment({
+      payment_type: activeTab === 'customer' ? 'inbound' : 'outbound',
+      payment_method: 'bank_transfer',
+      payment_date: new Date().toISOString().split('T')[0],
+      amount: '',
+      currency: 'USD',
+      reference: '',
+      description: '',
+      contact_id: '',
+      account_id: '',
+      bill_id: '',
+    });
+    setShowCreateModal(true);
+  };
 
   const handleCreatePayment = async () => {
     setIsSaving(true);
     try {
-      // Map frontend payment_type to backend type
-      // inbound (money received) = receipt, outbound (money paid) = payment
       const backendType = newPayment.payment_type === 'inbound' ? 'receipt' : 'payment';
-
-      // Get selected contact info for display purposes
       const selectedContact = contacts.find(c => c.id === newPayment.contact_id);
 
       const paymentData = {
@@ -131,30 +147,14 @@ export default function Payments() {
         reference: newPayment.reference,
         notes: newPayment.description,
         bank_account_id: newPayment.account_id || undefined,
-        // Keep frontend fields for UI display
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
         party_name: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
-        // Link to bill if selected
         entity_type: newPayment.bill_id ? 'purchase_invoice' : null,
         entity_id: newPayment.bill_id || null,
       };
 
       await createPayment(paymentData);
-
-      setNewPayment({
-        payment_type: 'outbound',
-        payment_method: 'bank_transfer',
-        payment_date: new Date().toISOString().split('T')[0],
-        amount: '',
-        currency: 'USD',
-        reference: '',
-        description: '',
-        contact_id: '',
-        account_id: '',
-        bill_id: '',
-      });
-
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating payment:', error);
@@ -200,10 +200,6 @@ export default function Payments() {
     return <Icon className="w-3 h-3" />;
   };
 
-  const getPaymentTypeIcon = (type) => {
-    return type === 'inbound' ? ArrowDownLeft : ArrowUpRight;
-  };
-
   const getPaymentMethodLabel = (method) => {
     const labels = {
       bank_transfer: t('bank_transfer') || 'Bank Transfer',
@@ -217,272 +213,32 @@ export default function Payments() {
 
   const bankAccounts = accounts.filter(a => a.is_bank_account || (a.category === 'asset' && a.code?.startsWith('1')));
 
+  const isCustomerTab = activeTab === 'customer';
+
+  const subTabClass = "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600";
+
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('total_received')}</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(summaryStats.totalInbound)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <ArrowDownLeft className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchQuery(''); setStatusFilter('all'); }}>
+        <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
+          <TabsTrigger value="customer" className={subTabClass}>
+            <ArrowDownLeft className="w-4 h-4" />
+            {t('customer_payments') || 'Customer Payments'}
+          </TabsTrigger>
+          <TabsTrigger value="vendor" className={subTabClass}>
+            <ArrowUpRight className="w-4 h-4" />
+            {t('vendor_payments') || 'Vendor Payments'}
+          </TabsTrigger>
+        </TabsList>
 
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('total_paid')}</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(summaryStats.totalOutbound)}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                <ArrowUpRight className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('pending')}</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {summaryStats.pendingCount}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-yellow-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('confirmed')}</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {summaryStats.confirmedCount}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Payments Table */}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-        <CardHeader className="border-b border-slate-100 pb-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[var(--genix-purple)]/10 rounded-xl flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-[var(--genix-purple)]" />
-              </div>
-              <div>
-                <CardTitle className="text-xl font-bold text-slate-900">
-                  {t('payments')}
-                </CardTitle>
-                <p className="text-sm text-slate-500 mt-1">
-                  {filteredPayments.length} {t('payments_total')}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder={t('search_payments')}
-                  className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[140px] bg-slate-50">
-                  <SelectValue placeholder={t('type')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_types')}</SelectItem>
-                  <SelectItem value="inbound">{t('received')}</SelectItem>
-                  <SelectItem value="outbound">{t('paid')}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px] bg-slate-50">
-                  <SelectValue placeholder={t('status')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_status')}</SelectItem>
-                  <SelectItem value="draft">{t('draft')}</SelectItem>
-                  <SelectItem value="pending">{t('pending')}</SelectItem>
-                  <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
-                  <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-                </SelectContent>
-              </Select>
-              {canCreate(MODULES.FINANCIALS) && (
-                <Button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="text-center">
-                <div className="w-8 h-8 border-4 border-[var(--genix-purple)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-slate-600 text-sm">{t('loading')}</p>
-              </div>
-            </div>
-          ) : filteredPayments.length === 0 ? (
-            <div className="text-center py-16 px-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <CreditCard className="w-10 h-10 text-slate-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? t('no_payments_found') : t('no_payments_yet')}
-              </h3>
-              <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                {searchQuery
-                  ? t('try_adjusting_search') || 'Try adjusting your search or filters'
-                  : t('record_first_payment')}
-              </p>
-              {!searchQuery && canCreate(MODULES.FINANCIALS) && (
-                <Button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('create_first_payment')}
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        {t('date')}
-                      </div>
-                    </TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('party')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('method')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <DollarSign className="w-4 h-4" />
-                        {t('amount')}
-                      </div>
-                    </TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPayments.map((payment, index) => {
-                    const TypeIcon = getPaymentTypeIcon(payment.payment_type);
-                    return (
-                      <TableRow
-                        key={payment.id || `payment-${index}`}
-                        className="hover:bg-blue-50/50 transition-colors"
-                      >
-                        <TableCell>
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            payment.payment_type === 'inbound'
-                              ? 'bg-green-100'
-                              : 'bg-red-100'
-                          }`}>
-                            <TypeIcon className={`w-4 h-4 ${
-                              payment.payment_type === 'inbound'
-                                ? 'text-green-600'
-                                : 'text-red-600'
-                            }`} />
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium text-slate-700">
-                          {payment.payment_date ? format(new Date(payment.payment_date), 'MMM dd, yyyy') : '-'}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-slate-600">
-                          {payment.reference || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {payment.party_type === 'customer' ? (
-                              <User className="w-4 h-4 text-slate-400" />
-                            ) : (
-                              <Building2 className="w-4 h-4 text-slate-400" />
-                            )}
-                            <span className="text-slate-700">{payment.party_name || '-'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-slate-600">
-                          {getPaymentMethodLabel(payment.payment_method)}
-                        </TableCell>
-                        <TableCell className={`text-right font-semibold tabular-nums ${
-                          payment.payment_type === 'inbound' ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {payment.payment_type === 'inbound' ? '+' : '-'}{formatCurrency(payment.amount || 0)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${getStatusColor(payment.status)} flex items-center gap-1 w-fit`}>
-                            {getStatusIcon(payment.status)}
-                            {t(payment.status) || payment.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDetail(payment)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Eye className="w-4 h-4 text-slate-500" />
-                            </Button>
-                            {(payment.status === 'draft' || payment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleConfirmPayment(payment.id)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* Both tabs share the same content structure */}
+        <TabsContent value="customer">
+          <PaymentContent />
+        </TabsContent>
+        <TabsContent value="vendor">
+          <PaymentContent />
+        </TabsContent>
+      </Tabs>
 
       {/* Create Payment Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -490,41 +246,16 @@ export default function Payments() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-[var(--genix-purple)]" />
-              {t('new_payment')}
+              {isCustomerTab ? (t('receive_payment') || 'Receive Payment') : (t('make_payment') || 'Make Payment')}
             </DialogTitle>
             <DialogDescription>
-              {t('record_first_payment')}
+              {isCustomerTab
+                ? (t('record_customer_payment') || 'Record a payment received from a customer')
+                : (t('record_vendor_payment') || 'Record a payment made to a vendor')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('payment_type')} *
-                </label>
-                <Select
-                  value={newPayment.payment_type}
-                  onValueChange={(value) => setNewPayment({...newPayment, payment_type: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inbound">
-                      <div className="flex items-center gap-2">
-                        <ArrowDownLeft className="w-4 h-4 text-green-600" />
-                        {t('money_received')}
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="outbound">
-                      <div className="flex items-center gap-2">
-                        <ArrowUpRight className="w-4 h-4 text-red-600" />
-                        {t('money_paid')}
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
                   {t('payment_date')} *
@@ -536,11 +267,31 @@ export default function Payments() {
                   required
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('payment_method')} *
+                </label>
+                <Select
+                  value={newPayment.payment_method}
+                  onValueChange={(value) => setNewPayment({...newPayment, payment_method: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank_transfer">{t('bank_transfer')}</SelectItem>
+                    <SelectItem value="cash">{t('cash')}</SelectItem>
+                    <SelectItem value="check">{t('check')}</SelectItem>
+                    <SelectItem value="credit_card">{t('credit_card')}</SelectItem>
+                    <SelectItem value="wire">{t('wire_transfer')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('contact')} *
+                {isCustomerTab ? (t('customer') || 'Customer') : (t('vendor') || 'Vendor')} *
               </label>
               <Select
                 value={newPayment.contact_id}
@@ -550,24 +301,40 @@ export default function Payments() {
                   <SelectValue placeholder={contactsLoading ? t('loading') : t('select_contact')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {contacts.map(contact => (
-                    <SelectItem key={contact.id} value={contact.id}>
-                      <div className="flex items-center gap-2">
-                        {contact.contact_type === 'customer' ? (
-                          <User className="w-4 h-4 text-blue-500" />
-                        ) : (
-                          <Building2 className="w-4 h-4 text-orange-500" />
-                        )}
-                        {contact.company_name || contact.contact_name || contact.name}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {contacts
+                    .filter(c => isCustomerTab ? c.contact_type === 'customer' : c.contact_type === 'vendor')
+                    .map(contact => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        <div className="flex items-center gap-2">
+                          {isCustomerTab ? (
+                            <User className="w-4 h-4 text-blue-500" />
+                          ) : (
+                            <Building2 className="w-4 h-4 text-orange-500" />
+                          )}
+                          {contact.company_name || contact.contact_name || contact.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  {contacts.filter(c => isCustomerTab ? c.contact_type === 'customer' : c.contact_type === 'vendor').length === 0 && !contactsLoading && (
+                    contacts.map(contact => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        <div className="flex items-center gap-2">
+                          {contact.contact_type === 'customer' ? (
+                            <User className="w-4 h-4 text-blue-500" />
+                          ) : (
+                            <Building2 className="w-4 h-4 text-orange-500" />
+                          )}
+                          {contact.company_name || contact.contact_name || contact.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Bill Selector - Only show for outbound payments */}
-            {newPayment.payment_type === 'outbound' && unpaidBills.length > 0 && (
+            {/* Bill Selector - Only show for vendor payments */}
+            {!isCustomerTab && unpaidBills.length > 0 && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
                   {t('apply_to_bill') || 'Apply to Bill'} ({t('optional') || 'Optional'})
@@ -621,23 +388,19 @@ export default function Payments() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('payment_method')} *
+                  {t('amount')} *
                 </label>
-                <Select
-                  value={newPayment.payment_method}
-                  onValueChange={(value) => setNewPayment({...newPayment, payment_method: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bank_transfer">{t('bank_transfer')}</SelectItem>
-                    <SelectItem value="cash">{t('cash')}</SelectItem>
-                    <SelectItem value="check">{t('check')}</SelectItem>
-                    <SelectItem value="credit_card">{t('credit_card')}</SelectItem>
-                    <SelectItem value="wire">{t('wire_transfer')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    className="pl-9"
+                    value={newPayment.amount}
+                    onChange={(e) => setNewPayment({...newPayment, amount: e.target.value})}
+                    required
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
@@ -661,33 +424,15 @@ export default function Payments() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('amount')} *
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    className="pl-9"
-                    value={newPayment.amount}
-                    onChange={(e) => setNewPayment({...newPayment, amount: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('reference')}
-                </label>
-                <Input
-                  placeholder={t('payment_reference')}
-                  value={newPayment.reference}
-                  onChange={(e) => setNewPayment({...newPayment, reference: e.target.value})}
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('reference')}
+              </label>
+              <Input
+                placeholder={t('payment_reference')}
+                value={newPayment.reference}
+                onChange={(e) => setNewPayment({...newPayment, reference: e.target.value})}
+              />
             </div>
 
             <div>
@@ -837,4 +582,240 @@ export default function Payments() {
       </Dialog>
     </div>
   );
+
+  // Inner content rendered for both tabs
+  function PaymentContent() {
+    return (
+      <div className="space-y-6">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">
+                    {isCustomerTab ? t('total_received') : t('total_paid')}
+                  </p>
+                  <p className={`text-2xl font-bold ${isCustomerTab ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(summaryStats.totalAmount)}
+                  </p>
+                </div>
+                <div className={`w-12 h-12 ${isCustomerTab ? 'bg-green-100' : 'bg-red-100'} rounded-xl flex items-center justify-center`}>
+                  {isCustomerTab
+                    ? <ArrowDownLeft className="w-6 h-6 text-green-600" />
+                    : <ArrowUpRight className="w-6 h-6 text-red-600" />
+                  }
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">{t('pending')}</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {summaryStats.pendingCount}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-yellow-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">{t('confirmed')}</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {summaryStats.confirmedCount}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Payments Table */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          <CardHeader className="border-b border-slate-100 pb-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[var(--genix-purple)]/10 rounded-xl flex items-center justify-center">
+                  <CreditCard className="w-5 h-5 text-[var(--genix-purple)]" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold text-slate-900">
+                    {isCustomerTab ? (t('customer_payments') || 'Customer Payments') : (t('vendor_payments') || 'Vendor Payments')}
+                  </CardTitle>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {filteredPayments.length} {t('payments_total')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder={t('search_payments')}
+                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[140px] bg-slate-50">
+                    <SelectValue placeholder={t('status')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_status')}</SelectItem>
+                    <SelectItem value="draft">{t('draft')}</SelectItem>
+                    <SelectItem value="pending">{t('pending')}</SelectItem>
+                    <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                {canCreate(MODULES.FINANCIALS) && (
+                  <Button
+                    onClick={handleOpenCreate}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="text-center">
+                  <div className="w-8 h-8 border-4 border-[var(--genix-purple)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-slate-600 text-sm">{t('loading')}</p>
+                </div>
+              </div>
+            ) : filteredPayments.length === 0 ? (
+              <div className="text-center py-16 px-6">
+                <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <CreditCard className="w-10 h-10 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  {searchQuery ? t('no_payments_found') : t('no_payments_yet')}
+                </h3>
+                <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
+                  {searchQuery
+                    ? t('try_adjusting_search') || 'Try adjusting your search or filters'
+                    : t('record_first_payment')}
+                </p>
+                {!searchQuery && canCreate(MODULES.FINANCIALS) && (
+                  <Button
+                    onClick={handleOpenCreate}
+                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> {t('create_first_payment')}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 hover:bg-slate-50">
+                      <TableHead className="font-semibold text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          {t('date')}
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700">
+                        {isCustomerTab ? (t('customer') || 'Customer') : (t('vendor') || 'Vendor')}
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('method')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <DollarSign className="w-4 h-4" />
+                          {t('amount')}
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPayments.map((payment, index) => (
+                      <TableRow
+                        key={payment.id || `payment-${index}`}
+                        className="hover:bg-blue-50/50 transition-colors"
+                      >
+                        <TableCell className="font-medium text-slate-700">
+                          {payment.payment_date ? format(new Date(payment.payment_date), 'MMM dd, yyyy') : '-'}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-slate-600">
+                          {payment.reference || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {isCustomerTab ? (
+                              <User className="w-4 h-4 text-slate-400" />
+                            ) : (
+                              <Building2 className="w-4 h-4 text-slate-400" />
+                            )}
+                            <span className="text-slate-700">{payment.party_name || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {getPaymentMethodLabel(payment.payment_method)}
+                        </TableCell>
+                        <TableCell className={`text-right font-semibold tabular-nums ${
+                          isCustomerTab ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {formatCurrency(payment.amount || 0)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getStatusColor(payment.status)} flex items-center gap-1 w-fit`}>
+                            {getStatusIcon(payment.status)}
+                            {t(payment.status) || payment.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewDetail(payment)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Eye className="w-4 h-4 text-slate-500" />
+                            </Button>
+                            {(payment.status === 'draft' || payment.status === 'pending') && canUpdate(MODULES.FINANCIALS) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleConfirmPayment(payment.id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 }

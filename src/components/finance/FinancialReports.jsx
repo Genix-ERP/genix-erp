@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   FileText, Download, Loader2, CheckCircle2, AlertTriangle,
   ChevronDown, ChevronRight, Users, Building2, DollarSign,
-  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight
+  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Scale
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -60,6 +60,98 @@ const getPeriodLabel = (period, language) => {
   }
 };
 
+// Collapsible P&L section component (Odoo-style)
+function PnLSection({ title, items, total, formatCurrency, isCollapsible }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      {/* Section Header */}
+      <tr
+        className={`border-b border-slate-200 ${isCollapsible ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+        onClick={() => isCollapsible && setExpanded(!expanded)}
+      >
+        <td className="py-3 px-4 font-semibold text-slate-800 flex items-center gap-2">
+          {isCollapsible && (
+            expanded ?
+              <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" /> :
+              <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          )}
+          {title}
+        </td>
+        <td className="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">
+          {formatCurrency(total)}
+        </td>
+      </tr>
+      {/* Expanded Items */}
+      {expanded && items.map((item, idx) => (
+        <tr key={item.account_id || idx} className="border-b border-slate-100 bg-slate-50/50">
+          <td className="py-2 px-4 pl-12 text-slate-600">
+            {item.account_code} {item.account_name}
+          </td>
+          <td className="py-2 px-4 text-right font-mono text-slate-600 tabular-nums">
+            {formatCurrency(item.amount)}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+// Balance Sheet section component (Odoo-style)
+function BalanceSheetSection({ title, sections, total, formatCurrency, colorClass, language }) {
+  const [expanded, setExpanded] = useState(true);
+  const accounts = sections?.flatMap(s => s.accounts || []) || [];
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      {/* Section Header */}
+      <div
+        className={`flex items-center justify-between px-4 py-3 cursor-pointer ${colorClass}`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2 font-bold">
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          {title}
+        </div>
+        <span className="font-bold tabular-nums">{formatCurrency(total)}</span>
+      </div>
+      {/* Account List */}
+      {expanded && accounts.length > 0 && (
+        <table className="w-full text-sm">
+          <tbody>
+            {accounts.map((acc, idx) => (
+              <tr key={acc.account_id || idx} className="border-t border-slate-100 hover:bg-slate-50">
+                <td className="py-2.5 px-4 pl-10 text-slate-700">
+                  <span className="font-mono text-xs text-slate-400 mr-2">{acc.account_code}</span>
+                  {acc.account_name}
+                </td>
+                <td className="py-2.5 px-4 text-right font-mono text-slate-700 tabular-nums w-48">
+                  {formatCurrency(acc.balance)}
+                </td>
+              </tr>
+            ))}
+            {/* Section Total */}
+            <tr className="border-t-2 border-slate-300 bg-slate-50">
+              <td className="py-2.5 px-4 pl-10 font-semibold text-slate-800">
+                {language === 'uz' ? 'Jami' : 'Total'} {title}
+              </td>
+              <td className="py-2.5 px-4 text-right font-bold text-slate-800 tabular-nums w-48">
+                {formatCurrency(total)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+      {expanded && accounts.length === 0 && (
+        <div className="px-4 py-6 text-center text-sm text-slate-400">
+          {language === 'uz' ? 'Ma\'lumot yo\'q' : 'No accounts'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FinancialReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -72,6 +164,8 @@ export default function FinancialReports() {
 
   // Report data states
   const [trialBalance, setTrialBalance] = useState(null);
+  const [incomeStatement, setIncomeStatement] = useState(null);
+  const [balanceSheet, setBalanceSheet] = useState(null);
   const [agingReceivables, setAgingReceivables] = useState(null);
   const [agingPayables, setAgingPayables] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
@@ -90,14 +184,18 @@ export default function FinancialReports() {
     const params = getDateParams(period);
 
     try {
-      const [tb, ar, ap, cf] = await Promise.all([
+      const [tb, pnl, bs, ar, ap, cf] = await Promise.all([
         financeService.getTrialBalance(params).catch(() => null),
+        financeService.getIncomeStatement(params).catch(() => null),
+        financeService.getBalanceSheet(params).catch(() => null),
         financeService.getAgingReceivables(params).catch(() => null),
         financeService.getAgingPayables(params).catch(() => null),
         financeService.getCashFlow(params).catch(() => null)
       ]);
 
       setTrialBalance(tb);
+      setIncomeStatement(pnl);
+      setBalanceSheet(bs);
       setAgingReceivables(ar);
       setAgingPayables(ap);
       setCashFlow(cf);
@@ -183,6 +281,51 @@ export default function FinancialReports() {
         </table>
         ` : ''}
 
+        ${incomeStatement ? `
+        <h2>${language === 'uz' ? 'Foyda va Zarar' : 'Profit and Loss'}</h2>
+        <table>
+          <tr><th></th><th class="amount">${getPeriodLabel(period, language)}</th></tr>
+          ${incomeStatement.revenue?.length > 0 ? `
+            <tr class="total-row"><td><strong>${language === 'uz' ? 'Daromad' : 'Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.total_revenue)}</strong></td></tr>
+            ${incomeStatement.revenue.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+          ` : ''}
+          ${incomeStatement.cost_of_sales?.length > 0 ? `
+            <tr class="total-row"><td><strong>${language === 'uz' ? 'Sotish tannarxi' : 'Less Costs of Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.cost_of_sales.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
+            ${incomeStatement.cost_of_sales.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+          ` : ''}
+          <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Yalpi foyda' : 'Gross Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.gross_profit)}</strong></td></tr>
+          ${incomeStatement.operating_expenses?.length > 0 ? `
+            <tr class="total-row"><td><strong>${language === 'uz' ? 'Operatsion xarajatlar' : 'Less Operating Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
+            ${incomeStatement.operating_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+          ` : ''}
+          <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Operatsion foyda' : 'Operating Income (or Loss)'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_profit)}</strong></td></tr>
+          ${incomeStatement.other_income?.length > 0 ? `
+            <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa daromadlar' : 'Plus Other Income'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_income.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
+            ${incomeStatement.other_income.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+          ` : ''}
+          ${incomeStatement.other_expenses?.length > 0 ? `
+            <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa xarajatlar' : 'Less Other Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
+            ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+          ` : ''}
+          <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Sof foyda' : 'Net Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.net_income)}</strong></td></tr>
+        </table>
+        ` : ''}
+
+        ${balanceSheet ? `
+        <h2>${language === 'uz' ? 'Buxgalteriya Balansi' : 'Balance Sheet'}</h2>
+        <p style="color:#64748b;font-size:12px">${language === 'uz' ? 'Sana' : 'As of'}: ${balanceSheet.as_of_date}</p>
+        <table>
+          <tr><th></th><th class="amount">${language === 'uz' ? 'Balans' : 'Balance'}</th></tr>
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Aktivlar' : 'Assets'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_assets)}</strong></td></tr>
+          ${balanceSheet.assets?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Majburiyatlar' : 'Liabilities'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_liabilities)}</strong></td></tr>
+          ${balanceSheet.liabilities?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Kapital' : 'Equity'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_equity)}</strong></td></tr>
+          ${balanceSheet.equity?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Majburiyatlar + Kapital' : 'Liabilities + Equity'}</strong></td><td class="amount"><strong>${formatCurrency((balanceSheet.total_liabilities || 0) + (balanceSheet.total_equity || 0))}</strong></td></tr>
+        </table>
+        ` : ''}
+
         ${agingReceivables ? `
         <h2>${language === 'uz' ? 'Debitorlik qarzi eskirishi' : 'Aged Receivables'}</h2>
         <table>
@@ -244,7 +387,7 @@ export default function FinancialReports() {
                   {language === 'uz' ? 'Moliyaviy Hisobotlar' : 'Financial Reports'}
                 </CardTitle>
                 <p className="text-sm text-white/80 mt-1">
-                  {language === 'uz' ? 'Sinov balansi, Eskirish, Pul oqimi' : 'Trial Balance, Aging, Cash Flow'}
+                  {language === 'uz' ? 'Sinov balansi, Foyda va zarar, Balans, Eskirish, Pul oqimi' : 'Trial Balance, P&L, Balance Sheet, Aging, Cash Flow'}
                 </p>
               </div>
             </div>
@@ -286,9 +429,15 @@ export default function FinancialReports() {
 
       {/* Reports Tabs */}
       <Tabs defaultValue="trial-balance" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
+          </TabsTrigger>
+          <TabsTrigger value="profit-loss">
+            {language === 'uz' ? 'Foyda va Zarar' : 'Profit & Loss'}
+          </TabsTrigger>
+          <TabsTrigger value="balance-sheet">
+            {language === 'uz' ? 'Balans' : 'Balance Sheet'}
           </TabsTrigger>
           <TabsTrigger value="aged-receivables">
             {language === 'uz' ? 'Debitorlik' : 'Aged AR'}
@@ -367,6 +516,219 @@ export default function FinancialReports() {
                       </TableRow>
                     </TableBody>
                   </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Profit & Loss Tab */}
+        <TabsContent value="profit-loss">
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  {language === 'uz' ? 'Foyda va Zarar Hisoboti' : 'Profit and Loss'}
+                </CardTitle>
+                <Badge variant="outline">{getPeriodLabel(period, language)}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : incomeStatement ? (
+                <div className="space-y-0">
+                  {/* P&L Table - Odoo style */}
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-slate-300">
+                        <th className="text-left py-3 px-4 font-semibold text-slate-700"></th>
+                        <th className="text-right py-3 px-4 font-semibold text-slate-700 w-48">
+                          {getPeriodLabel(period, language)}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Revenue Section */}
+                      {incomeStatement.revenue?.length > 0 && (
+                        <PnLSection
+                          title={language === 'uz' ? 'Daromad' : 'Revenue'}
+                          items={incomeStatement.revenue}
+                          total={incomeStatement.total_revenue}
+                          formatCurrency={formatCurrency}
+                          isCollapsible
+                        />
+                      )}
+
+                      {/* Less Costs of Revenue (COGS) */}
+                      {incomeStatement.cost_of_sales?.length > 0 && (
+                        <PnLSection
+                          title={language === 'uz' ? 'Sotish tannarxi' : 'Less Costs of Revenue'}
+                          items={incomeStatement.cost_of_sales}
+                          total={incomeStatement.cost_of_sales.reduce((s, a) => s + a.amount, 0)}
+                          formatCurrency={formatCurrency}
+                          isCollapsible
+                        />
+                      )}
+
+                      {/* Gross Profit */}
+                      <tr className="bg-slate-100 border-y border-slate-300">
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          {language === 'uz' ? 'Yalpi foyda' : 'Gross Profit'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 tabular-nums">
+                          {formatCurrency(incomeStatement.gross_profit)}
+                        </td>
+                      </tr>
+
+                      {/* Less Operating Expenses */}
+                      {incomeStatement.operating_expenses?.length > 0 && (
+                        <PnLSection
+                          title={language === 'uz' ? 'Operatsion xarajatlar' : 'Less Operating Expenses'}
+                          items={incomeStatement.operating_expenses}
+                          total={incomeStatement.operating_expenses.reduce((s, a) => s + a.amount, 0)}
+                          formatCurrency={formatCurrency}
+                          isCollapsible
+                        />
+                      )}
+
+                      {/* Operating Income */}
+                      <tr className="bg-slate-100 border-y border-slate-300">
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          {language === 'uz' ? 'Operatsion foyda (zarar)' : 'Operating Income (or Loss)'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 tabular-nums">
+                          {formatCurrency(incomeStatement.operating_profit)}
+                        </td>
+                      </tr>
+
+                      {/* Plus Other Income */}
+                      {incomeStatement.other_income?.length > 0 && (
+                        <PnLSection
+                          title={language === 'uz' ? 'Boshqa daromadlar' : 'Plus Other Income'}
+                          items={incomeStatement.other_income}
+                          total={incomeStatement.other_income.reduce((s, a) => s + a.amount, 0)}
+                          formatCurrency={formatCurrency}
+                          isCollapsible
+                        />
+                      )}
+
+                      {/* Less Other Expenses */}
+                      {incomeStatement.other_expenses?.length > 0 && (
+                        <PnLSection
+                          title={language === 'uz' ? 'Boshqa xarajatlar' : 'Less Other Expenses'}
+                          items={incomeStatement.other_expenses}
+                          total={incomeStatement.other_expenses.reduce((s, a) => s + a.amount, 0)}
+                          formatCurrency={formatCurrency}
+                          isCollapsible
+                        />
+                      )}
+
+                      {/* Net Profit */}
+                      <tr className="bg-slate-200 border-y-2 border-slate-400">
+                        <td className="py-4 px-4 font-bold text-lg text-slate-900">
+                          {language === 'uz' ? 'Sof foyda' : 'Net Profit'}
+                        </td>
+                        <td className={`py-4 px-4 text-right font-bold text-lg tabular-nums ${incomeStatement.net_income >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {formatCurrency(incomeStatement.net_income)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Balance Sheet Tab */}
+        <TabsContent value="balance-sheet">
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="w-5 h-5" />
+                  {language === 'uz' ? 'Buxgalteriya Balansi' : 'Balance Sheet'}
+                </CardTitle>
+                <Badge variant="outline">
+                  {language === 'uz' ? 'Sana' : 'As of'}: {balanceSheet?.as_of_date || getDateParams(period).as_of_date}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : balanceSheet ? (
+                <div className="space-y-6">
+                  {/* Assets Section */}
+                  <BalanceSheetSection
+                    title={language === 'uz' ? 'Aktivlar' : 'Assets'}
+                    sections={balanceSheet.assets}
+                    total={balanceSheet.total_assets}
+                    formatCurrency={formatCurrency}
+                    colorClass="text-blue-700 bg-blue-50 border-blue-200"
+                    language={language}
+                  />
+
+                  {/* Liabilities Section */}
+                  <BalanceSheetSection
+                    title={language === 'uz' ? 'Majburiyatlar' : 'Liabilities'}
+                    sections={balanceSheet.liabilities}
+                    total={balanceSheet.total_liabilities}
+                    formatCurrency={formatCurrency}
+                    colorClass="text-red-700 bg-red-50 border-red-200"
+                    language={language}
+                  />
+
+                  {/* Equity Section */}
+                  <BalanceSheetSection
+                    title={language === 'uz' ? 'Kapital' : 'Equity'}
+                    sections={balanceSheet.equity}
+                    total={balanceSheet.total_equity}
+                    formatCurrency={formatCurrency}
+                    colorClass="text-purple-700 bg-purple-50 border-purple-200"
+                    language={language}
+                  />
+
+                  {/* Liabilities + Equity Total */}
+                  <div className="border-t-2 border-slate-400 pt-4">
+                    <div className="flex justify-between items-center px-4 py-3 bg-slate-200 rounded-lg">
+                      <span className="font-bold text-lg text-slate-900">
+                        {language === 'uz' ? 'Majburiyatlar + Kapital' : 'Liabilities + Equity'}
+                      </span>
+                      <span className="font-bold text-lg text-slate-900 tabular-nums">
+                        {formatCurrency((balanceSheet.total_liabilities || 0) + (balanceSheet.total_equity || 0))}
+                      </span>
+                    </div>
+                    {/* Balance check */}
+                    {Math.abs(balanceSheet.total_assets - (balanceSheet.total_liabilities + balanceSheet.total_equity)) > 0.01 ? (
+                      <div className="flex items-center gap-2 mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                        <AlertTriangle className="w-4 h-4" />
+                        {language === 'uz'
+                          ? `Balans tengligi buzilgan: Farq ${formatCurrency(Math.abs(balanceSheet.total_assets - balanceSheet.total_liabilities - balanceSheet.total_equity))}`
+                          : `Balance equation doesn't hold: Difference ${formatCurrency(Math.abs(balanceSheet.total_assets - balanceSheet.total_liabilities - balanceSheet.total_equity))}`
+                        }
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {language === 'uz' ? 'Balans tengligi to\'g\'ri: Aktivlar = Majburiyatlar + Kapital' : 'Balance equation holds: Assets = Liabilities + Equity'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">

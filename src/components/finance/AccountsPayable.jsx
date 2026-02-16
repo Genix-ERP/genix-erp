@@ -68,6 +68,7 @@ export default function AccountsPayable() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
   const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
   const [debitNoteBill, setDebitNoteBill] = useState(null);
   const [debitNoteReason, setDebitNoteReason] = useState('');
@@ -201,6 +202,30 @@ export default function AccountsPayable() {
     { key: 'subtotal', label: t('amount') || 'Amount', required: true },
   ];
 
+  const getPaymentStatus = (bill) => {
+    const paid = bill.amount_paid || 0;
+    const total = bill.total_amount || 0;
+    if (total <= 0) return 'unpaid';
+    if (paid >= total) return 'paid';
+    if (paid > 0) return 'partial';
+    return 'unpaid';
+  };
+
+  const getPaymentStatusBadge = (bill) => {
+    const status = getPaymentStatus(bill);
+    const styles = {
+      paid: 'bg-green-100 text-green-800 border-green-200',
+      partial: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      unpaid: 'bg-red-100 text-red-800 border-red-200',
+    };
+    const labels = {
+      paid: t('paid'),
+      partial: t('partial') || 'Partial',
+      unpaid: t('unpaid') || 'Unpaid',
+    };
+    return { style: styles[status], label: labels[status] };
+  };
+
   useEffect(() => {
     setFilteredBills(vendorBills);
   }, [vendorBills]);
@@ -216,6 +241,10 @@ export default function AccountsPayable() {
       filtered = filtered.filter(b => (b.invoice_type || 'invoice') === typeFilter);
     }
 
+    if (paymentStatusFilter !== 'all') {
+      filtered = filtered.filter(b => getPaymentStatus(b) === paymentStatusFilter);
+    }
+
     if (searchQuery) {
       filtered = filtered.filter(b =>
         b.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -224,7 +253,7 @@ export default function AccountsPayable() {
     }
 
     setFilteredBills(filtered);
-  }, [vendorBills, searchQuery, statusFilter, typeFilter]);
+  }, [vendorBills, searchQuery, statusFilter, typeFilter, paymentStatusFilter]);
 
   const handleCreateBill = async () => {
     setIsSaving(true);
@@ -587,6 +616,17 @@ export default function AccountsPayable() {
                       <SelectItem value="overdue">{t('overdue') || 'Overdue'}</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all_payments') || 'All Payments'}</SelectItem>
+                      <SelectItem value="unpaid">{t('unpaid') || 'Unpaid'}</SelectItem>
+                      <SelectItem value="partial">{t('partial') || 'Partial'}</SelectItem>
+                      <SelectItem value="paid">{t('paid')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardHeader>
@@ -618,6 +658,7 @@ export default function AccountsPayable() {
                     <TableHead>{t('date')}</TableHead>
                     <TableHead>{t('due_date')}</TableHead>
                     <TableHead>{t('amount')}</TableHead>
+                    <TableHead>{t('payment_status') || 'Payment'}</TableHead>
                     <TableHead>{t('status')}</TableHead>
                     <TableHead>{t('actions')}</TableHead>
                   </TableRow>
@@ -656,6 +697,20 @@ export default function AccountsPayable() {
                         {bill.due_date ? format(new Date(bill.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                       </TableCell>
                       <TableCell className="font-semibold">{formatCurrency(bill.total_amount || 0)}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const ps = getPaymentStatusBadge(bill);
+                          const amountDue = (bill.total_amount || 0) - (bill.amount_paid || 0);
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge className={ps.style}>{ps.label}</Badge>
+                              {getPaymentStatus(bill) === 'partial' && (
+                                <span className="text-xs text-slate-500">{t('due')}: {formatCurrency(amountDue)}</span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(bill.status)}>{t(bill.status) || bill.status}</Badge>
                       </TableCell>
