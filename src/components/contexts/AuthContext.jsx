@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import authService from '@/api/services/auth';
+import { checkBackendHealth } from '@/config/dataMode';
 
 const AuthContext = createContext(null);
 
@@ -35,19 +36,8 @@ const DEMO_USERS = [
   }
 ];
 
-// Check if backend is available
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-const checkBackendAvailable = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/info`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-};
+// Use shared cached health check instead of making duplicate /info calls
+const checkBackendAvailable = checkBackendHealth;
 
 // System role types
 const ROLE_TYPES = {
