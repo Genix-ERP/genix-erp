@@ -167,9 +167,14 @@ export default function Warehouses() {
       .reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
+  const generateCode = (prefix, existingItems) => {
+    const num = (existingItems?.length || 0) + 1;
+    return `${prefix}-${String(num).padStart(3, '0')}`;
+  };
+
   const resetForm = () => {
     setFormData({
-      code: '',
+      code: generateCode('WH', warehouses),
       name: '',
       address: '',
       city: '',
@@ -188,8 +193,9 @@ export default function Warehouses() {
   };
 
   const resetLocationForm = () => {
+    const locCount = selectedWarehouse?.locations?.length || 0;
     setLocationForm({
-      code: '',
+      code: `LOC-${String(locCount + 1).padStart(3, '0')}`,
       name: '',
       type: 'storage',
       parent_id: '',
@@ -723,13 +729,12 @@ export default function Warehouses() {
                 <LabelWithHelp
                   label={t('code')}
                   required
-                  helpText={t('help_warehouse_code') || "Omborni tezkor aniqlash uchun qisqa kod (masalan, WH-01). Tizimda noyob bo'lishi kerak."}
+                  helpText={t('help_warehouse_code') || "Avtomatik yaratilgan noyob ombor kodi."}
                 />
                 <Input
-                  placeholder={t('warehouse_code_placeholder')}
                   value={formData.code}
-                  onChange={(e) => setFormData({...formData, code: e.target.value})}
-                  required
+                  disabled
+                  className="bg-slate-50"
                 />
               </div>
               <div>
@@ -1026,13 +1031,12 @@ export default function Warehouses() {
                   <LabelWithHelp
                     label={t('code')}
                     required
-                    helpText={t('help_location_code') || "Joylashuv koordinatasi (masalan, A-01-02-03). Tez topish va skanerlash uchun ishlatiladi."}
+                    helpText={t('help_location_code') || "Avtomatik yaratilgan noyob joylashuv kodi."}
                   />
                   <Input
-                    placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
                     value={locationForm.code}
-                    onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
-                    required
+                    disabled
+                    className="bg-slate-50"
                   />
                 </div>
                 <div>
@@ -1136,7 +1140,7 @@ export default function Warehouses() {
                 <div>
                   <LabelWithHelp
                     label={t('aisle') || 'Aisle'}
-                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (masalan, A, B, 1, 2). Omborning asosiy bo'linishi."}
+                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (A, B, 1, 2). Omborning asosiy bo'linishi."}
                   />
                   <Input
                     placeholder="A"
@@ -1332,13 +1336,12 @@ export default function Warehouses() {
                   <LabelWithHelp
                     label={t('code')}
                     required
-                    helpText={t('help_location_code') || "Joylashuv koordinatasi (masalan, A-01-02-03). Tez topish va skanerlash uchun ishlatiladi."}
+                    helpText={t('help_location_code') || "Avtomatik yaratilgan noyob joylashuv kodi."}
                   />
                   <Input
-                    placeholder={t('location_code_placeholder') || 'e.g., A-01-02-03'}
                     value={locationForm.code}
-                    onChange={(e) => setLocationForm({...locationForm, code: e.target.value})}
-                    required
+                    disabled
+                    className="bg-slate-50"
                   />
                 </div>
                 <div>
@@ -1389,7 +1392,7 @@ export default function Warehouses() {
                 <div>
                   <LabelWithHelp
                     label={t('aisle') || 'Aisle'}
-                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (masalan, A, B, 1, 2). Omborning asosiy bo'linishi."}
+                    helpText={t('help_aisle') || "Yo'lak harfi yoki raqami (A, B, 1, 2). Omborning asosiy bo'linishi."}
                   />
                   <Input
                     placeholder="A"
