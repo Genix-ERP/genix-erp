@@ -327,9 +327,10 @@ export default function FixedAssets() {
 
   const resetForm = () => {
     const defaultCategory = assetCategories.find(c => c.value === 'equipment');
+    const num = (fixedAssets?.length || 0) + 1;
     setFormData({
       name: '',
-      code: '',
+      code: `FA-${String(num).padStart(3, '0')}`,
       category: 'equipment',
       description: '',
       acquisition_date: format(new Date(), 'yyyy-MM-dd'),
@@ -613,9 +614,9 @@ export default function FixedAssets() {
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
                 <Input
-                  placeholder={t('asset_code_placeholder')}
                   value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  disabled
+                  className="bg-slate-50"
                 />
               </div>
               <div>

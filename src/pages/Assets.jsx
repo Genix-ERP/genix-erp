@@ -58,6 +58,8 @@ export default function Assets() {
   const [maintenanceHistory, setMaintenanceHistory] = useState({});
   const [auditLog, setAuditLog] = useState([]);
 
+  const generateAssetCode = () => `AST-${String((rawAssets?.length || 0) + 1).padStart(3, '0')}`;
+
   const [newAsset, setNewAsset] = useState({
     asset_name: '',
     asset_code: '',
@@ -104,7 +106,7 @@ export default function Assets() {
     try {
       await createAsset({
         ...newAsset,
-        asset_code: newAsset.asset_code || `AST-${Date.now()}`,
+        asset_code: newAsset.asset_code || generateAssetCode(),
         purchase_cost: parseFloat(newAsset.purchase_cost),
         useful_life_years: parseInt(newAsset.useful_life_years),
         current_value: parseFloat(newAsset.purchase_cost),
@@ -598,9 +600,9 @@ export default function Assets() {
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('asset_code')}</label>
                   <Input
-                    placeholder={t('auto_generated_if_empty')}
-                    value={newAsset.asset_code}
-                    onChange={(e) => setNewAsset({...newAsset, asset_code: e.target.value})}
+                    value={newAsset.asset_code || generateAssetCode()}
+                    disabled
+                    className="bg-slate-50"
                   />
                 </div>
               </div>

@@ -17,27 +17,42 @@ export const isBackendConfigured = () => {
 // API base URL
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
-// Check if backend is available (async health check)
+// Check if backend is available (async health check) - cached for 30 seconds
+let _healthCheckPromise = null;
+let _healthCheckTimestamp = 0;
+const HEALTH_CHECK_CACHE_MS = 30000;
+
 export const checkBackendHealth = async () => {
   if (!isBackendConfigured()) {
     return false;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-
-    const response = await fetch(`${API_BASE_URL}/info`, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch (error) {
-    console.warn('Backend not available:', error.message);
-    return false;
+  const now = Date.now();
+  // Return cached result if still valid
+  if (_healthCheckPromise && (now - _healthCheckTimestamp) < HEALTH_CHECK_CACHE_MS) {
+    return _healthCheckPromise;
   }
+
+  _healthCheckTimestamp = now;
+  _healthCheckPromise = (async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(`${API_BASE_URL}/info`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      console.warn('Backend not available:', error.message);
+      return false;
+    }
+  })();
+
+  return _healthCheckPromise;
 };
 
 // Storage key prefix for localStorage
