@@ -299,10 +299,11 @@ export default function BillOfMaterials() {
   };
 
   const resetForm = () => {
+    const num = (boms?.length || 0) + 1;
     setFormData({
       product_id: '',
       name: '',
-      code: '',
+      code: `BOM-${String(num).padStart(3, '0')}`,
       type: 'manufacturing',
       quantity: 1,
       description: '',
@@ -712,12 +713,12 @@ export default function BillOfMaterials() {
                 <LabelWithHelp
                   label={t('bom_code') || 'BOM Code'}
                   required
-                  helpText={t('help_bom_code') || "BOM kodi. Tizimda noyob identifikator sifatida ishlatiladi."}
+                  helpText={t('help_bom_code') || "Avtomatik yaratilgan noyob BOM kodi."}
                 />
                 <Input
-                  placeholder="e.g., BOM-001"
                   value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  disabled
+                  className="bg-slate-50"
                 />
               </div>
               <div>

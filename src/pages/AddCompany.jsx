@@ -199,7 +199,7 @@ export default function AddCompany() {
                     placeholder="COMP001"
                     required
                   />
-                  <p className="text-xs text-slate-500">Noyob identifikator (masalan: ACME01)</p>
+                  <p className="text-xs text-slate-500">Noyob identifikator (ACME01)</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="company_name">Kompaniya nomi *</Label>

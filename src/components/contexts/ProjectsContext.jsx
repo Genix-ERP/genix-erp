@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { projectsService } from '@/api/services/projects';
 import { useAdminSettings } from './AdminSettingsContext';
+import { useCompany } from './CompanyContext';
 
 const ProjectsContext = createContext(null);
 
 export function ProjectsProvider({ children }) {
   const { getSetting } = useAdminSettings();
+  const { activeCompany } = useCompany();
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [milestones, setMilestones] = useState([]);
@@ -33,12 +35,15 @@ export function ProjectsProvider({ children }) {
     projectStages: getSetting('projects.stages', ['Planning', 'In Progress', 'Review', 'Completed', 'On Hold', 'Cancelled'])
   }), [getSetting]);
 
-  // Load data from backend on mount
+  // Load data from backend when company is available
   useEffect(() => {
-    loadData();
-  }, []);
+    if (activeCompany) {
+      loadData();
+    }
+  }, [activeCompany]);
 
   const loadData = async () => {
+    if (!activeCompany) return;
     setIsLoading(true);
     setError(null);
     try {
