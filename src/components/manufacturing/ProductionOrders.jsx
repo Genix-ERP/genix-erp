@@ -561,21 +561,6 @@ export default function ProductionOrders() {
                   onChange={(e) => setNewOrder({...newOrder, name: e.target.value})}
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('priority') || 'Priority'} (1-10) *</label>
-                <Select value={String(newOrder.priority)} onValueChange={(value) => setNewOrder({...newOrder, priority: parseInt(value)})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 - {t('urgent') || 'Urgent'}</SelectItem>
-                    <SelectItem value="3">3 - {t('high') || 'High'}</SelectItem>
-                    <SelectItem value="5">5 - {t('normal') || 'Normal'}</SelectItem>
-                    <SelectItem value="7">7 - {t('low') || 'Low'}</SelectItem>
-                    <SelectItem value="10">10 - {t('lowest') || 'Lowest'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
