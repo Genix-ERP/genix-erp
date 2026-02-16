@@ -71,8 +71,7 @@ export default function CompanySettings() {
   // Simplified form matching Excel template for Uzbekistan business requirements
   const [formData, setFormData] = useState({
     company_name: "",
-    tax_id: "",           // INN
-    stir: "",             // STIR (can be same as INN)
+    tax_id: "",           // INN (STIR)
     oked: "",             // OKED code
     bank_account: "",     // Bank hisob raqami
     bank_mfo: "",         // Bank MFO
@@ -95,7 +94,6 @@ export default function CompanySettings() {
   const [addFormData, setAddFormData] = useState({
     company_name: "",
     tax_id: "",
-    stir: "",
     oked: "",
     bank_account: "",
     bank_mfo: "",
@@ -143,7 +141,6 @@ export default function CompanySettings() {
     setFormData({
       company_name: company.company_name || "",
       tax_id: company.tax_id || "",
-      stir: company.stir || "",
       oked: company.oked || "",
       bank_account: company.bank_account || "",
       bank_mfo: company.bank_mfo || "",
@@ -218,7 +215,6 @@ export default function CompanySettings() {
     setAddFormData({
       company_name: "",
       tax_id: "",
-      stir: "",
       oked: "",
       bank_account: "",
       bank_mfo: "",
@@ -266,8 +262,7 @@ export default function CompanySettings() {
   // Import columns definition for the modal
   const importColumns = [
     { key: 'company_name', label: t('company_name') || 'Firma nomi', required: true },
-    { key: 'tax_id', label: 'INN' },
-    { key: 'stir', label: 'STIR' },
+    { key: 'tax_id', label: 'INN (STIR)' },
     { key: 'oked', label: 'OKED' },
     { key: 'bank_account', label: t('bank_account') || 'Hisob raqami' },
     { key: 'bank_mfo', label: 'MFO' },
@@ -294,7 +289,6 @@ export default function CompanySettings() {
         code: `ORG-${Date.now()}-${index}`,  // Auto-generate unique code
         name: row.company_name || '',
         tax_id: row.tax_id || '',
-        stir: row.stir || '',
         oked: row.oked || '',
         bank_account: row.bank_account || '',
         bank_mfo: row.bank_mfo || '',
@@ -336,8 +330,7 @@ export default function CompanySettings() {
   const handleExport = () => {
     const exportData = companies.map(company => ({
       'Firma nomi': company.company_name,
-      'INN': company.tax_id || '',
-      'STIR': company.stir || '',
+      'INN (STIR)': company.tax_id || '',
       'OKED': company.oked || '',
       'Hisob raqami': company.bank_account || '',
       'MFO': company.bank_mfo || '',
@@ -366,8 +359,7 @@ export default function CompanySettings() {
   const handleDownloadTemplate = () => {
     const templateData = [{
       'Firma nomi': 'ACME Corporation',
-      'INN': '123456789',
-      'STIR': '123456789',
+      'INN (STIR)': '123456789',
       'OKED': '46900',
       'Hisob raqami': '20208000123456789012',
       'MFO': '00440',
@@ -393,8 +385,7 @@ export default function CompanySettings() {
       { 'TO\'LDIRISH YO\'RIQNOMASI': '' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'Maydon' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'Firma nomi', 'Izoh': 'Rasmiy nomi (majburiy)' },
-      { 'TO\'LDIRISH YO\'RIQNOMASI': 'INN', 'Izoh': 'Identifikatsiya raqami (9 raqam)' },
-      { 'TO\'LDIRISH YO\'RIQNOMASI': 'STIR', 'Izoh': 'Soliq to\'lovchi raqami' },
+      { 'TO\'LDIRISH YO\'RIQNOMASI': 'INN (STIR)', 'Izoh': 'Identifikatsiya raqami / Soliq to\'lovchi raqami (9 raqam)' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'OKED', 'Izoh': 'Iqtisodiy faoliyat klassifikatori' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'Hisob raqami', 'Izoh': 'Bank hisob raqami (20 raqam)' },
       { 'TO\'LDIRISH YO\'RIQNOMASI': 'MFO', 'Izoh': 'Bank MFO raqami (5 raqam)' },
@@ -650,22 +641,12 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN</Label>
+                  <Label>INN (STIR)</Label>
                   <Input
                     value={formData.tax_id}
                     onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
                     placeholder="123456789"
                     maxLength={9}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>STIR</Label>
-                  <Input
-                    value={formData.stir}
-                    onChange={(e) => setFormData({ ...formData, stir: e.target.value })}
-                    placeholder="123456789"
-                    maxLength={20}
                   />
                 </div>
 
@@ -936,22 +917,12 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN</Label>
+                  <Label>INN (STIR)</Label>
                   <Input
                     value={addFormData.tax_id}
                     onChange={(e) => setAddFormData({ ...addFormData, tax_id: e.target.value })}
                     placeholder="123456789"
                     maxLength={9}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>STIR</Label>
-                  <Input
-                    value={addFormData.stir}
-                    onChange={(e) => setAddFormData({ ...addFormData, stir: e.target.value })}
-                    placeholder="123456789"
-                    maxLength={20}
                   />
                 </div>
 
