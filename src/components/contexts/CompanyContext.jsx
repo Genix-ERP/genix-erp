@@ -60,7 +60,6 @@ export function CompanyProvider({ children }) {
         company_code: org.code || '',
         company_name: org.name || '',
         tax_id: org.tax_id || '',
-        stir: org.stir || '',
         oked: org.oked || '',
         bank_account: org.bank_account || '',
         bank_mfo: org.bank_mfo || '',
@@ -213,7 +212,6 @@ export function CompanyProvider({ children }) {
         name: companyData.company_name,
         type: 'company',
         tax_id: companyData.tax_id,
-        stir: companyData.stir,
         oked: companyData.oked,
         bank_account: companyData.bank_account,
         bank_mfo: companyData.bank_mfo,
@@ -245,7 +243,6 @@ export function CompanyProvider({ children }) {
         company_code: newOrg.code || '',
         company_name: newOrg.name || '',
         tax_id: newOrg.tax_id || companyData.tax_id || '',
-        stir: newOrg.stir || companyData.stir || '',
         oked: newOrg.oked || companyData.oked || '',
         bank_account: newOrg.bank_account || companyData.bank_account || '',
         bank_mfo: newOrg.bank_mfo || companyData.bank_mfo || '',
@@ -316,7 +313,6 @@ export function CompanyProvider({ children }) {
       if (updates.company_code !== undefined) backendUpdates.code = updates.company_code;
       if (updates.company_name !== undefined) backendUpdates.name = updates.company_name;
       if (updates.tax_id !== undefined) backendUpdates.tax_id = updates.tax_id;
-      if (updates.stir !== undefined) backendUpdates.stir = updates.stir;
       if (updates.oked !== undefined) backendUpdates.oked = updates.oked;
       if (updates.bank_account !== undefined) backendUpdates.bank_account = updates.bank_account;
       if (updates.bank_mfo !== undefined) backendUpdates.bank_mfo = updates.bank_mfo;
@@ -464,7 +460,6 @@ export function CompanyProvider({ children }) {
       code: company.company_code,
       name: company.company_name,
       tax_id: company.tax_id,
-      stir: company.stir,
       oked: company.oked,
       bank_account: company.bank_account,
       bank_mfo: company.bank_mfo,
