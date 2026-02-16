@@ -22,6 +22,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
+import { useInventory } from "@/components/contexts/InventoryContext";
 
 // Location type options (matching Odoo)
 const LOCATION_TYPES = [
@@ -38,6 +39,7 @@ export default function WarehouseLocations() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { warehouses: contextWarehouses } = useInventory();
 
   const [locations, setLocations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -75,24 +77,27 @@ export default function WarehouseLocations() {
     is_active: true
   });
 
-  // Fetch data
+  // Use warehouses from context
   useEffect(() => {
-    const fetchData = async () => {
+    if (contextWarehouses?.length) {
+      setWarehouses(contextWarehouses);
+    }
+  }, [contextWarehouses]);
+
+  // Fetch locations only
+  useEffect(() => {
+    const fetchLocations = async () => {
       setIsLoading(true);
       try {
-        const [locationsData, warehousesData] = await Promise.all([
-          inventoryService.listAllLocations({ include_inactive: true }),
-          inventoryService.listWarehouses()
-        ]);
+        const locationsData = await inventoryService.listAllLocations({ include_inactive: true });
         setLocations(locationsData || []);
-        setWarehouses(warehousesData || []);
       } catch (err) {
         console.error('Error fetching locations:', err);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchData();
+    fetchLocations();
   }, []);
 
   // Filter locations

@@ -189,9 +189,11 @@ export default function BudgetManagement() {
   };
 
   const resetForm = () => {
+    const year = new Date().getFullYear();
+    const num = (budgets?.length || 0) + 1;
     setFormData({
       name: '',
-      code: '',
+      code: `BUD-${year}-${String(num).padStart(2, '0')}`,
       fiscal_year_id: '',
       budget_type: 'expense',
       start_date: '',
@@ -503,9 +505,9 @@ export default function BudgetManagement() {
                 <LabelWithHelp htmlFor="budget_code" label={t('code') || 'Code'} helpText={t('help_budget_code')} required />
                 <Input
                   id="budget_code"
-                  placeholder="e.g., BUD-2025-01"
                   value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  disabled
+                  className="bg-slate-50"
                 />
               </div>
               <div className="space-y-2">
