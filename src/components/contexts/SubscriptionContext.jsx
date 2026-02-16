@@ -33,7 +33,10 @@ const PLAN_LIMITS = {
       advanced_security: false,
       white_label: false,
       dedicated_support: false,
+      full_ai_suite: false,
+      ai_supply_chain: false,
       custom_ai_training: false,
+      dedicated_account_manager: false,
       on_premise: false,
       soc2_gdpr: false,
       custom_integrations: false
@@ -41,9 +44,9 @@ const PLAN_LIMITS = {
   },
   starter: {
     name: 'Starter',
-    price: 45,
-    minUsers: 5,
-    maxUsers: 50,
+    price: 299,
+    minUsers: 1,
+    maxUsers: 10,
     maxCompanies: 1,
     aiRequestsPerMonth: 500,
     cloudStorageGB: 5,
@@ -65,7 +68,10 @@ const PLAN_LIMITS = {
       advanced_security: false,
       white_label: false,
       dedicated_support: false,
+      full_ai_suite: false,
+      ai_supply_chain: false,
       custom_ai_training: false,
+      dedicated_account_manager: false,
       on_premise: false,
       soc2_gdpr: false,
       custom_integrations: false
@@ -73,9 +79,9 @@ const PLAN_LIMITS = {
   },
   professional: {
     name: 'Professional',
-    price: 85,
-    minUsers: 10,
-    maxUsers: 200,
+    price: 499,
+    minUsers: 1,
+    maxUsers: 50,
     aiRequestsPerMonth: 2500,
     cloudStorageGB: 50,
     features: {
@@ -96,7 +102,10 @@ const PLAN_LIMITS = {
       advanced_security: true,
       white_label: false,
       dedicated_support: false,
+      full_ai_suite: false,
+      ai_supply_chain: false,
       custom_ai_training: false,
+      dedicated_account_manager: false,
       on_premise: false,
       soc2_gdpr: false,
       custom_integrations: false
@@ -106,8 +115,8 @@ const PLAN_LIMITS = {
   },
   enterprise: {
     name: 'Enterprise',
-    price: 150,
-    minUsers: 25,
+    price: 999,
+    minUsers: 1,
     maxUsers: -1, // unlimited
     aiRequestsPerMonth: -1, // unlimited
     cloudStorageGB: -1, // unlimited
@@ -129,7 +138,10 @@ const PLAN_LIMITS = {
       advanced_security: true,
       white_label: true,
       dedicated_support: true,
+      full_ai_suite: true,
+      ai_supply_chain: true,
       custom_ai_training: true,
+      dedicated_account_manager: true,
       on_premise: true,
       soc2_gdpr: true,
       custom_integrations: true
@@ -148,19 +160,22 @@ const FEATURE_DESCRIPTIONS = {
   email_support: 'Email yordam',
   mobile_access: 'Mobil kirish',
   single_company: 'Bitta kompaniya profili',
-  advanced_ai: 'Ilg\'or AI tahlil va prognozlash',
+  advanced_ai: 'AI tahlil va prognozlash',
   multi_module_erp: 'Ko\'p modulli ERP (Moliya, HR, SCM)',
   workflow_automation: 'Avtomatlashtirilgan ish oqimi mexanizmi',
   custom_reports: 'Maxsus hisobot qurish',
   priority_support: 'Ustuvor yordam (8s javob)',
   api_access: 'API kirish',
   multi_company: 'Ko\'p kompaniya profillari',
-  advanced_security: 'Ilg\'or xavfsizlik va ruxsatlar',
+  advanced_security: 'Xavfsizlik va ruxsatlar',
   white_label: 'White-Label variantlar',
   dedicated_support: '24/7 Premium yordam (1s javob)',
+  full_ai_suite: 'To\'liq AI to\'plami (Chatbot, Prognoz AI)',
+  ai_supply_chain: 'AI asosida ta\'minot zanjirini optimallashtirish',
   custom_ai_training: 'Maxsus AI model o\'qitish',
+  dedicated_account_manager: 'Maxsus hisob menejeri',
   on_premise: 'On-Premise joylashtirilish varianti',
-  soc2_gdpr: 'Ilg\'or muvofiqlik (SOC2, GDPR)',
+  soc2_gdpr: 'Muvofiqlik (SOC2, GDPR)',
   custom_integrations: 'Maxsus integratsiyalar'
 };
 
