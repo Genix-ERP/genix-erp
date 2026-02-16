@@ -212,6 +212,7 @@ export const translations = {
     "search_users": "Search users...",
     "all_roles": "All Roles",
     "all_status": "All Status",
+    "all_payments": "All Payments",
     "system_admin": "System Admin",
     "administrator": "Administrator",
     "manager": "Manager",
@@ -2108,6 +2109,8 @@ export const translations = {
     "bank_withdrawal_category": "Bank Withdrawal",
     "payments": "Payments",
     "payment": "Payment",
+    "customer_payments": "Customer Payments",
+    "vendor_payments": "Vendor Payments",
 
     // Chart of Accounts
     "accounts_total": "accounts",
@@ -5628,6 +5631,7 @@ export const translations = {
     "search_users": "Foydalanuvchilarni qidirish...",
     "all_roles": "Barcha rollar",
     "all_status": "Barcha holatlar",
+    "all_payments": "Barcha to'lovlar",
     "system_admin": "Tizim administratori",
     "administrator": "Administrator",
     "manager": "Menejer",
@@ -7504,6 +7508,8 @@ export const translations = {
     "cash_register": "Kassa",
     "payments": "To'lovlar",
     "payment": "To'lov",
+    "customer_payments": "Mijoz to'lovlari",
+    "vendor_payments": "Yetkazuvchi to'lovlari",
 
     // Chart of Accounts
     "accounts_total": "hisoblar",
@@ -10674,6 +10680,7 @@ export const translations = {
     "search_users": "Поиск пользователей...",
     "all_roles": "Все роли",
     "all_status": "Все статусы",
+    "all_payments": "Все платежи",
     "system_admin": "Системный администратор",
     "administrator": "Администратор",
     "manager": "Менеджер",
@@ -12535,6 +12542,8 @@ export const translations = {
     "bank": "Банк",
     "cash_register": "Касса",
     "payments": "Платежи",
+    "customer_payments": "Платежи клиентов",
+    "vendor_payments": "Платежи поставщикам",
     "accounts_total": "счетов",
     "search_accounts": "Поиск счетов...",
     "new_account": "Новый счёт",

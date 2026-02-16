@@ -51,6 +51,7 @@ export default function AccountsReceivable() {
   const [filteredInvoices, setFilteredInvoices] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Map customers to a consistent format for the dropdown
@@ -89,6 +90,30 @@ export default function AccountsReceivable() {
     setFilteredInvoices(updated);
   }, [customerInvoices]);
 
+  const getPaymentStatus = (invoice) => {
+    const paid = invoice.amount_paid || 0;
+    const total = invoice.total_amount || 0;
+    if (total <= 0) return 'unpaid';
+    if (paid >= total) return 'paid';
+    if (paid > 0) return 'partial';
+    return 'unpaid';
+  };
+
+  const getPaymentStatusBadge = (invoice) => {
+    const status = getPaymentStatus(invoice);
+    const styles = {
+      paid: 'bg-green-100 text-green-800 border-green-200',
+      partial: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      unpaid: 'bg-red-100 text-red-800 border-red-200',
+    };
+    const labels = {
+      paid: t('paid'),
+      partial: t('partial') || 'Partial',
+      unpaid: t('unpaid') || 'Unpaid',
+    };
+    return { style: styles[status], label: labels[status] };
+  };
+
   useEffect(() => {
     let filtered = customerInvoices.map(inv => {
       if (inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < new Date()) {
@@ -101,6 +126,10 @@ export default function AccountsReceivable() {
       filtered = filtered.filter(inv => inv.status === statusFilter);
     }
 
+    if (paymentStatusFilter !== 'all') {
+      filtered = filtered.filter(inv => getPaymentStatus(inv) === paymentStatusFilter);
+    }
+
     if (searchQuery) {
       filtered = filtered.filter(inv => {
         const customer = customers.find(c => c.id === inv.customer_id);
@@ -111,7 +140,7 @@ export default function AccountsReceivable() {
     }
 
     setFilteredInvoices(filtered);
-  }, [customerInvoices, searchQuery, statusFilter]);
+  }, [customerInvoices, searchQuery, statusFilter, paymentStatusFilter]);
 
   const handleCreateInvoice = async () => {
     const subtotal = parseFloat(newInvoice.subtotal) || 0;
@@ -368,6 +397,17 @@ export default function AccountsReceivable() {
                     <SelectItem value="overdue">{t('overdue') || 'Overdue'}</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_payments') || 'All Payments'}</SelectItem>
+                    <SelectItem value="unpaid">{t('unpaid') || 'Unpaid'}</SelectItem>
+                    <SelectItem value="partial">{t('partial') || 'Partial'}</SelectItem>
+                    <SelectItem value="paid">{t('paid')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>
@@ -396,6 +436,7 @@ export default function AccountsReceivable() {
                       <TableHead>{t('date')}</TableHead>
                       <TableHead>{t('due_date')}</TableHead>
                       <TableHead>{t('amount')}</TableHead>
+                      <TableHead>{t('payment_status') || 'Payment'}</TableHead>
                       <TableHead>{t('status')}</TableHead>
                       <TableHead>{t('dunning')}</TableHead>
                       <TableHead>{t('actions')}</TableHead>
@@ -416,6 +457,20 @@ export default function AccountsReceivable() {
                           {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy', { locale: dateLocale }) : '-'}
                         </TableCell>
                         <TableCell className="font-semibold">{formatCurrency(invoice.total_amount || 0)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const ps = getPaymentStatusBadge(invoice);
+                            const amountDue = (invoice.total_amount || 0) - (invoice.amount_paid || 0);
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <Badge className={ps.style}>{ps.label}</Badge>
+                                {getPaymentStatus(invoice) === 'partial' && (
+                                  <span className="text-xs text-slate-500">{t('due')}: {formatCurrency(amountDue)}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Badge className={getStatusColor(invoice.status)}>{t(invoice.status) || invoice.status}</Badge>
                         </TableCell>
