@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
+import { useToast } from "@/components/ui/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,7 @@ import {
 export default function CompanySettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { toast } = useToast();
 
   const {
     companies,
@@ -173,6 +175,7 @@ export default function CompanySettings() {
         setError(result.message || 'Xatolik yuz berdi');
         return;
       }
+      toast({ variant: "success", title: "Muvaffaqiyatli o'zgartirildi", description: formData.company_name });
       setShowEditForm(false);
       setEditingCompany(null);
     } catch (err) {
@@ -193,6 +196,8 @@ export default function CompanySettings() {
       const result = await deleteCompany(companyToDelete.id);
       if (!result.success) {
         setError(result.message || t('error_deleting_company') || "O'chirishda xatolik");
+      } else {
+        toast({ variant: "success", title: "Muvaffaqiyatli o'chirildi", description: companyToDelete.company_name });
       }
     } catch (err) {
       console.error("Error deleting company:", err);
@@ -252,6 +257,7 @@ export default function CompanySettings() {
         setAddError(result.message || 'Xatolik yuz berdi');
         return;
       }
+      toast({ variant: "success", title: "Muvaffaqiyatli qo'shildi", description: addFormData.company_name });
       setShowAddForm(false);
     } catch (err) {
       console.error("Error adding company:", err);
