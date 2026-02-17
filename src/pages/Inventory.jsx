@@ -23,7 +23,8 @@ import {
   DollarSign,
   Settings2,
   MapPin,
-  CalendarClock
+  CalendarClock,
+  BarChart3
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,6 +43,7 @@ import Planning from "@/components/inventory/Planning";
 // ReorderRules and Replenishment are now integrated into Planning component
 import OperationTypes from "@/components/inventory/OperationTypes";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
+import StockReport from "@/components/inventory/StockReport";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -303,6 +305,14 @@ export default function Inventory() {
               <CalendarClock className="w-4 h-4" />
               <span className="hidden sm:inline">{t('planning') || 'Planning'}</span>
             </TabsTrigger>
+
+            <TabsTrigger
+              value="reports"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('reports') || 'Reports'}</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -399,6 +409,11 @@ export default function Inventory() {
           {/* Planning Tab (Reorder Rules + Replenishment) */}
           <TabsContent value="planning" className="mt-6">
             <Planning />
+          </TabsContent>
+
+          {/* Reports Tab (Stock Movements, Changes, Adjustment P&L) */}
+          <TabsContent value="reports" className="mt-6">
+            <StockReport />
           </TabsContent>
         </Tabs>
 
