@@ -2112,6 +2112,9 @@ export const translations = {
     "payment": "Payment",
     "customer_payments": "Customer Payments",
     "vendor_payments": "Vendor Payments",
+    "sales_invoices": "Sales Invoices",
+    "invoices_payment_status_desc": "Invoice payment statuses",
+    "bills_payment_status_desc": "Bill payment statuses",
 
     // Chart of Accounts
     "accounts_total": "accounts",
@@ -7512,6 +7515,9 @@ export const translations = {
     "payment": "To'lov",
     "customer_payments": "Mijoz to'lovlari",
     "vendor_payments": "Yetkazuvchi to'lovlari",
+    "sales_invoices": "Savdo hisob-fakturalari",
+    "invoices_payment_status_desc": "Hisob-fakturalar to'lov holatlari",
+    "bills_payment_status_desc": "Yetkazuvchi hisob-fakturalari to'lov holatlari",
 
     // Chart of Accounts
     "accounts_total": "hisoblar",
@@ -13075,6 +13081,9 @@ export const translations = {
     "payments": "Платежи",
     "customer_payments": "Платежи клиентов",
     "vendor_payments": "Платежи поставщикам",
+    "sales_invoices": "Счета-фактуры продаж",
+    "invoices_payment_status_desc": "Статусы оплаты счетов-фактур",
+    "bills_payment_status_desc": "Статусы оплаты счетов поставщиков",
     "accounts_total": "счетов",
     "search_accounts": "Поиск счетов...",
     "new_account": "Новый счёт",

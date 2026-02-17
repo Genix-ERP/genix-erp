@@ -28,6 +28,7 @@ export default function Payments() {
     payments,
     accounts,
     vendorBills,
+    customerInvoices,
     createPayment,
     confirmPayment,
     isLoading
@@ -214,6 +215,28 @@ export default function Payments() {
   const bankAccounts = accounts.filter(a => a.is_bank_account || (a.category === 'asset' && a.code?.startsWith('1')));
 
   const isCustomerTab = activeTab === 'customer';
+
+  // Payment status helpers for invoices/bills
+  const getPaymentStatus = (inv) => {
+    const paid = inv.amount_paid || 0;
+    const total = inv.total_amount || 0;
+    if (total <= 0) return 'unpaid';
+    if (paid >= total) return 'paid';
+    if (paid > 0) return 'partial';
+    return 'unpaid';
+  };
+
+  const paymentStatusStyle = {
+    paid: 'bg-green-100 text-green-800',
+    partial: 'bg-yellow-100 text-yellow-800',
+    unpaid: 'bg-red-100 text-red-800',
+  };
+
+  const paymentStatusLabel = {
+    paid: t('paid') || 'Paid',
+    partial: t('partial') || 'Partial',
+    unpaid: t('unpaid') || 'Unpaid',
+  };
 
   const subTabClass = "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600";
 
@@ -813,6 +836,92 @@ export default function Payments() {
                 </Table>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Related Invoices / Bills */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+          <CardHeader className="border-b border-slate-100 pb-4">
+            <CardTitle className="text-lg font-bold text-slate-900">
+              {isCustomerTab
+                ? (t('sales_invoices') || 'Sales Invoices')
+                : (t('vendor_bills') || 'Vendor Bills')}
+            </CardTitle>
+            <p className="text-sm text-slate-500 mt-1">
+              {isCustomerTab
+                ? (t('invoices_payment_status_desc') || 'Invoice payment statuses')
+                : (t('bills_payment_status_desc') || 'Bill payment statuses')}
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            {(() => {
+              const items = isCustomerTab
+                ? (customerInvoices || []).filter(inv => inv.status !== 'cancelled')
+                : (vendorBills || []).filter(b => b.status !== 'cancelled');
+
+              if (items.length === 0) {
+                return (
+                  <div className="text-center py-10 text-slate-500 text-sm">
+                    {isCustomerTab
+                      ? (t('no_invoices') || 'No invoices')
+                      : (t('no_bills') || 'No bills')}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className="font-semibold text-slate-700">{t('invoice_number') || 'Invoice #'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">
+                          {isCustomerTab ? (t('customer') || 'Customer') : (t('vendor') || 'Vendor')}
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('date') || 'Date'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('total') || 'Total'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('paid') || 'Paid'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('due') || 'Due'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700">{t('payment_status') || 'Status'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item) => {
+                        const ps = getPaymentStatus(item);
+                        const amountDue = (item.total_amount || 0) - (item.amount_paid || 0);
+                        const partyName = isCustomerTab
+                          ? (item.customer_name || item.customer_id || '-')
+                          : (item.partner_name || item.vendor_name || '-');
+                        const itemDate = item.invoice_date || item.bill_date;
+                        return (
+                          <TableRow key={item.id} className="hover:bg-blue-50/50">
+                            <TableCell className="font-mono text-sm">{item.invoice_number || '-'}</TableCell>
+                            <TableCell className="text-slate-700">{partyName}</TableCell>
+                            <TableCell className="text-sm text-slate-600">
+                              {itemDate ? format(new Date(itemDate), 'dd.MM.yyyy') : '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              {formatCurrency(item.total_amount || 0)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-green-600">
+                              {formatCurrency(item.amount_paid || 0)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-red-600">
+                              {amountDue > 0 ? formatCurrency(amountDue) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={paymentStatusStyle[ps]}>
+                                {paymentStatusLabel[ps]}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>

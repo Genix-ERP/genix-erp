@@ -268,7 +268,11 @@ export default function SalesOrders() {
     const fetchWarehouses = async () => {
       try {
         const data = await inventoryService.listWarehouses({ limit: 100 });
-        setWarehouses(Array.isArray(data) ? data : data?.items || []);
+        const list = Array.isArray(data) ? data : data?.items || [];
+        setWarehouses(list);
+        if (list.length === 1) {
+          setNewOrder(prev => ({ ...prev, warehouse_id: list[0].id }));
+        }
       } catch (error) {
         console.error('Failed to fetch warehouses:', error);
       }
@@ -710,7 +714,7 @@ export default function SalesOrders() {
       customer_id: '',
       order_date: new Date().toISOString().split('T')[0],
       delivery_date: new Date().toISOString().split('T')[0], // Default to today
-      warehouse_id: '',
+      warehouse_id: warehouses.length === 1 ? warehouses[0].id : '',
       carrier: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
@@ -1271,21 +1275,25 @@ export default function SalesOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>{t('warehouse') || 'Warehouse'}</Label>
-                  <Select
-                    value={newOrder.warehouse_id || ''}
-                    onValueChange={(value) => setNewOrder({...newOrder, warehouse_id: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((warehouse) => (
-                        <SelectItem key={warehouse.id} value={warehouse.id}>
-                          {warehouse.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {warehouses.length === 1 ? (
+                    <Input value={warehouses[0].name} disabled className="bg-slate-50" />
+                  ) : (
+                    <Select
+                      value={newOrder.warehouse_id || ''}
+                      onValueChange={(value) => setNewOrder({...newOrder, warehouse_id: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div>
                   <Label>{t('carrier') || 'Carrier'}</Label>
@@ -1854,21 +1862,25 @@ export default function SalesOrders() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{t('warehouse') || 'Warehouse'}</Label>
-                    <Select
-                      value={editingOrder.warehouse_id || ''}
-                      onValueChange={(value) => setEditingOrder({...editingOrder, warehouse_id: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {warehouses.map((warehouse) => (
-                          <SelectItem key={warehouse.id} value={warehouse.id}>
-                            {warehouse.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {warehouses.length === 1 ? (
+                      <Input value={warehouses[0].name} disabled className="bg-slate-50" />
+                    ) : (
+                      <Select
+                        value={editingOrder.warehouse_id || ''}
+                        onValueChange={(value) => setEditingOrder({...editingOrder, warehouse_id: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {warehouses.map((warehouse) => (
+                            <SelectItem key={warehouse.id} value={warehouse.id}>
+                              {warehouse.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                   <div>
                     <Label>{t('carrier') || 'Carrier'}</Label>
