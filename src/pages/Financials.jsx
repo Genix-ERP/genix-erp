@@ -10,13 +10,13 @@ import {
   Landmark,
   Bell,
   RefreshCw,
-  Receipt,
   FileText,
   Wallet,
   Globe,
   FileCheck,
   Target,
-  Percent
+  Percent,
+  BookOpen
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -33,6 +33,7 @@ import CurrencyManagement from "@/components/finance/CurrencyManagement";
 import BudgetManagement from "@/components/finance/BudgetManagement";
 import ActSverka from "@/components/finance/ActSverka";
 import TaxReports from "@/components/finance/TaxReports";
+import GeneralLedger from "@/components/finance/GeneralLedger";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -70,7 +71,13 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('accounting') || 'Buxgalteriya'}</span>
             </TabsTrigger>
 
-            {/* 3. Kassa (YANGI) */}
+            {/* 3. Jurnal yozuvlari */}
+            <TabsTrigger value="journal-entries" className={tabTriggerClass}>
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('journal_entries') || 'Jurnal yozuvlari'}</span>
+            </TabsTrigger>
+
+            {/* 4. Kassa */}
             <TabsTrigger value="cash" className={tabTriggerClass}>
               <Wallet className="w-4 h-4" />
               <span className="hidden sm:inline">{t('cash_register') || 'Kassa'}</span>
@@ -82,14 +89,7 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('payments') || "To'lovlar"}</span>
             </TabsTrigger>
 
-            {/* 5. Kreditor va Debitor */}
-            <TabsTrigger value="ap-ar" className={tabTriggerClass}>
-              <Receipt className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('ap_ar') || 'Kreditor/Debitor'}</span>
-              <span className="sm:hidden">KD</span>
-            </TabsTrigger>
-
-            {/* 6. Akt sverka (YANGI) */}
+            {/* 5. Akt sverka */}
             <TabsTrigger value="reconciliation" className={tabTriggerClass}>
               <FileCheck className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reconciliation_act') || 'Akt sverka'}</span>
@@ -138,15 +138,43 @@ export default function Financials() {
           <TabsContent value="accounts" className="mt-6">
             <ChartOfAccounts />
           </TabsContent>
+          <TabsContent value="journal-entries" className="mt-6">
+            <GeneralLedger />
+          </TabsContent>
           <TabsContent value="cash" className="mt-6">
             <CashRegister />
           </TabsContent>
           <TabsContent value="payments" className="mt-6">
             <Payments />
           </TabsContent>
-          <TabsContent value="ap-ar" className="mt-6">
-            <Tabs defaultValue="payables" className="w-full">
+          <TabsContent value="reconciliation" className="mt-6">
+            <ActSverka />
+          </TabsContent>
+          <TabsContent value="currency" className="mt-6">
+            <CurrencyManagement />
+          </TabsContent>
+          <TabsContent value="bank" className="mt-6">
+            <BankReconciliation />
+          </TabsContent>
+          <TabsContent value="budget" className="mt-6">
+            <BudgetManagement />
+          </TabsContent>
+          <TabsContent value="recurring" className="mt-6">
+            <RecurringJournalEntries />
+          </TabsContent>
+          <TabsContent value="tax-reports" className="mt-6">
+            <TaxReports />
+          </TabsContent>
+          <TabsContent value="reports" className="mt-6">
+            <Tabs defaultValue="financial-reports" className="w-full">
               <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
+                <TabsTrigger
+                  value="financial-reports"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <FileText className="w-4 h-4" />
+                  {t('reports') || 'Reports'}
+                </TabsTrigger>
                 <TabsTrigger
                   value="payables"
                   className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
@@ -169,6 +197,9 @@ export default function Financials() {
                   {t('followups') || 'Follow-ups'}
                 </TabsTrigger>
               </TabsList>
+              <TabsContent value="financial-reports">
+                <FinancialReports />
+              </TabsContent>
               <TabsContent value="payables">
                 <AccountsPayable />
               </TabsContent>
@@ -179,27 +210,6 @@ export default function Financials() {
                 <CustomerFollowups />
               </TabsContent>
             </Tabs>
-          </TabsContent>
-          <TabsContent value="reconciliation" className="mt-6">
-            <ActSverka />
-          </TabsContent>
-          <TabsContent value="currency" className="mt-6">
-            <CurrencyManagement />
-          </TabsContent>
-          <TabsContent value="bank" className="mt-6">
-            <BankReconciliation />
-          </TabsContent>
-          <TabsContent value="budget" className="mt-6">
-            <BudgetManagement />
-          </TabsContent>
-          <TabsContent value="recurring" className="mt-6">
-            <RecurringJournalEntries />
-          </TabsContent>
-          <TabsContent value="tax-reports" className="mt-6">
-            <TaxReports />
-          </TabsContent>
-          <TabsContent value="reports" className="mt-6">
-            <FinancialReports />
           </TabsContent>
         </Tabs>
       </div>

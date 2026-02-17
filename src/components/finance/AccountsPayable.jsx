@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, History, Repeat, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
+import { Upload, Search, FileText, AlertTriangle, CheckCircle, Clock, DollarSign, Brain, Plus, Download, Printer, Eye, Building2, Loader2, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru, uz } from 'date-fns/locale';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -34,9 +33,7 @@ import {
   BatchPrintModal,
   generateDocumentPDF,
   useAuditTrail,
-  AuditTrailPanel,
   AttachmentsCommentsCard,
-  RecurringPanel,
 } from '@/components/shared';
 
 // Helper to get date-fns locale
@@ -80,7 +77,6 @@ export default function AccountsPayable() {
   const [showBatchPrint, setShowBatchPrint] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
-  const [activeTab, setActiveTab] = useState('list');
   const { addAuditLog } = useAuditTrail('vendor_bills');
   const [newBill, setNewBill] = useState({
     partner_id: '',
@@ -103,11 +99,10 @@ export default function AccountsPayable() {
 
   // Load vendors when create modal opens or recurring tab is active
   useEffect(() => {
-    if ((showCreateModal || activeTab === 'recurring') && vendors.length === 0) {
+    if (showCreateModal && vendors.length === 0) {
       setVendorsLoading(true);
       contactsService.list({ contact_type: 'vendor' })
         .then(data => {
-          // Include all contacts as potential vendors
           const allContacts = data?.data || data || [];
           setVendors(allContacts);
         })
@@ -118,7 +113,7 @@ export default function AccountsPayable() {
           setVendorsLoading(false);
         });
     }
-  }, [showCreateModal, activeTab, vendors.length]);
+  }, [showCreateModal, vendors.length]);
 
   // Handle file selection for AI extraction
   const handleFileSelect = (e) => {
@@ -539,24 +534,7 @@ export default function AccountsPayable() {
         </Card>
       </div>
 
-      {/* Tabs for Bills, Recurring, Audit */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-white/80 backdrop-blur-sm border border-slate-200/60">
-          <TabsTrigger value="list" className="data-[state=active]:bg-blue-50">
-            <FileText className="w-4 h-4 mr-2" />
-            {t('invoices') || 'Invoices'}
-          </TabsTrigger>
-          <TabsTrigger value="recurring" className="data-[state=active]:bg-blue-50">
-            <Repeat className="w-4 h-4 mr-2" />
-            {t('recurring') || 'Recurring'}
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="data-[state=active]:bg-blue-50">
-            <History className="w-4 h-4 mr-2" />
-            {t('history') || 'History'}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="list">
+      {/* Bills List */}
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
             <CardHeader className="border-b border-slate-100 pb-6">
               <div className="flex flex-col gap-4">
@@ -768,44 +746,6 @@ export default function AccountsPayable() {
           )}
         </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Recurring Transactions Tab */}
-        <TabsContent value="recurring">
-          <RecurringPanel
-            entityType="vendor_bills"
-            entityName={t('payment') || 'Payment'}
-            canCreate={canCreate('financials')}
-            canEdit={canUpdate('financials')}
-            canRemove={canDelete('financials')}
-            fields={[
-              { key: 'partner_id', label: t('vendor') || 'Vendor', type: 'select', required: true, options: vendors.map(v => ({ value: v.id, label: v.name })) },
-              { key: 'amount', label: t('amount') || 'Amount', type: 'number', required: true },
-              { key: 'description', label: t('description') || 'Description' },
-            ]}
-            onCreateTransaction={(data) => {
-              const billData = {
-                partner_id: data.partner_id,
-                invoice_date: new Date().toISOString().split('T')[0],
-                due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                subtotal: parseFloat(data.amount) || 0,
-                tax_amount: (parseFloat(data.amount) || 0) * 0.12,
-                total_amount: (parseFloat(data.amount) || 0) * 1.12,
-                amount_due: (parseFloat(data.amount) || 0) * 1.12,
-                amount_paid: 0,
-                status: 'draft',
-                description: data.description,
-              };
-              createVendorBill(billData);
-            }}
-          />
-        </TabsContent>
-
-        {/* Audit Trail Tab */}
-        <TabsContent value="audit">
-          <AuditTrailPanel entityType="vendor_bills" title={t('vendor_bills_history') || 'Vendor Bills History'} />
-        </TabsContent>
-      </Tabs>
 
       {/* Upload Modal */}
       <Dialog open={showUploadModal} onOpenChange={(open) => {
