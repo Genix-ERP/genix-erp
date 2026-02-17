@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,6 +94,18 @@ export default function Products() {
     stock_output_account_id: '',
   };
 
+  // Compute default accounts by account_type code
+  const defaultCategoryAccounts = useMemo(() => {
+    const findByType = (typeCode) => accounts.find(a => a.account_type?.code === typeCode)?.id || '';
+    return {
+      income_account_id: findByType('REVENUE'),
+      expense_account_id: findByType('COGS'),
+      stock_valuation_account_id: findByType('INV'),
+      stock_input_account_id: findByType('INV'),
+      stock_output_account_id: findByType('COGS'),
+    };
+  }, [accounts]);
+
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -116,6 +128,13 @@ export default function Products() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editCategoryName, setEditCategoryName] = useState('');
   const [categoryAccounts, setCategoryAccounts] = useState({ ...emptyCategoryAccounts });
+
+  // Set defaults when accounts load
+  useEffect(() => {
+    if (defaultCategoryAccounts.income_account_id && !showCategoryModal && !showEditCategoryModal) {
+      setCategoryAccounts({ ...defaultCategoryAccounts });
+    }
+  }, [defaultCategoryAccounts]);
   const { addAuditLog } = useAuditTrail('products');
 
   // Format number with thousands separators for display in price inputs
@@ -684,7 +703,7 @@ export default function Products() {
 
     createCategory(categoryData);
     setNewCategoryName('');
-    setCategoryAccounts({ ...emptyCategoryAccounts });
+    setCategoryAccounts({ ...defaultCategoryAccounts });
     setShowCategoryModal(false);
   };
 
@@ -692,11 +711,11 @@ export default function Products() {
     setSelectedCategory(category);
     setEditCategoryName(category.name);
     setCategoryAccounts({
-      income_account_id: category.income_account_id || '',
-      expense_account_id: category.expense_account_id || '',
-      stock_valuation_account_id: category.stock_valuation_account_id || '',
-      stock_input_account_id: category.stock_input_account_id || '',
-      stock_output_account_id: category.stock_output_account_id || '',
+      income_account_id: category.income_account_id || defaultCategoryAccounts.income_account_id,
+      expense_account_id: category.expense_account_id || defaultCategoryAccounts.expense_account_id,
+      stock_valuation_account_id: category.stock_valuation_account_id || defaultCategoryAccounts.stock_valuation_account_id,
+      stock_input_account_id: category.stock_input_account_id || defaultCategoryAccounts.stock_input_account_id,
+      stock_output_account_id: category.stock_output_account_id || defaultCategoryAccounts.stock_output_account_id,
     });
     setShowEditCategoryModal(true);
   };
@@ -714,7 +733,7 @@ export default function Products() {
       stock_output_account_id: categoryAccounts.stock_output_account_id || '',
     });
     setEditCategoryName('');
-    setCategoryAccounts({ ...emptyCategoryAccounts });
+    setCategoryAccounts({ ...defaultCategoryAccounts });
     setSelectedCategory(null);
     setShowEditCategoryModal(false);
   };
@@ -2642,7 +2661,7 @@ export default function Products() {
       {/* Create Category Modal */}
       <Dialog open={showCategoryModal} onOpenChange={(open) => {
         setShowCategoryModal(open);
-        if (!open) { setNewCategoryName(''); setCategoryAccounts({ ...emptyCategoryAccounts }); }
+        if (!open) { setNewCategoryName(''); setCategoryAccounts({ ...defaultCategoryAccounts }); }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -2704,7 +2723,7 @@ export default function Products() {
                 onClick={() => {
                   setShowCategoryModal(false);
                   setNewCategoryName('');
-                  setCategoryAccounts({ ...emptyCategoryAccounts });
+                  setCategoryAccounts({ ...defaultCategoryAccounts });
                 }}
                 className="flex-1"
               >
@@ -2817,7 +2836,7 @@ export default function Products() {
       {/* Edit Category Modal */}
       <Dialog open={showEditCategoryModal} onOpenChange={(open) => {
         setShowEditCategoryModal(open);
-        if (!open) { setEditCategoryName(''); setSelectedCategory(null); setCategoryAccounts({ ...emptyCategoryAccounts }); }
+        if (!open) { setEditCategoryName(''); setSelectedCategory(null); setCategoryAccounts({ ...defaultCategoryAccounts }); }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -2877,7 +2896,7 @@ export default function Products() {
                   setShowEditCategoryModal(false);
                   setEditCategoryName('');
                   setSelectedCategory(null);
-                  setCategoryAccounts({ ...emptyCategoryAccounts });
+                  setCategoryAccounts({ ...defaultCategoryAccounts });
                 }}
                 className="flex-1"
               >

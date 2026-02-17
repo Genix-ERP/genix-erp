@@ -122,7 +122,11 @@ export default function PurchaseOrders() {
     const fetchWarehouses = async () => {
       try {
         const data = await inventoryService.listWarehouses();
-        setWarehouses(Array.isArray(data) ? data : data?.items || []);
+        const list = Array.isArray(data) ? data : data?.items || [];
+        setWarehouses(list);
+        if (list.length === 1) {
+          setNewPO(prev => ({ ...prev, warehouse_id: list[0].id }));
+        }
       } catch (error) {
         console.error('Failed to fetch warehouses:', error);
       }
@@ -369,7 +373,7 @@ export default function PurchaseOrders() {
         po_number: '',
         supplier_id: '',
         vendor_name: '',
-        warehouse_id: '',
+        warehouse_id: warehouses.length === 1 ? warehouses[0].id : '',
         order_date: new Date().toISOString().split('T')[0],
         expected_delivery_date: new Date().toISOString().split('T')[0],
         total_amount: 0,
@@ -716,22 +720,26 @@ export default function PurchaseOrders() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
-                <Select
-                  value={newPO.warehouse_id || '__none__'}
-                  onValueChange={(value) => setNewPO({...newPO, warehouse_id: value === '__none__' ? '' : value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
-                    {warehouses.map((wh) => (
-                      <SelectItem key={wh.id} value={wh.id}>
-                        {wh.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {warehouses.length === 1 ? (
+                  <Input value={warehouses[0].name} disabled className="bg-slate-50" />
+                ) : (
+                  <Select
+                    value={newPO.warehouse_id || '__none__'}
+                    onValueChange={(value) => setNewPO({...newPO, warehouse_id: value === '__none__' ? '' : value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
+                      {warehouses.map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          {wh.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
