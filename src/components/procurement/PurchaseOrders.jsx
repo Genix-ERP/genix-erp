@@ -6,6 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
@@ -22,6 +32,7 @@ import {
   ClipboardList,
   Layers,
   DollarSign,
+  Trash2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -44,6 +55,7 @@ export default function PurchaseOrders() {
     purchaseOrders,
     createPurchaseOrder,
     updatePurchaseOrder,
+    deletePurchaseOrder,
     getSupplierById,
     isLoading,
   } = useProcurement();
@@ -62,6 +74,7 @@ export default function PurchaseOrders() {
   const [purchaseReturns, setPurchaseReturns] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Products list for selection
   const [products, setProducts] = useState([]);
@@ -604,6 +617,17 @@ export default function PurchaseOrders() {
                                   <Truck className="w-4 h-4" />
                                 </Button>
                               )}
+                              {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => setDeleteConfirm(po)}
+                                  title={t('delete') || 'Delete'}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1140,6 +1164,37 @@ export default function PurchaseOrders() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === 'uz' ? "Buyurtmani o'chirish" : 'Delete Purchase Order'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === 'uz'
+                ? `Haqiqatan ham "${deleteConfirm?.po_number || deleteConfirm?.order_number || ''}" buyurtmani o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.`
+                : `Are you sure you want to delete order "${deleteConfirm?.po_number || deleteConfirm?.order_number || ''}"? This action cannot be undone.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{language === 'uz' ? 'Bekor qilish' : 'Cancel'}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={async () => {
+                if (deleteConfirm) {
+                  await deletePurchaseOrder(deleteConfirm.id);
+                  setDeleteConfirm(null);
+                }
+              }}
+            >
+              {language === 'uz' ? "O'chirish" : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

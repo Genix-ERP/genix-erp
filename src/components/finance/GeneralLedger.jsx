@@ -43,6 +43,8 @@ export default function GeneralLedger() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const defaultJournalId = journals.find(j => j.code === 'MISC')?.id || journals.find(j => j.code === 'GEN')?.id || journals[0]?.id || '';
+
   const [newEntry, setNewEntry] = useState({
     journal_id: '',
     entry_date: new Date().toISOString().split('T')[0],
@@ -163,7 +165,7 @@ export default function GeneralLedger() {
 
       // Reset form and close modal
       setNewEntry({
-        journal_id: '',
+        journal_id: defaultJournalId,
         entry_date: new Date().toISOString().split('T')[0],
         description: '',
         reference: '',
@@ -340,7 +342,10 @@ export default function GeneralLedger() {
                 </div>
                 {canCreate(MODULES.FINANCIALS) && (
                   <Button
-                    onClick={() => setShowCreateModal(true)}
+                    onClick={() => {
+                      setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
+                      setShowCreateModal(true);
+                    }}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
                   >
                     <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
@@ -372,7 +377,10 @@ export default function GeneralLedger() {
                 </p>
                 {!searchQuery && canCreate(MODULES.FINANCIALS) && (
                   <Button
-                    onClick={() => setShowCreateModal(true)}
+                    onClick={() => {
+                      setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
+                      setShowCreateModal(true);
+                    }}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   >
                     <Plus className="w-4 h-4 mr-2" /> {t('create_first_entry')}

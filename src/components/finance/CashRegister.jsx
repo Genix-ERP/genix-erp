@@ -66,8 +66,8 @@ export default function CashRegister() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [newOrder, setNewOrder] = useState({
-    date: new Date().toISOString().split('T')[0],
-    type: 'pko',
+    order_date: new Date().toISOString().split('T')[0],
+    order_type: 'pko',
     amount: '',
     currency: 'UZS',
     description: '',
@@ -80,8 +80,8 @@ export default function CashRegister() {
   // Calculate summaries
   const today = new Date().toISOString().split('T')[0];
   const getDateStr = useCallback((t) => {
-    if (!t.transaction_date && !t.date) return '';
-    const dateVal = t.transaction_date || t.date;
+    if (!t.transaction_date && !t.order_date && !t.date) return '';
+    const dateVal = t.transaction_date || t.order_date || t.date;
     const dateStr = typeof dateVal === 'string' ? dateVal : dateVal.toISOString();
     return dateStr.split('T')[0];
   }, []);
@@ -92,9 +92,9 @@ export default function CashRegister() {
 
   const summaryStats = {
     currentBalance: getCashBalance(),
-    todayIncome: todayOrders.filter(o => o.type === 'pko').reduce((s, o) => s + (o.amount || 0), 0)
+    todayIncome: todayOrders.filter(o => o.order_type === 'pko').reduce((s, o) => s + (o.amount || 0), 0)
       + (cashTransactions || []).filter(t => getDateStr(t) === today && t.type === 'income').reduce((s, t) => s + t.amount, 0),
-    todayExpense: todayOrders.filter(o => o.type === 'rko').reduce((s, o) => s + (o.amount || 0), 0)
+    todayExpense: todayOrders.filter(o => o.order_type === 'rko').reduce((s, o) => s + (o.amount || 0), 0)
       + (cashTransactions || []).filter(t => getDateStr(t) === today && t.type === 'expense').reduce((s, t) => s + t.amount, 0),
     totalOrders: allOrders.length,
     confirmedOrders: allOrders.filter(o => o.status === 'confirmed').length,
@@ -117,7 +117,7 @@ export default function CashRegister() {
       );
     }
     if (typeFilter !== "all") {
-      filtered = filtered.filter(o => o.type === typeFilter);
+      filtered = filtered.filter(o => o.order_type === typeFilter);
     }
     if (selectedRegister !== "all") {
       filtered = filtered.filter(o => o.cash_register_id === selectedRegister);
@@ -131,7 +131,7 @@ export default function CashRegister() {
       const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       filtered = filtered.filter(o => getDateStr(o) >= monthAgo);
     }
-    setFilteredOrders(filtered.sort((a, b) => new Date(b.date || b.transaction_date) - new Date(a.date || a.transaction_date)));
+    setFilteredOrders(filtered.sort((a, b) => new Date(b.order_date || b.date) - new Date(a.order_date || a.date)));
   }, [cashOrders, searchQuery, typeFilter, dateFilter, selectedRegister, today, getDateStr]);
 
   // Filter legacy transactions
@@ -151,14 +151,14 @@ export default function CashRegister() {
     try {
       const orderData = {
         ...newOrder,
-        order_number: generateOrderNumber(newOrder.type),
+        order_number: generateOrderNumber(newOrder.order_type),
         amount: parseFloat(newOrder.amount) || 0,
         status: 'draft'
       };
       await createCashOrder(orderData);
       setNewOrder({
-        date: new Date().toISOString().split('T')[0],
-        type: 'pko',
+        order_date: new Date().toISOString().split('T')[0],
+        order_type: 'pko',
         amount: '',
         currency: 'UZS',
         description: '',
@@ -203,8 +203,8 @@ export default function CashRegister() {
       const d = getDateStr(o);
       if (!d) return;
       if (!dateMap[d]) dateMap[d] = { date: d, income: 0, expense: 0 };
-      if (o.type === 'pko') dateMap[d].income += o.amount || 0;
-      if (o.type === 'rko') dateMap[d].expense += o.amount || 0;
+      if (o.order_type === 'pko') dateMap[d].income += o.amount || 0;
+      if (o.order_type === 'rko') dateMap[d].expense += o.amount || 0;
     });
     // Also include legacy transactions
     (cashTransactions || []).forEach(t => {
@@ -326,7 +326,7 @@ export default function CashRegister() {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
-                setNewOrder({ ...newOrder, type: 'pko', account_code: '5010' });
+                setNewOrder({ ...newOrder, order_type: 'pko', account_code: '5010' });
                 setShowCreateModal(true);
               }}
               className="bg-green-600 hover:bg-green-700 text-white"
@@ -336,7 +336,7 @@ export default function CashRegister() {
             </Button>
             <Button
               onClick={() => {
-                setNewOrder({ ...newOrder, type: 'rko', account_code: '5010' });
+                setNewOrder({ ...newOrder, order_type: 'rko', account_code: '5010' });
                 setShowCreateModal(true);
               }}
               className="bg-red-600 hover:bg-red-700 text-white"
@@ -446,9 +446,9 @@ export default function CashRegister() {
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id} className="hover:bg-slate-50">
                       <TableCell className="font-mono text-sm">{order.order_number}</TableCell>
-                      <TableCell>{format(new Date(order.date || order.transaction_date), 'dd.MM.yyyy')}</TableCell>
+                      <TableCell>{order.order_date ? format(new Date(order.order_date), 'dd.MM.yyyy') : '-'}</TableCell>
                       <TableCell>
-                        {order.type === 'pko' ? (
+                        {order.order_type === 'pko' ? (
                           <Badge className="bg-green-100 text-green-700"><ArrowDownLeft className="w-3 h-3 mr-1" />{t('pko_short') || 'PKO'}</Badge>
                         ) : (
                           <Badge className="bg-red-100 text-red-700"><ArrowUpRight className="w-3 h-3 mr-1" />{t('rko_short') || 'RKO'}</Badge>
@@ -457,8 +457,8 @@ export default function CashRegister() {
                       <TableCell>{order.partner_name || '-'}</TableCell>
                       <TableCell className="font-mono text-sm">{order.account_code || '5010'}</TableCell>
                       <TableCell className="max-w-[180px] truncate">{order.description}</TableCell>
-                      <TableCell className={`text-right font-semibold ${order.type === 'pko' ? 'text-green-600' : 'text-red-600'}`}>
-                        {order.type === 'pko' ? '+' : '-'}{formatCurrency(order.amount, order.currency)}
+                      <TableCell className={`text-right font-semibold ${order.order_type === 'pko' ? 'text-green-600' : 'text-red-600'}`}>
+                        {order.order_type === 'pko' ? '+' : '-'}{formatCurrency(order.amount, order.currency)}
                       </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>
@@ -523,7 +523,7 @@ export default function CashRegister() {
                 <TableBody>
                   {cashBookData.map((entry) => (
                     <TableRow key={entry.date} className="hover:bg-slate-50">
-                      <TableCell className="font-medium">{format(new Date(entry.date), 'dd.MM.yyyy')}</TableCell>
+                      <TableCell className="font-medium">{entry.date ? format(new Date(entry.date), 'dd.MM.yyyy') : '-'}</TableCell>
                       <TableCell className="text-right">{formatCurrency(entry.opening)}</TableCell>
                       <TableCell className="text-right text-green-600 font-medium">+{formatCurrency(entry.income)}</TableCell>
                       <TableCell className="text-right text-red-600 font-medium">-{formatCurrency(entry.expense)}</TableCell>
@@ -565,7 +565,7 @@ export default function CashRegister() {
                 <TableBody>
                   {filteredTransactions.map((transaction) => (
                     <TableRow key={transaction.id} className="hover:bg-slate-50">
-                      <TableCell>{format(new Date(transaction.transaction_date), 'dd.MM.yyyy')}</TableCell>
+                      <TableCell>{transaction.transaction_date ? format(new Date(transaction.transaction_date), 'dd.MM.yyyy') : '-'}</TableCell>
                       <TableCell className="font-mono text-sm">{transaction.reference}</TableCell>
                       <TableCell className="max-w-[200px] truncate">{transaction.description}</TableCell>
                       <TableCell><Badge variant="outline">{transaction.category}</Badge></TableCell>
@@ -605,7 +605,7 @@ export default function CashRegister() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {newOrder.type === 'pko' ? (
+              {newOrder.order_type === 'pko' ? (
                 <><ArrowDownLeft className="w-5 h-5 text-green-600" />{t('pko') || 'Cash Receipt Order (PKO)'}</>
               ) : (
                 <><ArrowUpRight className="w-5 h-5 text-red-600" />{t('rko') || 'Cash Disbursement Order (RKO)'}</>
@@ -619,15 +619,15 @@ export default function CashRegister() {
                 <label className="text-sm font-medium">{t('date') || 'Date'}</label>
                 <Input
                   type="date"
-                  value={newOrder.date}
-                  onChange={(e) => setNewOrder({ ...newOrder, date: e.target.value })}
+                  value={newOrder.order_date}
+                  onChange={(e) => setNewOrder({ ...newOrder, order_date: e.target.value })}
                 />
               </div>
               <div>
                 <label className="text-sm font-medium">{t('type') || 'Type'}</label>
                 <Select
-                  value={newOrder.type}
-                  onValueChange={(v) => setNewOrder({ ...newOrder, type: v })}
+                  value={newOrder.order_type}
+                  onValueChange={(v) => setNewOrder({ ...newOrder, order_type: v })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -738,7 +738,7 @@ export default function CashRegister() {
               <Button
                 onClick={handleCreateOrder}
                 disabled={isSaving || !newOrder.amount || !newOrder.description}
-                className={`text-white ${newOrder.type === 'pko' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                className={`text-white ${newOrder.order_type === 'pko' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
               >
                 {isSaving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>
