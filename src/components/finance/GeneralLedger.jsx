@@ -16,6 +16,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
+import AccountCombobox from "@/components/shared/AccountCombobox";
 import { MODULES } from "@/config/permissions";
 import financeService from "@/api/services/finance";
 import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
@@ -665,21 +666,12 @@ export default function GeneralLedger() {
                     {newEntry.lines.map((line, index) => (
                       <TableRow key={index}>
                         <TableCell className="p-2">
-                          <Select
+                          <AccountCombobox
+                            accounts={accounts}
                             value={line.account_id}
                             onValueChange={(value) => updateLine(index, 'account_id', value)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={t('select_account')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {accounts.map((account) => (
-                                <SelectItem key={account.id} value={account.id}>
-                                  {account.code} - {account.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={t('select_account')}
+                          />
                         </TableCell>
                         <TableCell className="p-2">
                           <Input
@@ -692,19 +684,31 @@ export default function GeneralLedger() {
                         <TableCell className="p-2">
                           <Input
                             className="h-9 text-right"
-                            type="number"
-                            placeholder="0.00"
+                            inputMode="decimal"
+                            placeholder="0"
                             value={line.debit_amount || ''}
-                            onChange={(e) => updateLine(index, 'debit_amount', e.target.value)}
+                            onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                updateLine(index, 'debit_amount', val);
+                              }
+                            }}
                           />
                         </TableCell>
                         <TableCell className="p-2">
                           <Input
                             className="h-9 text-right"
-                            type="number"
-                            placeholder="0.00"
+                            inputMode="decimal"
+                            placeholder="0"
                             value={line.credit_amount || ''}
-                            onChange={(e) => updateLine(index, 'credit_amount', e.target.value)}
+                            onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                updateLine(index, 'credit_amount', val);
+                              }
+                            }}
                           />
                         </TableCell>
                         <TableCell className="p-2">

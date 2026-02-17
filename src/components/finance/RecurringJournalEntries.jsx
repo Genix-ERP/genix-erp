@@ -24,6 +24,7 @@ import { financeService } from "@/api/services";
 import { format, parseISO, addDays, addWeeks, addMonths, addYears } from "date-fns";
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
+import AccountCombobox from "@/components/shared/AccountCombobox";
 
 const FREQUENCIES = [
   { value: 'daily', labelKey: 'daily' },
@@ -67,6 +68,8 @@ export default function RecurringJournalEntries() {
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const defaultJournalId = journals.find(j => j.code === 'MISC')?.id || journals[0]?.id || '';
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -81,8 +84,8 @@ export default function RecurringJournalEntries() {
     end_date: '',
     auto_post: false,
     lines: [
-      { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
-      { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+      { account_id: '', description: '', debit_amount: '', credit_amount: '' },
+      { account_id: '', description: '', debit_amount: '', credit_amount: '' },
     ]
   });
 
@@ -146,7 +149,7 @@ export default function RecurringJournalEntries() {
       name: '',
       description: '',
       reference: '',
-      journal_id: '',
+      journal_id: defaultJournalId,
       frequency: 'monthly',
       interval_count: 1,
       day_of_month: 1,
@@ -156,8 +159,8 @@ export default function RecurringJournalEntries() {
       end_date: '',
       auto_post: false,
       lines: [
-        { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
-        { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+        { account_id: '', description: '', debit_amount: '', credit_amount: '' },
+        { account_id: '', description: '', debit_amount: '', credit_amount: '' },
       ]
     });
   };
@@ -303,8 +306,8 @@ export default function RecurringJournalEntries() {
           debit_amount: l.debit_amount || 0,
           credit_amount: l.credit_amount || 0,
         })) : [
-          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
-          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
+          { account_id: '', description: '', debit_amount: '', credit_amount: '' },
+          { account_id: '', description: '', debit_amount: '', credit_amount: '' },
         ]
       });
       setShowEditModal(true);
@@ -339,7 +342,7 @@ export default function RecurringJournalEntries() {
   const addLine = () => {
     setFormData(prev => ({
       ...prev,
-      lines: [...prev.lines, { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }]
+      lines: [...prev.lines, { account_id: '', description: '', debit_amount: '', credit_amount: '' }]
     }));
   };
 
@@ -465,7 +468,7 @@ export default function RecurringJournalEntries() {
             {t('recurring_journal_templates')}
           </CardTitle>
           {canCreate(MODULES.FINANCE, 'journal_entry') && (
-            <Button onClick={() => setShowCreateModal(true)}>
+            <Button onClick={() => { resetForm(); setShowCreateModal(true); }}>
               <Plus className="h-4 w-4 mr-2" />
               {t('create_template')}
             </Button>
@@ -791,21 +794,12 @@ export default function RecurringJournalEntries() {
                   {formData.lines.map((line, index) => (
                     <TableRow key={index}>
                       <TableCell>
-                        <Select
+                        <AccountCombobox
+                          accounts={accounts}
                           value={line.account_id}
                           onValueChange={(value) => updateLine(index, 'account_id', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('select_account')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.map(a => (
-                              <SelectItem key={a.id} value={a.id}>
-                                {a.code} - {a.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder={t('select_account')}
+                        />
                       </TableCell>
                       <TableCell>
                         <Input
@@ -816,21 +810,31 @@ export default function RecurringJournalEntries() {
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={line.debit_amount}
-                          onChange={(e) => updateLine(index, 'debit_amount', e.target.value)}
+                          inputMode="decimal"
+                          value={line.debit_amount || ''}
+                          onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              updateLine(index, 'debit_amount', val);
+                            }
+                          }}
+                          placeholder="0"
                           className="text-right"
                         />
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={line.credit_amount}
-                          onChange={(e) => updateLine(index, 'credit_amount', e.target.value)}
+                          inputMode="decimal"
+                          value={line.credit_amount || ''}
+                          onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              updateLine(index, 'credit_amount', val);
+                            }
+                          }}
+                          placeholder="0"
                           className="text-right"
                         />
                       </TableCell>
