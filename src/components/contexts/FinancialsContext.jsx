@@ -409,7 +409,14 @@ export function FinancialsProvider({ children }) {
           setFixedAssets(fixedAssetsData || []);
           // Finance extra modules
           setCashRegisters(cashRegistersData || []);
-          setCashOrders(cashOrdersData || []);
+          // Merge backend cash orders with localStorage (backend is stub, returns empty)
+          const localCashOrders = JSON.parse(localStorage.getItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id)) || '[]');
+          const backendOrders = cashOrdersData || [];
+          if (backendOrders.length > 0) {
+            setCashOrders(backendOrders);
+          } else {
+            setCashOrders(localCashOrders);
+          }
           setReconciliationActs(reconciliationActsData || []);
           setExchangeDiffs(exchangeDiffsData || []);
 
@@ -1479,9 +1486,15 @@ export function FinancialsProvider({ children }) {
   // ========== Cash Orders (PKO/RKO) ==========
   const createCashOrder = useCallback(async (data) => {
     if (backendAvailable) {
-      const result = await financeService.createCashOrder(data);
-      setCashOrders(prev => [...prev, result]);
-      return result;
+      try {
+        const result = await financeService.createCashOrder(data);
+        if (result && result.id) {
+          setCashOrders(prev => [...prev, result]);
+          return result;
+        }
+      } catch (e) {
+        // Backend stub or error — fall through to localStorage
+      }
     }
     const prefix = data.order_type === 'pko' ? 'PKO' : 'RKO';
     const num = String(cashOrders.filter(o => o.order_type === data.order_type).length + 1).padStart(5, '0');
@@ -1492,16 +1505,14 @@ export function FinancialsProvider({ children }) {
 
   const confirmCashOrder = useCallback(async (id) => {
     if (backendAvailable) {
-      const result = await financeService.confirmCashOrder(id);
-      setCashOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'confirmed' } : o));
-      return result;
+      try { await financeService.confirmCashOrder(id); } catch (e) { /* stub */ }
     }
     setCashOrders(prev => { const updated = prev.map(o => o.id === id ? { ...o, status: 'confirmed' } : o); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
   }, [backendAvailable, activeCompany]);
 
   const deleteCashOrder = useCallback(async (id) => {
     if (backendAvailable) {
-      await financeService.updateCashOrder(id, { status: 'cancelled' });
+      try { await financeService.updateCashOrder(id, { status: 'cancelled' }); } catch (e) { /* stub */ }
     }
     setCashOrders(prev => { const updated = prev.filter(o => o.id !== id); localStorage.setItem(getStorageKey(CASH_ORDERS_KEY, activeCompany?.id), JSON.stringify(updated)); return updated; });
   }, [backendAvailable, activeCompany]);
