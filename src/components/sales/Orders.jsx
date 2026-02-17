@@ -22,7 +22,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Search, ShoppingBag, Package, Truck,
-  CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, Trash2,
+  CheckCircle, FileText, Receipt, RotateCcw, Upload, Download, Eye, Printer, X,
   ClipboardList, MessageSquareWarning, CreditCard
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -293,9 +293,9 @@ export default function Orders({
                                   variant="ghost"
                                   className="text-red-600 hover:text-red-700"
                                   onClick={() => { setOrderToDelete(order); setShowDeleteDialog(true); }}
-                                  title={t('delete') || 'Delete'}
+                                  title={language === 'uz' ? 'Bekor qilish' : 'Cancel Order'}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <X className="w-4 h-4" />
                                 </Button>
                               )}
                             </div>
@@ -321,13 +321,17 @@ export default function Orders({
         </TabsContent>
       </Tabs>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Cancel Order Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('delete_order') || 'Delete Order'}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {language === 'uz' ? 'Buyurtmani bekor qilish' : 'Cancel Order'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t('delete_order_confirm') || 'Are you sure you want to delete this order? This action cannot be undone.'}
+              {language === 'uz'
+                ? 'Haqiqatan ham bu buyurtmani bekor qilmoqchimisiz?'
+                : 'Are you sure you want to cancel this order?'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {orderToDelete && (
@@ -347,10 +351,10 @@ export default function Orders({
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('cancel') || 'Cancel'}</AlertDialogCancel>
+            <AlertDialogCancel>{language === 'uz' ? 'Ortga' : 'Back'}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">
-              <Trash2 className="w-4 h-4 mr-2" />
-              {t('delete') || 'Delete'}
+              <X className="w-4 h-4 mr-2" />
+              {language === 'uz' ? 'Bekor qilish' : 'Cancel Order'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
