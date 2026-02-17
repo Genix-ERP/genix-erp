@@ -59,11 +59,13 @@ export default function RFQManagement() {
   const { t } = useTranslation(language);
   const {
     rfqs,
+    purchaseOrders,
     suppliers,
     createRFQ,
     updateRFQ,
     deleteRFQ,
     selectRFQWinner,
+    updatePurchaseOrder,
     isLoading,
   } = useProcurement();
   const { canCreate } = usePermissions();
@@ -109,26 +111,47 @@ export default function RFQManagement() {
     fetchProducts();
   }, []);
 
+  // Map draft Purchase Orders as RFQ items
+  const draftPOsAsRFQs = useMemo(() => {
+    return (purchaseOrders || [])
+      .filter(po => po.status === 'draft')
+      .map(po => ({
+        id: po.id,
+        rfq_number: po.po_number || po.order_number,
+        title: po.vendor_name || po.supplier_name || '-',
+        description: `${formatCurrency(po.total_amount)} — ${po.lines?.length || 0} ${language === 'uz' ? 'qator' : 'lines'}`,
+        deadline: po.expected_delivery_date,
+        status: 'draft',
+        invitation_count: 1,
+        response_count: 0,
+        _isPO: true, // marker to distinguish from real RFQs
+        _poData: po,
+      }));
+  }, [purchaseOrders, formatCurrency, language]);
+
+  // Merge RFQs + draft POs
+  const allRFQs = useMemo(() => [...rfqs, ...draftPOsAsRFQs], [rfqs, draftPOsAsRFQs]);
+
   // Filter RFQs
   const filteredRFQs = useMemo(() => {
-    return rfqs.filter((rfq) => {
+    return allRFQs.filter((rfq) => {
       const matchesSearch =
         rfq.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         rfq.rfq_number?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === "all" || rfq.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [rfqs, searchQuery, statusFilter]);
+  }, [allRFQs, searchQuery, statusFilter]);
 
   // Stats
   const stats = useMemo(() => {
     return {
-      total: rfqs.length,
-      open: rfqs.filter((r) => r.status === "open" || r.status === "draft").length,
-      closed: rfqs.filter((r) => r.status === "closed").length,
-      responses: rfqs.reduce((sum, r) => sum + (r.responses?.length || 0), 0),
+      total: allRFQs.length,
+      open: allRFQs.filter((r) => r.status === "open" || r.status === "draft").length,
+      closed: allRFQs.filter((r) => r.status === "closed").length,
+      responses: allRFQs.reduce((sum, r) => sum + (r.responses?.length || 0), 0),
     };
-  }, [rfqs]);
+  }, [allRFQs]);
 
   const handleSubmit = async () => {
     const rfqData = {
@@ -395,9 +418,14 @@ export default function RFQManagement() {
                   {filteredRFQs.map((rfq) => (
                     <TableRow key={rfq.id} className="hover:bg-slate-50">
                       <TableCell>
-                        <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                          {rfq.rfq_number}
-                        </code>
+                        <div className="flex items-center gap-1.5">
+                          <code className="text-xs bg-slate-100 px-2 py-1 rounded">
+                            {rfq.rfq_number}
+                          </code>
+                          {rfq._isPO && (
+                            <Badge className="bg-orange-100 text-orange-700 text-[10px] px-1.5 py-0">PO</Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -431,7 +459,8 @@ export default function RFQManagement() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => handleViewDetails(rfq)}
+                            onClick={() => rfq._isPO ? null : handleViewDetails(rfq)}
+                            title={rfq._isPO ? (t('purchase_order') || 'Purchase Order') : (t('view') || 'View')}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -439,7 +468,10 @@ export default function RFQManagement() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              onClick={() => handleSendRFQ(rfq)}
+                              onClick={() => rfq._isPO
+                                ? updatePurchaseOrder(rfq.id, { status: 'sent' })
+                                : handleSendRFQ(rfq)
+                              }
                               title={t('send') || "Yuborish"}
                             >
                               <Send className="w-4 h-4" />
