@@ -641,14 +641,6 @@ export default function PurchaseOrders() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">{t('po_number_optional') || 'PO Number (Optional)'}</label>
-                <Input
-                  placeholder={t('auto_generate') || 'Auto generate'}
-                  value={newPO.po_number}
-                  onChange={(e) => setNewPO({...newPO, po_number: e.target.value})}
-                />
-              </div>
-              <div>
                 <label className="text-sm font-medium mb-1 block">{t('supplier') || 'Supplier'} *</label>
                 <Select
                   value={newPO.supplier_id}
@@ -698,6 +690,25 @@ export default function PurchaseOrders() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
+                <Select
+                  value={newPO.warehouse_id || '__none__'}
+                  onValueChange={(value) => setNewPO({...newPO, warehouse_id: value === '__none__' ? '' : value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
+                    {warehouses.map((wh) => (
+                      <SelectItem key={wh.id} value={wh.id}>
+                        {wh.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -720,28 +731,6 @@ export default function PurchaseOrders() {
                     setIsDeliveryDateManual(true);
                   }}
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('warehouse') || 'Warehouse'}</label>
-                <Select
-                  value={newPO.warehouse_id || '__none__'}
-                  onValueChange={(value) => setNewPO({...newPO, warehouse_id: value === '__none__' ? '' : value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">{t('auto_select') || 'Auto select'}</SelectItem>
-                    {warehouses.map((wh) => (
-                      <SelectItem key={wh.id} value={wh.id}>
-                        {wh.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 

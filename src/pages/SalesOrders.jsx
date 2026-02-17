@@ -1219,14 +1219,6 @@ export default function SalesOrders() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>{t('order_number')}</Label>
-                  <Input
-                    placeholder={t('automatic')}
-                    value={newOrder.order_number}
-                    onChange={(e) => setNewOrder({...newOrder, order_number: e.target.value})}
-                  />
-                </div>
-                <div>
                   <Label>{t('customer')} *</Label>
                   <Select
                     value={newOrder.customer_id || ''}
