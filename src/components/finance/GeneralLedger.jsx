@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2 } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +38,8 @@ export default function GeneralLedger() {
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [selectedJournalLines, setSelectedJournalLines] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -63,12 +65,17 @@ export default function GeneralLedger() {
   useEffect(() => {
     let filtered = journalEntries;
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = journalEntries.filter(entry =>
-        entry.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        entry.entry_number?.toLowerCase().includes(searchQuery.toLowerCase())
+        entry.description?.toLowerCase().includes(q) ||
+        entry.entry_number?.toLowerCase().includes(q) ||
+        entry.reference?.toLowerCase().includes(q) ||
+        entry.source_type?.toLowerCase().includes(q) ||
+        entry.journal?.name?.toLowerCase().includes(q)
       );
     }
     setFilteredEntries(filtered);
+    setCurrentPage(1);
   }, [searchQuery, journalEntries]);
 
   const [isLoadingLines, setIsLoadingLines] = useState(false);
@@ -310,6 +317,12 @@ export default function GeneralLedger() {
     return <Icon className="w-3 h-3" />;
   };
 
+  // Pagination
+  const totalPages = Math.ceil(filteredEntries.length / pageSize);
+  const paginatedEntries = filteredEntries.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const startIndex = (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, filteredEntries.length);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Journal Entries List */}
@@ -388,6 +401,7 @@ export default function GeneralLedger() {
                 )}
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -398,8 +412,9 @@ export default function GeneralLedger() {
                           {t('date')}
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('journal')} #</TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('description')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('number')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('journal')}</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <DollarSign className="w-4 h-4" />
@@ -410,20 +425,25 @@ export default function GeneralLedger() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEntries.map(entry => (
-                      <TableRow 
-                        key={entry.id} 
-                        onClick={() => handleSelectEntry(entry)} 
+                    {paginatedEntries.map(entry => (
+                      <TableRow
+                        key={entry.id}
+                        onClick={() => handleSelectEntry(entry)}
                         className={`cursor-pointer hover:bg-blue-50/50 transition-colors ${
                           selectedEntry?.id === entry.id ? 'bg-blue-50 border-l-4 border-[var(--genix-blue)]' : ''
                         }`}
                       >
-                        <TableCell className="font-medium text-slate-700">
-                          {entry.entry_date ? format(new Date(entry.entry_date), 'MMM dd, yyyy') : '-'}
+                        <TableCell className="font-medium text-slate-700 whitespace-nowrap">
+                          {entry.created_at ? format(new Date(entry.created_at), 'MM/dd/yyyy HH:mm') : entry.entry_date ? format(new Date(entry.entry_date), 'MM/dd/yyyy') : '-'}
                         </TableCell>
-                        <TableCell className="font-mono text-sm text-slate-600">{entry.entry_number}</TableCell>
-                        <TableCell className="text-slate-700">{entry.description}</TableCell>
-                        <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
+                        <TableCell className="font-mono text-sm text-slate-600 whitespace-nowrap">{entry.entry_number}</TableCell>
+                        <TableCell className="text-slate-700 max-w-[250px] truncate">
+                          {entry.description || entry.reference || '-'}
+                        </TableCell>
+                        <TableCell className="text-slate-600 whitespace-nowrap">
+                          {entry.journal?.name || '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
                           {formatCurrency(entry.total_debit || 0)}
                         </TableCell>
                         <TableCell>
@@ -437,6 +457,38 @@ export default function GeneralLedger() {
                   </TableBody>
                 </Table>
               </div>
+              {/* Pagination */}
+              {filteredEntries.length > pageSize && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+                  <span className="text-sm text-slate-600">
+                    {startIndex}-{endIndex} / {filteredEntries.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-slate-600 px-2">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -474,6 +526,20 @@ export default function GeneralLedger() {
                         {selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'MMM dd, yyyy') : '-'}
                       </p>
                     </div>
+                    <div className="p-3 bg-slate-50 rounded-lg">
+                      <p className="text-xs text-slate-500 mb-1">{t('journal')}</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {selectedEntry.journal?.name || '-'}
+                      </p>
+                    </div>
+                    {selectedEntry.source_type && (
+                      <div className="p-3 bg-slate-50 rounded-lg">
+                        <p className="text-xs text-slate-500 mb-1">{t('source')}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {selectedEntry.source_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </p>
+                      </div>
+                    )}
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
                       <p className="text-sm font-semibold text-slate-900 tabular-nums">
