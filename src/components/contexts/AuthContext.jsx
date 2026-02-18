@@ -339,10 +339,23 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setIsAuthenticated(false);
-      // Clear demo session, user data and tenant info
-      localStorage.removeItem('demo_session');
-      localStorage.removeItem('genixerp_user');
-      localStorage.removeItem('tenantId');
+      // Clear all cached data to prevent data leakage between users
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith('genix_') ||
+          key.startsWith('demo_') ||
+          key === 'genixerp_user' ||
+          key === 'demo_session' ||
+          key === 'tenantId' ||
+          key === 'accessToken' ||
+          key === 'refreshToken'
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
       setIsLoading(false);
     }
   }, [backendAvailable]);
