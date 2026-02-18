@@ -22,7 +22,7 @@ export default function Payroll() {
   const { t } = useTranslation(language);
   const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -326,7 +326,7 @@ export default function Payroll() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('gross_pay')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalGrossPay)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalGrossPay)}</p>
                 </div>
               </div>
             </CardContent>
@@ -340,7 +340,7 @@ export default function Payroll() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('net_pay')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalNetPay)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalNetPay)}</p>
                 </div>
               </div>
             </CardContent>

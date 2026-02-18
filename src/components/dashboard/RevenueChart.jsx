@@ -9,7 +9,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 export default function RevenueChart({ data }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   return (
     <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
@@ -32,7 +32,7 @@ export default function RevenueChart({ data }) {
               <YAxis 
                 stroke="#64748b"
                 fontSize={12}
-                tickFormatter={(value) => formatCurrency(value)}
+                tickFormatter={(value) => formatCurrencyCompact(value)}
               />
               <Tooltip 
                 formatter={(value) => [formatCurrency(value), t('revenue')]}

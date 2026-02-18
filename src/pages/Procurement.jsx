@@ -60,7 +60,7 @@ export default function Procurement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     suppliers,
     purchaseOrders,
@@ -604,7 +604,7 @@ export default function Procurement() {
                     <div>
                       <p className="text-xs text-slate-500">{t('total_value') || 'Total Value'}</p>
                       <p className="text-lg font-bold text-green-600">
-                        {formatCurrency(metrics.totalValue)}
+                        {formatCurrencyCompact(metrics.totalValue)}
                       </p>
                     </div>
                     <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -732,7 +732,7 @@ export default function Procurement() {
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
-                        <YAxis fontSize={12} />
+                        <YAxis fontSize={12} tickFormatter={(v) => formatCurrencyCompact(v)} />
                         <Tooltip formatter={(value) => [formatCurrency(value), t('amount') || 'Amount']} />
                         <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                       </BarChart>
@@ -763,7 +763,7 @@ export default function Procurement() {
                           <div className="text-right">
                             <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                             <p className="text-xs text-slate-500 mt-1">
-                              {formatCurrency(po.total_amount || 0)}
+                              {formatCurrencyCompact(po.total_amount || 0)}
                             </p>
                           </div>
                         </div>

@@ -31,7 +31,7 @@ export default function Projects() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { projects, createProject, updateProject, isLoading } = useModules();
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -431,7 +431,7 @@ export default function Projects() {
                   <DollarSign className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalBudget)}</p>
+              <p className="text-3xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalBudget)}</p>
               <p className="text-sm text-slate-600">{t('total_budget')}</p>
             </CardContent>
           </Card>
