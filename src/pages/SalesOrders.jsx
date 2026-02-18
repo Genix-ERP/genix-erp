@@ -62,7 +62,7 @@ export default function SalesOrders() {
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const {
@@ -999,7 +999,7 @@ export default function SalesOrders() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-600">{t('revenue')}</p>
-                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(metrics.totalRevenue)}</p>
+                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrencyCompact(metrics.totalRevenue)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -1073,7 +1073,7 @@ export default function SalesOrders() {
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" fontSize={12} />
-                      <YAxis fontSize={12} />
+                      <YAxis fontSize={12} tickFormatter={(v) => formatCurrencyCompact(v)} />
                       <Tooltip formatter={(value) => formatCurrency(value)} />
                       <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
                     </LineChart>

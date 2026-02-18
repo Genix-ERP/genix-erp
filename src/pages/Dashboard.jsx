@@ -50,7 +50,7 @@ import {
 export default function Dashboard() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // Get data from all contexts
   const { items: inventory, stockMovements } = useInventory();
@@ -224,7 +224,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           <MetricCard
             title={t("revenue")}
-            value={formatCurrency(metrics.totalRevenue)}
+            value={formatCurrencyCompact(metrics.totalRevenue)}
             change={salesAnalysis.metrics?.growthRate ? `${salesAnalysis.metrics.growthRate > 0 ? '+' : ''}${salesAnalysis.metrics.growthRate.toFixed(1)}%` : t("n_a")}
             trend={salesAnalysis.metrics?.growthRate > 0 ? "up" : salesAnalysis.metrics?.growthRate < 0 ? "down" : "neutral"}
             icon={DollarSign}
@@ -248,7 +248,7 @@ export default function Dashboard() {
           />
           <MetricCard
             title={t("cost_savings")}
-            value={`${formatCurrency(metrics.automationSavings)}${t("per_month")}`}
+            value={`${formatCurrencyCompact(metrics.automationSavings)}${t("per_month")}`}
             change={t("from_ai_automation")}
             trend="up"
             icon={Zap}
@@ -404,7 +404,7 @@ export default function Dashboard() {
             <CardContent className="p-4">
               <div className="text-sm text-orange-600 font-medium">{t('pipeline')}</div>
               <div className="text-2xl font-bold text-orange-900">
-                {formatCurrency(opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0))}
+                {formatCurrencyCompact(opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0))}
               </div>
               <div className="text-xs text-orange-600/70 mt-1">
                 {opportunities.length} {t('opportunities')}

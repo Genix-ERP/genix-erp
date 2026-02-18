@@ -27,7 +27,7 @@ export default function FinanceDashboard() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { financialTransactions, isLoading } = useFinancials();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis using real data
   const financialAnalysis = useMemo(() =>
@@ -125,7 +125,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_income')}</p>
               <p className="text-3xl font-bold text-green-600 tabular-nums">
-                {formatCurrency(metrics.totalIncome)}
+                {formatCurrencyCompact(metrics.totalIncome)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
@@ -147,7 +147,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_expenses')}</p>
               <p className="text-3xl font-bold text-red-600 tabular-nums">
-                {formatCurrency(metrics.totalExpenses)}
+                {formatCurrencyCompact(metrics.totalExpenses)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month') || 'vs last month'}</p>
             </div>
@@ -171,7 +171,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('net_profit')}</p>
               <p className={`text-3xl font-bold tabular-nums ${metrics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {formatCurrency(metrics.netProfit)}
+                {formatCurrencyCompact(metrics.netProfit)}
               </p>
               <p className="text-xs text-slate-500 mt-2">
                 {metrics.netProfit >= 0 ? t('healthy_profit') || 'Healthy profit' : t('needs_attention') || 'Needs attention'}
@@ -218,7 +218,7 @@ export default function FinanceDashboard() {
                 <BarChart data={cashFlowData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatCurrencyCompact(v)} />
                   <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Bar dataKey="income" fill="#10b981" name={t('income')} />
                   <Bar dataKey="expenses" fill="#ef4444" name={t('expense')} />
