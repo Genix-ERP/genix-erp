@@ -52,10 +52,9 @@ export default function FixedAssets() {
     createFixedAsset,
     updateFixedAsset,
     deleteFixedAsset,
-    createDepreciationEntry,
-    runDepreciation,
-    disposeAsset,
-    isLoading
+    runDepreciationForPeriod,
+    isLoading,
+    refreshData
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
@@ -239,26 +238,8 @@ export default function FixedAssets() {
   const handleRunDepreciation = async () => {
     setIsSaving(true);
     try {
-      const today = new Date();
-      const period = format(today, 'yyyy-MM');
-
-      for (const asset of fixedAssets.filter(a => a.status === 'active')) {
-        const depCalc = calculateDepreciation(asset);
-        if (depCalc.monthlyDepreciation > 0) {
-          await createDepreciationEntry({
-            asset_id: asset.id,
-            period: period,
-            amount: depCalc.monthlyDepreciation,
-            depreciation_date: format(today, 'yyyy-MM-dd'),
-            method: asset.depreciation_method,
-          });
-
-          await updateFixedAsset(asset.id, {
-            accumulated_depreciation: (asset.accumulated_depreciation || 0) + depCalc.monthlyDepreciation
-          });
-        }
-      }
-
+      const period = format(new Date(), 'yyyy-MM');
+      await runDepreciationForPeriod(period);
       setShowDepreciationModal(false);
     } catch (error) {
       console.error('Error running depreciation:', error);
@@ -272,8 +253,8 @@ export default function FixedAssets() {
     setIsSaving(true);
     try {
       const disposalAmount = parseFloat(disposeFormData.disposal_amount) || 0;
-      const depCalc = calculateDepreciation(selectedAsset);
-      const gainLoss = disposalAmount - depCalc.netBookValue;
+      const nbv = selectedAsset.book_value != null ? selectedAsset.book_value : ((selectedAsset.acquisition_cost || 0) - (selectedAsset.accumulated_depreciation || 0));
+      const gainLoss = disposalAmount - nbv;
 
       await updateFixedAsset(selectedAsset.id, {
         status: 'disposed',
@@ -530,9 +511,12 @@ export default function FixedAssets() {
               </TableHeader>
               <TableBody>
                 {filteredAssets.map((asset) => {
-                  const depCalc = calculateDepreciation(asset);
                   const categoryInfo = getCategoryInfo(asset.category);
                   const CategoryIcon = categoryInfo.icon;
+                  const depreciableAmount = (asset.acquisition_cost || 0) - (asset.salvage_value || 0);
+                  const accumulated = asset.accumulated_depreciation || 0;
+                  const bookValue = asset.book_value != null ? asset.book_value : ((asset.acquisition_cost || 0) - accumulated);
+                  const progress = depreciableAmount > 0 ? Math.min((accumulated / depreciableAmount) * 100, 100) : 0;
 
                   return (
                     <TableRow key={asset.id} className="hover:bg-slate-50">
@@ -555,16 +539,16 @@ export default function FixedAssets() {
                         {formatCurrency(asset.acquisition_cost || 0)}
                       </TableCell>
                       <TableCell className="text-right font-medium text-purple-600">
-                        {formatCurrency(depCalc.netBookValue)}
+                        {formatCurrency(bookValue)}
                       </TableCell>
                       <TableCell>
                         <div className="w-24">
                           <Progress
-                            value={depCalc.depreciationProgress || 0}
+                            value={progress}
                             className="h-2 [&>div]:bg-amber-500"
                           />
                           <span className="text-xs text-slate-500">
-                            {(depCalc.depreciationProgress || 0).toFixed(0)}%
+                            {progress.toFixed(0)}%
                           </span>
                         </div>
                       </TableCell>
@@ -859,7 +843,7 @@ export default function FixedAssets() {
             {selectedAsset && (
               <div className="bg-slate-50 p-4 rounded-lg">
                 <p className="font-medium">{selectedAsset.name}</p>
-                <p className="text-sm text-slate-500">{t('net_book_value') || 'NBV'}: {formatCurrency(calculateDepreciation(selectedAsset).netBookValue)}</p>
+                <p className="text-sm text-slate-500">{t('net_book_value') || 'NBV'}: {formatCurrency(selectedAsset.book_value != null ? selectedAsset.book_value : ((selectedAsset.acquisition_cost || 0) - (selectedAsset.accumulated_depreciation || 0)))}</p>
               </div>
             )}
 

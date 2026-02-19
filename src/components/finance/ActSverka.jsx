@@ -8,7 +8,7 @@ import {
   Download, Users, Calendar, Eye, Trash2, RefreshCw, FileSpreadsheet
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -38,6 +38,8 @@ export default function ActSverka() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedAct, setSelectedAct] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [actToDelete, setActToDelete] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -132,20 +134,112 @@ export default function ActSverka() {
     }
   };
 
-  const handleExport = async (id, fmt) => {
-    try {
-      await exportReconciliationAct(id, fmt);
-    } catch (err) {
-      console.error('Export failed:', err);
+  const handleExport = (id, fmt) => {
+    const act = reconciliationActs.find(a => a.id === id);
+    if (!act) return;
+
+    const html = `
+      <html>
+      <head>
+        <title>Akt sverka - ${act.partner_name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+          h1 { text-align: center; font-size: 20px; margin-bottom: 4px; }
+          h2 { text-align: center; font-size: 14px; font-weight: normal; color: #666; margin-bottom: 24px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #999; padding: 8px 12px; font-size: 13px; }
+          th { background: #f0f0f0; text-align: center; }
+          td.right { text-align: right; }
+          td.bold { font-weight: bold; }
+          .info { display: flex; justify-content: space-between; margin-bottom: 16px; font-size: 13px; }
+          .info div { margin-right: 24px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 48px; }
+          .signatures div { width: 45%; border-top: 1px solid #333; padding-top: 8px; font-size: 13px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>AKT SVERKA</h1>
+        <h2>Solishtirma dalolatnoma</h2>
+        <div class="info">
+          <div><strong>Kontragent:</strong> ${act.partner_name}</div>
+          <div><strong>Davr:</strong> ${act.period_start} — ${act.period_end}</div>
+          <div><strong>Holat:</strong> ${act.status}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2"></th>
+              <th colspan="2">Bizning ma'lumot</th>
+              <th colspan="2">Kontragent ma'lumoti</th>
+            </tr>
+            <tr>
+              <th>Debet</th>
+              <th>Kredit</th>
+              <th>Debet</th>
+              <th>Kredit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="bold">Davr boshi qoldiq</td>
+              <td class="right">${formatAmount(act.opening_balance)}</td>
+              <td></td>
+              <td></td>
+              <td class="right">${formatAmount(act.opening_balance)}</td>
+            </tr>
+            <tr>
+              <td class="bold">Davr operatsiyalari</td>
+              <td class="right">${formatAmount(act.our_debit_total)}</td>
+              <td class="right">${formatAmount(act.our_credit_total)}</td>
+              <td class="right">${formatAmount(act.partner_debit_total)}</td>
+              <td class="right">${formatAmount(act.partner_credit_total)}</td>
+            </tr>
+            <tr>
+              <td class="bold">Davr oxiri qoldiq</td>
+              <td class="right bold" colspan="2">${formatAmount(act.our_balance)}</td>
+              <td class="right bold" colspan="2">${formatAmount(act.partner_balance)}</td>
+            </tr>
+            ${Math.abs(act.difference || 0) > 0 ? `
+            <tr>
+              <td class="bold" style="color:red">Farq</td>
+              <td class="right bold" colspan="4" style="color:red">${formatAmount(act.difference)} so'm</td>
+            </tr>` : ''}
+          </tbody>
+        </table>
+        ${act.notes ? `<p style="margin-top:16px;font-size:13px"><strong>Izoh:</strong> ${act.notes}</p>` : ''}
+        <div class="signatures">
+          <div>Tashkilot vakili: _______________</div>
+          <div>Kontragent vakili: _______________</div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDeleteClick = (act) => {
+    setActToDelete(act);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!actToDelete) return;
     try {
-      await deleteReconciliationAct(id);
-      if (selectedAct?.id === id) setShowDetailModal(false);
+      await deleteReconciliationAct(actToDelete.id);
+      if (selectedAct?.id === actToDelete.id) setShowDetailModal(false);
     } catch (err) {
       console.error('Delete failed:', err);
+    } finally {
+      setShowDeleteConfirm(false);
+      setActToDelete(null);
     }
   };
 
@@ -307,7 +401,7 @@ export default function ActSverka() {
                           <Download className="w-4 h-4" />
                         </Button>
                         {canDelete(MODULES.FINANCIALS) && act.status === 'draft' && (
-                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => handleDelete(act.id)}>
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteClick(act)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}
@@ -546,6 +640,42 @@ export default function ActSverka() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('confirm_delete') || "O'chirishni tasdiqlash"}
+            </DialogTitle>
+            <DialogDescription>
+              {t('delete_act_confirmation') || "Haqiqatan ham bu akt sverkani o'chirmoqchimisiz?"}
+            </DialogDescription>
+          </DialogHeader>
+          {actToDelete && (
+            <div className="py-4">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="font-medium">{actToDelete.partner_name}</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {actToDelete.period_start} — {actToDelete.period_end}
+                </p>
+              </div>
+              <p className="mt-3 text-sm text-red-600">
+                {t('action_cannot_be_undone') || "Bu amalni qaytarib bo'lmaydi."}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              {t('delete') || "O'chirish"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
