@@ -76,7 +76,7 @@ export default function BudgetManagement() {
     const activeBudgets = budgets.filter(b => b.status === 'active').length;
     const totalBudgeted = budgets.reduce((sum, b) => sum + (b.total_amount || 0), 0);
     const totalActual = budgetLines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
-    const totalPlanned = budgetLines.reduce((sum, l) => sum + (l.planned_amount || 0), 0);
+    const totalPlanned = budgetLines.reduce((sum, l) => sum + (l.budgeted_amount || l.planned_amount || 0), 0);
     const variance = totalPlanned - totalActual;
     const variancePercent = totalPlanned > 0 ? ((variance / totalPlanned) * 100).toFixed(1) : 0;
 
@@ -242,9 +242,8 @@ export default function BudgetManagement() {
       case 'expense':
         return <Badge className="bg-red-100 text-red-700"><TrendingDown className="w-3 h-3 mr-1" /> {t('expense') || 'Expense'}</Badge>;
       case 'revenue':
-        return <Badge className="bg-green-100 text-green-700"><TrendingUp className="w-3 h-3 mr-1" /> {t('revenue') || 'Revenue'}</Badge>;
       case 'income':
-        return <Badge className="bg-emerald-100 text-emerald-700"><TrendingUp className="w-3 h-3 mr-1" /> {t('income_budget') || 'Income'}</Badge>;
+        return <Badge className="bg-green-100 text-green-700"><TrendingUp className="w-3 h-3 mr-1" /> {t('revenue') || 'Revenue'}</Badge>;
       case 'cashflow':
         return <Badge className="bg-blue-100 text-blue-700"><BarChart3 className="w-3 h-3 mr-1" /> {t('cashflow_budget') || 'Cash Flow'}</Badge>;
       case 'investment':
@@ -260,7 +259,8 @@ export default function BudgetManagement() {
 
   const calculateBudgetUsage = (budget) => {
     const lines = getBudgetLines(budget.id);
-    const totalPlanned = lines.reduce((sum, l) => sum + (l.planned_amount || 0), 0);
+    const linesPlanned = lines.reduce((sum, l) => sum + (l.budgeted_amount || l.planned_amount || 0), 0);
+    const totalPlanned = linesPlanned > 0 ? linesPlanned : (budget.total_amount || 0);
     const totalActual = lines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
     const percentage = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
     const warningThreshold = budget.warning_threshold || 80;
@@ -360,7 +360,6 @@ export default function BudgetManagement() {
                   <SelectItem value="all">{t('all_types') || 'All Types'}</SelectItem>
                   <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
                   <SelectItem value="revenue">{t('revenue') || 'Revenue'}</SelectItem>
-                  <SelectItem value="income">{t('income_budget') || 'Income'}</SelectItem>
                   <SelectItem value="cashflow">{t('cashflow_budget') || 'Cash Flow'}</SelectItem>
                   <SelectItem value="investment">{t('investment_budget') || 'Investment'}</SelectItem>
                   <SelectItem value="production">{t('production_budget') || 'Production'}</SelectItem>
@@ -435,13 +434,13 @@ export default function BudgetManagement() {
                         ) : '-'}
                       </TableCell>
                       <TableCell>
-                        <div className="w-32">
+                        <div className="w-40">
                           <div className="flex justify-between text-xs mb-1">
                             <span className={usage.isOverBudget ? 'text-red-600 font-medium' : usage.isWarning ? 'text-amber-600 font-medium' : 'text-slate-600'}>
                               {usage.percentage.toFixed(0)}%
                             </span>
-                            <span className="text-slate-400">
-                              {formatCurrency(usage.totalActual)}
+                            <span className="text-slate-500">
+                              {formatCurrency(usage.totalActual)} / {formatCurrency(usage.totalPlanned || budget.total_amount || 0)}
                             </span>
                           </div>
                           <Progress
@@ -519,7 +518,6 @@ export default function BudgetManagement() {
                   <SelectContent>
                     <SelectItem value="expense">{t('expense') || 'Expense'}</SelectItem>
                     <SelectItem value="revenue">{t('revenue') || 'Revenue'}</SelectItem>
-                    <SelectItem value="income">{t('income_budget') || 'Income'}</SelectItem>
                     <SelectItem value="cashflow">{t('cashflow_budget') || 'Cash Flow'}</SelectItem>
                     <SelectItem value="investment">{t('investment_budget') || 'Investment'}</SelectItem>
                     <SelectItem value="production">{t('production_budget') || 'Production'}</SelectItem>
@@ -619,7 +617,7 @@ export default function BudgetManagement() {
             <Button
               onClick={showEditModal ? handleUpdateBudget : handleCreateBudget}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !formData.code || !formData.name}
+              disabled={isSaving || !formData.code || !formData.name || !formData.start_date || !formData.end_date || (!showEditModal && (parseFloat(formData.total_amount) || 0) <= 0)}
             >
               {isSaving ? (t('saving') || 'Saving...') : showEditModal ? (t('save') || 'Save') : (t('create') || 'Create')}
             </Button>
@@ -658,9 +656,14 @@ export default function BudgetManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     {accounts
-                      .filter(a => selectedBudget?.budget_type === 'both' ||
-                        (selectedBudget?.budget_type === 'expense' && a.type === 'expense') ||
-                        (selectedBudget?.budget_type === 'revenue' && a.type === 'revenue'))
+                      .filter(a => {
+                        const budgetType = selectedBudget?.budget_type;
+                        if (!budgetType || budgetType === 'both') return true;
+                        const cat = a.category || a.account_type?.category || '';
+                        if (budgetType === 'expense') return cat === 'expense';
+                        if (budgetType === 'revenue' || budgetType === 'income') return cat === 'revenue';
+                        return true; // cashflow, investment, production - show all accounts
+                      })
                       .map(acc => (
                         <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
                       ))
@@ -703,14 +706,15 @@ export default function BudgetManagement() {
                 </TableHeader>
                 <TableBody>
                   {getBudgetLines(selectedBudget.id).map((line) => {
-                    const variance = (line.planned_amount || 0) - (line.actual_amount || 0);
-                    const usage = line.planned_amount > 0 ? ((line.actual_amount || 0) / line.planned_amount) * 100 : 0;
+                    const planned = line.budgeted_amount || line.planned_amount || 0;
+                    const variance = planned - (line.actual_amount || 0);
+                    const usage = planned > 0 ? ((line.actual_amount || 0) / planned) * 100 : 0;
                     const isOverBudget = usage > 100;
 
                     return (
                       <TableRow key={line.id}>
                         <TableCell>{getAccountName(line.account_id)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(line.planned_amount || 0)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(planned)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(line.actual_amount || 0)}</TableCell>
                         <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
