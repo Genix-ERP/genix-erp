@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Pencil, Trash2, CheckCircle, XCircle,
+  Plus, Search, Pencil, Trash2, CheckCircle,
   BookOpen, AlertCircle, ShoppingCart, Package, Landmark, Banknote, FileText, MoreHorizontal
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -35,6 +35,7 @@ export default function JournalManagement() {
   const { t } = useTranslation(language);
   const {
     journals,
+    accounts,
     createJournal,
     updateJournal,
     deleteJournal,
@@ -60,6 +61,8 @@ export default function JournalManagement() {
     description: '',
     auto_sequence: true,
     number_prefix: '',
+    default_debit_account_id: '',
+    default_credit_account_id: '',
   });
 
   useEffect(() => {
@@ -102,6 +105,8 @@ export default function JournalManagement() {
       description: '',
       auto_sequence: true,
       number_prefix: '',
+      default_debit_account_id: '',
+      default_credit_account_id: '',
     });
     setCodeManuallyEdited(false);
   };
@@ -132,6 +137,8 @@ export default function JournalManagement() {
       auto_sequence: journal.auto_sequence !== false,
       number_prefix: journal.number_prefix || '',
       is_active: journal.is_active !== false,
+      default_debit_account_id: journal.default_debit_account_id || '',
+      default_credit_account_id: journal.default_credit_account_id || '',
     });
     setShowEditModal(true);
   };
@@ -145,6 +152,8 @@ export default function JournalManagement() {
         auto_sequence: formData.auto_sequence,
         number_prefix: formData.number_prefix,
         is_active: formData.is_active,
+        default_debit_account_id: formData.default_debit_account_id || '',
+        default_credit_account_id: formData.default_credit_account_id || '',
       });
       resetForm();
       setSelectedJournal(null);
@@ -281,6 +290,118 @@ export default function JournalManagement() {
           onChange={(e) => setFormData({...formData, number_prefix: e.target.value})}
           maxLength={10}
         />
+      </div>
+
+      {/* Accounting Information - context-sensitive based on journal type */}
+      <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50/50">
+        <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+          {t('accounting_information') || 'Accounting Information'}
+        </h4>
+        {(() => {
+          // Context-sensitive account labels based on journal type (Odoo-style)
+          const accountLabels = {
+            sales: {
+              debit: t('default_receivable_account') || 'Default Receivable Account',
+              credit: t('default_income_account') || 'Default Income Account',
+            },
+            purchase: {
+              debit: t('default_expense_account') || 'Default Expense Account',
+              credit: t('default_payable_account') || 'Default Payable Account',
+            },
+            cash: {
+              debit: t('default_cash_account') || 'Default Cash Account',
+              credit: t('default_cash_account') || 'Default Cash Account',
+            },
+            bank: {
+              debit: t('default_bank_account') || 'Default Bank Account',
+              credit: t('default_bank_account') || 'Default Bank Account',
+            },
+            general: {
+              debit: t('default_debit_account') || 'Default Debit Account',
+              credit: t('default_credit_account') || 'Default Credit Account',
+            },
+            miscellaneous: {
+              debit: t('default_debit_account') || 'Default Debit Account',
+              credit: t('default_credit_account') || 'Default Credit Account',
+            },
+          };
+          const labels = accountLabels[formData.type] || accountLabels.general;
+          const isCashOrBank = formData.type === 'cash' || formData.type === 'bank';
+
+          return (
+            <div className={isCashOrBank ? '' : 'grid grid-cols-2 gap-4'}>
+              {isCashOrBank ? (
+                /* Cash/Bank journals use a single account */
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {labels.debit}
+                  </label>
+                  <Select
+                    value={formData.default_debit_account_id || 'none'}
+                    onValueChange={(value) => setFormData({...formData, default_debit_account_id: value === 'none' ? '' : value, default_credit_account_id: value === 'none' ? '' : value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_account') || 'Select account'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('none') || 'None'}</SelectItem>
+                      {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.code} - {acc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      {labels.debit}
+                    </label>
+                    <Select
+                      value={formData.default_debit_account_id || 'none'}
+                      onValueChange={(value) => setFormData({...formData, default_debit_account_id: value === 'none' ? '' : value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_account') || 'Select account'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('none') || 'None'}</SelectItem>
+                        {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {acc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      {labels.credit}
+                    </label>
+                    <Select
+                      value={formData.default_credit_account_id || 'none'}
+                      onValueChange={(value) => setFormData({...formData, default_credit_account_id: value === 'none' ? '' : value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('select_account') || 'Select account'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('none') || 'None'}</SelectItem>
+                        {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.code} - {acc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -452,7 +573,7 @@ export default function JournalManagement() {
                     <TableHead className="font-semibold text-slate-700">{t('code') || 'Code'}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('name')}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('type') || 'Type'}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('auto_sequence') || 'Auto Seq.'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('default_account') || 'Default Account'}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
                   </TableRow>
@@ -484,11 +605,27 @@ export default function JournalManagement() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {journal.auto_sequence ? (
-                            <CheckCircle className="w-5 h-5 text-green-500" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-slate-300" />
-                          )}
+                          {(() => {
+                            const debitAcc = journal.default_debit_account_id
+                              ? (accounts || []).find(a => a.id === journal.default_debit_account_id)
+                              : null;
+                            const creditAcc = journal.default_credit_account_id
+                              ? (accounts || []).find(a => a.id === journal.default_credit_account_id)
+                              : null;
+                            // If both are the same (cash/bank), show once
+                            if (debitAcc && creditAcc && debitAcc.id === creditAcc.id) {
+                              return <span className="text-sm text-slate-700">{debitAcc.code} {debitAcc.name}</span>;
+                            }
+                            if (!debitAcc && !creditAcc) {
+                              return <span className="text-sm text-slate-400">—</span>;
+                            }
+                            return (
+                              <div className="space-y-0.5">
+                                {debitAcc && <div className="text-sm text-slate-700">{debitAcc.code} {debitAcc.name}</div>}
+                                {creditAcc && <div className="text-sm text-slate-700">{creditAcc.code} {creditAcc.name}</div>}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Badge className={journal.is_active

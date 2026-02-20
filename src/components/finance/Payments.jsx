@@ -56,12 +56,19 @@ export default function Payments() {
     contact_id: '',
     account_id: '',
     bill_id: '',
+    invoice_id: '',
+    invoice_party_name: '',
   });
 
   // Get unpaid vendor bills for bill selector
   const unpaidBills = vendorBills.filter(b =>
     b.status === 'posted' || b.status === 'confirmed' || b.status === 'draft'
   ).filter(b => (b.amount_due || b.total_amount || 0) > 0);
+
+  // Get unpaid customer invoices for invoice selector
+  const unpaidInvoices = (customerInvoices || []).filter(inv =>
+    inv.status !== 'cancelled' && inv.status !== 'paid'
+  ).filter(inv => ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0);
 
   // Load contacts when modal opens
   useEffect(() => {
@@ -130,6 +137,8 @@ export default function Payments() {
       contact_id: '',
       account_id: '',
       bill_id: '',
+      invoice_id: '',
+      invoice_party_name: '',
     });
     setShowCreateModal(true);
   };
@@ -140,19 +149,35 @@ export default function Payments() {
       const backendType = newPayment.payment_type === 'inbound' ? 'receipt' : 'payment';
       const selectedContact = contacts.find(c => c.id === newPayment.contact_id);
 
+      // Build allocations array if linked to an invoice/bill
+      const allocations = [];
+      const paymentAmount = parseFloat(newPayment.amount) || 0;
+      if (newPayment.bill_id) {
+        allocations.push({
+          document_type: 'purchase_invoice',
+          document_id: newPayment.bill_id,
+          amount: paymentAmount,
+        });
+      } else if (newPayment.invoice_id) {
+        allocations.push({
+          document_type: 'sales_invoice',
+          document_id: newPayment.invoice_id,
+          amount: paymentAmount,
+        });
+      }
+
       const paymentData = {
         type: backendType,
         contact_id: newPayment.contact_id,
         payment_date: newPayment.payment_date,
-        amount: parseFloat(newPayment.amount) || 0,
+        amount: paymentAmount,
         reference: newPayment.reference,
         notes: newPayment.description,
         bank_account_id: newPayment.account_id || undefined,
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
-        party_name: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
-        entity_type: newPayment.bill_id ? 'purchase_invoice' : null,
-        entity_id: newPayment.bill_id || null,
+        party_name: newPayment.invoice_party_name || selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
+        allocations: allocations.length > 0 ? allocations : undefined,
       };
 
       await createPayment(paymentData);
@@ -174,6 +199,43 @@ export default function Payments() {
   const handleViewDetail = (payment) => {
     setSelectedPayment(payment);
     setShowDetailModal(true);
+  };
+
+  // Pay an invoice directly from the invoices table
+  const handlePayInvoice = (invoice, isCustomer) => {
+    const amountDue = (invoice.total_amount || 0) - (invoice.amount_paid || 0);
+    const contactId = isCustomer
+      ? (invoice.customer_id || '')
+      : (invoice.vendor_id || invoice.partner_id || '');
+    const partyName = isCustomer
+      ? (invoice.customer_name || '')
+      : (invoice.partner_name || invoice.vendor_name || '');
+
+    setNewPayment({
+      payment_type: isCustomer ? 'inbound' : 'outbound',
+      payment_method: 'bank_transfer',
+      payment_date: new Date().toISOString().split('T')[0],
+      amount: amountDue.toString(),
+      currency: 'USD',
+      reference: `${t('payment_for') || 'Payment for'} ${invoice.invoice_number}`,
+      description: '',
+      contact_id: contactId,
+      account_id: '',
+      bill_id: !isCustomer ? invoice.id : '',
+      invoice_id: isCustomer ? invoice.id : '',
+      invoice_party_name: partyName,
+    });
+
+    // Ensure contacts are loaded
+    if (contacts.length === 0) {
+      setContactsLoading(true);
+      contactsService.list()
+        .then(data => setContacts(data || []))
+        .catch(err => console.error('Failed to load contacts:', err))
+        .finally(() => setContactsLoading(false));
+    }
+
+    setShowCreateModal(true);
   };
 
   const getStatusColor = (status) => {
@@ -355,6 +417,62 @@ export default function Payments() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Invoice Selector - Only show for customer payments */}
+            {isCustomerTab && unpaidInvoices.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('apply_to_invoice') || 'Apply to Invoice'} ({t('optional') || 'Optional'})
+                </label>
+                <Select
+                  value={newPayment.invoice_id || '__none__'}
+                  onValueChange={(value) => {
+                    if (value === '__none__') {
+                      setNewPayment({...newPayment, invoice_id: ''});
+                      return;
+                    }
+                    const selectedInv = unpaidInvoices.find(inv => inv.id === value);
+                    if (selectedInv) {
+                      const due = (selectedInv.total_amount || 0) - (selectedInv.amount_paid || 0);
+                      setNewPayment({
+                        ...newPayment,
+                        invoice_id: value,
+                        amount: due.toString(),
+                        contact_id: selectedInv.customer_id || '',
+                        reference: `${t('payment_for') || 'Payment for'} ${selectedInv.invoice_number}`,
+                      });
+                    } else {
+                      setNewPayment({...newPayment, invoice_id: value});
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_invoice') || 'Select an invoice'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-slate-500">{t('no_specific_invoice') || 'No specific invoice'}</span>
+                    </SelectItem>
+                    {unpaidInvoices.map(inv => {
+                      const due = (inv.total_amount || 0) - (inv.amount_paid || 0);
+                      return (
+                        <SelectItem key={inv.id} value={inv.id}>
+                          <div className="flex items-center justify-between gap-4 w-full">
+                            <span className="font-mono text-sm">{inv.invoice_number}</span>
+                            <span className="text-slate-500">
+                              {inv.customer_name || '-'}
+                            </span>
+                            <span className="font-semibold text-red-600">
+                              {formatCurrency(due)}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Bill Selector - Only show for vendor payments */}
             {!isCustomerTab && unpaidBills.length > 0 && (
@@ -883,6 +1001,7 @@ export default function Payments() {
                         <TableHead className="font-semibold text-slate-700 text-right">{t('paid') || 'Paid'}</TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">{t('due') || 'Due'}</TableHead>
                         <TableHead className="font-semibold text-slate-700">{t('payment_status') || 'Status'}</TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">{t('actions') || 'Actions'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -913,6 +1032,19 @@ export default function Payments() {
                               <Badge className={paymentStatusStyle[ps]}>
                                 {paymentStatusLabel[ps]}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {ps !== 'paid' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50"
+                                  onClick={() => handlePayInvoice(item, isCustomerTab)}
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  {t('record_payment') || 'Record Payment'}
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         );

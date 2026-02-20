@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { SettingsSection, SettingsField, SettingsRow, SettingsToggle } from './SettingsSection';
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Tag, CreditCard, Receipt } from 'lucide-react';
+import { FileText, Tag, CreditCard, Receipt, Percent } from 'lucide-react';
+import financeService from "@/api/services/finance";
 
 const PRICING_STRATEGIES = [
   { value: 'standard', label: 'Standard Pricing', desc: 'Single price for all customers' },
@@ -28,6 +29,11 @@ export default function SalesSettings() {
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const sales = settings.sales || {};
+
+  const [taxRates, setTaxRates] = useState([]);
+  useEffect(() => {
+    financeService.listTaxRates().then(data => setTaxRates(data || [])).catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -169,6 +175,34 @@ export default function SalesSettings() {
             ))}
           </div>
         </div>
+      </SettingsSection>
+
+      {/* Default Tax */}
+      <SettingsSection
+        title={t('default_tax_settings') || 'Default Tax'}
+        description={t('default_sales_tax_desc') || 'Default tax applied automatically to new sales orders'}
+        icon={Percent}
+      >
+        <SettingsRow>
+          <SettingsField label={t('default_sales_tax') || 'Default Sales Tax'} description={t('default_sales_tax_help') || 'This tax will be pre-filled when creating sales orders'}>
+            <Select
+              value={sales.tax?.default_tax_id || 'none'}
+              onValueChange={(value) => updateSetting('sales.tax.default_tax_id', value === 'none' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t('select_tax') || 'Select tax'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t('no_tax') || 'No tax'}</SelectItem>
+                {taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type).map(tr => (
+                  <SelectItem key={tr.id} value={tr.id}>
+                    {tr.name} ({tr.rate}%)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsField>
+        </SettingsRow>
       </SettingsSection>
 
       {/* Invoice Settings */}
