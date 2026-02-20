@@ -42,6 +42,9 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { procurementService } from '@/api/services/procurement';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
+import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import PurchaseReturns from './PurchaseReturns';
 import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
@@ -50,6 +53,15 @@ export default function PurchaseOrders() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, MODULES } = usePermissions();
+  const { getSetting } = useAdminSettings();
+  const { taxRates = [] } = useFinancials();
+  const { formatCurrency } = useCurrencyFormatter();
+
+  // Get default tax from settings
+  const defaultPurchaseTaxId = getSetting('purchase.tax.default_tax_id', '');
+  const defaultPurchaseTax = defaultPurchaseTaxId ? taxRates.find(tr => tr.id === defaultPurchaseTaxId) : null;
+  const defaultTaxPercent = defaultPurchaseTax?.rate || 0;
+
   const {
     suppliers,
     purchaseOrders,
@@ -100,9 +112,17 @@ export default function PurchaseOrders() {
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date().toISOString().split('T')[0],
     total_amount: 0,
+    tax_percent: 0,
     payment_terms: 'net_30',
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
+
+  // Pre-fill default tax from settings
+  useEffect(() => {
+    if (defaultTaxPercent > 0 && newPO.tax_percent === 0) {
+      setNewPO(prev => ({ ...prev, tax_percent: defaultTaxPercent }));
+    }
+  }, [defaultTaxPercent]);
 
   // Fetch products on component mount
   useEffect(() => {
@@ -356,12 +376,17 @@ export default function PurchaseOrders() {
     setIsSubmitting(true);
     try {
       const supplier = getSupplierById(newPO.supplier_id);
-      const totalAmount = calculateOrderTotal(newPO.lines);
+      const subtotal = calculateOrderTotal(newPO.lines);
+      const taxPercent = parseFloat(newPO.tax_percent) || 0;
+      const taxAmount = subtotal * (taxPercent / 100);
+      const totalAmount = subtotal + taxAmount;
       const poData = {
         ...newPO,
         po_number: newPO.po_number || `PO-${Date.now()}`,
         vendor_name: supplier?.name || newPO.vendor_name,
         total_amount: totalAmount,
+        tax_percent: taxPercent,
+        tax_amount: taxAmount,
         status: 'draft',
         ai_price_validation: true
       };
@@ -377,6 +402,7 @@ export default function PurchaseOrders() {
         order_date: new Date().toISOString().split('T')[0],
         expected_delivery_date: new Date().toISOString().split('T')[0],
         total_amount: 0,
+        tax_percent: defaultTaxPercent,
         payment_terms: 'net_30',
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
@@ -888,15 +914,32 @@ export default function PurchaseOrders() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
+                <label className="text-sm font-medium mb-1 block">{t('tax')} (%)</label>
                 <Input
                   type="number"
-                  value={calculateOrderTotal(newPO.lines)}
-                  disabled
-                  className="bg-slate-100"
+                  placeholder="12"
+                  value={newPO.tax_percent}
+                  onChange={(e) => setNewPO({...newPO, tax_percent: e.target.value})}
                 />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
+                {(() => {
+                  const subtotal = calculateOrderTotal(newPO.lines);
+                  const taxPercent = parseFloat(newPO.tax_percent) || 0;
+                  const taxAmount = subtotal * (taxPercent / 100);
+                  const total = subtotal + taxAmount;
+                  return (
+                    <Input
+                      type="number"
+                      value={total.toFixed(2)}
+                      disabled
+                      className="bg-slate-100"
+                    />
+                  );
+                })()}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>

@@ -36,6 +36,8 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
+import { useFinancials } from '@/components/contexts/FinancialsContext';
 
 // Import sales components
 import QuotationsSection from '@/components/sales/QuotationsSection';
@@ -62,9 +64,16 @@ export default function SalesOrders() {
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
+  const { getSetting } = useAdminSettings();
+  const { taxRates = [] } = useFinancials();
+
+  // Get default tax from settings
+  const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
+  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => tr.id === defaultSalesTaxId) : null;
+  const defaultTaxPercent = defaultSalesTax?.rate || 0;
   const {
     quotations = [],
     invoices = [],
@@ -224,6 +233,13 @@ export default function SalesOrders() {
     discount_value: 0,
     max_discount_amount: null,
   });
+  // Pre-fill default tax from settings
+  useEffect(() => {
+    if (defaultTaxPercent > 0 && newOrder.tax_percent === 0) {
+      setNewOrder(prev => ({ ...prev, tax_percent: defaultTaxPercent }));
+    }
+  }, [defaultTaxPercent]);
+
   const [discountCodeInput, setDiscountCodeInput] = useState('');
   const [discountValidation, setDiscountValidation] = useState({ valid: false, message: '' });
   const [editingOrder, setEditingOrder] = useState(null);
@@ -718,7 +734,7 @@ export default function SalesOrders() {
       carrier: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
-      tax_percent: 0,
+      tax_percent: defaultTaxPercent,
       discount_code: '',
       discount_id: '',
       discount_name: '',
@@ -999,7 +1015,7 @@ export default function SalesOrders() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-600">{t('revenue')}</p>
-                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrency(metrics.totalRevenue)}</p>
+                      <p className="text-lg font-bold text-slate-900 truncate">{formatCurrencyCompact(metrics.totalRevenue)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -1073,7 +1089,7 @@ export default function SalesOrders() {
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" fontSize={12} />
-                      <YAxis fontSize={12} />
+                      <YAxis fontSize={12} tickFormatter={(v) => formatCurrencyCompact(v)} />
                       <Tooltip formatter={(value) => formatCurrency(value)} />
                       <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
                     </LineChart>

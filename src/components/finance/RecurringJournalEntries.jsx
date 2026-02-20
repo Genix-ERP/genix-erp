@@ -226,6 +226,12 @@ export default function RecurringJournalEntries() {
         description: formData.description,
         frequency: formData.frequency,
         interval_count: parseInt(formData.interval_count) || 1,
+        start_date: formData.start_date || '',
+        end_date: formData.end_date || '',
+        next_run_date: formData.start_date || '',
+        day_of_month: parseInt(formData.day_of_month) || null,
+        day_of_week: parseInt(formData.day_of_week) || null,
+        month_of_year: parseInt(formData.month_of_year) || null,
         is_active: formData.is_active,
         auto_post: formData.auto_post,
         lines: formData.lines.filter(l => l.account_id).map(l => ({

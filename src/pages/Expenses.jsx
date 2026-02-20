@@ -25,7 +25,7 @@ export default function Expenses() {
   const { t } = useTranslation(language);
   const { expenses, createExpense, updateExpense, isLoading, employees } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis
   const expenseAnalysis = useMemo(() => analyzeExpenses(expenses, language), [expenses, language]);
@@ -278,7 +278,7 @@ export default function Expenses() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('total_amount')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalAmount)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalAmount)}</p>
                 </div>
               </div>
             </CardContent>
