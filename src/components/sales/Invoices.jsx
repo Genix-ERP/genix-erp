@@ -68,7 +68,7 @@ export default function Invoices() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const {
     invoices,
@@ -460,7 +460,7 @@ export default function Invoices() {
               <div>
                 <p className="text-xs text-blue-600 font-medium">{t("total")}</p>
                 <p className="text-lg font-bold text-blue-900">
-                  {formatCurrency(stats.total)}
+                  {formatCurrencyCompact(stats.total)}
                 </p>
               </div>
             </div>
@@ -475,7 +475,7 @@ export default function Invoices() {
               <div>
                 <p className="text-xs text-green-600 font-medium">{t("paid")}</p>
                 <p className="text-lg font-bold text-green-900">
-                  {formatCurrency(stats.paid)}
+                  {formatCurrencyCompact(stats.paid)}
                 </p>
               </div>
             </div>
@@ -490,7 +490,7 @@ export default function Invoices() {
               <div>
                 <p className="text-xs text-yellow-600 font-medium">{t("pending")}</p>
                 <p className="text-lg font-bold text-yellow-900">
-                  {formatCurrency(stats.outstanding)}
+                  {formatCurrencyCompact(stats.outstanding)}
                 </p>
               </div>
             </div>
@@ -505,7 +505,7 @@ export default function Invoices() {
               <div>
                 <p className="text-xs text-red-600 font-medium">{t("overdue")}</p>
                 <p className="text-lg font-bold text-red-900">
-                  {formatCurrency(stats.overdue)}
+                  {formatCurrencyCompact(stats.overdue)}
                 </p>
               </div>
             </div>

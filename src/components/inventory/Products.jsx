@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, Calculator
+  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw
 } from "lucide-react";
 import {
   Tooltip,
@@ -33,6 +33,8 @@ import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import COGSCalculator from "./COGSCalculator";
+import apiClient from '@/api/client';
+import { useToast } from "@/components/ui/use-toast";
 
 // Import universal ERP components
 import {
@@ -85,6 +87,7 @@ export default function Products() {
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { toast } = useToast();
 
   const emptyCategoryAccounts = {
     income_account_id: '',
@@ -128,6 +131,12 @@ export default function Products() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editCategoryName, setEditCategoryName] = useState('');
   const [categoryAccounts, setCategoryAccounts] = useState({ ...emptyCategoryAccounts });
+
+  // Variant management state (for edit modal)
+  const [editProductAttributes, setEditProductAttributes] = useState([]);
+  const [allAttributes, setAllAttributes] = useState([]);
+  const [editProductVariants, setEditProductVariants] = useState([]);
+  const [isGeneratingVariants, setIsGeneratingVariants] = useState(false);
 
   // Set defaults when accounts load
   useEffect(() => {
@@ -626,6 +635,66 @@ export default function Products() {
     });
     setShowAdvancedFields(hasAdvancedData || product.track_expiration);
     setShowEditModal(true);
+    loadEditProductData(product.id);
+  };
+
+  // Load attributes and variants for the product being edited
+  const loadEditProductData = async (productId) => {
+    try {
+      const [attrsRes, variantsRes, allAttrsRes] = await Promise.all([
+        apiClient.get(`/products/${productId}/attributes`).catch(() => ({ data: { data: [] } })),
+        apiClient.get(`/product-variants?product_id=${productId}`).catch(() => ({ data: { data: [] } })),
+        apiClient.get('/product-attributes').catch(() => ({ data: { data: [] } })),
+      ]);
+      setEditProductAttributes(attrsRes.data?.data || []);
+      const variantData = variantsRes.data?.data;
+      setEditProductVariants(Array.isArray(variantData) ? variantData : variantData?.items || []);
+      setAllAttributes(allAttrsRes.data?.data || []);
+    } catch (err) {
+      console.error('Failed to load product variant data:', err);
+    }
+  };
+
+  const handleAddAttrToProduct = async (attributeId, valueIds) => {
+    if (!selectedProduct) return;
+    try {
+      await apiClient.post(`/products/${selectedProduct.id}/attributes`, {
+        product_id: selectedProduct.id,
+        attribute_id: attributeId,
+        value_ids: valueIds,
+      });
+      toast({ title: t('success'), description: t('attribute_added_to_product') || 'Attribute added' });
+      loadEditProductData(selectedProduct.id);
+    } catch (error) {
+      toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleGenerateProductVariants = async () => {
+    if (!selectedProduct) return;
+    setIsGeneratingVariants(true);
+    try {
+      const response = await apiClient.post('/product-variants/generate', {
+        product_id: selectedProduct.id,
+      });
+      const count = response.data?.data?.created_count || 0;
+      toast({ title: t('success'), description: `${t('generated') || 'Generated'} ${count} ${t('variants') || 'variants'}` });
+      loadEditProductData(selectedProduct.id);
+    } catch (error) {
+      toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    } finally {
+      setIsGeneratingVariants(false);
+    }
+  };
+
+  const handleDeleteProductVariant = async (variantId) => {
+    try {
+      await apiClient.delete(`/product-variants/${variantId}`);
+      toast({ title: t('success'), description: t('variant_deleted') || 'Variant deleted' });
+      loadEditProductData(selectedProduct.id);
+    } catch (error) {
+      toast({ title: t('error'), description: error.message, variant: 'destructive' });
+    }
   };
 
   const handleUpdate = () => {
@@ -2428,6 +2497,178 @@ export default function Products() {
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Attributes & Variants Section - Only in Edit Mode */}
+            {showEditModal && (
+              <div className="border-t border-slate-200 pt-6">
+                <h4 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[var(--genix-purple)]" />
+                  {t('attributes_and_variants') || "Atributlar va variantlar"}
+                </h4>
+
+                {/* Currently configured attributes */}
+                {editProductAttributes.length > 0 ? (
+                  <div className="space-y-2 mb-4">
+                    {editProductAttributes.map(pa => {
+                      const fullAttr = allAttributes.find(a => a.id === pa.attribute_id);
+                      const configuredValueIds = (pa.values || []).map(v => v.value_id);
+                      const missingValues = fullAttr?.values?.filter(v => !configuredValueIds.includes(v.id)) || [];
+
+                      return (
+                        <div key={pa.pta_id} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="font-medium text-sm text-slate-700">{pa.attribute_name}</div>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {pa.values?.map(v => (
+                              <Badge key={v.ptav_id} variant="outline" className="text-xs">
+                                {v.html_color && (
+                                  <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: v.html_color }} />
+                                )}
+                                {v.value_name}
+                                {v.price_extra > 0 && ` (+${formatCurrency(v.price_extra)})`}
+                              </Badge>
+                            ))}
+                          </div>
+                          {/* Add missing values */}
+                          {missingValues.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                              <p className="text-xs text-slate-500 mb-1">{t('add_new_values') || "Yangi qiymatlar qo'shish"}:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {missingValues.map(val => (
+                                  <Button
+                                    key={val.id}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-6"
+                                    onClick={() => handleAddAttrToProduct(pa.attribute_id, [val.id])}
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    {val.html_color && (
+                                      <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: val.html_color }} />
+                                    )}
+                                    {val.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 mb-4">{t('no_attributes_configured') || "Atributlar sozlanmagan"}</p>
+                )}
+
+                {/* Add new attribute */}
+                {(() => {
+                  const availableAttrs = allAttributes.filter(
+                    a => !editProductAttributes.some(pa => pa.attribute_id === a.id)
+                  );
+                  if (availableAttrs.length === 0) return null;
+                  return (
+                    <div className="mb-4">
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">
+                        {t('add_attribute_to_product') || "Atribut qo'shish"}
+                      </label>
+                      <Select
+                        value=""
+                        onValueChange={(attrId) => {
+                          const attr = allAttributes.find(a => a.id === attrId);
+                          if (attr && attr.values?.length > 0) {
+                            handleAddAttrToProduct(attrId, attr.values.map(v => v.id));
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={t('select_attribute') || "Atributni tanlang"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableAttrs.map(attr => (
+                            <SelectItem key={attr.id} value={attr.id}>
+                              {attr.name} ({attr.values?.length || 0} {t('values') || 'values'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
+
+                {/* Existing variants */}
+                {editProductVariants.length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-medium text-slate-700 mb-2">
+                      {t('product_variants_list') || "Mahsulot variantlari"} ({editProductVariants.length})
+                    </h5>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs">{t('variant') || 'Variant'}</TableHead>
+                            <TableHead className="text-xs">SKU</TableHead>
+                            <TableHead className="text-xs text-right">{t('cost_price') || 'Cost'}</TableHead>
+                            <TableHead className="text-xs text-right">{t('list_price') || 'Price'}</TableHead>
+                            <TableHead className="text-xs text-right">{t('stock') || 'Stock'}</TableHead>
+                            <TableHead className="text-xs text-right">{t('actions') || ''}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {editProductVariants.map(v => (
+                            <TableRow key={v.id}>
+                              <TableCell className="text-xs">
+                                <div className="flex flex-wrap gap-1">
+                                  {v.attributes?.map((attr, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs">
+                                      {attr.html_color && (
+                                        <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: attr.html_color }} />
+                                      )}
+                                      {attr.value_name}
+                                    </Badge>
+                                  )) || v.variant_name || '-'}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-slate-500">{v.sku || '-'}</TableCell>
+                              <TableCell className="text-xs text-right">{v.cost_price ? formatCurrency(v.cost_price) : '-'}</TableCell>
+                              <TableCell className="text-xs text-right">{v.list_price ? formatCurrency(v.list_price) : '-'}</TableCell>
+                              <TableCell className="text-xs text-right">{v.stock_quantity || 0}</TableCell>
+                              <TableCell className="text-xs text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                  onClick={() => handleDeleteProductVariant(v.id)}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {editProductVariants.length === 0 && editProductAttributes.length > 0 && (
+                  <p className="text-sm text-slate-400 mb-4">{t('no_variants_generated') || "Variantlar hali yaratilmagan"}</p>
+                )}
+
+                {/* Generate Variants button */}
+                {editProductAttributes.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleGenerateProductVariants}
+                    disabled={isGeneratingVariants}
+                    className="w-full"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isGeneratingVariants ? 'animate-spin' : ''}`} />
+                    {isGeneratingVariants
+                      ? (t('generating') || "Yaratilmoqda...")
+                      : (t('generate_variants') || "Variantlarni yaratish")}
+                  </Button>
+                )}
+              </div>
             )}
 
             <div className="flex gap-3 pt-4">

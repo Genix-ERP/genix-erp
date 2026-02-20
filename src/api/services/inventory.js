@@ -279,6 +279,39 @@ export const inventoryService = {
   async removePackageContent(packageId, contentId) {
     await apiClient.delete(`/packages/${packageId}/contents/${contentId}`);
   },
+
+  // =====================================================
+  // STOCK COUNTS (Inventarizatsiya)
+  // =====================================================
+
+  async listStockCounts(params = {}) {
+    const response = await apiClient.get('/stock-counts', { params });
+    return response.data.data;
+  },
+
+  async getStockCount(id) {
+    const response = await apiClient.get(`/stock-counts/${id}`);
+    return response.data.data;
+  },
+
+  async createStockCount(data) {
+    const response = await apiClient.post('/stock-counts', data);
+    return response.data.data;
+  },
+
+  async recordCountLine(countId, data) {
+    const response = await apiClient.post(`/stock-counts/${countId}/record`, data);
+    return response.data.data;
+  },
+
+  async completeStockCount(countId) {
+    const response = await apiClient.post(`/stock-counts/${countId}/complete`);
+    return response.data.data;
+  },
+
+  async deleteStockCount(id) {
+    await apiClient.delete(`/stock-counts/${id}`);
+  },
 };
 
 export default inventoryService;

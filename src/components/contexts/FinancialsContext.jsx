@@ -1343,7 +1343,7 @@ export function FinancialsProvider({ children }) {
 
   const getBudgetVariance = useCallback((budgetId) => {
     const lines = budgetLines.filter(bl => bl.budget_id === budgetId);
-    const totalPlanned = lines.reduce((sum, l) => sum + (l.planned_amount || 0), 0);
+    const totalPlanned = lines.reduce((sum, l) => sum + (l.budgeted_amount || l.planned_amount || 0), 0);
     const totalActual = lines.reduce((sum, l) => sum + (l.actual_amount || 0), 0);
     return {
       planned: totalPlanned,

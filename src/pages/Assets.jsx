@@ -25,12 +25,12 @@ export default function Assets() {
   const { t } = useTranslation(language);
   const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis
   const assetAnalysis = useMemo(() => {
     try {
-      return analyzeAssets(rawAssets || [], language) || {
+      return analyzeAssets(rawAssets || [], language, formatCurrencyCompact) || {
         insights: [],
         recommendations: [],
         metrics: {}
@@ -39,7 +39,7 @@ export default function Assets() {
       console.error('Error analyzing assets:', error);
       return { insights: [], recommendations: [], metrics: {} };
     }
-  }, [rawAssets, language]);
+  }, [rawAssets, language, formatCurrencyCompact]);
   const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -338,7 +338,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('purchase_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -352,7 +352,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('current_value')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.currentValue)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.currentValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -366,7 +366,7 @@ export default function Assets() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-600">{t('depreciation')}</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(metrics.totalDepreciation)}</p>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalDepreciation)}</p>
                 </div>
               </div>
             </CardContent>
