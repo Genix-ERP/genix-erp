@@ -666,7 +666,16 @@ export function InventoryProvider({ children }) {
           };
 
           setLots(getLocalData(LOTS_STORAGE_KEY, sampleLots));
-          setStockCounts(getLocalData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
+
+          // Load stock counts from backend
+          try {
+            const stockCountsData = await inventoryService.listStockCounts();
+            setStockCounts(stockCountsData || []);
+          } catch (scErr) {
+            console.warn('[InventoryContext] Stock counts API not available, using localStorage:', scErr.message);
+            setStockCounts(getLocalData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
+          }
+
           setBOMs(getLocalData(BOMS_STORAGE_KEY, sampleBOMs));
           setBOMLines(getLocalData(BOM_LINES_STORAGE_KEY, sampleBOMLines));
           setReorderRules(getLocalData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
@@ -1363,6 +1372,25 @@ export function InventoryProvider({ children }) {
 
   // ================== STOCK COUNTING (INVENTARIZATSIYA) ==================
   const createStockCount = useCallback(async (countData) => {
+    if (backendAvailable) {
+      try {
+        const newCount = await inventoryService.createStockCount({
+          warehouse_id: countData.warehouse_id,
+          organization_id: countData.organization_id || null,
+          count_date: countData.count_date || new Date().toISOString().split('T')[0],
+          notes: countData.notes || '',
+        });
+        // Refresh stock counts list from backend
+        const stockCountsData = await inventoryService.listStockCounts();
+        setStockCounts(stockCountsData || []);
+        return newCount;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to create stock count via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage-only mode
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
 
@@ -1401,16 +1429,33 @@ export function InventoryProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setStockCounts(updated);
     return newCount;
-  }, [stockCounts, inventory, activeCompany]);
+  }, [stockCounts, inventory, activeCompany, backendAvailable]);
 
   const updateStockCountLine = useCallback(async (countId, productId, countedQty, reason, systemQtyOverride) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.recordCountLine(countId, {
+          product_id: productId,
+          counted_quantity: countedQty,
+          notes: reason || '',
+        });
+        // Refresh this stock count from backend
+        const updatedCount = await inventoryService.getStockCount(countId);
+        setStockCounts(prev => prev.map(sc => sc.id === countId ? updatedCount : sc));
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to record count line via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage-only mode
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
     const updated = stockCounts.map(sc => {
       if (sc.id === countId) {
         const updatedLines = sc.lines.map(line => {
           if (line.product_id === productId) {
-            // Use provided systemQty or fall back to line's system_qty or 0
             const systemQty = systemQtyOverride ?? line.system_qty ?? 0;
             const variance = countedQty - systemQty;
             return {
@@ -1418,7 +1463,7 @@ export function InventoryProvider({ children }) {
               counted_qty: countedQty,
               variance,
               variance_reason: reason || null,
-              system_qty: systemQty // Ensure system_qty is persisted
+              system_qty: systemQty
             };
           }
           return line;
@@ -1429,9 +1474,31 @@ export function InventoryProvider({ children }) {
     });
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setStockCounts(updated);
-  }, [stockCounts, activeCompany]);
+  }, [stockCounts, activeCompany, backendAvailable]);
 
   const completeStockCount = useCallback(async (countId, approvedBy) => {
+    if (backendAvailable) {
+      try {
+        // Backend handles everything: inventory adjustments + journal entries
+        await inventoryService.completeStockCount(countId);
+
+        // Refresh all data from backend
+        const [stockCountsData, inventoryData, movementsData] = await Promise.all([
+          inventoryService.listStockCounts(),
+          inventoryService.listInventory(),
+          inventoryService.listInventoryMovements(),
+        ]);
+        setStockCounts(stockCountsData || []);
+        setInventory(inventoryData || []);
+        setStockMovements(movementsData || []);
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to complete stock count via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage-only mode
     const companyId = activeCompany?.id;
     const countsKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
     const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
@@ -1440,32 +1507,29 @@ export function InventoryProvider({ children }) {
     const count = stockCounts.find(sc => sc.id === countId);
     if (!count) return;
 
-    // Apply adjustments to inventory
+    const linesWithVariance = (count.lines || []).filter(line => line.variance && line.variance !== 0);
+
     let updatedInventory = [...inventory];
     const newMovements = [];
 
-    count.lines.forEach(line => {
-      if (line.variance && line.variance !== 0) {
-        // Update inventory
-        updatedInventory = updatedInventory.map(inv => {
-          if (inv.product_id === line.product_id && inv.warehouse_id === count.warehouse_id) {
-            return { ...inv, quantity: line.counted_qty, last_count_date: new Date().toISOString() };
-          }
-          return inv;
-        });
+    linesWithVariance.forEach(line => {
+      updatedInventory = updatedInventory.map(inv => {
+        if (inv.product_id === line.product_id && inv.warehouse_id === count.warehouse_id) {
+          return { ...inv, quantity: line.counted_qty, last_count_date: new Date().toISOString() };
+        }
+        return inv;
+      });
 
-        // Create adjustment movement
-        newMovements.push({
-          id: `mov_${Date.now()}_${line.product_id}`,
-          product_id: line.product_id,
-          warehouse_id: count.warehouse_id,
-          movement_type: 'adjustment',
-          quantity: line.variance,
-          reference: count.count_number,
-          notes: `Inventory count adjustment: ${line.variance_reason || 'Count variance'}`,
-          created_at: new Date().toISOString()
-        });
-      }
+      newMovements.push({
+        id: `mov_${Date.now()}_${line.product_id}`,
+        product_id: line.product_id,
+        warehouse_id: count.warehouse_id,
+        movement_type: 'adjustment',
+        quantity: line.variance,
+        reference: count.count_number,
+        notes: `Inventory count adjustment: ${line.variance_reason || 'Count variance'}`,
+        created_at: new Date().toISOString()
+      });
     });
 
     localStorage.setItem(inventoryKey, JSON.stringify(updatedInventory));
@@ -1475,7 +1539,6 @@ export function InventoryProvider({ children }) {
     localStorage.setItem(movementsKey, JSON.stringify(updatedMovements));
     setStockMovements(updatedMovements);
 
-    // Update count status
     const updatedCounts = stockCounts.map(sc =>
       sc.id === countId
         ? { ...sc, status: 'completed', approved_by: approvedBy, completed_at: new Date().toISOString() }
@@ -1483,9 +1546,21 @@ export function InventoryProvider({ children }) {
     );
     localStorage.setItem(countsKey, JSON.stringify(updatedCounts));
     setStockCounts(updatedCounts);
-  }, [stockCounts, inventory, stockMovements, activeCompany]);
+  }, [stockCounts, inventory, stockMovements, activeCompany, backendAvailable]);
 
   const cancelStockCount = useCallback(async (countId) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteStockCount(countId);
+        setStockCounts(prev => prev.filter(sc => sc.id !== countId));
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to delete stock count via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage-only mode
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(STOCK_COUNTS_STORAGE_KEY, companyId);
     const updated = stockCounts.map(sc =>
@@ -1493,7 +1568,7 @@ export function InventoryProvider({ children }) {
     );
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setStockCounts(updated);
-  }, [stockCounts, activeCompany]);
+  }, [stockCounts, activeCompany, backendAvailable]);
 
   // ================== BILL OF MATERIALS (BOM) ==================
   const createBOM = useCallback(async (bomData) => {

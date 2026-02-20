@@ -16,7 +16,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import financeService from "@/api/services/finance";
-import GeneralLedger from "./GeneralLedger";
+import GeneralLedgerView from "./GeneralLedgerView";
 import JournalManagement from "./JournalManagement";
 import FixedAssets from "./FixedAssets";
 
@@ -888,7 +888,7 @@ export default function ChartOfAccounts() {
         </TabsContent>
 
         <TabsContent value="ledger" className="mt-4">
-          <GeneralLedger />
+          <GeneralLedgerView />
         </TabsContent>
 
         <TabsContent value="journals" className="mt-4">

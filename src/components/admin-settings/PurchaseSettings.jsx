@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ClipboardCheck, Building, FileText, Clock, Shield, CheckCircle2, ArrowRight, Users } from 'lucide-react';
+import { ClipboardCheck, Building, FileText, Clock, Shield, CheckCircle2, ArrowRight, Users, Percent } from 'lucide-react';
 import ProcurementRules from '@/components/procurement/ProcurementRules';
 import ApprovalWorkflows from '@/components/procurement/ApprovalWorkflows';
 import { procurementService } from '@/api/services/procurement';
+import financeService from "@/api/services/finance";
 
 const PAYMENT_TERMS = [
   'Immediate',
@@ -28,6 +29,11 @@ export default function PurchaseSettings() {
   const { settings, updateSetting, resetSection } = useAdminSettings();
 
   const purchase = settings.purchase || {};
+
+  const [taxRates, setTaxRates] = useState([]);
+  useEffect(() => {
+    financeService.listTaxRates().then(data => setTaxRates(data || [])).catch(() => {});
+  }, []);
 
   const [showRulesDialog, setShowRulesDialog] = useState(false);
   const [showWorkflowsDialog, setShowWorkflowsDialog] = useState(false);
@@ -155,6 +161,34 @@ export default function PurchaseSettings() {
             onChange={(checked) => updateSetting('purchase.vendor.preferred_vendors_only', checked)}
           />
         </div>
+      </SettingsSection>
+
+      {/* Default Tax */}
+      <SettingsSection
+        title={t('default_tax_settings') || 'Default Tax'}
+        description={t('default_purchase_tax_desc') || 'Default tax applied automatically to new purchase orders'}
+        icon={Percent}
+      >
+        <SettingsRow>
+          <SettingsField label={t('default_purchase_tax') || 'Default Purchase Tax'} description={t('default_purchase_tax_help') || 'This tax will be pre-filled when creating purchase orders'}>
+            <Select
+              value={purchase.tax?.default_tax_id || 'none'}
+              onValueChange={(value) => updateSetting('purchase.tax.default_tax_id', value === 'none' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t('select_tax') || 'Select tax'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t('no_tax') || 'No tax'}</SelectItem>
+                {taxRates.filter(tr => tr.tax_type === 'purchase' || !tr.tax_type).map(tr => (
+                  <SelectItem key={tr.id} value={tr.id}>
+                    {tr.name} ({tr.rate}%)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsField>
+        </SettingsRow>
       </SettingsSection>
 
       {/* RFQ Settings */}

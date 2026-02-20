@@ -52,6 +52,7 @@ export default function FixedAssets() {
     createFixedAsset,
     updateFixedAsset,
     deleteFixedAsset,
+    disposeFixedAsset,
     runDepreciationForPeriod,
     isLoading,
     refreshData
@@ -253,15 +254,11 @@ export default function FixedAssets() {
     setIsSaving(true);
     try {
       const disposalAmount = parseFloat(disposeFormData.disposal_amount) || 0;
-      const nbv = selectedAsset.book_value != null ? selectedAsset.book_value : ((selectedAsset.acquisition_cost || 0) - (selectedAsset.accumulated_depreciation || 0));
-      const gainLoss = disposalAmount - nbv;
 
-      await updateFixedAsset(selectedAsset.id, {
-        status: 'disposed',
+      await disposeFixedAsset(selectedAsset.id, {
         disposal_date: disposeFormData.disposal_date,
         disposal_amount: disposalAmount,
         disposal_reason: disposeFormData.disposal_reason,
-        gain_loss_on_disposal: gainLoss,
       });
 
       setShowDisposeModal(false);
