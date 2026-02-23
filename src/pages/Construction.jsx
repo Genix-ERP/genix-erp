@@ -67,6 +67,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { format } from 'date-fns';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
@@ -2486,9 +2487,10 @@ const ProjectDetailView = ({
               <div>
                 <Label>{t('estimated_cost') || 'Taxminiy narx'}</Label>
                 <Input
-                  type="number"
-                  value={buildingForm.estimated_cost}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: e.target.value })}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(buildingForm.estimated_cost)}
+                  onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: parsePriceInput(e.target.value) })}
                   placeholder="5000000000"
                 />
               </div>
@@ -2649,10 +2651,10 @@ const ProjectDetailView = ({
               <div>
                 <Label>{t('unit_price') || 'Birlik narxi'} *</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={itemForm.unit_price}
-                  onChange={(e) => setItemForm({ ...itemForm, unit_price: e.target.value })}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(itemForm.unit_price)}
+                  onChange={(e) => setItemForm({ ...itemForm, unit_price: parsePriceInput(e.target.value) })}
                   required
                 />
               </div>
@@ -2820,9 +2822,10 @@ const ProjectDetailView = ({
               <div>
                 <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
                 <Input
-                  type="number"
-                  value={vendorForm.contract_amount}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contract_amount: e.target.value })}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(vendorForm.contract_amount)}
+                  onChange={(e) => setVendorForm({ ...vendorForm, contract_amount: parsePriceInput(e.target.value) })}
                   placeholder="100000000"
                 />
               </div>
@@ -3750,9 +3753,10 @@ export default function Construction() {
               <div>
                 <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
                 <Input
-                  type="number"
-                  value={projectForm.contract_amount}
-                  onChange={(e) => setProjectForm({ ...projectForm, contract_amount: e.target.value })}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(projectForm.contract_amount)}
+                  onChange={(e) => setProjectForm({ ...projectForm, contract_amount: parsePriceInput(e.target.value) })}
                 />
               </div>
             </div>

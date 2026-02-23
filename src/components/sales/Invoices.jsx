@@ -63,6 +63,7 @@ import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Invoices() {
   const { language } = useLanguage();
@@ -814,11 +815,11 @@ export default function Invoices() {
                         </TableCell>
                         <TableCell>
                           <Input
-                            type="number"
-                            min="0"
-                            value={item.unit_price}
+                            type="text"
+                            inputMode="decimal"
+                            value={formatPriceInput(item.unit_price)}
                             onChange={(e) =>
-                              handleItemChange(index, "unit_price", e.target.value)
+                              handleItemChange(index, "unit_price", parsePriceInput(e.target.value))
                             }
                           />
                         </TableCell>
@@ -849,13 +850,13 @@ export default function Invoices() {
               <div className="space-y-2">
                 <Label>{t('discount_amount')}</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={formData.discount_amount}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(formData.discount_amount)}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      discount_amount: parseFloat(e.target.value) || 0,
+                      discount_amount: parsePriceInput(e.target.value),
                     })
                   }
                 />
@@ -960,14 +961,13 @@ export default function Invoices() {
               <div className="space-y-2">
                 <Label>{t('payment_amount')} *</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  max={selectedInvoice.balance}
-                  value={paymentData.amount}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(paymentData.amount)}
                   onChange={(e) =>
                     setPaymentData({
                       ...paymentData,
-                      amount: parseFloat(e.target.value) || 0,
+                      amount: parsePriceInput(e.target.value),
                     })
                   }
                 />

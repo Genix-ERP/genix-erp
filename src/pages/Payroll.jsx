@@ -16,6 +16,7 @@ import { analyzePayroll } from '@/api/services/aiAnalytics';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Payroll() {
   const { language } = useLanguage();
@@ -647,10 +648,11 @@ export default function Payroll() {
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('basic_salary')} *</label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
-                      value={newPayroll.basic_salary}
-                      onChange={(e) => setNewPayroll({...newPayroll, basic_salary: e.target.value})}
+                      value={formatPriceInput(newPayroll.basic_salary)}
+                      onChange={(e) => setNewPayroll({...newPayroll, basic_salary: parsePriceInput(e.target.value)})}
                       required
                     />
                   </div>
@@ -666,19 +668,21 @@ export default function Payroll() {
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('bonuses')}</label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
-                      value={newPayroll.bonuses}
-                      onChange={(e) => setNewPayroll({...newPayroll, bonuses: e.target.value})}
+                      value={formatPriceInput(newPayroll.bonuses)}
+                      onChange={(e) => setNewPayroll({...newPayroll, bonuses: parsePriceInput(e.target.value)})}
                     />
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('allowances')}</label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
-                      value={newPayroll.allowances}
-                      onChange={(e) => setNewPayroll({...newPayroll, allowances: e.target.value})}
+                      value={formatPriceInput(newPayroll.allowances)}
+                      onChange={(e) => setNewPayroll({...newPayroll, allowances: parsePriceInput(e.target.value)})}
                     />
                   </div>
                 </div>
@@ -792,9 +796,10 @@ export default function Payroll() {
                     <div>
                       <label className="text-sm font-medium mb-1 block">{t('basic_salary')} *</label>
                       <Input
-                        type="number"
-                        value={editPayroll.basic_salary}
-                        onChange={(e) => setEditPayroll({...editPayroll, basic_salary: e.target.value})}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatPriceInput(editPayroll.basic_salary)}
+                        onChange={(e) => setEditPayroll({...editPayroll, basic_salary: parsePriceInput(e.target.value)})}
                       />
                     </div>
                     <div>
@@ -808,17 +813,19 @@ export default function Payroll() {
                     <div>
                       <label className="text-sm font-medium mb-1 block">{t('bonuses')}</label>
                       <Input
-                        type="number"
-                        value={editPayroll.bonuses}
-                        onChange={(e) => setEditPayroll({...editPayroll, bonuses: e.target.value})}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatPriceInput(editPayroll.bonuses)}
+                        onChange={(e) => setEditPayroll({...editPayroll, bonuses: parsePriceInput(e.target.value)})}
                       />
                     </div>
                     <div>
                       <label className="text-sm font-medium mb-1 block">{t('allowances')}</label>
                       <Input
-                        type="number"
-                        value={editPayroll.allowances}
-                        onChange={(e) => setEditPayroll({...editPayroll, allowances: e.target.value})}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatPriceInput(editPayroll.allowances)}
+                        onChange={(e) => setEditPayroll({...editPayroll, allowances: parsePriceInput(e.target.value)})}
                       />
                     </div>
                   </div>

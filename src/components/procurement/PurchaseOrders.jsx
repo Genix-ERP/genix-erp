@@ -45,6 +45,7 @@ import { procurementService } from '@/api/services/procurement';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import PurchaseReturns from './PurchaseReturns';
 import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
@@ -854,10 +855,11 @@ export default function PurchaseOrders() {
                       </div>
                       <div className={hasVariants ? "col-span-2" : "col-span-3"}>
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           placeholder={t('price') || 'Price'}
-                          value={line.unit_price}
-                          onChange={(e) => handleLineChange(index, 'unit_price', e.target.value)}
+                          value={formatPriceInput(line.unit_price)}
+                          onChange={(e) => handleLineChange(index, 'unit_price', parsePriceInput(e.target.value))}
                         />
                       </div>
                       <div className="col-span-1 flex justify-end">
@@ -933,8 +935,8 @@ export default function PurchaseOrders() {
                   const total = subtotal + taxAmount;
                   return (
                     <Input
-                      type="number"
-                      value={total.toFixed(2)}
+                      type="text"
+                      value={formatPriceInput(Math.round(total))}
                       disabled
                       className="bg-slate-100"
                     />
@@ -1015,7 +1017,7 @@ export default function PurchaseOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
-                  <Input type="number" value={editPO.total_amount} disabled className="bg-slate-100" />
+                  <Input type="text" value={formatPriceInput(editPO.total_amount)} disabled className="bg-slate-100" />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
