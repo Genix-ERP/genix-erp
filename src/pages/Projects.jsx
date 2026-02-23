@@ -15,6 +15,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 // Default status IDs for Kanban
 const DEFAULT_STATUS_IDS = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
@@ -685,10 +686,11 @@ export default function Projects() {
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('budget')} *</label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
-                    value={newProject.budget}
-                    onChange={(e) => setNewProject({...newProject, budget: e.target.value})}
+                    value={formatPriceInput(newProject.budget)}
+                    onChange={(e) => setNewProject({...newProject, budget: parsePriceInput(e.target.value)})}
                     required
                   />
                 </div>
@@ -804,9 +806,10 @@ export default function Projects() {
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('budget')}</label>
                     <Input
-                      type="number"
-                      value={editProject.budget}
-                      onChange={(e) => setEditProject({...editProject, budget: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(editProject.budget)}
+                      onChange={(e) => setEditProject({...editProject, budget: parsePriceInput(e.target.value)})}
                     />
                   </div>
                   <div>

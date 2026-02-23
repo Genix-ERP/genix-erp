@@ -56,6 +56,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { projectsService } from '@/api/services/projects';
 import { hrService } from '@/api/services/hr';
 import { contactsService } from '@/api/services/contacts';
@@ -1553,11 +1554,10 @@ export default function ProjectDetail() {
                 <div>
                   <Label>{t('hourly_rate') || 'Hourly Rate'}</Label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newTimeEntry.hourly_rate}
-                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, hourly_rate: e.target.value })}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(newTimeEntry.hourly_rate)}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, hourly_rate: parsePriceInput(e.target.value) })}
                     placeholder="0.00"
                   />
                 </div>
@@ -1635,11 +1635,10 @@ export default function ProjectDetail() {
                 <div>
                   <Label>{t('amount') || 'Amount'} *</Label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newExpense.amount}
-                    onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value })}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(newExpense.amount)}
+                    onChange={(e) => setNewExpense({ ...newExpense, amount: parsePriceInput(e.target.value) })}
                     placeholder="0.00"
                   />
                 </div>

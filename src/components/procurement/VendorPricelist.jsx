@@ -47,6 +47,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { MODULES } from "@/config/permissions";
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { inventoryService } from '@/api/services/inventory';
@@ -530,9 +531,10 @@ export default function VendorPricelist() {
               <div className="space-y-2">
                 <Label>{t('price') || 'Price'} *</Label>
                 <Input
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(formData.price)}
+                  onChange={(e) => setFormData({ ...formData, price: parsePriceInput(e.target.value) })}
                   placeholder="0"
                 />
               </div>

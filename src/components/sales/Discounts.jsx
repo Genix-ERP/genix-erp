@@ -56,6 +56,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Discounts() {
   const { language } = useLanguage();
@@ -580,11 +581,17 @@ export default function Discounts() {
               <div className="space-y-2">
                 <Label>{t('value')} *</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={formData.discount_value}
+                  type={formData.discount_type === "fixed_amount" ? "text" : "number"}
+                  inputMode={formData.discount_type === "fixed_amount" ? "decimal" : undefined}
+                  min={formData.discount_type === "fixed_amount" ? undefined : "0"}
+                  value={formData.discount_type === "fixed_amount" ? formatPriceInput(formData.discount_value) : formData.discount_value}
                   onChange={(e) =>
-                    setFormData({ ...formData, discount_value: parseFloat(e.target.value) || 0 })
+                    setFormData({
+                      ...formData,
+                      discount_value: formData.discount_type === "fixed_amount"
+                        ? parsePriceInput(e.target.value)
+                        : (parseFloat(e.target.value) || 0),
+                    })
                   }
                 />
               </div>
@@ -594,13 +601,13 @@ export default function Discounts() {
               <div className="space-y-2">
                 <Label>{t('min_order_amount')}</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={formData.min_order_amount}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatPriceInput(formData.min_order_amount)}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      min_order_amount: parseFloat(e.target.value) || 0,
+                      min_order_amount: parsePriceInput(e.target.value),
                     })
                   }
                 />
@@ -608,13 +615,13 @@ export default function Discounts() {
               <div className="space-y-2">
                 <Label>{t('max_discount_amount')}</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={formData.max_discount_amount || ''}
+                  type="text"
+                  inputMode="decimal"
+                  value={formData.max_discount_amount ? formatPriceInput(formData.max_discount_amount) : ''}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      max_discount_amount: e.target.value ? parseFloat(e.target.value) : null,
+                      max_discount_amount: e.target.value ? parsePriceInput(e.target.value) : null,
                     })
                   }
                 />
@@ -720,13 +727,13 @@ export default function Discounts() {
             <div className="space-y-2">
               <Label>{t('order_amount')}</Label>
               <Input
-                type="number"
-                min="0"
-                value={testData.amount}
+                type="text"
+                inputMode="decimal"
+                value={formatPriceInput(testData.amount)}
                 onChange={(e) =>
                   setTestData({
                     ...testData,
-                    amount: parseFloat(e.target.value) || 0,
+                    amount: parsePriceInput(e.target.value),
                   })
                 }
               />

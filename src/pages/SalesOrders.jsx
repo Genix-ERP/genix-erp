@@ -57,6 +57,7 @@ import {
   useAuditTrail,
 } from '@/components/shared';
 import { useCompany } from '@/components/contexts/CompanyContext';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function SalesOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1437,10 +1438,11 @@ export default function SalesOrders() {
                         )}
                         <div className={line.packaging_id ? "col-span-1" : "col-span-2"}>
                           <Input
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             placeholder={t('price')}
-                            value={line.unit_price}
-                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', e.target.value, isDeliveryDateManual)}
+                            value={formatPriceInput(line.unit_price)}
+                            onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', parsePriceInput(e.target.value), isDeliveryDateManual)}
                           />
                         </div>
                         {!line.packaging_id && (
@@ -1489,10 +1491,11 @@ export default function SalesOrders() {
                 <div>
                   <Label>{t('shipping')}</Label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={newOrder.shipping_cost}
-                    onChange={(e) => setNewOrder({...newOrder, shipping_cost: e.target.value})}
+                    value={formatPriceInput(newOrder.shipping_cost)}
+                    onChange={(e) => setNewOrder({...newOrder, shipping_cost: parsePriceInput(e.target.value)})}
                   />
                 </div>
               </div>
@@ -2024,10 +2027,11 @@ export default function SalesOrders() {
                           )}
                           <div className="col-span-2">
                             <Input
-                              type="number"
+                              type="text"
+                              inputMode="decimal"
                               placeholder={t('price')}
-                              value={line.unit_price}
-                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', e.target.value, isEditDeliveryDateManual)}
+                              value={formatPriceInput(line.unit_price)}
+                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', parsePriceInput(e.target.value), isEditDeliveryDateManual)}
                             />
                           </div>
                           <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
@@ -2073,9 +2077,10 @@ export default function SalesOrders() {
                   <div>
                     <Label>{t('shipping')}</Label>
                     <Input
-                      type="number"
-                      value={editingOrder.shipping_cost || 0}
-                      onChange={(e) => setEditingOrder({...editingOrder, shipping_cost: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(editingOrder.shipping_cost || 0)}
+                      onChange={(e) => setEditingOrder({...editingOrder, shipping_cost: parsePriceInput(e.target.value)})}
                     />
                   </div>
                 </div>
