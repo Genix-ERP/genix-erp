@@ -427,7 +427,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Metrics - Enhanced */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">

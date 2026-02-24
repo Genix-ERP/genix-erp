@@ -479,7 +479,7 @@ export default function ProductionOrders() {
                               <span className="text-red-500">{order.reject_quantity || 0}</span>
                             </div>
                             {order.package_count > 0 && (
-                              <p className="text-slate-500 mt-0.5">{order.package_count} {t('packages') || 'pkg'}</p>
+                              <p className="text-slate-500 mt-0.5">{order.package_count} {t('packages_short') || 'pkg'}</p>
                             )}
                           </div>
                         </TableCell>

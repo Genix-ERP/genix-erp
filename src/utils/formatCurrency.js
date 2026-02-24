@@ -90,6 +90,25 @@ export function formatCompactNumber(amount, options = {}) {
   return valueWithSuffix + ' ' + symbol;
 }
 
+// Format a raw number string for display in price inputs (adds thousands separators)
+export function formatPriceInput(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const str = String(value);
+  const parts = str.split('.');
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  if (parts.length > 1) return intPart + '.' + parts[1];
+  return intPart;
+}
+
+// Parse a formatted price input back to a raw number string (strips formatting)
+export function parsePriceInput(rawValue) {
+  const cleaned = rawValue.replace(/[^\d.]/g, '');
+  const dotIndex = cleaned.indexOf('.');
+  return dotIndex >= 0
+    ? cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, '')
+    : cleaned;
+}
+
 export function createCurrencyFormatter(settings = {}) {
   const {
     currency = 'UZS',

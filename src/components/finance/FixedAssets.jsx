@@ -19,6 +19,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { MODULES } from "@/config/permissions";
 import { format, differenceInMonths, addMonths } from "date-fns";
 
@@ -668,10 +669,11 @@ export default function FixedAssets() {
                 <div>
                   <label className="text-sm font-medium text-slate-700 mb-1 block">{t('acquisition_cost') || 'Acquisition Cost'} *</label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={formData.acquisition_cost}
-                    onChange={(e) => setFormData({ ...formData, acquisition_cost: e.target.value })}
+                    value={formatPriceInput(formData.acquisition_cost)}
+                    onChange={(e) => setFormData({ ...formData, acquisition_cost: parsePriceInput(e.target.value) })}
                   />
                 </div>
               </div>
@@ -680,10 +682,11 @@ export default function FixedAssets() {
                 <div>
                   <label className="text-sm font-medium text-slate-700 mb-1 block">{t('salvage_value') || 'Salvage Value'}</label>
                   <Input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0"
-                    value={formData.salvage_value}
-                    onChange={(e) => setFormData({ ...formData, salvage_value: e.target.value })}
+                    value={formatPriceInput(formData.salvage_value)}
+                    onChange={(e) => setFormData({ ...formData, salvage_value: parsePriceInput(e.target.value) })}
                   />
                 </div>
                 <div>
@@ -856,10 +859,11 @@ export default function FixedAssets() {
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('disposal_amount') || 'Disposal Amount'}</label>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder="0"
-                value={disposeFormData.disposal_amount}
-                onChange={(e) => setDisposeFormData({ ...disposeFormData, disposal_amount: e.target.value })}
+                value={formatPriceInput(disposeFormData.disposal_amount)}
+                onChange={(e) => setDisposeFormData({ ...disposeFormData, disposal_amount: parsePriceInput(e.target.value) })}
               />
             </div>
 

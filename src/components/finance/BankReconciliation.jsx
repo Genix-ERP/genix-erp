@@ -23,6 +23,7 @@ import CurrencyManagement from "./CurrencyManagement";
 import FiscalPeriods from "./FiscalPeriods";
 import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
+import BankStatementImport from "./BankStatementImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function BankReconciliation() {
@@ -55,6 +56,7 @@ export default function BankReconciliation() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteAccountId, setDeleteAccountId] = useState(null);
   const [editAccount, setEditAccount] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const [newBankAccount, setNewBankAccount] = useState({
     name: '',
@@ -336,13 +338,22 @@ export default function BankReconciliation() {
               </Button>
             )}
             {activeTab === 'transactions' && selectedBankAccount && canCreate(MODULES.FINANCIALS) && (
-              <Button
-                onClick={() => setShowCreateTransactionModal(true)}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                {t('new_transaction') || 'New Transaction'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowImportModal(true)}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {t('import_statement') || 'Import Statement'}
+                </Button>
+                <Button
+                  onClick={() => setShowCreateTransactionModal(true)}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('new_transaction') || 'New Transaction'}
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -872,6 +883,18 @@ export default function BankReconciliation() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Bank Statement Import */}
+      <BankStatementImport
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        bankAccount={selectedBankAccount}
+        onImportComplete={() => {
+          if (selectedBankAccount?.id) {
+            loadBankTransactions(selectedBankAccount.id);
+          }
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       <Dialog open={!!deleteAccountId} onOpenChange={(open) => !open && setDeleteAccountId(null)}>

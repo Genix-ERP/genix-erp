@@ -19,6 +19,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { MODULES } from "@/config/permissions";
 import { format } from "date-fns";
 
@@ -578,10 +579,11 @@ export default function BudgetManagement() {
                 <LabelWithHelp htmlFor="total_amount" label={t('total_amount') || 'Total Amount'} helpText={t('help_budget_amount')} />
                 <Input
                   id="total_amount"
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0"
-                  value={formData.total_amount}
-                  onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
+                  value={formatPriceInput(formData.total_amount)}
+                  onChange={(e) => setFormData({ ...formData, total_amount: parsePriceInput(e.target.value) })}
                 />
               </div>
               <div className="space-y-2">
@@ -675,10 +677,11 @@ export default function BudgetManagement() {
                 <LabelWithHelp htmlFor="planned_amount" label={t('planned_amount') || 'Planned Amount'} helpText={t('help_budget_planned')} />
                 <Input
                   id="planned_amount"
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0"
-                  value={lineFormData.planned_amount}
-                  onChange={(e) => setLineFormData({ ...lineFormData, planned_amount: e.target.value })}
+                  value={formatPriceInput(lineFormData.planned_amount)}
+                  onChange={(e) => setLineFormData({ ...lineFormData, planned_amount: parsePriceInput(e.target.value) })}
                 />
               </div>
             </div>

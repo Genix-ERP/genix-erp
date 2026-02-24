@@ -33,6 +33,7 @@ import {
   Layers,
   DollarSign,
   Trash2,
+  Receipt,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -42,9 +43,11 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { procurementService } from '@/api/services/procurement';
+import { financeService } from '@/api/services/finance';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import PurchaseReturns from './PurchaseReturns';
 import BlanketOrders from './BlanketOrders';
 import LandedCosts from './LandedCosts';
@@ -103,6 +106,9 @@ export default function PurchaseOrders() {
 
   // Track if delivery date was manually set
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
+
+  // Track which POs already have vendor bills
+  const [poBillMap, setPoBillMap] = useState({});
 
   const [newPO, setNewPO] = useState({
     po_number: '',
@@ -167,6 +173,31 @@ export default function PurchaseOrders() {
     fetchReturns();
   }, []);
 
+  // Fetch purchase invoices (vendor bills) to check which POs have bills
+  useEffect(() => {
+    const fetchBills = async () => {
+      try {
+        const bills = await financeService.listPurchaseInvoices({ limit: 1000 });
+        const billList = Array.isArray(bills) ? bills : bills?.data || bills?.items || [];
+        const map = {};
+        billList.forEach(bill => {
+          if (bill.purchase_order_id && bill.status !== 'cancelled') {
+            map[bill.purchase_order_id] = true;
+          }
+        });
+        setPoBillMap(map);
+      } catch (error) {
+        console.error('Failed to fetch purchase invoices:', error);
+      }
+    };
+    fetchBills();
+  }, []);
+
+  // Check if an order already has a vendor bill
+  const poHasBill = useCallback((poId) => {
+    return !!poBillMap[poId];
+  }, [poBillMap]);
+
   // Check if an order has returns
   const orderHasReturns = useCallback((poId) => {
     return purchaseReturns.some(r => r.purchase_order_id === poId);
@@ -213,6 +244,18 @@ export default function PurchaseOrders() {
   // Calculate order total from line items
   const calculateOrderTotal = (lines) => {
     return lines.reduce((sum, line) => sum + (parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)), 0);
+  };
+
+  // Calculate tax considering price_include flag
+  const calculateTaxFromRate = (rawSubtotal, taxPercent, taxRateObj) => {
+    const rate = parseFloat(taxPercent) || 0;
+    if (rate <= 0) return { subtotal: rawSubtotal, taxAmount: 0, isInclusive: false };
+    if (taxRateObj?.price_include) {
+      const taxAmount = rawSubtotal * rate / (100 + rate);
+      return { subtotal: rawSubtotal - taxAmount, taxAmount, isInclusive: true };
+    }
+    const taxAmount = rawSubtotal * rate / 100;
+    return { subtotal: rawSubtotal, taxAmount, isInclusive: false };
   };
 
   // Handle line item changes
@@ -376,14 +419,17 @@ export default function PurchaseOrders() {
     setIsSubmitting(true);
     try {
       const supplier = getSupplierById(newPO.supplier_id);
-      const subtotal = calculateOrderTotal(newPO.lines);
+      const rawSubtotal = calculateOrderTotal(newPO.lines);
       const taxPercent = parseFloat(newPO.tax_percent) || 0;
-      const taxAmount = subtotal * (taxPercent / 100);
+      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultPurchaseTax);
+      const subtotal = taxCalc.subtotal;
+      const taxAmount = taxCalc.taxAmount;
       const totalAmount = subtotal + taxAmount;
       const poData = {
         ...newPO,
         po_number: newPO.po_number || `PO-${Date.now()}`,
         vendor_name: supplier?.name || newPO.vendor_name,
+        subtotal: subtotal,
         total_amount: totalAmount,
         tax_percent: taxPercent,
         tax_amount: taxAmount,
@@ -501,6 +547,16 @@ export default function PurchaseOrders() {
   const updatePOStatus = async (poId, newStatus) => {
     const updates = { status: newStatus };
     await updatePurchaseOrder(poId, updates);
+  };
+
+  const handleCreateBill = async (poId) => {
+    try {
+      await procurementService.createBillFromPO(poId);
+      setPoBillMap(prev => ({ ...prev, [poId]: true }));
+    } catch (error) {
+      console.error('Failed to create bill:', error);
+      alert(t('error_creating_bill') || 'Failed to create vendor bill');
+    }
   };
 
   const getStatusColor = (status) => {
@@ -645,6 +701,11 @@ export default function PurchaseOrders() {
                               {canUpdate(MODULES.PURCHASES) && po.status === 'confirmed' && (
                                 <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
                                   <Truck className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {['confirmed', 'received', 'partial'].includes(po.status) && !poHasBill(po.id) && (
+                                <Button size="sm" variant="ghost" onClick={() => handleCreateBill(po.id)} title={t('create_bill') || 'Create Bill'}>
+                                  <Receipt className="w-4 h-4 text-green-600" />
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && (po.status === 'draft' || po.status === 'cancelled') && (
@@ -854,10 +915,11 @@ export default function PurchaseOrders() {
                       </div>
                       <div className={hasVariants ? "col-span-2" : "col-span-3"}>
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           placeholder={t('price') || 'Price'}
-                          value={line.unit_price}
-                          onChange={(e) => handleLineChange(index, 'unit_price', e.target.value)}
+                          value={formatPriceInput(line.unit_price)}
+                          onChange={(e) => handleLineChange(index, 'unit_price', parsePriceInput(e.target.value))}
                         />
                       </div>
                       <div className="col-span-1 flex justify-end">
@@ -927,17 +989,22 @@ export default function PurchaseOrders() {
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
                 {(() => {
-                  const subtotal = calculateOrderTotal(newPO.lines);
+                  const rawSubtotal = calculateOrderTotal(newPO.lines);
                   const taxPercent = parseFloat(newPO.tax_percent) || 0;
-                  const taxAmount = subtotal * (taxPercent / 100);
-                  const total = subtotal + taxAmount;
+                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultPurchaseTax);
+                  const total = taxCalc.subtotal + taxCalc.taxAmount;
                   return (
-                    <Input
-                      type="number"
-                      value={total.toFixed(2)}
-                      disabled
-                      className="bg-slate-100"
-                    />
+                    <>
+                      <Input
+                        type="text"
+                        value={formatPriceInput(Math.round(total))}
+                        disabled
+                        className="bg-slate-100"
+                      />
+                      {taxCalc.isInclusive && taxCalc.taxAmount > 0 && (
+                        <p className="text-xs text-amber-600 mt-1">{t('tax')} ({t('incl') || 'incl.'}): {formatPriceInput(Math.round(taxCalc.taxAmount))}</p>
+                      )}
+                    </>
                   );
                 })()}
               </div>
@@ -1015,7 +1082,7 @@ export default function PurchaseOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
-                  <Input type="number" value={editPO.total_amount} disabled className="bg-slate-100" />
+                  <Input type="text" value={formatPriceInput(editPO.total_amount)} disabled className="bg-slate-100" />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>

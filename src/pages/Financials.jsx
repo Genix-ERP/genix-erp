@@ -16,7 +16,8 @@ import {
   FileCheck,
   Target,
   Percent,
-  BookOpen
+  BookOpen,
+  Clock
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -34,6 +35,8 @@ import BudgetManagement from "@/components/finance/BudgetManagement";
 import ActSverka from "@/components/finance/ActSverka";
 import TaxReports from "@/components/finance/TaxReports";
 import GeneralLedger from "@/components/finance/GeneralLedger";
+import AgedReceivables from "@/components/finance/AgedReceivables";
+import AgedPayables from "@/components/finance/AgedPayables";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -190,6 +193,20 @@ export default function Financials() {
                   {t('receivables_ar')}
                 </TabsTrigger>
                 <TabsTrigger
+                  value="aged-receivables"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <Clock className="w-4 h-4" />
+                  {t('aged_receivables') || 'Aged Receivables'}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="aged-payables"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <Clock className="w-4 h-4" />
+                  {t('aged_payables') || 'Aged Payables'}
+                </TabsTrigger>
+                <TabsTrigger
                   value="followups"
                   className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
                 >
@@ -205,6 +222,12 @@ export default function Financials() {
               </TabsContent>
               <TabsContent value="receivables">
                 <AccountsReceivable />
+              </TabsContent>
+              <TabsContent value="aged-receivables">
+                <AgedReceivables />
+              </TabsContent>
+              <TabsContent value="aged-payables">
+                <AgedPayables />
               </TabsContent>
               <TabsContent value="followups">
                 <CustomerFollowups />
