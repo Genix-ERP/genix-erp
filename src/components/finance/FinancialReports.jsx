@@ -5,10 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   FileText, Download, Loader2, CheckCircle2, AlertTriangle,
-  ChevronDown, ChevronRight, Users, Building2, DollarSign,
+  ChevronDown, ChevronRight, DollarSign,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Scale
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -166,13 +165,7 @@ export default function FinancialReports() {
   const [trialBalance, setTrialBalance] = useState(null);
   const [incomeStatement, setIncomeStatement] = useState(null);
   const [balanceSheet, setBalanceSheet] = useState(null);
-  const [agingReceivables, setAgingReceivables] = useState(null);
-  const [agingPayables, setAgingPayables] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
-
-  // Expanded rows for aging reports
-  const [expandedCustomers, setExpandedCustomers] = useState({});
-  const [expandedVendors, setExpandedVendors] = useState({});
 
   // Fetch all reports when period changes
   useEffect(() => {
@@ -184,35 +177,22 @@ export default function FinancialReports() {
     const params = getDateParams(period);
 
     try {
-      const [tb, pnl, bs, ar, ap, cf] = await Promise.all([
+      const [tb, pnl, bs, cf] = await Promise.all([
         financeService.getTrialBalance(params).catch(() => null),
         financeService.getIncomeStatement(params).catch(() => null),
         financeService.getBalanceSheet(params).catch(() => null),
-        financeService.getAgingReceivables(params).catch(() => null),
-        financeService.getAgingPayables(params).catch(() => null),
         financeService.getCashFlow(params).catch(() => null)
       ]);
 
       setTrialBalance(tb);
       setIncomeStatement(pnl);
       setBalanceSheet(bs);
-      setAgingReceivables(ar);
-      setAgingPayables(ap);
       setCashFlow(cf);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Toggle expanded state for aging reports
-  const toggleCustomer = (id) => {
-    setExpandedCustomers(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const toggleVendor = (id) => {
-    setExpandedVendors(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Export to PDF
@@ -326,33 +306,6 @@ export default function FinancialReports() {
         </table>
         ` : ''}
 
-        ${agingReceivables ? `
-        <h2>${language === 'uz' ? 'Debitorlik qarzi eskirishi' : 'Aged Receivables'}</h2>
-        <table>
-          <tr><th>Customer</th><th class="amount">Current</th><th class="amount">1-30</th><th class="amount">31-60</th><th class="amount">61-90</th><th class="amount">90+</th><th class="amount">Total</th></tr>
-          ${agingReceivables.contacts?.map(c => `
-            <tr>
-              <td>${c.contact_name}</td>
-              <td class="amount">${formatCurrency(c.current)}</td>
-              <td class="amount">${formatCurrency(c.days_1_to_30)}</td>
-              <td class="amount">${formatCurrency(c.days_31_to_60)}</td>
-              <td class="amount">${formatCurrency(c.days_61_to_90)}</td>
-              <td class="amount">${formatCurrency(c.over_90_days)}</td>
-              <td class="amount">${formatCurrency(c.total_amount)}</td>
-            </tr>
-          `).join('') || ''}
-          <tr class="total-row">
-            <td><strong>Total</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.current_total)}</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.days_1_to_30)}</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.days_31_to_60)}</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.days_61_to_90)}</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.over_90_days)}</strong></td>
-            <td class="amount"><strong>${formatCurrency(agingReceivables.total_amount)}</strong></td>
-          </tr>
-        </table>
-        ` : ''}
-
         <div class="footer">
           ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Genix ERP
         </div>
@@ -387,7 +340,7 @@ export default function FinancialReports() {
                   {language === 'uz' ? 'Moliyaviy Hisobotlar' : 'Financial Reports'}
                 </CardTitle>
                 <p className="text-sm text-white/80 mt-1">
-                  {language === 'uz' ? 'Sinov balansi, Foyda va zarar, Balans, Eskirish, Pul oqimi' : 'Trial Balance, P&L, Balance Sheet, Aging, Cash Flow'}
+                  {language === 'uz' ? 'Sinov balansi, Foyda va zarar, Balans, Pul oqimi' : 'Trial Balance, P&L, Balance Sheet, Cash Flow'}
                 </p>
               </div>
             </div>
@@ -429,7 +382,7 @@ export default function FinancialReports() {
 
       {/* Reports Tabs */}
       <Tabs defaultValue="trial-balance" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 bg-white/80">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
           </TabsTrigger>
@@ -438,12 +391,6 @@ export default function FinancialReports() {
           </TabsTrigger>
           <TabsTrigger value="balance-sheet">
             {language === 'uz' ? 'Balans' : 'Balance Sheet'}
-          </TabsTrigger>
-          <TabsTrigger value="aged-receivables">
-            {language === 'uz' ? 'Debitorlik' : 'Aged AR'}
-          </TabsTrigger>
-          <TabsTrigger value="aged-payables">
-            {language === 'uz' ? 'Kreditorlik' : 'Aged AP'}
           </TabsTrigger>
           <TabsTrigger value="cash-flow">
             {language === 'uz' ? 'Pul Oqimi' : 'Cash Flow'}
@@ -733,258 +680,6 @@ export default function FinancialReports() {
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Aged Receivables Tab */}
-        <TabsContent value="aged-receivables">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                {language === 'uz' ? 'Debitorlik Qarzi Eskirishi' : 'Aged Receivables Report'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Summary Cards */}
-              {agingReceivables && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase">{language === 'uz' ? 'Jami' : 'Total'}</p>
-                    <p className="text-xl font-bold text-slate-900">{formatCurrency(agingReceivables.total_amount)}</p>
-                  </div>
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <p className="text-xs text-green-600 uppercase">{language === 'uz' ? 'Joriy' : 'Current'}</p>
-                    <p className="text-xl font-bold text-green-700">{formatCurrency(agingReceivables.current_total)}</p>
-                  </div>
-                  <div className="p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-xs text-yellow-600 uppercase">1-30 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-yellow-700">{formatCurrency(agingReceivables.days_1_to_30)}</p>
-                  </div>
-                  <div className="p-4 bg-orange-50 rounded-lg">
-                    <p className="text-xs text-orange-600 uppercase">31-60 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-orange-700">{formatCurrency(agingReceivables.days_31_to_60)}</p>
-                  </div>
-                  <div className="p-4 bg-red-50 rounded-lg">
-                    <p className="text-xs text-red-600 uppercase">61-90 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-red-700">{formatCurrency(agingReceivables.days_61_to_90)}</p>
-                  </div>
-                  <div className="p-4 bg-red-100 rounded-lg">
-                    <p className="text-xs text-red-700 uppercase">90+ {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-red-800">{formatCurrency(agingReceivables.over_90_days)}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Customer Table */}
-              {isLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-                </div>
-              ) : agingReceivables?.contacts?.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead>{language === 'uz' ? 'Mijoz' : 'Customer'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy' : 'Current'}</TableHead>
-                        <TableHead className="text-right">1-30</TableHead>
-                        <TableHead className="text-right">31-60</TableHead>
-                        <TableHead className="text-right">61-90</TableHead>
-                        <TableHead className="text-right">90+</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Jami' : 'Total'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {agingReceivables.contacts.map((contact) => (
-                        <React.Fragment key={contact.contact_id}>
-                          <TableRow
-                            className="cursor-pointer hover:bg-slate-50"
-                            onClick={() => toggleCustomer(contact.contact_id)}
-                          >
-                            <TableCell>
-                              {expandedCustomers[contact.contact_id] ? (
-                                <ChevronDown className="w-4 h-4" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4" />
-                              )}
-                            </TableCell>
-                            <TableCell className="font-medium">{contact.contact_name}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">
-                              {contact.current > 0 ? formatCurrency(contact.current) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-yellow-600">
-                              {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-orange-600">
-                              {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-red-600">
-                              {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-red-700">
-                              {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono font-bold">
-                              {formatCurrency(contact.total_amount)}
-                            </TableCell>
-                          </TableRow>
-                          {/* Expanded Invoice Details */}
-                          {expandedCustomers[contact.contact_id] && contact.invoices?.map((inv) => (
-                            <TableRow key={inv.invoice_id} className="bg-slate-50/50">
-                              <TableCell></TableCell>
-                              <TableCell className="text-sm text-slate-600 pl-8">
-                                {inv.invoice_number} - Due: {inv.due_date}
-                                {inv.days_overdue > 0 && (
-                                  <Badge variant="outline" className="ml-2 text-xs">
-                                    {inv.days_overdue} {language === 'uz' ? 'kun' : 'days'}
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell colSpan={5}></TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatCurrency(inv.amount_due)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-slate-500">
-                  {language === 'uz' ? 'To\'lanmagan hisob-fakturalar yo\'q' : 'No outstanding invoices'}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Aged Payables Tab */}
-        <TabsContent value="aged-payables">
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                {language === 'uz' ? 'Kreditorlik Qarzi Eskirishi' : 'Aged Payables Report'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Summary Cards */}
-              {agingPayables && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase">{language === 'uz' ? 'Jami' : 'Total'}</p>
-                    <p className="text-xl font-bold text-slate-900">{formatCurrency(agingPayables.total_amount)}</p>
-                  </div>
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <p className="text-xs text-green-600 uppercase">{language === 'uz' ? 'Joriy' : 'Current'}</p>
-                    <p className="text-xl font-bold text-green-700">{formatCurrency(agingPayables.current_total)}</p>
-                  </div>
-                  <div className="p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-xs text-yellow-600 uppercase">1-30 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-yellow-700">{formatCurrency(agingPayables.days_1_to_30)}</p>
-                  </div>
-                  <div className="p-4 bg-orange-50 rounded-lg">
-                    <p className="text-xs text-orange-600 uppercase">31-60 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-orange-700">{formatCurrency(agingPayables.days_31_to_60)}</p>
-                  </div>
-                  <div className="p-4 bg-red-50 rounded-lg">
-                    <p className="text-xs text-red-600 uppercase">61-90 {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-red-700">{formatCurrency(agingPayables.days_61_to_90)}</p>
-                  </div>
-                  <div className="p-4 bg-red-100 rounded-lg">
-                    <p className="text-xs text-red-700 uppercase">90+ {language === 'uz' ? 'kun' : 'days'}</p>
-                    <p className="text-xl font-bold text-red-800">{formatCurrency(agingPayables.over_90_days)}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Vendor Table */}
-              {isLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-                </div>
-              ) : agingPayables?.contacts?.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8"></TableHead>
-                        <TableHead>{language === 'uz' ? 'Yetkazib beruvchi' : 'Vendor'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Joriy' : 'Current'}</TableHead>
-                        <TableHead className="text-right">1-30</TableHead>
-                        <TableHead className="text-right">31-60</TableHead>
-                        <TableHead className="text-right">61-90</TableHead>
-                        <TableHead className="text-right">90+</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Jami' : 'Total'}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {agingPayables.contacts.map((contact) => (
-                        <React.Fragment key={contact.contact_id}>
-                          <TableRow
-                            className="cursor-pointer hover:bg-slate-50"
-                            onClick={() => toggleVendor(contact.contact_id)}
-                          >
-                            <TableCell>
-                              {expandedVendors[contact.contact_id] ? (
-                                <ChevronDown className="w-4 h-4" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4" />
-                              )}
-                            </TableCell>
-                            <TableCell className="font-medium">{contact.contact_name}</TableCell>
-                            <TableCell className="text-right font-mono text-green-600">
-                              {contact.current > 0 ? formatCurrency(contact.current) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-yellow-600">
-                              {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-orange-600">
-                              {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-red-600">
-                              {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-red-700">
-                              {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
-                            </TableCell>
-                            <TableCell className="text-right font-mono font-bold">
-                              {formatCurrency(contact.total_amount)}
-                            </TableCell>
-                          </TableRow>
-                          {/* Expanded Bill Details */}
-                          {expandedVendors[contact.contact_id] && contact.invoices?.map((inv) => (
-                            <TableRow key={inv.invoice_id} className="bg-slate-50/50">
-                              <TableCell></TableCell>
-                              <TableCell className="text-sm text-slate-600 pl-8">
-                                {inv.invoice_number} - Due: {inv.due_date}
-                                {inv.days_overdue > 0 && (
-                                  <Badge variant="outline" className="ml-2 text-xs">
-                                    {inv.days_overdue} {language === 'uz' ? 'kun' : 'days'}
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell colSpan={5}></TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatCurrency(inv.amount_due)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-slate-500">
-                  {language === 'uz' ? 'To\'lanmagan hisob-fakturalar yo\'q' : 'No outstanding bills'}
                 </div>
               )}
             </CardContent>
