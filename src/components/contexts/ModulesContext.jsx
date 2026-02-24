@@ -100,12 +100,15 @@ export function ModulesProvider({ children }) {
         hrService.listPayrollPeriods().catch(err => { console.warn('Payroll API error:', err); return []; })
       ]);
 
+      // Helper to safely extract array from API response
+      const toArray = (d) => Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : [];
+
       // Set data from API responses
-      setEmployees(empData?.items || empData || []);
-      setPurchaseOrders(poData?.items || poData || []);
-      setSalesOrders(soData?.items || soData || []);
+      setEmployees(toArray(empData));
+      setPurchaseOrders(toArray(poData));
+      setSalesOrders(toArray(soData));
       // Map backend project fields to frontend expected fields
-      const rawProjects = projectsData?.items || projectsData || [];
+      const rawProjects = toArray(projectsData);
       const mappedProjects = rawProjects.map(p => ({
         ...p,
         project_name: p.name || p.project_name,
@@ -113,7 +116,7 @@ export function ModulesProvider({ children }) {
       }));
       setProjects(mappedProjects);
       // Map backend contract fields to frontend expected fields
-      const rawContracts = contractsData?.items || contractsData || [];
+      const rawContracts = toArray(contractsData);
       const mappedContracts = rawContracts.map(c => ({
         ...c,
         contract_name: c.title || c.contract_name,
@@ -125,7 +128,7 @@ export function ModulesProvider({ children }) {
       setContracts(mappedContracts);
       // Map backend expense fields to frontend expected fields
       // Backend returns: date (not expense_date), expense_number, category (not category_name)
-      const rawExpenses = expensesData?.items || expensesData || [];
+      const rawExpenses = toArray(expensesData);
       const mappedExpenses = rawExpenses.map(e => ({
         ...e,
         claim_number: e.expense_number || e.claim_number,
@@ -135,7 +138,7 @@ export function ModulesProvider({ children }) {
       }));
       setExpenses(mappedExpenses);
       // Map backend asset fields to frontend expected fields
-      const rawAssets = assetsData?.items || assetsData || [];
+      const rawAssets = toArray(assetsData);
       const mappedAssets = rawAssets.map(a => ({
         ...a,
         asset_name: a.name || a.asset_name,
@@ -149,7 +152,7 @@ export function ModulesProvider({ children }) {
       }));
       setAssets(mappedAssets);
       // Map backend payroll period fields to frontend expected fields
-      const rawPayrolls = payrollsData?.items || payrollsData || [];
+      const rawPayrolls = toArray(payrollsData);
       const mappedPayrolls = rawPayrolls.map(p => ({
         ...p,
         payroll_number: p.period_code || p.payroll_number,

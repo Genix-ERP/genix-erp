@@ -35,6 +35,11 @@ export const purchaseService = {
     const response = await apiClient.post(`/purchase-orders/${id}/receive`, data);
     return response.data.data;
   },
+
+  async createBillFromPO(poId) {
+    const response = await apiClient.post(`/purchase-orders/${poId}/bill`);
+    return response.data.data;
+  },
 };
 
 export default purchaseService;

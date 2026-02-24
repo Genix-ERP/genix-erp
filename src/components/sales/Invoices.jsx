@@ -62,6 +62,8 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { salesService } from "@/api/services/sales";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
@@ -70,6 +72,12 @@ export default function Invoices() {
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { getSetting } = useAdminSettings();
+  const { taxRates = [] } = useFinancials();
+
+  // Get default tax from settings
+  const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
+  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => tr.id === defaultSalesTaxId) : null;
 
   const {
     invoices,
@@ -166,14 +174,23 @@ export default function Invoices() {
   }, [invoices]);
 
   const calculateTotals = (items, discountAmount, taxPercent) => {
-    const subtotal = items.reduce(
+    const rawSubtotal = items.reduce(
       (sum, item) => sum + item.quantity * item.unit_price,
       0
     );
-    const afterDiscount = subtotal - discountAmount;
-    const taxAmount = (afterDiscount * taxPercent) / 100;
+    const rate = parseFloat(taxPercent) || 0;
+    const isInclusive = defaultSalesTax?.price_include && rate > 0;
+    if (isInclusive) {
+      const taxAmount = rawSubtotal * rate / (100 + rate);
+      const subtotal = rawSubtotal - taxAmount;
+      const afterDiscount = subtotal - discountAmount;
+      const total = afterDiscount + taxAmount;
+      return { subtotal, taxAmount, total, isInclusive: true };
+    }
+    const afterDiscount = rawSubtotal - discountAmount;
+    const taxAmount = (afterDiscount * rate) / 100;
     const total = afterDiscount + taxAmount;
-    return { subtotal, taxAmount, total };
+    return { subtotal: rawSubtotal, taxAmount, total, isInclusive: false };
   };
 
   const handleAddItem = () => {
@@ -442,7 +459,7 @@ export default function Invoices() {
     return { text: `${days} ${t("days_left")}`, isOverdue: false };
   };
 
-  const { subtotal, taxAmount, total } = calculateTotals(
+  const { subtotal, taxAmount, total, isInclusive } = calculateTotals(
     formData.items,
     formData.discount_amount,
     formData.tax_percent
@@ -890,7 +907,7 @@ export default function Invoices() {
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span>{t('tax')} ({formData.tax_percent}%):</span>
+                <span>{t('tax')} ({formData.tax_percent}%{isInclusive ? ` ${t('incl') || 'incl.'}` : ''}):</span>
                 <span>{formatCurrency(taxAmount)}</span>
               </div>
               <div className="flex justify-between font-semibold text-lg pt-2 border-t">

@@ -348,6 +348,19 @@ export default function SalesOrders() {
     return subtotal;
   };
 
+  // Calculate tax considering price_include flag
+  // When price_include=true, the entered prices already contain tax, so we back-calculate
+  const calculateTaxFromRate = (rawSubtotal, taxPercent, taxRateObj) => {
+    const rate = parseFloat(taxPercent) || 0;
+    if (rate <= 0) return { subtotal: rawSubtotal, taxAmount: 0, isInclusive: false };
+    if (taxRateObj?.price_include) {
+      const taxAmount = rawSubtotal * rate / (100 + rate);
+      return { subtotal: rawSubtotal - taxAmount, taxAmount, isInclusive: true };
+    }
+    const taxAmount = rawSubtotal * rate / 100;
+    return { subtotal: rawSubtotal, taxAmount, isInclusive: false };
+  };
+
   const handleAddLine = (order, setOrder, isManualDelivery, setManualDelivery) => {
     const newLines = [...order.lines, { product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }];
     setOrder({
@@ -569,9 +582,11 @@ export default function SalesOrders() {
   };
 
   const handleCreateOrder = async () => {
-    const subtotal = calculateOrderTotals(newOrder.lines);
+    const rawSubtotal = calculateOrderTotals(newOrder.lines);
     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
-    const taxAmount = subtotal * (taxPercent / 100);
+    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+    const subtotal = taxCalc.subtotal;
+    const taxAmount = taxCalc.taxAmount;
     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
 
     // Calculate discount dynamically based on current subtotal
@@ -658,9 +673,11 @@ export default function SalesOrders() {
   };
 
   const handleEditOrder = async () => {
-    const subtotal = calculateOrderTotals(editingOrder.lines);
+    const rawSubtotal = calculateOrderTotals(editingOrder.lines);
     const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
-    const taxAmount = subtotal * (taxPercent / 100);
+    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+    const subtotal = taxCalc.subtotal;
+    const taxAmount = taxCalc.taxAmount;
     const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
     const total = subtotal + taxAmount + shippingCost;
 
@@ -1551,9 +1568,11 @@ export default function SalesOrders() {
               <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                 <div className="space-y-2">
                   {(() => {
-                    const subtotal = calculateOrderTotals(newOrder.lines);
+                    const rawSubtotal = calculateOrderTotals(newOrder.lines);
                     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
-                    const taxAmount = subtotal * (taxPercent / 100);
+                    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+                    const subtotal = taxCalc.subtotal;
+                    const taxAmount = taxCalc.taxAmount;
                     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
                     const discountAmount = newOrder.discount_id ? calculateDiscountAmount(subtotal, {
                       discount_type: newOrder.discount_type,
@@ -1574,7 +1593,7 @@ export default function SalesOrders() {
                           </div>
                         )}
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-600">{t('tax')}:</span>
+                          <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
                           <span className="font-medium">{formatCurrency(taxAmount)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
@@ -2089,9 +2108,11 @@ export default function SalesOrders() {
                 <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
                   <div className="space-y-2">
                     {(() => {
-                      const subtotal = calculateOrderTotals(editingOrder.lines);
+                      const rawSubtotal = calculateOrderTotals(editingOrder.lines);
                       const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
-                      const taxAmount = subtotal * (taxPercent / 100);
+                      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+                      const subtotal = taxCalc.subtotal;
+                      const taxAmount = taxCalc.taxAmount;
                       const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
                       const total = subtotal + taxAmount + shippingCost;
                       return (
@@ -2101,7 +2122,7 @@ export default function SalesOrders() {
                             <span className="font-medium">{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">{t('tax')}:</span>
+                            <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
                             <span className="font-medium">{formatCurrency(taxAmount)}</span>
                           </div>
                           <div className="flex justify-between text-sm">

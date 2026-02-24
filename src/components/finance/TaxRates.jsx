@@ -49,6 +49,7 @@ export default function TaxRates({ hideReports = false }) {
     tax_type: 'sales',
     description: '',
     is_compound: false,
+    price_include: false,
     is_active: true
   });
 
@@ -91,6 +92,7 @@ export default function TaxRates({ hideReports = false }) {
       tax_type: 'sales',
       description: '',
       is_compound: false,
+      price_include: false,
       is_active: true
     });
   };
@@ -125,6 +127,7 @@ export default function TaxRates({ hideReports = false }) {
       tax_type: taxRate.tax_type || 'sales',
       description: taxRate.description || '',
       is_compound: taxRate.is_compound || false,
+      price_include: taxRate.price_include || false,
       is_active: taxRate.is_active !== false
     });
     setShowEditModal(true);
@@ -296,6 +299,9 @@ export default function TaxRates({ hideReports = false }) {
                         </TableCell>
                         <TableCell className="text-right font-bold text-lg text-slate-900 tabular-nums">
                           {taxRate.rate}%
+                          {taxRate.price_include && (
+                            <span className="ml-1 text-xs font-normal text-amber-600">({t('incl') || 'incl.'})</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {taxRate.is_compound ? (
@@ -455,6 +461,17 @@ export default function TaxRates({ hideReports = false }) {
 
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <div>
+                <p className="text-sm font-medium text-slate-700">{t('price_include') || 'Included in Price'}</p>
+                <p className="text-xs text-slate-500">{t('price_include_desc') || 'Product prices already include this tax'}</p>
+              </div>
+              <Switch
+                checked={formData.price_include}
+                onCheckedChange={(checked) => setFormData({...formData, price_include: checked})}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div>
                 <p className="text-sm font-medium text-slate-700">{t('active') || 'Active'}</p>
                 <p className="text-xs text-slate-500">{t('can_be_used_in_transactions') || 'Can be used in transactions'}</p>
               </div>
@@ -574,6 +591,17 @@ export default function TaxRates({ hideReports = false }) {
               <Switch
                 checked={formData.is_compound}
                 onCheckedChange={(checked) => setFormData({...formData, is_compound: checked})}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div>
+                <p className="text-sm font-medium text-slate-700">{t('price_include') || 'Included in Price'}</p>
+                <p className="text-xs text-slate-500">{t('price_include_desc') || 'Product prices already include this tax'}</p>
+              </div>
+              <Switch
+                checked={formData.price_include}
+                onCheckedChange={(checked) => setFormData({...formData, price_include: checked})}
               />
             </div>
 
