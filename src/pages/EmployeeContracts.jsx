@@ -48,6 +48,7 @@ import { useHR } from '@/components/contexts/HRContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { EmployeeContract } from '@/api/entities';
 import { format, parseISO, differenceInDays, addMonths, isBefore, isAfter } from 'date-fns';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 const CONTRACT_TYPES = {
   permanent: { label: 'permanent_contract', color: 'bg-green-100 text-green-700 border-green-200' },
@@ -604,9 +605,10 @@ export default function EmployeeContracts() {
                   <LabelWithHelp htmlFor="salary" label={t('salary') || "Maosh"} helpText={t('help_contract_salary')} required />
                   <Input
                     id="salary"
-                    type="number"
-                    value={newContract.salary}
-                    onChange={e => setNewContract({ ...newContract, salary: e.target.value })}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(newContract.salary)}
+                    onChange={e => setNewContract({ ...newContract, salary: parsePriceInput(e.target.value) })}
                     placeholder="0"
                   />
                 </div>
@@ -797,9 +799,10 @@ export default function EmployeeContracts() {
                     <LabelWithHelp htmlFor="edit_salary" label={t('salary') || "Maosh"} helpText={t('help_contract_salary')} />
                     <Input
                       id="edit_salary"
-                      type="number"
-                      value={selectedContract.salary}
-                      onChange={e => setSelectedContract({ ...selectedContract, salary: e.target.value })}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(selectedContract.salary)}
+                      onChange={e => setSelectedContract({ ...selectedContract, salary: parsePriceInput(e.target.value) })}
                     />
                   </div>
                 </div>

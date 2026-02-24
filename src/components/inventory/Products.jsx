@@ -1801,11 +1801,10 @@ export default function Products() {
               </div>
             </div>
 
-            {/* Module Visibility (Odoo-style) */}
+            {/* Module Visibility */}
             <div className="pt-4 border-t border-slate-200">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                {t('module_visibility') || 'Modul korinishi'}
-                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
+                {t('module_visibility') || "Modul ko'rinishi"}
               </h4>
               <p className="text-xs text-slate-500 mb-3">
                 {t('module_visibility_desc') || "Mahsulot qaysi modullarda ko'rinishini belgilang"}

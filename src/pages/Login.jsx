@@ -209,6 +209,12 @@ export default function Login() {
               </div>
             </div>
 
+            <div style={{ textAlign: 'right', marginTop: -4 }}>
+              <Link to="/forgot-password" style={{ fontSize: 13, color: '#0EA5E9', textDecoration: 'none' }}>
+                {t('forgot_password') || "Parolni unutdingizmi?"}
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}

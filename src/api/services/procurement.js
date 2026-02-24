@@ -129,6 +129,11 @@ export const procurementService = {
     return response.data.data;
   },
 
+  async createBillFromPO(poId) {
+    const response = await apiClient.post(`/purchase-orders/${poId}/bill`);
+    return response.data.data;
+  },
+
   // RFQs (Request for Quotations)
   async listRFQs(params = {}) {
     const response = await apiClient.get('/rfqs', { params });
