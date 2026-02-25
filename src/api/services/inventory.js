@@ -343,6 +343,36 @@ export const inventoryService = {
     const response = await apiClient.get('/scrap/summary');
     return response.data.data;
   },
+
+  // Reorder Rules
+  async listReorderRules(params = {}) {
+    const response = await apiClient.get('/reorder-rules', { params });
+    return response.data.data;
+  },
+
+  async getReorderRule(id) {
+    const response = await apiClient.get(`/reorder-rules/${id}`);
+    return response.data.data;
+  },
+
+  async createReorderRule(data) {
+    const response = await apiClient.post('/reorder-rules', data);
+    return response.data.data;
+  },
+
+  async updateReorderRule(id, data) {
+    const response = await apiClient.put(`/reorder-rules/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteReorderRule(id) {
+    await apiClient.delete(`/reorder-rules/${id}`);
+  },
+
+  async getReorderAlerts(params = {}) {
+    const response = await apiClient.get('/reorder-rules/alerts', { params });
+    return response.data.data;
+  },
 };
 
 export default inventoryService;
