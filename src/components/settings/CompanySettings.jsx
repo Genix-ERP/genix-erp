@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useSubscription } from "@/components/contexts/SubscriptionContext";
@@ -122,6 +122,22 @@ export default function CompanySettings() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editVendorDropdownOpen, setEditVendorDropdownOpen] = useState(false);
   const [addVendorDropdownOpen, setAddVendorDropdownOpen] = useState(false);
+  const editVendorRef = useRef(null);
+  const addVendorRef = useRef(null);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (editVendorDropdownOpen && editVendorRef.current && !editVendorRef.current.contains(e.target)) {
+        setEditVendorDropdownOpen(false);
+      }
+      if (addVendorDropdownOpen && addVendorRef.current && !addVendorRef.current.contains(e.target)) {
+        setAddVendorDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [editVendorDropdownOpen, addVendorDropdownOpen]);
 
   const limits = getPlanLimits();
   const maxCompanies = limits.maxCompanies || 1;
@@ -185,6 +201,7 @@ export default function CompanySettings() {
       toast({ variant: "success", title: t('company_updated') || "Muvaffaqiyatli o'zgartirildi", description: formData.company_name });
       setShowEditForm(false);
       setEditingCompany(null);
+      window.location.reload();
     } catch (err) {
       console.error("Error saving company:", err);
       setError('Kompaniyani saqlashda xatolik');
@@ -795,7 +812,7 @@ export default function CompanySettings() {
                   <div className="space-y-2 md:col-span-2">
                     <Label>{t('intercompany_vendors') || 'Intercompany vendorlar'}</Label>
                     <p className="text-xs text-slate-500">{t('intercompany_vendors_desc') || "Tanlangan kompaniyalarda vendor va mijoz sifatida avtomatik yaratiladi"}</p>
-                    <div className="relative">
+                    <div className="relative" ref={editVendorRef}>
                       <Button
                         type="button"
                         variant="outline"
@@ -1112,7 +1129,7 @@ export default function CompanySettings() {
                   <div className="space-y-2 md:col-span-2">
                     <Label>{t('intercompany_vendors') || 'Intercompany vendorlar'}</Label>
                     <p className="text-xs text-slate-500">{t('intercompany_vendors_desc') || "Tanlangan kompaniyalarda vendor va mijoz sifatida avtomatik yaratiladi"}</p>
-                    <div className="relative">
+                    <div className="relative" ref={addVendorRef}>
                       <Button
                         type="button"
                         variant="outline"

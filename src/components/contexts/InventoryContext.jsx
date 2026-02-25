@@ -687,7 +687,15 @@ export function InventoryProvider({ children }) {
 
           setBOMs(getLocalData(BOMS_STORAGE_KEY, sampleBOMs));
           setBOMLines(getLocalData(BOM_LINES_STORAGE_KEY, sampleBOMLines));
-          setReorderRules(getLocalData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
+
+          // Load reorder rules from backend
+          try {
+            const reorderData = await inventoryService.listReorderRules();
+            setReorderRules(reorderData || []);
+          } catch (rrErr) {
+            console.warn('[InventoryContext] Reorder rules API not available, using localStorage:', rrErr.message);
+            setReorderRules(getLocalData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
+          }
         } catch (apiError) {
           console.error('[InventoryContext] API call failed:', apiError);
           console.error('[InventoryContext] Error details:', apiError.response?.data || apiError.message);
@@ -1668,6 +1676,29 @@ export function InventoryProvider({ children }) {
 
   // ================== REORDER RULES ==================
   const createReorderRule = useCallback(async (ruleData) => {
+    if (backendAvailable) {
+      try {
+        const result = await inventoryService.createReorderRule({
+          product_id: ruleData.product_id,
+          warehouse_id: ruleData.warehouse_id || undefined,
+          min_qty: parseFloat(ruleData.min_qty) || 0,
+          max_qty: parseFloat(ruleData.max_qty) || 0,
+          reorder_qty: parseFloat(ruleData.reorder_qty) || 0,
+          trigger_type: ruleData.trigger_type || 'min_qty',
+          lead_time_days: parseInt(ruleData.lead_time_days) || 0,
+          safety_stock: parseFloat(ruleData.safety_stock) || 0,
+          auto_create_po: !!ruleData.auto_create_po,
+          notes: ruleData.notes || '',
+        });
+        const rulesList = await inventoryService.listReorderRules();
+        setReorderRules(rulesList || []);
+        return result;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to create reorder rule via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
 
@@ -1681,23 +1712,58 @@ export function InventoryProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setReorderRules(updated);
     return newRule;
-  }, [reorderRules, activeCompany]);
+  }, [reorderRules, activeCompany, backendAvailable]);
 
   const updateReorderRule = useCallback(async (id, ruleData) => {
+    if (backendAvailable) {
+      try {
+        const updateData = {};
+        if (ruleData.min_qty !== undefined) updateData.min_qty = parseFloat(ruleData.min_qty);
+        if (ruleData.max_qty !== undefined) updateData.max_qty = parseFloat(ruleData.max_qty);
+        if (ruleData.reorder_qty !== undefined) updateData.reorder_qty = parseFloat(ruleData.reorder_qty);
+        if (ruleData.trigger_type !== undefined) updateData.trigger_type = ruleData.trigger_type;
+        if (ruleData.lead_time_days !== undefined) updateData.lead_time_days = parseInt(ruleData.lead_time_days);
+        if (ruleData.safety_stock !== undefined) updateData.safety_stock = parseFloat(ruleData.safety_stock);
+        if (ruleData.auto_create_po !== undefined) updateData.auto_create_po = ruleData.auto_create_po;
+        if (ruleData.is_active !== undefined) updateData.is_active = ruleData.is_active;
+        if (ruleData.notes !== undefined) updateData.notes = ruleData.notes;
+
+        await inventoryService.updateReorderRule(id, updateData);
+        const rulesList = await inventoryService.listReorderRules();
+        setReorderRules(rulesList || []);
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to update reorder rule via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
     const updated = reorderRules.map(r => r.id === id ? { ...r, ...ruleData } : r);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setReorderRules(updated);
-  }, [reorderRules, activeCompany]);
+  }, [reorderRules, activeCompany, backendAvailable]);
 
   const deleteReorderRule = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteReorderRule(id);
+        const rulesList = await inventoryService.listReorderRules();
+        setReorderRules(rulesList || []);
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to delete reorder rule via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(REORDER_RULES_STORAGE_KEY, companyId);
     const updated = reorderRules.filter(r => r.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setReorderRules(updated);
-  }, [reorderRules, activeCompany]);
+  }, [reorderRules, activeCompany, backendAvailable]);
 
   const getReorderRulesByProduct = useCallback((productId) => {
     return reorderRules.filter(r => r.product_id === productId);
