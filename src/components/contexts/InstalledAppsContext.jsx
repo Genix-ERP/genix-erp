@@ -14,7 +14,20 @@ const getStorageKey = (baseKey, companyId) => {
 
 export function InstalledAppsProvider({ children }) {
   const { activeCompany } = useCompany();
-  const [installedApps, setInstalledApps] = useState([]);
+
+  // Initialize from localStorage cache immediately to avoid delay
+  const [installedApps, setInstalledApps] = useState(() => {
+    try {
+      const companyId = activeCompany?.id;
+      const storageKey = getStorageKey(STORAGE_KEY, companyId);
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const apps = JSON.parse(stored);
+        return (apps || []).filter(app => app.status === 'active');
+      }
+    } catch (e) { /* ignore */ }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
 

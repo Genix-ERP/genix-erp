@@ -312,6 +312,37 @@ export const inventoryService = {
   async deleteStockCount(id) {
     await apiClient.delete(`/stock-counts/${id}`);
   },
+
+  // Scrap Orders
+  async listScrapOrders(params) {
+    const response = await apiClient.get('/scrap/orders', { params });
+    return response.data.data;
+  },
+
+  async getScrapOrder(id) {
+    const response = await apiClient.get(`/scrap/orders/${id}`);
+    return response.data.data;
+  },
+
+  async createScrapOrder(data) {
+    const response = await apiClient.post('/scrap/orders', data);
+    return response.data.data;
+  },
+
+  async confirmScrapOrder(id) {
+    const response = await apiClient.post(`/scrap/orders/${id}/confirm`);
+    return response.data;
+  },
+
+  async cancelScrapOrder(id) {
+    const response = await apiClient.post(`/scrap/orders/${id}/cancel`);
+    return response.data;
+  },
+
+  async getScrapSummary() {
+    const response = await apiClient.get('/scrap/summary');
+    return response.data.data;
+  },
 };
 
 export default inventoryService;

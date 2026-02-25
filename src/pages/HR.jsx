@@ -33,6 +33,8 @@ import {
   Upload,
   Download,
   Printer,
+  Send,
+  ChevronsUpDown,
 } from "lucide-react";
 
 // Import universal ERP components
@@ -60,6 +62,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -154,7 +157,7 @@ export default function HR() {
     headerFields: [
       { label: 'Xodim', value: employee.full_name },
       { label: 'Lavozim', value: employee.job_title },
-      { label: "Bo'lim", value: getDepartmentName(employee.department) },
+      { label: "Bo'lim", value: employee.department || '-' },
       { label: 'Email', value: employee.email },
       { label: 'Telefon', value: employee.phone },
       { label: 'Ishga kirgan', value: employee.hire_date },
@@ -169,17 +172,58 @@ export default function HR() {
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
     email: '',
-    password: '',
     phone: '',
     job_title: '',
-    department: 'engineering',
+    department: '',
     hire_date: new Date().toISOString().split('T')[0],
     salary: '',
     status: 'active',
     performance_score: 3,
     turnover_risk: 'low',
-    permission: 'basic'
+    permission: 'important',
+    organization_ids: []
   });
+  const [organizations, setOrganizations] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const generatePassword = () => {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const all = letters + digits;
+    // Ensure at least 1 letter and 1 digit
+    let chars = [
+      letters.charAt(Math.floor(Math.random() * letters.length)),
+      digits.charAt(Math.floor(Math.random() * digits.length)),
+    ];
+    for (let i = 2; i < 8; i++) {
+      chars.push(all.charAt(Math.floor(Math.random() * all.length)));
+    }
+    // Shuffle
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
+  };
+
+  const handleSendCredentials = async (employee, method) => {
+    try {
+      const password = generatePassword();
+      await apiClient.post('/users/send-credentials', {
+        email: employee.email,
+        password: password,
+        method: method === 'phone' ? 'sms' : 'email',
+        phone: employee.phone || '',
+      });
+      toast({
+        title: t('success'),
+        description: method === 'phone'
+          ? (t('password_sent_to_phone') || 'Parol telefonga yuborildi')
+          : (t('password_sent_to_email') || 'Parol emailga yuborildi'),
+      });
+    } catch (error) {
+      toast({ title: t('error'), description: error.response?.data?.error?.message || t('password_send_error') || 'Parol yuborishda xatolik', variant: 'destructive' });
+    }
+  };
 
   // AI-based turnover risk assessment
   const assessTurnoverRisk = useCallback(async (employeesList) => {
@@ -320,10 +364,10 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
-    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.password) {
+    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email) {
       toast({
         title: t('error') || 'Xato',
-        description: t('required_fields_error') || "Ism, lavozim, email va parol to'ldirilishi shart",
+        description: t('required_fields_error') || "Ism, lavozim va email to'ldirilishi shart",
         variant: 'destructive',
       });
       return;
@@ -331,6 +375,9 @@ Only return the JSON, no other text.`;
 
     setIsSubmitting(true);
     try {
+      // Auto-generate 8-character alphanumeric password
+      const password = generatePassword();
+
       // First create user account (validates email uniqueness per tenant)
       const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
       const firstName = nameParts[0] || 'User';
@@ -338,7 +385,7 @@ Only return the JSON, no other text.`;
 
       await apiClient.post('/users', {
         email: newEmployee.email,
-        password: newEmployee.password,
+        password: password,
         first_name: firstName,
         last_name: lastName,
         phone: newEmployee.phone || '',
@@ -359,7 +406,22 @@ Only return the JSON, no other text.`;
         permission: newEmployee.permission
       };
 
-      await hrService.createEmployee(employeeData);
+      const createdEmployee = await hrService.createEmployee(employeeData);
+
+      // Assign to selected organizations
+      if (newEmployee.organization_ids.length > 0 && createdEmployee?.id) {
+        for (let i = 0; i < newEmployee.organization_ids.length; i++) {
+          try {
+            await apiClient.post('/employee-organizations', {
+              employee_id: createdEmployee.id,
+              organization_id: newEmployee.organization_ids[i],
+              is_primary: i === 0,
+            });
+          } catch (orgErr) {
+            console.error("Error assigning organization:", orgErr);
+          }
+        }
+      }
 
       toast({
         title: t('success') || 'Muvaffaqiyatli',
@@ -368,18 +430,10 @@ Only return the JSON, no other text.`;
 
       setShowAddModal(false);
       setNewEmployee({
-        full_name: '',
-        email: '',
-        password: '',
-        phone: '',
-        job_title: '',
-        department: 'engineering',
-        hire_date: new Date().toISOString().split('T')[0],
-        salary: '',
-        status: 'active',
-        performance_score: 3,
-        turnover_risk: 'low',
-        permission: 'basic'
+        full_name: '', email: '', phone: '', job_title: '',
+        department: '', hire_date: new Date().toISOString().split('T')[0],
+        salary: '', status: 'active', performance_score: 3,
+        turnover_risk: 'low', permission: 'important', organization_ids: []
       });
       await loadEmployees();
     } catch (error) {
@@ -407,12 +461,26 @@ Only return the JSON, no other text.`;
     setShowViewModal(true);
   };
 
-  const handleEditEmployee = (employee) => {
+  const handleEditEmployee = async (employee) => {
     setSelectedEmployee({
       ...employee,
-      salary: employee.salary || ''
+      salary: employee.salary || '',
+      organization_ids: [],
+      _orig_org_ids: []
     });
     setShowEditModal(true);
+    // Load employee's current organizations
+    try {
+      const res = await apiClient.get(`/employees/${employee.id}/organizations`);
+      const orgs = res.data?.data || res.data || [];
+      const orgIds = orgs.map(o => o.organization_id);
+      setSelectedEmployee(prev => prev ? ({
+        ...prev,
+        organization_ids: orgIds,
+        _orig_org_ids: orgIds,
+        _org_assignments: orgs
+      }) : prev);
+    } catch {}
   };
 
   const handleUpdateEmployee = async () => {
@@ -435,6 +503,29 @@ Only return the JSON, no other text.`;
       };
 
       await hrService.updateEmployee(selectedEmployee.id, employeeData);
+
+      // Handle organization assignments
+      const currentIds = selectedEmployee.organization_ids || [];
+      const origIds = selectedEmployee._orig_org_ids || [];
+      const assignments = selectedEmployee._org_assignments || [];
+
+      // Remove orgs that were unchecked
+      for (const a of assignments) {
+        if (!currentIds.includes(a.organization_id)) {
+          await apiClient.delete(`/employee-organizations/${a.id}`).catch(() => {});
+        }
+      }
+      // Add orgs that were newly checked
+      for (let i = 0; i < currentIds.length; i++) {
+        if (!origIds.includes(currentIds[i])) {
+          await apiClient.post('/employee-organizations', {
+            employee_id: selectedEmployee.id,
+            organization_id: currentIds[i],
+            is_primary: currentIds.length === 1 || (i === 0 && assignments.length === 0),
+          }).catch(() => {});
+        }
+      }
+
       setShowEditModal(false);
       setSelectedEmployee(null);
       await loadEmployees();
@@ -674,6 +765,14 @@ Only return the JSON, no other text.`;
 
   useEffect(() => {
     loadEmployees();
+    // Load organizations for company assignment
+    apiClient.get('/organizations').then(res => {
+      setOrganizations(res.data?.data || res.data || []);
+    }).catch(() => {});
+    // Load departments
+    apiClient.get('/departments').then(res => {
+      setDepartments(res.data?.data || res.data || []);
+    }).catch(() => {});
   }, [loadEmployees]);
 
   // Generate insights when employees data changes
@@ -727,11 +826,9 @@ Only return the JSON, no other text.`;
                 <SelectTrigger className="w-48"><SelectValue placeholder={t('all_departments')}/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t('all_departments')}</SelectItem>
-                  <SelectItem value="engineering">{t('engineering')}</SelectItem>
-                  <SelectItem value="sales">{t('sales')}</SelectItem>
-                  <SelectItem value="marketing">{t('marketing')}</SelectItem>
-                  <SelectItem value="finance">{t('finance')}</SelectItem>
-                  <SelectItem value="operations">{t('operations')}</SelectItem>
+                  {departments.map(dept => (
+                    <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -787,7 +884,7 @@ Only return the JSON, no other text.`;
                         <p className="text-sm text-slate-500">{e.job_title}</p>
                       </div>
                     </TableCell>
-                    <TableCell><Badge variant="outline">{t(e.department)}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{e.department || '-'}</Badge></TableCell>
                     <TableCell>{new Date(e.hire_date).toLocaleDateString()}</TableCell>
                     <TableCell>{e.performance_score}/5</TableCell>
                     <TableCell className={getRiskColor(e.turnover_risk)}>{t(e.turnover_risk)}</TableCell>
@@ -814,6 +911,18 @@ Only return the JSON, no other text.`;
                             <DropdownMenuItem onClick={() => handleManagePermissions(e)}>
                               <Shield className="mr-2 h-4 w-4" />
                               {t('manage_permissions') || 'Manage Permissions'}
+                            </DropdownMenuItem>
+                          )}
+                          {e.email && (
+                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'email')}>
+                              <Mail className="mr-2 h-4 w-4" />
+                              {t('send_email') || 'Send email'}
+                            </DropdownMenuItem>
+                          )}
+                          {e.phone && (
+                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'phone')}>
+                              <Send className="mr-2 h-4 w-4" />
+                              {t('send_sms') || 'Send SMS'}
                             </DropdownMenuItem>
                           )}
                           {canDelete(MODULES.HR) && (
@@ -879,25 +988,14 @@ Only return the JSON, no other text.`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('email')} *</Label>
-                  <Input
-                    type="email"
-                    value={newEmployee.email}
-                    onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
-                    placeholder={t('enter_email')}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('password')} *</Label>
-                  <Input
-                    type="password"
-                    value={newEmployee.password}
-                    onChange={e => setNewEmployee({...newEmployee, password: e.target.value})}
-                    placeholder={t('enter_password')}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('email')} *</Label>
+                <Input
+                  type="email"
+                  value={newEmployee.email}
+                  onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
+                  placeholder={t('enter_email')}
+                />
               </div>
 
               <div className="space-y-2">
@@ -925,14 +1023,11 @@ Only return the JSON, no other text.`;
                     value={newEmployee.department}
                     onValueChange={value => setNewEmployee({...newEmployee, department: value})}
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('select_department') || "Bo'limni tanlang"} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="engineering">{t('engineering')}</SelectItem>
-                      <SelectItem value="sales">{t('sales')}</SelectItem>
-                      <SelectItem value="marketing">{t('marketing')}</SelectItem>
-                      <SelectItem value="finance">{t('finance')}</SelectItem>
-                      <SelectItem value="operations">{t('operations')}</SelectItem>
-                      <SelectItem value="hr">{t('hr')}</SelectItem>
+                      {departments.map(dept => (
+                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -972,21 +1067,43 @@ Only return the JSON, no other text.`;
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>{t('permission')}</Label>
-                <Select
-                  value={newEmployee.permission}
-                  onValueChange={value => setNewEmployee({...newEmployee, permission: value})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="learner">{t('learner')}</SelectItem>
-                    <SelectItem value="basic">{t('basic')}</SelectItem>
-                    <SelectItem value="important">{t('important')}</SelectItem>
-                    <SelectItem value="grant">{t('grant')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {organizations.length > 0 && (
+                <div className="space-y-2">
+                  <Label>{t('companies') || 'Kompaniyalar'}</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between font-normal">
+                        <span className="truncate">
+                          {newEmployee.organization_ids.length > 0
+                            ? organizations.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
+                            : (t('select_companies') || 'Kompaniyalarni tanlang')}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                      <div className="max-h-48 overflow-y-auto">
+                        {organizations.map(org => (
+                          <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newEmployee.organization_ids.includes(org.id)}
+                              onChange={(e) => {
+                                const ids = e.target.checked
+                                  ? [...newEmployee.organization_ids, org.id]
+                                  : newEmployee.organization_ids.filter(id => id !== org.id);
+                                setNewEmployee({...newEmployee, organization_ids: ids});
+                              }}
+                              className="rounded border-slate-300"
+                            />
+                            <span className="text-sm">{org.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowAddModal(false)}>
@@ -994,7 +1111,7 @@ Only return the JSON, no other text.`;
                 </Button>
                 <Button
                   onClick={handleAddEmployee}
-                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.password}
+                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
                   {isSubmitting ? t('saving') : t('add_employee')}
@@ -1042,7 +1159,7 @@ Only return the JSON, no other text.`;
                       <Briefcase className="w-4 h-4" />
                       {t('department') || 'Department'}
                     </div>
-                    <Badge variant="outline">{t(selectedEmployee.department)}</Badge>
+                    <Badge variant="outline">{selectedEmployee.department || '-'}</Badge>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -1167,14 +1284,11 @@ Only return the JSON, no other text.`;
                       value={selectedEmployee.department}
                       onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value})}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t('select_department') || "Bo'limni tanlang"} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="engineering">{t('engineering')}</SelectItem>
-                        <SelectItem value="sales">{t('sales')}</SelectItem>
-                        <SelectItem value="marketing">{t('marketing')}</SelectItem>
-                        <SelectItem value="finance">{t('finance')}</SelectItem>
-                        <SelectItem value="operations">{t('operations')}</SelectItem>
-                        <SelectItem value="hr">{t('hr')}</SelectItem>
+                        {departments.map(dept => (
+                          <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1247,21 +1361,43 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>{t('permission')}</Label>
-                  <Select
-                    value={selectedEmployee.permission || 'basic'}
-                    onValueChange={value => setSelectedEmployee({...selectedEmployee, permission: value})}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="learner">{t('learner')}</SelectItem>
-                      <SelectItem value="basic">{t('basic')}</SelectItem>
-                      <SelectItem value="important">{t('important')}</SelectItem>
-                      <SelectItem value="grant">{t('grant')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {organizations.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>{t('companies') || 'Kompaniyalar'}</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {(selectedEmployee.organization_ids || []).length > 0
+                              ? organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')
+                              : (t('select_companies') || 'Kompaniyalarni tanlang')}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                        <div className="max-h-48 overflow-y-auto">
+                          {organizations.map(org => (
+                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={(selectedEmployee.organization_ids || []).includes(org.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked
+                                    ? [...(selectedEmployee.organization_ids || []), org.id]
+                                    : (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
+                                  setSelectedEmployee({...selectedEmployee, organization_ids: ids});
+                                }}
+                                className="rounded border-slate-300"
+                              />
+                              <span className="text-sm">{org.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4">
                   <Button variant="outline" onClick={() => setShowEditModal(false)}>
