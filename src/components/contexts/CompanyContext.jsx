@@ -332,7 +332,7 @@ export function CompanyProvider({ children }) {
       if (updates.currency !== undefined) backendUpdates.currency = updates.currency;
       if (updates.logo_url !== undefined) backendUpdates.logo_url = updates.logo_url;
       if (updates.is_active !== undefined) backendUpdates.is_active = updates.is_active;
-      if (updates.intercompany_vendor_ids !== undefined && updates.intercompany_vendor_ids.length > 0) backendUpdates.intercompany_vendor_ids = updates.intercompany_vendor_ids;
+      if (updates.intercompany_vendor_ids !== undefined) backendUpdates.intercompany_vendor_ids = updates.intercompany_vendor_ids;
       // Handle contact info
       if (updates.email !== undefined || updates.phone !== undefined) {
         backendUpdates.contact_info = {
