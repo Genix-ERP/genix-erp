@@ -25,6 +25,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { hrService } from "@/api/services/hr";
+import { inventoryService } from "@/api/services/inventory";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -154,7 +155,7 @@ export default function StockCounting() {
     inProgress: stockCounts.filter(sc => sc.status === 'in_progress' || sc.status === 'draft').length,
     totalVariance: stockCounts
       .filter(sc => sc.status === 'completed')
-      .reduce((sum, sc) => sum + sc.lines.reduce((lineSum, l) => lineSum + Math.abs(l.variance || 0), 0), 0)
+      .reduce((sum, sc) => sum + Math.abs(sc.total_variance_value || 0), 0)
   };
 
   const filteredCounts = stockCounts.filter(sc => {
@@ -243,6 +244,19 @@ export default function StockCounting() {
       console.error('Error completing stock count:', err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSelectCount = async (count) => {
+    try {
+      const fullCount = await inventoryService.getStockCount(count.id);
+      setSelectedCount(fullCount);
+      setActiveTab('count');
+    } catch (err) {
+      console.error('Error fetching stock count details:', err);
+      // Fallback to list item data
+      setSelectedCount(count);
+      setActiveTab('count');
     }
   };
 
@@ -407,8 +421,8 @@ export default function StockCounting() {
                 <TableBody>
                   {filteredCounts.map((count) => {
                     const warehouse = warehouses.find(w => w.id === count.warehouse_id);
-                    const totalVariance = count.lines?.reduce((sum, l) => sum + Math.abs(l.variance || 0), 0) || 0;
-                    const countedLines = count.lines?.filter(l => l.counted_qty !== null).length || 0;
+                    const totalVariance = Math.abs(count.total_variance_value || 0);
+                    const countedLines = count.counted_count || 0;
 
                     return (
                       <TableRow key={count.id} className="hover:bg-slate-50">
@@ -428,7 +442,7 @@ export default function StockCounting() {
                         </TableCell>
                         <TableCell>
                           <span className="font-semibold">{countedLines}</span>
-                          <span className="text-slate-400">/{count.lines?.length || 0}</span>
+                          <span className="text-slate-400">/{count.line_count || 0}</span>
                         </TableCell>
                         <TableCell>
                           {count.status === 'completed' ? (
@@ -445,10 +459,7 @@ export default function StockCounting() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setSelectedCount(count);
-                                setActiveTab('count');
-                              }}
+                              onClick={() => handleSelectCount(count)}
                             >
                               <Edit className="w-4 h-4 mr-1" />
                               {t('continue')}
@@ -458,10 +469,7 @@ export default function StockCounting() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
-                                setSelectedCount(count);
-                                setActiveTab('count');
-                              }}
+                              onClick={() => handleSelectCount(count)}
                             >
                               <Eye className="w-4 h-4 mr-1" />
                               {t('view')}
@@ -510,7 +518,7 @@ export default function StockCounting() {
                             size="sm"
                             onClick={() => setShowCompleteModal(true)}
                             className="bg-green-600 hover:bg-green-700 text-white"
-                            disabled={selectedCount.lines?.some(l => l.counted_qty === null)}
+                            disabled={selectedCount.lines?.some(l => (l.counted_quantity ?? l.counted_qty) === null)}
                           >
                             <Check className="w-4 h-4 mr-1" />
                             {t('complete')}
@@ -542,19 +550,17 @@ export default function StockCounting() {
                       {selectedCount.lines?.map((line) => {
                         const product = products.find(p => p.id === line.product_id);
                         const isEditable = selectedCount.status !== 'completed' && selectedCount.status !== 'cancelled';
-                        // Get system_qty from line, or fall back to current inventory
-                        const inventoryItem = inventory.find(i =>
-                          i.product_id === line.product_id &&
-                          i.warehouse_id === selectedCount.warehouse_id
-                        );
-                        const systemQty = line.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
+                        const systemQty = line.system_quantity ?? line.system_qty ?? 0;
+                        const countedQty = line.counted_quantity ?? line.counted_qty;
+                        const variance = line.variance_quantity ?? line.variance ?? 0;
+                        const productName = line.product_name || product?.name || t('unknown');
 
                         return (
-                          <TableRow key={line.product_id} className="hover:bg-slate-50">
+                          <TableRow key={line.id || line.product_id} className="hover:bg-slate-50">
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Package className="w-4 h-4 text-slate-400" />
-                                <span className="font-medium">{product?.name || t('unknown')}</span>
+                                <span className="font-medium">{productName}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-center font-semibold">{systemQty}</TableCell>
@@ -562,31 +568,31 @@ export default function StockCounting() {
                               {isEditable ? (
                                 <Input
                                   type="number"
-                                  value={line.counted_qty ?? ''}
+                                  value={countedQty ?? ''}
                                   onChange={(e) => handleUpdateLine(line.product_id, e.target.value, line.variance_reason)}
                                   className="w-24 text-center mx-auto"
                                   placeholder="0"
                                 />
                               ) : (
-                                <span className="font-semibold">{line.counted_qty ?? '-'}</span>
+                                <span className="font-semibold">{countedQty ?? '-'}</span>
                               )}
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center gap-1">
-                                {getVarianceIcon(line.variance)}
+                                {getVarianceIcon(variance)}
                                 <span className={`font-semibold ${
-                                  line.variance > 0 ? 'text-green-600' :
-                                  line.variance < 0 ? 'text-red-600' : 'text-slate-400'
+                                  variance > 0 ? 'text-green-600' :
+                                  variance < 0 ? 'text-red-600' : 'text-slate-400'
                                 }`}>
-                                  {line.variance !== null ? (line.variance > 0 ? `+${line.variance}` : line.variance) : '-'}
+                                  {countedQty !== null && countedQty !== undefined ? (variance > 0 ? `+${variance}` : variance) : '-'}
                                 </span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              {isEditable && line.variance !== 0 && line.variance !== null ? (
+                              {isEditable && variance !== 0 ? (
                                 <Input
                                   value={line.variance_reason || ''}
-                                  onChange={(e) => handleUpdateLine(line.product_id, line.counted_qty, e.target.value)}
+                                  onChange={(e) => handleUpdateLine(line.product_id, countedQty, e.target.value)}
                                   placeholder={t('enter_reason')}
                                   className="w-full"
                                 />

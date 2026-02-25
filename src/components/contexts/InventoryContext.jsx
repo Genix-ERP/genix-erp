@@ -676,10 +676,18 @@ export function InventoryProvider({ children }) {
             setStockCounts(getLocalData(STOCK_COUNTS_STORAGE_KEY, sampleStockCounts));
           }
 
+          // Load scrap orders from backend
+          try {
+            const scrapData = await inventoryService.listScrapOrders();
+            setScrapOrders(scrapData || []);
+          } catch (scrapErr) {
+            console.warn('[InventoryContext] Scrap orders API not available, using localStorage:', scrapErr.message);
+            setScrapOrders(getLocalData(SCRAP_ORDERS_STORAGE_KEY, sampleScrapOrders));
+          }
+
           setBOMs(getLocalData(BOMS_STORAGE_KEY, sampleBOMs));
           setBOMLines(getLocalData(BOM_LINES_STORAGE_KEY, sampleBOMLines));
           setReorderRules(getLocalData(REORDER_RULES_STORAGE_KEY, sampleReorderRules));
-          setScrapOrders(getLocalData(SCRAP_ORDERS_STORAGE_KEY, sampleScrapOrders));
         } catch (apiError) {
           console.error('[InventoryContext] API call failed:', apiError);
           console.error('[InventoryContext] Error details:', apiError.response?.data || apiError.message);
@@ -1378,7 +1386,10 @@ export function InventoryProvider({ children }) {
           warehouse_id: countData.warehouse_id,
           organization_id: countData.organization_id || null,
           count_date: countData.count_date || new Date().toISOString().split('T')[0],
+          count_type: countData.count_type || 'full',
           notes: countData.notes || '',
+          counted_by: countData.counted_by || '',
+          selected_products: countData.selected_products || [],
         });
         // Refresh stock counts list from backend
         const stockCountsData = await inventoryService.listStockCounts();
@@ -1719,10 +1730,31 @@ export function InventoryProvider({ children }) {
 
   // ================== SCRAP MANAGEMENT ==================
   const createScrapOrder = useCallback(async (scrapData) => {
+    if (backendAvailable) {
+      try {
+        const product = products.find(p => p.id === scrapData.product_id);
+        const result = await inventoryService.createScrapOrder({
+          product_id: scrapData.product_id,
+          warehouse_id: scrapData.warehouse_id,
+          quantity: scrapData.quantity,
+          unit_cost: product?.cost_price || 0,
+          reason: scrapData.reason,
+          reason_notes: scrapData.reason_notes || '',
+          scrap_date: scrapData.scrap_date || new Date().toISOString().split('T')[0],
+          notes: scrapData.notes || '',
+        });
+        const scrapList = await inventoryService.listScrapOrders();
+        setScrapOrders(scrapList || []);
+        return result;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to create scrap order via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
-    const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
-    const movementsKey = getStorageKey(STOCK_MOVEMENTS_STORAGE_KEY, companyId);
 
     const product = products.find(p => p.id === scrapData.product_id);
     const costImpact = scrapData.quantity * (product?.cost_price || 0);
@@ -1739,7 +1771,7 @@ export function InventoryProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setScrapOrders(updated);
     return newScrap;
-  }, [scrapOrders, products, activeCompany]);
+  }, [scrapOrders, products, activeCompany, backendAvailable]);
 
   const updateScrapOrder = useCallback(async (id, scrapData) => {
     const companyId = activeCompany?.id;
@@ -1750,6 +1782,26 @@ export function InventoryProvider({ children }) {
   }, [scrapOrders, activeCompany]);
 
   const confirmScrapOrder = useCallback(async (id, approvedBy) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.confirmScrapOrder(id);
+        // Refresh scrap orders, inventory, and movements
+        const [scrapList, inventoryData, movementsData] = await Promise.all([
+          inventoryService.listScrapOrders(),
+          inventoryService.listInventory(),
+          inventoryService.listInventoryMovements(),
+        ]);
+        setScrapOrders(scrapList || []);
+        setInventory(inventoryData || []);
+        setStockMovements(movementsData || []);
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to confirm scrap order via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage
     const companyId = activeCompany?.id;
     const scrapKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
     const inventoryKey = getStorageKey(INVENTORY_STORAGE_KEY, companyId);
@@ -1791,9 +1843,22 @@ export function InventoryProvider({ children }) {
     );
     localStorage.setItem(scrapKey, JSON.stringify(updatedScraps));
     setScrapOrders(updatedScraps);
-  }, [scrapOrders, inventory, stockMovements, activeCompany]);
+  }, [scrapOrders, inventory, stockMovements, activeCompany, backendAvailable]);
 
   const cancelScrapOrder = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.cancelScrapOrder(id);
+        const scrapList = await inventoryService.listScrapOrders();
+        setScrapOrders(scrapList || []);
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to cancel scrap order via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(SCRAP_ORDERS_STORAGE_KEY, companyId);
     const updated = scrapOrders.map(s =>
@@ -1801,15 +1866,16 @@ export function InventoryProvider({ children }) {
     );
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setScrapOrders(updated);
-  }, [scrapOrders, activeCompany]);
+  }, [scrapOrders, activeCompany, backendAvailable]);
 
   const getScrapSummary = useCallback(() => {
     const completed = scrapOrders.filter(s => s.status === 'completed');
-    const totalCost = completed.reduce((sum, s) => sum + (s.cost_impact || 0), 0);
-    const totalQuantity = completed.reduce((sum, s) => sum + s.quantity, 0);
+    const totalCost = completed.reduce((sum, s) => sum + (s.total_cost || s.cost_impact || 0), 0);
+    const totalQuantity = completed.reduce((sum, s) => sum + (s.quantity || 0), 0);
 
     const byReason = completed.reduce((acc, s) => {
-      acc[s.reason] = (acc[s.reason] || 0) + s.quantity;
+      const reason = s.reason || 'other';
+      acc[reason] = (acc[reason] || 0) + (s.quantity || 0);
       return acc;
     }, {});
 
