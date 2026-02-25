@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/components/ui/use-toast";
 import apiClient from '@/api/client';
 import { hrService } from "@/api/services/hr";
-import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search } from 'lucide-react';
+import { Calendar, Receipt, Clock, MapPin, Wallet, Building2, Users, Plus, Check, X as XIcon, Search, Pencil, Trash2, FolderTree } from 'lucide-react';
 
 // PAY_PERIODS is defined inside component to use translations
 
@@ -25,6 +25,16 @@ const LEAVE_TYPE_TRANSLATION_KEYS = {
   paternity: 'paternity_leave',
 };
 
+// Map leave type names to translation keys (fallback when id is missing)
+const LEAVE_TYPE_NAME_KEYS = {
+  'Annual Leave': 'annual_leave',
+  'Sick Leave': 'sick_leave',
+  'Personal Leave': 'personal_leave',
+  'Unpaid Leave': 'unpaid_leave',
+  'Maternity Leave': 'maternity_leave',
+  'Paternity Leave': 'paternity_leave',
+};
+
 // Map expense category IDs to translation keys
 const EXPENSE_CATEGORY_TRANSLATION_KEYS = {
   travel: 'travel',
@@ -32,6 +42,15 @@ const EXPENSE_CATEGORY_TRANSLATION_KEYS = {
   supplies: 'office_supplies',
   equipment: 'equipment',
   other: 'other',
+};
+
+// Map expense category names to translation keys (fallback when id is missing)
+const EXPENSE_CATEGORY_NAME_KEYS = {
+  'Travel': 'travel',
+  'Meals': 'meals',
+  'Office Supplies': 'office_supplies',
+  'Equipment': 'equipment',
+  'Other': 'other',
 };
 
 export default function HRSettings() {
@@ -47,6 +66,98 @@ export default function HRSettings() {
     { value: 'bi-weekly', label: t('bi_weekly') },
     { value: 'monthly', label: t('monthly') }
   ];
+
+  // Department management state
+  const [departments, setDepartments] = useState([]);
+  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [editingDept, setEditingDept] = useState(null);
+  const [deptForm, setDeptForm] = useState({ code: '', name: '' });
+
+  // Load departments
+  const loadDepartments = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/departments');
+      setDepartments(response.data?.data || []);
+    } catch (error) {
+      console.error("Error loading departments:", error);
+    }
+  }, []);
+
+  // Save department (create or update)
+  const handleSaveDepartment = async () => {
+    if (!deptForm.code || !deptForm.name) {
+      toast({
+        title: t('error') || 'Xato',
+        description: t('fill_required_fields') || "Majburiy maydonlarni to'ldiring",
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      if (editingDept) {
+        await apiClient.put(`/departments/${editingDept.id}`, {
+          code: deptForm.code,
+          name: deptForm.name,
+        });
+      } else {
+        await apiClient.post('/departments', {
+          code: deptForm.code,
+          name: deptForm.name,
+        });
+      }
+
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: editingDept
+          ? (t('department_updated') || "Bo'lim yangilandi")
+          : (t('department_created') || "Bo'lim yaratildi"),
+      });
+
+      setShowDeptModal(false);
+      setEditingDept(null);
+      setDeptForm({ code: '', name: '' });
+      await loadDepartments();
+    } catch (error) {
+      console.error("Error saving department:", error);
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || t('failed_to_save_department') || "Bo'limni saqlashda xatolik",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Delete department
+  const handleDeleteDepartment = async (deptId) => {
+    try {
+      await apiClient.delete(`/departments/${deptId}`);
+      toast({
+        title: t('success') || 'Muvaffaqiyat',
+        description: t('department_deleted') || "Bo'lim o'chirildi",
+      });
+      await loadDepartments();
+    } catch (error) {
+      console.error("Error deleting department:", error);
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || t('failed_to_delete_department') || "Bo'limni o'chirishda xatolik",
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Open add/edit modal
+  const handleOpenDeptModal = (dept = null) => {
+    if (dept) {
+      setEditingDept(dept);
+      setDeptForm({ code: dept.code, name: dept.name });
+    } else {
+      setEditingDept(null);
+      setDeptForm({ code: '', name: '' });
+    }
+    setShowDeptModal(true);
+  };
 
   // Employee company assignment state
   const [employees, setEmployees] = useState([]);
@@ -196,10 +307,11 @@ export default function HRSettings() {
     }
   }, [employeeSearchQuery, employees]);
 
-  // Load employees on mount
+  // Load data on mount
   useEffect(() => {
     loadEmployees();
-  }, [loadEmployees]);
+    loadDepartments();
+  }, [loadEmployees, loadDepartments]);
 
   return (
     <div className="space-y-4">
@@ -225,7 +337,7 @@ export default function HRSettings() {
             <div key={leaveType.id} className="p-4 bg-slate-50 rounded-lg">
               <div className="flex items-center justify-between mb-3">
                 <span className="font-medium text-slate-800">
-                  {t(LEAVE_TYPE_TRANSLATION_KEYS[leaveType.id]) || leaveType.name}
+                  {t(LEAVE_TYPE_TRANSLATION_KEYS[leaveType.id] || LEAVE_TYPE_NAME_KEYS[leaveType.name] || leaveType.name)}
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -301,7 +413,7 @@ export default function HRSettings() {
           {(hr.expense?.categories || []).map((category, index) => (
             <div key={category.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
               <span className="text-sm font-medium">
-                {t(EXPENSE_CATEGORY_TRANSLATION_KEYS[category.id]) || category.name}
+                {t(EXPENSE_CATEGORY_TRANSLATION_KEYS[category.id] || EXPENSE_CATEGORY_NAME_KEYS[category.name] || category.name)}
               </span>
               <div className="flex items-center gap-2">
                 <input
@@ -422,6 +534,114 @@ export default function HRSettings() {
           </SettingsField>
         </SettingsRow>
       </SettingsSection>
+
+      {/* Departments */}
+      <SettingsSection
+        title={t('departments') || "Bo'limlar"}
+        description={t('departments_desc') || "Bo'limlarni yaratish va boshqarish"}
+        icon={FolderTree}
+      >
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              onClick={() => handleOpenDeptModal()}
+              className="gap-2 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+            >
+              <Plus className="w-4 h-4" />
+              {t('add_department') || "Bo'lim qo'shish"}
+            </Button>
+          </div>
+
+          {departments.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-4">
+              {t('no_departments') || "Bo'limlar topilmadi"}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {departments.map((dept) => (
+                <div
+                  key={dept.id}
+                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {dept.name?.charAt(0)?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-800">{dept.name}</p>
+                      <p className="text-sm text-slate-500">{dept.code}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenDeptModal(dept)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleDeleteDepartment(dept.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </SettingsSection>
+
+      {/* Department Add/Edit Modal */}
+      <Dialog open={showDeptModal} onOpenChange={setShowDeptModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderTree className="w-5 h-5" />
+              {editingDept
+                ? (t('edit_department') || "Bo'limni tahrirlash")
+                : (t('add_department') || "Bo'lim qo'shish")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">
+                {t('code') || 'Kod'} *
+              </label>
+              <Input
+                value={deptForm.code}
+                onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })}
+                placeholder={t('enter_code') || 'Kodni kiriting'}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">
+                {t('name') || 'Nomi'} *
+              </label>
+              <Input
+                value={deptForm.name}
+                onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+                placeholder={t('enter_name') || 'Nomini kiriting'}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowDeptModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button
+                onClick={handleSaveDepartment}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                {editingDept ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Employee Company Assignments */}
       <SettingsSection

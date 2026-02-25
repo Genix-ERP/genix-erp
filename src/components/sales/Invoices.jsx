@@ -136,6 +136,8 @@ export default function Invoices() {
     amount: 0,
     method: "cash",
     date: new Date().toISOString().split("T")[0],
+    write_off: false,
+    write_off_amount: 0,
   });
 
   const filteredInvoices = useMemo(() => {
@@ -369,7 +371,8 @@ export default function Invoices() {
         selectedInvoice.id,
         paymentData.amount,
         paymentData.method,
-        paymentData.date
+        paymentData.date,
+        paymentData.write_off ? paymentData.write_off_amount : 0
       );
       setShowPaymentModal(false);
       setSelectedInvoice(null);
@@ -989,6 +992,33 @@ export default function Invoices() {
                   }
                 />
               </div>
+
+              {paymentData.amount > 0 && paymentData.amount < (selectedInvoice?.balance || 0) && (
+                <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="write-off-check"
+                    checked={paymentData.write_off}
+                    onChange={(e) =>
+                      setPaymentData({
+                        ...paymentData,
+                        write_off: e.target.checked,
+                        write_off_amount: e.target.checked
+                          ? (selectedInvoice?.balance || 0) - paymentData.amount
+                          : 0,
+                      })
+                    }
+                    className="rounded border-yellow-400"
+                  />
+                  <label htmlFor="write-off-check" className="text-sm text-yellow-800 cursor-pointer">
+                    {t('write_off_difference') || 'Write off'}{' '}
+                    <span className="font-semibold">
+                      {formatCurrency((selectedInvoice?.balance || 0) - paymentData.amount)}
+                    </span>{' '}
+                    {t('payment_difference') || 'difference'}
+                  </label>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>{t('payment_method')}</Label>
