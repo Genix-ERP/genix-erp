@@ -194,8 +194,10 @@ export default function ReorderRules() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(rule => {
         const product = products.find(p => p.id === rule.product_id);
-        return product?.name.toLowerCase().includes(query) ||
-               product?.code?.toLowerCase().includes(query);
+        const productName = rule.product_name || product?.name || '';
+        const productCode = rule.product_code || product?.code || '';
+        return productName.toLowerCase().includes(query) ||
+               productCode.toLowerCase().includes(query);
       });
     }
 
@@ -301,13 +303,15 @@ export default function ReorderRules() {
     await updateReorderRule(rule.id, { is_active: !rule.is_active });
   };
 
-  const getProductName = (productId) => {
+  const getProductName = (productId, rule) => {
+    if (rule?.product_name) return rule.product_name;
     const product = products.find(p => p.id === productId);
     return product?.name || 'Unknown';
   };
 
-  const getWarehouseName = (warehouseId) => {
+  const getWarehouseName = (warehouseId, rule) => {
     if (!warehouseId) return t('all_warehouses') || 'All Warehouses';
+    if (rule?.warehouse_name) return rule.warehouse_name;
     const warehouse = warehouses.find(w => w.id === warehouseId);
     return warehouse?.name || 'Unknown';
   };
@@ -475,14 +479,14 @@ export default function ReorderRules() {
                     </TableRow>
                   ) : (
                     filteredRules.map((rule) => {
-                      const currentStock = getCurrentStock(rule.product_id, rule.warehouse_id);
+                      const currentStock = rule.current_stock ?? getCurrentStock(rule.product_id, rule.warehouse_id);
                       const isLow = currentStock <= rule.min_qty;
                       return (
                         <TableRow key={rule.id}>
                           <TableCell className="font-medium">
-                            {getProductName(rule.product_id)}
+                            {getProductName(rule.product_id, rule)}
                           </TableCell>
-                          <TableCell>{getWarehouseName(rule.warehouse_id)}</TableCell>
+                          <TableCell>{getWarehouseName(rule.warehouse_id, rule)}</TableCell>
                           <TableCell className="text-right">{rule.min_qty}</TableCell>
                           <TableCell className="text-right">{rule.max_qty}</TableCell>
                           <TableCell className="text-right">{rule.reorder_qty}</TableCell>
@@ -1005,9 +1009,9 @@ export default function ReorderRules() {
             </p>
             {ruleToDelete && (
               <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                <p className="font-medium">{getProductName(ruleToDelete.product_id)}</p>
+                <p className="font-medium">{getProductName(ruleToDelete.product_id, ruleToDelete)}</p>
                 <p className="text-sm text-slate-500">
-                  {t('warehouse')}: {getWarehouseName(ruleToDelete.warehouse_id)}
+                  {t('warehouse')}: {getWarehouseName(ruleToDelete.warehouse_id, ruleToDelete)}
                 </p>
               </div>
             )}

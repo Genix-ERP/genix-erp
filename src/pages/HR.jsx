@@ -811,10 +811,10 @@ Only return the JSON, no other text.`;
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card><CardContent className="p-6"><div className="flex justify-between items-center"><Users className="w-8 h-8 text-[var(--genix-blue)]" /><div><p className="text-2xl font-bold">{metrics.totalEmployees}</p><p className="text-sm text-slate-500">{t('total_employees')}</p></div></div></CardContent></Card>
-          <Card><CardContent className="p-6"><div className="flex justify-between items-center"><UserCheck className="w-8 h-8 text-green-600" /><div><p className="text-2xl font-bold">{metrics.activeEmployees}</p><p className="text-sm text-slate-500">{t('active_employees')}</p></div></div></CardContent></Card>
-          <Card><CardContent className="p-6"><div className="flex justify-between items-center"><UserX className="w-8 h-8 text-red-600" /><div><p className="text-2xl font-bold">{metrics.highTurnoverRisk}</p><p className="text-sm text-slate-500">{t('high_turnover_risk')}</p></div></div></CardContent></Card>
-          <Card><CardContent className="p-6"><div className="flex justify-between items-center"><TrendingUp className="w-8 h-8 text-purple-600" /><div><p className="text-2xl font-bold">{metrics.avgPerformance}/5</p><p className="text-sm text-slate-500">{t('avg_performance')}</p></div></div></CardContent></Card>
+          <Card><CardContent className="p-6 flex items-start gap-4"><Users className="w-8 h-8 text-[var(--genix-blue)] shrink-0" /><div><p className="text-2xl font-bold">{metrics.totalEmployees}</p><p className="text-sm text-slate-500">{t('total_employees')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-6 flex items-start gap-4"><UserCheck className="w-8 h-8 text-green-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.activeEmployees}</p><p className="text-sm text-slate-500">{t('active_employees')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-6 flex items-start gap-4"><UserX className="w-8 h-8 text-red-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.highTurnoverRisk}</p><p className="text-sm text-slate-500">{t('high_turnover_risk')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-6 flex items-start gap-4"><TrendingUp className="w-8 h-8 text-purple-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.avgPerformance}/5</p><p className="text-sm text-slate-500">{t('avg_performance')}</p></div></CardContent></Card>
         </div>
 
         {/* Filters and Actions */}
