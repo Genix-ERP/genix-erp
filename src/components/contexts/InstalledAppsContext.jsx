@@ -39,43 +39,34 @@ export function InstalledAppsProvider({ children }) {
       return;
     }
 
-    setIsLoading(true);
-
+    // Load from localStorage immediately (no blocking)
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(STORAGE_KEY, companyId);
     try {
-      // Check if backend is available
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const apps = JSON.parse(stored);
+        const activeApps = (apps || []).filter(app => app.status === 'active');
+        if (activeApps.length > 0) {
+          setInstalledApps(activeApps);
+          setIsLoading(false);
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    // Then fetch from backend in background (non-blocking update)
+    try {
       const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
 
       if (isAvailable) {
-        // Load from backend
         const apps = await installedAppsService.getInstalledApps();
         const activeApps = (apps || []).filter(app => app.status === 'active');
         setInstalledApps(activeApps);
-
-        // Also save to localStorage as cache
-        const companyId = activeCompany?.id;
-        const storageKey = getStorageKey(STORAGE_KEY, companyId);
         localStorage.setItem(storageKey, JSON.stringify(activeApps));
-      } else {
-        // Fallback to localStorage
-        const companyId = activeCompany?.id;
-        const storageKey = getStorageKey(STORAGE_KEY, companyId);
-        const stored = localStorage.getItem(storageKey);
-        const apps = stored ? JSON.parse(stored) : [];
-        setInstalledApps(apps.filter(app => app.status === 'active'));
       }
     } catch (error) {
-      console.error('Error loading installed apps:', error);
-      // Fallback to localStorage on error
-      try {
-        const companyId = activeCompany?.id;
-        const storageKey = getStorageKey(STORAGE_KEY, companyId);
-        const stored = localStorage.getItem(storageKey);
-        const apps = stored ? JSON.parse(stored) : [];
-        setInstalledApps(apps.filter(app => app.status === 'active'));
-      } catch (e) {
-        setInstalledApps([]);
-      }
+      console.error('Error loading installed apps from backend:', error);
     }
 
     setIsLoading(false);
