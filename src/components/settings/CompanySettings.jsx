@@ -28,7 +28,9 @@ import {
   MoreHorizontal,
   Upload,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronsUpDown,
+  Check
 } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
@@ -83,6 +85,7 @@ export default function CompanySettings() {
     activity_status: "active", // Faoliyat holati
     business_group: "",   // Guruh/Klaster
     intercompany_relations: "", // Intercompany aloqa
+    intercompany_vendor_ids: [],
     director_name: "",    // Direktor F.I.O.
     director_phone: "",   // Direktor telefon
     phone: "",            // Kompaniya telefon
@@ -105,6 +108,7 @@ export default function CompanySettings() {
     activity_status: "active",
     business_group: "",
     intercompany_relations: "",
+    intercompany_vendor_ids: [],
     director_name: "",
     director_phone: "",
     phone: "",
@@ -116,6 +120,8 @@ export default function CompanySettings() {
   });
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [editVendorDropdownOpen, setEditVendorDropdownOpen] = useState(false);
+  const [addVendorDropdownOpen, setAddVendorDropdownOpen] = useState(false);
 
   const limits = getPlanLimits();
   const maxCompanies = limits.maxCompanies || 1;
@@ -152,6 +158,7 @@ export default function CompanySettings() {
       activity_status: company.activity_status || "active",
       business_group: company.business_group || "",
       intercompany_relations: company.intercompany_relations || "",
+      intercompany_vendor_ids: company.intercompany_vendor_ids || [],
       director_name: company.director_name || "",
       director_phone: company.director_phone || "",
       phone: company.phone || "",
@@ -175,7 +182,7 @@ export default function CompanySettings() {
         setError(result.message || 'Xatolik yuz berdi');
         return;
       }
-      toast({ variant: "success", title: "Muvaffaqiyatli o'zgartirildi", description: formData.company_name });
+      toast({ variant: "success", title: t('company_updated') || "Muvaffaqiyatli o'zgartirildi", description: formData.company_name });
       setShowEditForm(false);
       setEditingCompany(null);
     } catch (err) {
@@ -197,7 +204,7 @@ export default function CompanySettings() {
       if (!result.success) {
         setError(result.message || t('error_deleting_company') || "O'chirishda xatolik");
       } else {
-        toast({ variant: "success", title: "Muvaffaqiyatli o'chirildi", description: companyToDelete.company_name });
+        toast({ variant: "success", title: t('company_deleted') || "Muvaffaqiyatli o'chirildi", description: companyToDelete.company_name });
       }
     } catch (err) {
       console.error("Error deleting company:", err);
@@ -229,6 +236,7 @@ export default function CompanySettings() {
       activity_status: "active",
       business_group: "",
       intercompany_relations: "",
+      intercompany_vendor_ids: [],
       director_name: "",
       director_phone: "",
       phone: "",
@@ -257,7 +265,7 @@ export default function CompanySettings() {
         setAddError(result.message || 'Xatolik yuz berdi');
         return;
       }
-      toast({ variant: "success", title: "Muvaffaqiyatli qo'shildi", description: addFormData.company_name });
+      toast({ variant: "success", title: t('company_added') || "Muvaffaqiyatli qo'shildi", description: addFormData.company_name });
       setShowAddForm(false);
     } catch (err) {
       console.error("Error adding company:", err);
@@ -647,12 +655,13 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN (STIR)</Label>
+                  <Label>INN (STIR) *</Label>
                   <Input
                     value={formData.tax_id}
                     onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
                     placeholder="123456789"
                     maxLength={9}
+                    required
                   />
                 </div>
 
@@ -782,14 +791,54 @@ export default function CompanySettings() {
                   />
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('intercompany_relations') || 'Intercompany aloqa'}</Label>
-                  <Input
-                    value={formData.intercompany_relations}
-                    onChange={(e) => setFormData({ ...formData, intercompany_relations: e.target.value })}
-                    placeholder={t('intercompany_placeholder') || "Bosh kompaniya yoki bog'liq kompaniyalar"}
-                  />
-                </div>
+                {companies.filter(c => c.id !== editingCompany?.id).length > 0 && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>{t('intercompany_vendors') || 'Intercompany vendorlar'}</Label>
+                    <p className="text-xs text-slate-500">{t('intercompany_vendors_desc') || "Tanlangan kompaniyalarda vendor va mijoz sifatida avtomatik yaratiladi"}</p>
+                    <div className="relative">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between font-normal"
+                        onClick={() => setEditVendorDropdownOpen(!editVendorDropdownOpen)}
+                      >
+                        <span className="truncate">
+                          {formData.intercompany_vendor_ids.length > 0
+                            ? companies.filter(c => formData.intercompany_vendor_ids.includes(c.id)).map(c => c.company_name).join(', ')
+                            : t('select_companies') || 'Kompaniyalarni tanlang'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                      {editVendorDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white p-2 shadow-md">
+                          <div className="max-h-[200px] overflow-y-auto space-y-1">
+                            {companies.filter(c => c.id !== editingCompany?.id).map(company => {
+                              const isSelected = formData.intercompany_vendor_ids.includes(company.id);
+                              return (
+                                <div
+                                  key={company.id}
+                                  className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-slate-100"
+                                  onClick={() => {
+                                    const ids = isSelected
+                                      ? formData.intercompany_vendor_ids.filter(id => id !== company.id)
+                                      : [...formData.intercompany_vendor_ids, company.id];
+                                    setFormData({ ...formData, intercompany_vendor_ids: ids });
+                                  }}
+                                >
+                                  <div className="w-4 h-4 flex items-center justify-center">
+                                    {isSelected && <Check className="h-4 w-4" />}
+                                  </div>
+                                  <span className="text-sm">{company.company_name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
 
@@ -923,12 +972,13 @@ export default function CompanySettings() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>INN (STIR)</Label>
+                  <Label>INN (STIR) *</Label>
                   <Input
                     value={addFormData.tax_id}
                     onChange={(e) => setAddFormData({ ...addFormData, tax_id: e.target.value })}
                     placeholder="123456789"
                     maxLength={9}
+                    required
                   />
                 </div>
 
@@ -1058,14 +1108,53 @@ export default function CompanySettings() {
                   />
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('intercompany_relations') || 'Intercompany aloqa'}</Label>
-                  <Input
-                    value={addFormData.intercompany_relations}
-                    onChange={(e) => setAddFormData({ ...addFormData, intercompany_relations: e.target.value })}
-                    placeholder={t('intercompany_placeholder') || "Bosh kompaniya yoki bog'liq kompaniyalar"}
-                  />
-                </div>
+                {companies.length > 0 && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>{t('intercompany_vendors') || 'Intercompany vendorlar'}</Label>
+                    <p className="text-xs text-slate-500">{t('intercompany_vendors_desc') || "Tanlangan kompaniyalarda vendor va mijoz sifatida avtomatik yaratiladi"}</p>
+                    <div className="relative">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between font-normal"
+                        onClick={() => setAddVendorDropdownOpen(!addVendorDropdownOpen)}
+                      >
+                        <span className="truncate">
+                          {addFormData.intercompany_vendor_ids.length > 0
+                            ? companies.filter(c => addFormData.intercompany_vendor_ids.includes(c.id)).map(c => c.company_name).join(', ')
+                            : t('select_companies') || 'Kompaniyalarni tanlang'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                      {addVendorDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white p-2 shadow-md">
+                          <div className="max-h-[200px] overflow-y-auto space-y-1">
+                            {companies.map(company => {
+                              const isSelected = addFormData.intercompany_vendor_ids.includes(company.id);
+                              return (
+                                <div
+                                  key={company.id}
+                                  className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-slate-100"
+                                  onClick={() => {
+                                    const ids = isSelected
+                                      ? addFormData.intercompany_vendor_ids.filter(id => id !== company.id)
+                                      : [...addFormData.intercompany_vendor_ids, company.id];
+                                    setAddFormData({ ...addFormData, intercompany_vendor_ids: ids });
+                                  }}
+                                >
+                                  <div className="w-4 h-4 flex items-center justify-center">
+                                    {isSelected && <Check className="h-4 w-4" />}
+                                  </div>
+                                  <span className="text-sm">{company.company_name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

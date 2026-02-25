@@ -429,14 +429,14 @@ export default function ScrapManagement() {
                         <TableCell className="font-mono font-medium">
                           {order.scrap_number}
                         </TableCell>
-                        <TableCell>{getProductName(order.product_id)}</TableCell>
-                        <TableCell>{getWarehouseName(order.warehouse_id)}</TableCell>
+                        <TableCell>{order.product_name || getProductName(order.product_id)}</TableCell>
+                        <TableCell>{order.warehouse_name || getWarehouseName(order.warehouse_id)}</TableCell>
                         <TableCell className="text-right">{order.quantity}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{getReasonLabel(order.reason)}</Badge>
                         </TableCell>
                         <TableCell className="text-right text-red-600">
-                          {formatCurrency(order.cost_impact || 0)}
+                          {formatCurrency(order.total_cost || order.cost_impact || 0)}
                         </TableCell>
                         <TableCell>{order.scrap_date}</TableCell>
                         <TableCell>{getStatusBadge(order.status)}</TableCell>
@@ -735,11 +735,11 @@ export default function ScrapManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs text-slate-500">{t('product') || 'Product'}</Label>
-                  <p className="font-medium">{getProductName(viewingScrap.product_id)}</p>
+                  <p className="font-medium">{viewingScrap.product_name || getProductName(viewingScrap.product_id)}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500">{t('warehouse') || 'Warehouse'}</Label>
-                  <p className="font-medium">{getWarehouseName(viewingScrap.warehouse_id)}</p>
+                  <p className="font-medium">{viewingScrap.warehouse_name || getWarehouseName(viewingScrap.warehouse_id)}</p>
                 </div>
               </div>
 
@@ -750,7 +750,7 @@ export default function ScrapManagement() {
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500">{t('cost_impact') || 'Cost Impact'}</Label>
-                  <p className="font-medium text-red-600">{formatCurrency(viewingScrap.cost_impact || 0)}</p>
+                  <p className="font-medium text-red-600">{formatCurrency(viewingScrap.total_cost || viewingScrap.cost_impact || 0)}</p>
                 </div>
               </div>
 
