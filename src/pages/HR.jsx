@@ -13,8 +13,6 @@ import {
   Users,
   Search,
   Plus,
-  TrendingUp,
-  TrendingDown,
   UserCheck,
   UserX,
   Briefcase,
@@ -81,7 +79,7 @@ export default function HR() {
   const { isAppInstalled } = useInstalledApps();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { getEmployeePermissions, updateEmployeePermissions } = useEmployeePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -172,7 +170,7 @@ export default function HR() {
   const [newEmployee, setNewEmployee] = useState({
     full_name: '',
     email: '',
-    phone: '',
+    phone: '+998',
     job_title: '',
     department: '',
     hire_date: new Date().toISOString().split('T')[0],
@@ -185,6 +183,7 @@ export default function HR() {
   });
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [roles, setRoles] = useState([]);
   const generatePassword = () => {
     const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
     const digits = '23456789';
@@ -364,7 +363,7 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
-    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email) {
+    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
         description: t('required_fields_error') || "Ism, lavozim va email to'ldirilishi shart",
@@ -419,6 +418,20 @@ Only return the JSON, no other text.`;
             });
           } catch (orgErr) {
             console.error("Error assigning organization:", orgErr);
+          }
+        }
+      }
+
+      // Assign role to employee (auto-applies permissions)
+      if (newEmployee.job_title && createdEmployee?.id) {
+        const selectedRole = roles.find(r => r.name === newEmployee.job_title);
+        if (selectedRole) {
+          try {
+            await apiClient.post(`/roles/${selectedRole.id}/assign`, {
+              employee_id: createdEmployee.id,
+            });
+          } catch (roleErr) {
+            console.error("Error assigning role:", roleErr);
           }
         }
       }
@@ -526,6 +539,20 @@ Only return the JSON, no other text.`;
         }
       }
 
+      // Assign role if changed (auto-applies permissions)
+      if (selectedEmployee.job_title) {
+        const selectedRole = roles.find(r => r.name === selectedEmployee.job_title);
+        if (selectedRole) {
+          try {
+            await apiClient.post(`/roles/${selectedRole.id}/assign`, {
+              employee_id: selectedEmployee.id,
+            });
+          } catch (roleErr) {
+            console.error("Error assigning role:", roleErr);
+          }
+        }
+      }
+
       setShowEditModal(false);
       setSelectedEmployee(null);
       await loadEmployees();
@@ -541,6 +568,7 @@ Only return the JSON, no other text.`;
     setSelectedEmployee(employee);
     setShowDeleteDialog(true);
   };
+
 
   // Local state for editing permissions before saving
   const [editingPermissions, setEditingPermissions] = useState({});
@@ -773,6 +801,10 @@ Only return the JSON, no other text.`;
     apiClient.get('/departments').then(res => {
       setDepartments(res.data?.data || res.data || []);
     }).catch(() => {});
+    // Load roles
+    apiClient.get('/roles').then(res => {
+      setRoles(res.data?.data || res.data || []);
+    }).catch(() => {});
   }, [loadEmployees]);
 
   // Generate insights when employees data changes
@@ -799,22 +831,18 @@ Only return the JSON, no other text.`;
   const metrics = {
     totalEmployees: employees.length,
     activeEmployees: employees.filter(e => e.status === 'active').length,
-    highTurnoverRisk: employees.filter(e => e.turnover_risk === 'high').length,
-    avgPerformance: (employees.length > 0 ? employees.reduce((sum, e) => sum + (e.performance_score || 3), 0) / employees.length : 0).toFixed(1)
+    totalSalaries: employees.filter(e => e.status === 'active').reduce((sum, e) => sum + (parseFloat(e.salary) || 0), 0),
   };
-
-  const getRiskColor = (risk) => ({ low: "text-green-600", medium: "text-yellow-600", high: "text-red-600" }[risk] || "text-slate-600");
 
   return (
     <div className="p-6 md:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-8">
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card><CardContent className="p-6 flex items-start gap-4"><Users className="w-8 h-8 text-[var(--genix-blue)] shrink-0" /><div><p className="text-2xl font-bold">{metrics.totalEmployees}</p><p className="text-sm text-slate-500">{t('total_employees')}</p></div></CardContent></Card>
           <Card><CardContent className="p-6 flex items-start gap-4"><UserCheck className="w-8 h-8 text-green-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.activeEmployees}</p><p className="text-sm text-slate-500">{t('active_employees')}</p></div></CardContent></Card>
-          <Card><CardContent className="p-6 flex items-start gap-4"><UserX className="w-8 h-8 text-red-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.highTurnoverRisk}</p><p className="text-sm text-slate-500">{t('high_turnover_risk')}</p></div></CardContent></Card>
-          <Card><CardContent className="p-6 flex items-start gap-4"><TrendingUp className="w-8 h-8 text-purple-600 shrink-0" /><div><p className="text-2xl font-bold">{metrics.avgPerformance}/5</p><p className="text-sm text-slate-500">{t('avg_performance')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-6 flex items-start gap-4"><DollarSign className="w-8 h-8 text-emerald-600 shrink-0" /><div><p className="text-2xl font-bold">{formatCurrencyCompact(metrics.totalSalaries)}</p><p className="text-sm text-slate-500">{t('total_salaries') || 'Total Salaries'}</p></div></CardContent></Card>
         </div>
 
         {/* Filters and Actions */}
@@ -869,8 +897,6 @@ Only return the JSON, no other text.`;
                   <TableHead>{t('table_header_employee')}</TableHead>
                   <TableHead>{t('table_header_department')}</TableHead>
                   <TableHead>{t('table_header_hire_date')}</TableHead>
-                  <TableHead>{t('table_header_performance')}</TableHead>
-                  <TableHead>{t('table_header_turnover_risk')}</TableHead>
                   <TableHead>{t('table_header_status')}</TableHead>
                   <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
                 </TableRow>
@@ -886,9 +912,16 @@ Only return the JSON, no other text.`;
                     </TableCell>
                     <TableCell><Badge variant="outline">{e.department || '-'}</Badge></TableCell>
                     <TableCell>{new Date(e.hire_date).toLocaleDateString()}</TableCell>
-                    <TableCell>{e.performance_score}/5</TableCell>
-                    <TableCell className={getRiskColor(e.turnover_risk)}>{t(e.turnover_risk)}</TableCell>
-                    <TableCell><Badge>{t(e.status)}</Badge></TableCell>
+                    <TableCell>
+                      <Badge className={
+                        e.status === 'active' ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-100' :
+                        e.status === 'on_leave' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100' :
+                        e.status === 'terminated' ? 'bg-red-100 text-red-700 border-red-200 hover:bg-red-100' :
+                        ''
+                      } variant="outline">
+                        {t(e.status)}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -901,25 +934,25 @@ Only return the JSON, no other text.`;
                             <Eye className="mr-2 h-4 w-4" />
                             {t('view') || 'View Details'}
                           </DropdownMenuItem>
-                          {canUpdate(MODULES.HR) && (
+                          {e.status !== 'terminated' && canUpdate(MODULES.HR) && (
                             <DropdownMenuItem onClick={() => handleEditEmployee(e)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               {t('edit') || 'Edit'}
                             </DropdownMenuItem>
                           )}
-                          {canUpdate(MODULES.HR) && (
+                          {e.status !== 'terminated' && canUpdate(MODULES.HR) && (
                             <DropdownMenuItem onClick={() => handleManagePermissions(e)}>
                               <Shield className="mr-2 h-4 w-4" />
                               {t('manage_permissions') || 'Manage Permissions'}
                             </DropdownMenuItem>
                           )}
-                          {e.email && (
+                          {e.status !== 'terminated' && e.email && (
                             <DropdownMenuItem onClick={() => handleSendCredentials(e, 'email')}>
                               <Mail className="mr-2 h-4 w-4" />
                               {t('send_email') || 'Send email'}
                             </DropdownMenuItem>
                           )}
-                          {e.phone && (
+                          {e.status !== 'terminated' && e.phone && (
                             <DropdownMenuItem onClick={() => handleSendCredentials(e, 'phone')}>
                               <Send className="mr-2 h-4 w-4" />
                               {t('send_sms') || 'Send SMS'}
@@ -999,7 +1032,7 @@ Only return the JSON, no other text.`;
               </div>
 
               <div className="space-y-2">
-                <Label>{t('phone')}</Label>
+                <Label>{t('phone')} *</Label>
                 <Input
                   value={newEmployee.phone}
                   onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
@@ -1007,16 +1040,21 @@ Only return the JSON, no other text.`;
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>{t('job_title')} *</Label>
-                <Input
-                  value={newEmployee.job_title}
-                  onChange={e => setNewEmployee({...newEmployee, job_title: e.target.value})}
-                  placeholder={t('enter_job_title')}
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('employee_role') || t('role') || 'Role'} *</Label>
+                  <Select
+                    value={newEmployee.job_title}
+                    onValueChange={value => setNewEmployee({...newEmployee, job_title: value})}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_role') || "Rolni tanlang"} /></SelectTrigger>
+                    <SelectContent>
+                      {roles.map(role => (
+                        <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>{t('department')}</Label>
                   <Select
@@ -1061,7 +1099,6 @@ Only return the JSON, no other text.`;
                     <SelectContent>
                       <SelectItem value="active">{t('active')}</SelectItem>
                       <SelectItem value="on_leave">{t('on_leave')}</SelectItem>
-                      <SelectItem value="terminated">{t('terminated')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1111,7 +1148,7 @@ Only return the JSON, no other text.`;
                 </Button>
                 <Button
                   onClick={handleAddEmployee}
-                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email}
+                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                 >
                   {isSubmitting ? t('saving') : t('add_employee')}
@@ -1176,38 +1213,10 @@ Only return the JSON, no other text.`;
                     <p className="font-medium">{formatCurrency(parseFloat(selectedEmployee.salary || 0))}</p>
                   </div>
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-slate-500 text-sm">
-                      <TrendingUp className="w-4 h-4" />
-                      {t('performance') || 'Performance'}
-                    </div>
-                    <p className="font-medium">{selectedEmployee.performance_score}/5</p>
-                  </div>
-                  <div className="space-y-1">
                     <div className="text-slate-500 text-sm">{t('status') || 'Status'}</div>
                     <Badge>{t(selectedEmployee.status)}</Badge>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-slate-500 text-sm">
-                      <Brain className="w-4 h-4" />
-                      {t('turnover_risk') || 'Turnover Risk'}
-                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200">AI</Badge>
-                    </div>
-                    <span className={`font-medium ${getRiskColor(selectedEmployee.turnover_risk)}`}>
-                      {t(selectedEmployee.turnover_risk)}
-                    </span>
-                  </div>
                 </div>
-
-                {/* AI Risk Reason */}
-                {selectedEmployee.risk_reason && (
-                  <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
-                    <div className="flex items-center gap-2 text-purple-700 text-sm font-medium mb-1">
-                      <Brain className="w-4 h-4" />
-                      AI Risk Assessment
-                    </div>
-                    <p className="text-sm text-purple-600">{selectedEmployee.risk_reason}</p>
-                  </div>
-                )}
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
                   <Button variant="outline" onClick={() => setShowViewModal(false)}>
@@ -1268,16 +1277,21 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>{t('job_title')} *</Label>
-                  <Input
-                    value={selectedEmployee.job_title}
-                    onChange={e => setSelectedEmployee({...selectedEmployee, job_title: e.target.value})}
-                    placeholder={t('enter_job_title')}
-                  />
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t('employee_role') || t('role') || 'Role'} *</Label>
+                    <Select
+                      value={selectedEmployee.job_title}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, job_title: value})}
+                    >
+                      <SelectTrigger><SelectValue placeholder={t('select_role') || "Rolni tanlang"} /></SelectTrigger>
+                      <SelectContent>
+                        {roles.map(role => (
+                          <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label>{t('department')}</Label>
                     <Select
@@ -1323,39 +1337,6 @@ Only return the JSON, no other text.`;
                         <SelectItem value="active">{t('active')}</SelectItem>
                         <SelectItem value="on_leave">{t('on_leave')}</SelectItem>
                         <SelectItem value="terminated">{t('terminated')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{t('performance_score') || 'Performance Score'}</Label>
-                    <Select
-                      value={String(selectedEmployee.performance_score)}
-                      onValueChange={value => setSelectedEmployee({...selectedEmployee, performance_score: parseInt(value)})}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 - Poor</SelectItem>
-                        <SelectItem value="2">2 - Below Average</SelectItem>
-                        <SelectItem value="3">3 - Average</SelectItem>
-                        <SelectItem value="4">4 - Good</SelectItem>
-                        <SelectItem value="5">5 - Excellent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('turnover_risk') || 'Turnover Risk'}</Label>
-                    <Select
-                      value={selectedEmployee.turnover_risk}
-                      onValueChange={value => setSelectedEmployee({...selectedEmployee, turnover_risk: value})}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">{t('low') || 'Low'}</SelectItem>
-                        <SelectItem value="medium">{t('medium') || 'Medium'}</SelectItem>
-                        <SelectItem value="high">{t('high') || 'High'}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
