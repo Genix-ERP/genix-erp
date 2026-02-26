@@ -51,29 +51,33 @@ import {
 import { format, formatDistanceToNow, isToday, isTomorrow, isPast } from "date-fns";
 import { uz } from "date-fns/locale";
 import { activityService } from "@/api/services/activity";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 import { toast } from "sonner";
 
 // Activity types with icons
 const ACTIVITY_TYPES = {
-  call: { label: "Qo'ng'iroq", icon: Phone, color: "bg-blue-100 text-blue-700" },
-  meeting: { label: "Uchrashuv", icon: Video, color: "bg-purple-100 text-purple-700" },
-  email: { label: "Email", icon: Mail, color: "bg-green-100 text-green-700" },
-  todo: { label: "Vazifa", icon: ClipboardList, color: "bg-orange-100 text-orange-700" },
-  reminder: { label: "Eslatma", icon: Bell, color: "bg-yellow-100 text-yellow-700" },
+  call: { labelKey: "activity_call", icon: Phone, color: "bg-blue-100 text-blue-700" },
+  meeting: { labelKey: "activity_meeting", icon: Video, color: "bg-purple-100 text-purple-700" },
+  email: { labelKey: "email", icon: Mail, color: "bg-green-100 text-green-700" },
+  todo: { labelKey: "activity_task", icon: ClipboardList, color: "bg-orange-100 text-orange-700" },
+  reminder: { labelKey: "activity_reminder", icon: Bell, color: "bg-yellow-100 text-yellow-700" },
 };
 
 // Log activity types
 const LOG_TYPES = {
-  create: { label: "Yaratildi", color: "bg-green-100 text-green-700" },
-  update: { label: "Yangilandi", color: "bg-blue-100 text-blue-700" },
-  delete: { label: "O'chirildi", color: "bg-red-100 text-red-700" },
-  comment: { label: "Izoh", color: "bg-slate-100 text-slate-700" },
-  status_change: { label: "Holat o'zgarishi", color: "bg-purple-100 text-purple-700" },
-  assignment: { label: "Tayinlash", color: "bg-orange-100 text-orange-700" },
+  create: { labelKey: "log_created", color: "bg-green-100 text-green-700" },
+  update: { labelKey: "log_updated", color: "bg-blue-100 text-blue-700" },
+  delete: { labelKey: "log_deleted", color: "bg-red-100 text-red-700" },
+  comment: { labelKey: "comment", color: "bg-slate-100 text-slate-700" },
+  status_change: { labelKey: "log_status_change", color: "bg-purple-100 text-purple-700" },
+  assignment: { labelKey: "log_assignment", color: "bg-orange-100 text-orange-700" },
 };
 
 // Hook for activity log data
 export function useActivityLog(modelName, recordId) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [logs, setLogs] = useState([]);
   const [comments, setComments] = useState([]);
   const [scheduledActivities, setScheduledActivities] = useState([]);
@@ -144,9 +148,9 @@ export function useActivityLog(modelName, recordId) {
     try {
       await activityService.createScheduledActivity(modelName, recordId, data);
       await fetchScheduledActivities();
-      toast.success("Faoliyat rejalashtirildi");
+      toast.success(t('activity_scheduled') || "Activity scheduled");
     } catch (error) {
-      toast.error("Faoliyatni rejalashtirishda xatolik");
+      toast.error(t('activity_schedule_error') || "Error scheduling activity");
     }
   };
 
@@ -155,9 +159,9 @@ export function useActivityLog(modelName, recordId) {
       await activityService.completeScheduledActivity(activityId);
       await fetchScheduledActivities();
       await fetchLogs();
-      toast.success("Faoliyat bajarildi deb belgilandi");
+      toast.success(t('activity_completed') || "Activity completed");
     } catch (error) {
-      toast.error("Xatolik yuz berdi");
+      toast.error(t('error_occurred') || "An error occurred");
     }
   };
 
@@ -175,7 +179,10 @@ export function useActivityLog(modelName, recordId) {
 }
 
 // Comment Input Component
-function CommentInput({ onSubmit, placeholder = "Izoh yozing..." }) {
+function CommentInput({ onSubmit, placeholder }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+  const displayPlaceholder = placeholder || t('write_comment') || "Write a comment...";
   const [content, setContent] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -194,7 +201,7 @@ function CommentInput({ onSubmit, placeholder = "Izoh yozing..." }) {
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder={placeholder}
+            placeholder={displayPlaceholder}
             rows={3}
             autoFocus
           />
@@ -207,11 +214,11 @@ function CommentInput({ onSubmit, placeholder = "Izoh yozing..." }) {
                 setContent("");
               }}
             >
-              Bekor qilish
+              {t('cancel') || 'Cancel'}
             </Button>
             <Button size="sm" onClick={handleSubmit} disabled={!content.trim()}>
               <Send className="w-4 h-4 mr-1" />
-              Yuborish
+              {t('send') || 'Send'}
             </Button>
           </div>
         </div>
@@ -220,7 +227,7 @@ function CommentInput({ onSubmit, placeholder = "Izoh yozing..." }) {
           className="w-full text-left text-slate-500 hover:text-slate-700"
           onClick={() => setIsExpanded(true)}
         >
-          {placeholder}
+          {displayPlaceholder}
         </button>
       )}
     </div>
@@ -229,6 +236,8 @@ function CommentInput({ onSubmit, placeholder = "Izoh yozing..." }) {
 
 // Activity Timeline Item
 function ActivityTimelineItem({ log }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const logType = LOG_TYPES[log.activity_type] || LOG_TYPES.update;
   const [showChanges, setShowChanges] = useState(false);
 
@@ -242,9 +251,9 @@ function ActivityTimelineItem({ log }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm">{log.user_name || "Tizim"}</span>
+          <span className="font-medium text-sm">{log.user_name || t('system') || "System"}</span>
           <Badge variant="outline" className={`text-xs ${logType.color}`}>
-            {logType.label}
+            {t(logType.labelKey)}
           </Badge>
           {log.old_status && log.new_status && (
             <div className="flex items-center gap-1 text-xs text-slate-500">
@@ -270,7 +279,7 @@ function ActivityTimelineItem({ log }) {
             ) : (
               <ChevronRight className="w-3 h-3" />
             )}
-            O'zgarishlarni ko'rish
+            {t('view_changes') || 'View changes'}
           </button>
         )}
         {showChanges && hasFieldChanges && (
@@ -295,6 +304,8 @@ function ActivityTimelineItem({ log }) {
 
 // Comment Item
 function CommentItem({ comment, onDelete }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   return (
     <div className="flex gap-3 pb-4 border-b border-slate-100 last:border-0">
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-medium text-sm">
@@ -303,7 +314,7 @@ function CommentItem({ comment, onDelete }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-sm">{comment.user_name || "Foydalanuvchi"}</span>
+            <span className="font-medium text-sm">{comment.user_name || t('user') || "User"}</span>
             <span className="text-xs text-slate-400">
               {format(new Date(comment.created_at), "dd.MM.yyyy HH:mm")}
             </span>
@@ -321,7 +332,7 @@ function CommentItem({ comment, onDelete }) {
                   className="text-red-600"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
-                  O'chirish
+                  {t('delete') || 'Delete'}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -343,6 +354,8 @@ function CommentItem({ comment, onDelete }) {
 
 // Scheduled Activity Item
 function ScheduledActivityItem({ activity, onComplete }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const activityType = ACTIVITY_TYPES[activity.activity_type] || ACTIVITY_TYPES.todo;
   const Icon = activityType.icon;
 
@@ -351,8 +364,8 @@ function ScheduledActivityItem({ activity, onComplete }) {
   const isDueTomorrow = isTomorrow(new Date(activity.due_date));
 
   const getDueDateLabel = () => {
-    if (isDueToday) return "Bugun";
-    if (isDueTomorrow) return "Ertaga";
+    if (isDueToday) return t('today') || "Today";
+    if (isDueTomorrow) return t('tomorrow') || "Tomorrow";
     return format(new Date(activity.due_date), "dd.MM.yyyy");
   };
 
@@ -407,7 +420,7 @@ function ScheduledActivityItem({ activity, onComplete }) {
           {activity.status === "done" && (
             <Badge className="bg-green-100 text-green-700">
               <Check className="w-3 h-3 mr-1" />
-              Bajarildi
+              {t('done') || 'Done'}
             </Badge>
           )}
         </div>
@@ -421,6 +434,8 @@ function ScheduledActivityItem({ activity, onComplete }) {
 
 // Schedule Activity Modal
 function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [form, setForm] = useState({
     activity_type: "todo",
     summary: "",
@@ -432,7 +447,7 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
 
   const handleSubmit = () => {
     if (!form.summary || !form.due_date) {
-      toast.error("Iltimos majburiy maydonlarni to'ldiring");
+      toast.error(t('fill_required_fields') || "Please fill in required fields");
       return;
     }
     onSubmit(form);
@@ -451,11 +466,11 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Faoliyat rejalashtirish</DialogTitle>
+          <DialogTitle>{t('schedule_activity') || 'Schedule Activity'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium mb-1 block">Tur</label>
+            <label className="text-sm font-medium mb-1 block">{t('type') || 'Type'}</label>
             <Select
               value={form.activity_type}
               onValueChange={(value) => setForm({ ...form, activity_type: value })}
@@ -464,11 +479,11 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(ACTIVITY_TYPES).map(([key, { label, icon: Icon }]) => (
+                {Object.entries(ACTIVITY_TYPES).map(([key, { labelKey, icon: Icon }]) => (
                   <SelectItem key={key} value={key}>
                     <div className="flex items-center gap-2">
                       <Icon className="w-4 h-4" />
-                      {label}
+                      {t(labelKey)}
                     </div>
                   </SelectItem>
                 ))}
@@ -477,17 +492,17 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-1 block">Sarlavha *</label>
+            <label className="text-sm font-medium mb-1 block">{t('title') || 'Title'} *</label>
             <Input
               value={form.summary}
               onChange={(e) => setForm({ ...form, summary: e.target.value })}
-              placeholder="Faoliyat sarlavhasi"
+              placeholder={t('activity_title') || "Activity title"}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Sana *</label>
+              <label className="text-sm font-medium mb-1 block">{t('date') || 'Date'} *</label>
               <Input
                 type="date"
                 value={form.due_date}
@@ -495,7 +510,7 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Vaqt</label>
+              <label className="text-sm font-medium mb-1 block">{t('time') || 'Time'}</label>
               <Input
                 type="time"
                 value={form.due_time}
@@ -506,13 +521,13 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
 
           {users.length > 0 && (
             <div>
-              <label className="text-sm font-medium mb-1 block">Mas'ul</label>
+              <label className="text-sm font-medium mb-1 block">{t('assignee') || 'Assignee'}</label>
               <Select
                 value={form.assigned_to}
                 onValueChange={(value) => setForm({ ...form, assigned_to: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Tanlang..." />
+                  <SelectValue placeholder={t('select') || "Select..."} />
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((user) => (
@@ -526,22 +541,22 @@ function ScheduleActivityModal({ open, onClose, onSubmit, users = [] }) {
           )}
 
           <div>
-            <label className="text-sm font-medium mb-1 block">Izoh</label>
+            <label className="text-sm font-medium mb-1 block">{t('note') || 'Note'}</label>
             <Textarea
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
-              placeholder="Qo'shimcha ma'lumot..."
+              placeholder={t('additional_info') || "Additional information..."}
               rows={3}
             />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Bekor qilish
+            {t('cancel') || 'Cancel'}
           </Button>
           <Button onClick={handleSubmit}>
             <Plus className="w-4 h-4 mr-1" />
-            Qo'shish
+            {t('add') || 'Add'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -557,6 +572,8 @@ export function ActivityLogPanel({
   readOnly = false,
   maxHeight = "500px",
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const {
     logs,
     comments,
@@ -578,10 +595,10 @@ export function ActivityLogPanel({
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-slate-600" />
-          <span className="font-semibold">Faoliyat</span>
+          <span className="font-semibold">{t('activity') || 'Activity'}</span>
           {pendingActivities.length > 0 && (
             <Badge variant="destructive" className="text-xs">
-              {pendingActivities.length} kutilmoqda
+              {pendingActivities.length} {t('pending') || 'pending'}
             </Badge>
           )}
         </div>
@@ -592,7 +609,7 @@ export function ActivityLogPanel({
           {!readOnly && (
             <Button size="sm" onClick={() => setShowScheduleModal(true)}>
               <Plus className="w-4 h-4 mr-1" />
-              Rejalashtirish
+              {t('schedule') || 'Schedule'}
             </Button>
           )}
         </div>
@@ -602,7 +619,7 @@ export function ActivityLogPanel({
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="chatter" className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              Izohlar
+              {t('comments') || 'Comments'}
               {comments.length > 0 && (
                 <Badge variant="outline" className="ml-1 text-xs">
                   {comments.length}
@@ -611,7 +628,7 @@ export function ActivityLogPanel({
             </TabsTrigger>
             <TabsTrigger value="activities" className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
-              Rejalar
+              {t('plans') || 'Plans'}
               {pendingActivities.length > 0 && (
                 <Badge variant="destructive" className="ml-1 text-xs">
                   {pendingActivities.length}
@@ -620,7 +637,7 @@ export function ActivityLogPanel({
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-1">
               <History className="w-4 h-4" />
-              Tarix
+              {t('history') || 'History'}
               {logs.length > 0 && (
                 <Badge variant="outline" className="ml-1 text-xs">
                   {logs.length}
@@ -637,7 +654,7 @@ export function ActivityLogPanel({
                   {comments.length === 0 ? (
                     <div className="text-center py-8 text-slate-400">
                       <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>Izohlar yo'q</p>
+                      <p>{t('no_comments') || 'No comments'}</p>
                     </div>
                   ) : (
                     comments.map((comment) => (
@@ -659,7 +676,7 @@ export function ActivityLogPanel({
                 {scheduledActivities.length === 0 ? (
                   <div className="text-center py-8 text-slate-400">
                     <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Rejalashtirilgan faoliyatlar yo'q</p>
+                    <p>{t('no_scheduled_activities') || 'No scheduled activities'}</p>
                     {!readOnly && (
                       <Button
                         size="sm"
@@ -668,7 +685,7 @@ export function ActivityLogPanel({
                         onClick={() => setShowScheduleModal(true)}
                       >
                         <Plus className="w-4 h-4 mr-1" />
-                        Rejalashtirish
+                        {t('schedule') || 'Schedule'}
                       </Button>
                     )}
                   </div>
@@ -691,7 +708,7 @@ export function ActivityLogPanel({
                 {logs.length === 0 ? (
                   <div className="text-center py-8 text-slate-400">
                     <History className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Faoliyat tarixi yo'q</p>
+                    <p>{t('no_activity_history') || 'No activity history'}</p>
                   </div>
                 ) : (
                   logs.map((log) => <ActivityTimelineItem key={log.id} log={log} />)

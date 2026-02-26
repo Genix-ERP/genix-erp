@@ -55,7 +55,6 @@ import {
   List,
   PlusCircle,
   Receipt,
-  Briefcase,
   Hammer,
   HardHat,
   LayoutGrid,
@@ -643,7 +642,6 @@ const ProjectDetailView = ({
   const [team, setTeam] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
   const [photoReports, setPhotoReports] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
@@ -654,8 +652,7 @@ const ProjectDetailView = ({
   const [showSectionModal, setShowSectionModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
-  const [showVendorModal, setShowVendorModal] = useState(false);
-  const [showDailyLogModal, setShowDailyLogModal] = useState(false);
+const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
   const [showMaterialRequestModal, setShowMaterialRequestModal] = useState(false);
 
@@ -674,10 +671,6 @@ const ProjectDetailView = ({
   const [sectionForm, setSectionForm] = useState({ code: '', name: '', description: '' });
   const [itemForm, setItemForm] = useState({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
-  const [vendorForm, setVendorForm] = useState({
-    id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-    vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
-  });
   const [materialRequestForm, setMaterialRequestForm] = useState({
     id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
   });
@@ -921,16 +914,6 @@ const ProjectDetailView = ({
               setEmployees(employeesData?.items || employeesData || []);
             } catch (e) { setTeam([]); setEmployees([]); }
             break;
-          case 'vendors':
-            try {
-              const [vendorsData, orgsData] = await Promise.all([
-                constructionService.listProjectVendors(project.id),
-                constructionService.listOrganizations()
-              ]);
-              setVendors(vendorsData || []);
-              setOrganizations(orgsData || []);
-            } catch (e) { setVendors([]); setOrganizations([]); }
-            break;
           case 'daily_logs':
             try {
               const logsData = await constructionService.listDailyReports(project.id);
@@ -1107,44 +1090,6 @@ const ProjectDetailView = ({
       setTeam(teamData || []);
     } catch (error) {
       console.error('Error removing team member:', error);
-    }
-  };
-
-  // Handle vendor creation/update
-  const handleCreateVendor = async (e) => {
-    e.preventDefault();
-    try {
-      const vendorData = {
-        vendor_id: vendorForm.vendor_id || '',
-        vendor_name: vendorForm.vendor_id ? '' : vendorForm.vendor_name,
-        contract_number: vendorForm.contract_number,
-        contract_date: vendorForm.contract_date,
-        contract_amount: parseFloat(vendorForm.contract_amount) || 0,
-        currency: vendorForm.currency || 'UZS',
-        vendor_type: vendorForm.vendor_type,
-        work_scope: vendorForm.work_scope,
-        contact_person: vendorForm.contact_person,
-        contact_phone: vendorForm.contact_phone,
-        contact_email: vendorForm.contact_email,
-        start_date: vendorForm.start_date,
-        end_date: vendorForm.end_date,
-        notes: vendorForm.notes
-      };
-
-      if (vendorForm.id) {
-        await constructionService.updateProjectVendor(vendorForm.id, vendorData);
-      } else {
-        await constructionService.addProjectVendor(project.id, vendorData);
-      }
-      const vendorsData = await constructionService.listProjectVendors(project.id);
-      setVendors(vendorsData || []);
-      setShowVendorModal(false);
-      setVendorForm({
-        id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-        vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
-      });
-    } catch (error) {
-      console.error('Error saving vendor:', error);
     }
   };
 
@@ -1451,11 +1396,7 @@ const ProjectDetailView = ({
             <Users className="w-4 h-4 mr-2" />
             {t('team') || 'Jamoa'}
           </TabsTrigger>
-          <TabsTrigger value="vendors" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Briefcase className="w-4 h-4 mr-2" />
-            {t('vendors') || 'Pudratchilar'}
-          </TabsTrigger>
-          <TabsTrigger value="materials" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+<TabsTrigger value="materials" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Package className="w-4 h-4 mr-2" />
             {t('materials') || 'Materiallar'}
           </TabsTrigger>
@@ -1918,111 +1859,6 @@ const ProjectDetailView = ({
                             <p className="text-xs text-slate-400 mt-2">{member.phone}</p>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Vendors Tab */}
-        <TabsContent value="vendors" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{t('subcontractors') || 'Pudratchilar'}</CardTitle>
-              <Button onClick={() => {
-                setVendorForm({
-                  id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-                  vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
-                });
-                setShowVendorModal(true);
-              }}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('add_vendor') || 'Pudratchi qo\'shish'}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {vendors.length === 0 ? (
-                <div className="text-center py-12">
-                  <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">{t('no_vendors') || 'Pudratchilar mavjud emas'}</p>
-                  <Button variant="outline" className="mt-4" onClick={() => {
-                    setVendorForm({
-                      id: null, vendor_id: '', vendor_name: '', contract_number: '', contract_date: '', contract_amount: '', currency: 'UZS',
-                      vendor_type: 'subcontractor', work_scope: '', contact_person: '', contact_phone: '', contact_email: '', start_date: '', end_date: '', notes: ''
-                    });
-                    setShowVendorModal(true);
-                  }}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('add_first_vendor') || 'Birinchi pudratchini qo\'shing'}
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {vendors.map((vendor) => (
-                    <Card key={vendor.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="font-semibold">{vendor.vendor_name || 'Vendor'}</h4>
-                            <p className="text-sm text-slate-500">{vendor.contract_number}</p>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                setVendorForm({
-                                  id: vendor.id,
-                                  vendor_id: vendor.vendor_id || '',
-                                  vendor_name: vendor.vendor_name || '',
-                                  vendor_type: vendor.vendor_type || '',
-                                  contract_number: vendor.contract_number || '',
-                                  contract_amount: vendor.contract_amount || '',
-                                  work_scope: vendor.work_scope || '',
-                                  contact_person: vendor.contact_person || '',
-                                  contact_phone: vendor.contact_phone || '',
-                                  start_date: vendor.start_date || '',
-                                  end_date: vendor.end_date || '',
-                                  notes: vendor.notes || ''
-                                });
-                                setShowVendorModal(true);
-                              }}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                {t('edit') || 'Tahrirlash'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-red-600"
-                                onClick={async () => {
-                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-                                    try {
-                                      await constructionService.removeProjectVendor(vendor.id);
-                                      const vendorsData = await constructionService.listProjectVendors(project.id);
-                                      setVendors(vendorsData || []);
-                                    } catch (error) {
-                                      console.error('Error deleting vendor:', error);
-                                    }
-                                  }
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {t('delete') || "O'chirish"}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        <p className="text-lg font-bold mt-2">{formatCurrency(vendor.contract_amount || 0)}</p>
-                        {vendor.work_scope && (
-                          <p className="text-sm text-slate-600 mt-1">{vendor.work_scope}</p>
-                        )}
-                        {vendor.contact_phone && (
-                          <p className="text-xs text-slate-400 mt-2">{vendor.contact_phone}</p>
-                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -2568,20 +2404,11 @@ const ProjectDetailView = ({
           </DialogHeader>
           <form onSubmit={handleCreateSection} className="space-y-4">
             <div>
-              <Label>{t('code') || 'Kod'} *</Label>
-              <Input
-                value={sectionForm.code}
-                onChange={(e) => setSectionForm({ ...sectionForm, code: e.target.value })}
-                placeholder="BOL-001"
-                required
-              />
-            </div>
-            <div>
               <Label>{t('name') || 'Nomi'} *</Label>
               <Input
                 value={sectionForm.name}
                 onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
-                placeholder="Poydevor ishlari"
+                placeholder={t('section_name_placeholder') || "Foundation works"}
                 required
               />
             </div>
@@ -2738,158 +2565,6 @@ const ProjectDetailView = ({
               </Button>
               <Button type="submit" disabled={!teamForm.employee_id || !teamForm.role}>
                 {t('add') || "Qo'shish"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Vendor Modal */}
-      <Dialog open={showVendorModal} onOpenChange={setShowVendorModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{vendorForm.id ? (t('edit_vendor') || "Pudratchini tahrirlash") : (t('add_vendor') || "Pudratchi qo'shish")}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateVendor} className="space-y-4">
-            {/* Vendor Selection */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('select_organization') || 'Mavjud tashkilot'}</Label>
-                <Select
-                  value={vendorForm.vendor_id || '__new__'}
-                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_id: value === '__new__' ? '' : value, vendor_name: value === '__new__' ? vendorForm.vendor_name : '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_organization') || 'Tashkilotni tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__new__">{t('new_vendor') || 'Yangi pudratchi'}</SelectItem>
-                    {organizations.filter(org => org.id).map((org) => (
-                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {!vendorForm.vendor_id && (
-                <div>
-                  <Label>{t('vendor_name') || 'Pudratchi nomi'} *</Label>
-                  <Input
-                    value={vendorForm.vendor_name}
-                    onChange={(e) => setVendorForm({ ...vendorForm, vendor_name: e.target.value })}
-                    placeholder="Qurilish MChJ"
-                    required={!vendorForm.vendor_id}
-                  />
-                </div>
-              )}
-              {vendorForm.vendor_id && <div></div>}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('vendor_type') || 'Turi'}</Label>
-                <Select
-                  value={vendorForm.vendor_type}
-                  onValueChange={(value) => setVendorForm({ ...vendorForm, vendor_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_type') || 'Turni tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="subcontractor">{t('subcontractor') || 'Pudratchi'}</SelectItem>
-                    <SelectItem value="supplier">{t('supplier') || 'Yetkazib beruvchi'}</SelectItem>
-                    <SelectItem value="consultant">{t('consultant') || 'Maslahatchi'}</SelectItem>
-                    <SelectItem value="other">{t('other') || 'Boshqa'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t('contract_date') || 'Shartnoma sanasi'}</Label>
-                <Input
-                  type="date"
-                  value={vendorForm.contract_date || ''}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contract_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('contract_number') || 'Shartnoma raqami'}</Label>
-                <Input
-                  value={vendorForm.contract_number}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contract_number: e.target.value })}
-                  placeholder="SH-2024-001"
-                />
-              </div>
-              <div>
-                <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatPriceInput(vendorForm.contract_amount)}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contract_amount: parsePriceInput(e.target.value) })}
-                  placeholder="100000000"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>{t('work_scope') || 'Ish hajmi'}</Label>
-              <Textarea
-                value={vendorForm.work_scope}
-                onChange={(e) => setVendorForm({ ...vendorForm, work_scope: e.target.value })}
-                placeholder={t('work_scope_placeholder') || "Bajaradigan ishlar tavsifi..."}
-                rows={2}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label>{t('contact_person') || "Bog'lanish shaxsi"}</Label>
-                <Input
-                  value={vendorForm.contact_person}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
-                  placeholder="Alisher Karimov"
-                />
-              </div>
-              <div>
-                <Label>{t('contact_phone') || 'Telefon'}</Label>
-                <Input
-                  value={vendorForm.contact_phone}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contact_phone: e.target.value })}
-                  placeholder="+998 90 123 45 67"
-                />
-              </div>
-              <div>
-                <Label>{t('contact_email') || 'Email'}</Label>
-                <Input
-                  type="email"
-                  value={vendorForm.contact_email}
-                  onChange={(e) => setVendorForm({ ...vendorForm, contact_email: e.target.value })}
-                  placeholder="info@company.uz"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('start_date') || 'Boshlanish sanasi'}</Label>
-                <Input
-                  type="date"
-                  value={vendorForm.start_date}
-                  onChange={(e) => setVendorForm({ ...vendorForm, start_date: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('end_date') || 'Tugash sanasi'}</Label>
-                <Input
-                  type="date"
-                  value={vendorForm.end_date}
-                  onChange={(e) => setVendorForm({ ...vendorForm, end_date: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowVendorModal(false)}>
-                {t('cancel') || 'Bekor qilish'}
-              </Button>
-              <Button type="submit" disabled={!vendorForm.vendor_id && !vendorForm.vendor_name}>
-                {vendorForm.id ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}
               </Button>
             </DialogFooter>
           </form>

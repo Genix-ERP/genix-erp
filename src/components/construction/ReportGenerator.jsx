@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -34,29 +36,29 @@ import { toast } from 'sonner';
 const REPORT_TYPES = {
   ks2: {
     id: 'ks2',
-    name: 'KS-2 (Bajarilgan ishlar dalolatnomasi)',
-    description: "Bajarilgan qurilish-montaj ishlari to'g'risidagi dalolatnoma",
+    nameKey: 'report_ks2_name',
+    descKey: 'report_ks2_desc',
     icon: ClipboardList,
     color: 'bg-blue-100 text-blue-700',
   },
   ks3: {
     id: 'ks3',
-    name: 'KS-3 (Smeta hisob-kitobi)',
-    description: 'Bajarilgan ish qiymati to\'g\'risidagi ma\'lumotnoma',
+    nameKey: 'report_ks3_name',
+    descKey: 'report_ks3_desc',
     icon: FileSpreadsheet,
     color: 'bg-green-100 text-green-700',
   },
   smeta_summary: {
     id: 'smeta_summary',
-    name: 'Smeta xulosasi',
-    description: 'Loyiha smetasi bo\'yicha umumiy hisobot',
+    nameKey: 'report_smeta_summary_name',
+    descKey: 'report_smeta_summary_desc',
     icon: FileText,
     color: 'bg-purple-100 text-purple-700',
   },
   progress_report: {
     id: 'progress_report',
-    name: 'Progress hisoboti',
-    description: 'Loyiha bajarilish holati to\'g\'risida hisobot',
+    nameKey: 'report_progress_name',
+    descKey: 'report_progress_desc',
     icon: Building2,
     color: 'bg-orange-100 text-orange-700',
   },
@@ -503,6 +505,8 @@ const printReport = (htmlContent, title) => {
 
 // Report Generator Component
 export function ReportGenerator({ project, sections = [], items = [], buildings = [] }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [showModal, setShowModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportData, setReportData] = useState({
@@ -533,11 +537,11 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
         htmlContent = generateProgressReportHTML(project, buildings, sections);
         break;
       default:
-        toast.error('Bu hisobot turi hali tayyor emas');
+        toast.error(t('report_not_ready') || 'This report type is not ready yet');
         return;
     }
 
-    printReport(htmlContent, REPORT_TYPES[selectedReport].name);
+    printReport(htmlContent, t(REPORT_TYPES[selectedReport].nameKey));
     setShowModal(false);
   };
 
@@ -545,19 +549,19 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
     <>
       <Button onClick={() => setShowModal(true)} variant="outline">
         <FileText className="w-4 h-4 mr-2" />
-        Hisobot yaratish
+        {t('generate_report') || 'Generate Report'}
       </Button>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Hisobot yaratish</DialogTitle>
+            <DialogTitle>{t('generate_report') || 'Generate Report'}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
             {/* Report Type Selection */}
             <div>
-              <Label className="mb-3 block">Hisobot turi</Label>
+              <Label className="mb-3 block">{t('report_type') || 'Report Type'}</Label>
               <div className="grid grid-cols-2 gap-3">
                 {Object.values(REPORT_TYPES).map((report) => {
                   const Icon = report.icon;
@@ -575,8 +579,8 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                             <Icon className="w-5 h-5" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">{report.name}</p>
-                            <p className="text-xs text-slate-500 mt-1">{report.description}</p>
+                            <p className="font-medium text-sm">{t(report.nameKey)}</p>
+                            <p className="text-xs text-slate-500 mt-1">{t(report.descKey)}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -589,10 +593,10 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
             {/* Additional fields for KS-2 */}
             {selectedReport === 'ks2' && (
               <div className="space-y-4 p-4 bg-slate-50 rounded-lg">
-                <h4 className="font-medium">KS-2 ma'lumotlari</h4>
+                <h4 className="font-medium">{t('ks2_details') || 'KS-2 Details'}</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Hisobot davri (boshlanishi)</Label>
+                    <Label>{t('report_period_start') || 'Report Period (Start)'}</Label>
                     <Input
                       type="date"
                       value={reportData.periodStart}
@@ -600,7 +604,7 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                     />
                   </div>
                   <div>
-                    <Label>Hisobot davri (tugashi)</Label>
+                    <Label>{t('report_period_end') || 'Report Period (End)'}</Label>
                     <Input
                       type="date"
                       value={reportData.periodEnd}
@@ -608,7 +612,7 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                     />
                   </div>
                   <div>
-                    <Label>Shartnoma raqami</Label>
+                    <Label>{t('contract_number') || 'Contract Number'}</Label>
                     <Input
                       value={reportData.contractNumber}
                       onChange={(e) => setReportData({ ...reportData, contractNumber: e.target.value })}
@@ -616,7 +620,7 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                     />
                   </div>
                   <div>
-                    <Label>Shartnoma sanasi</Label>
+                    <Label>{t('contract_date') || 'Contract Date'}</Label>
                     <Input
                       type="date"
                       value={reportData.contractDate}
@@ -624,7 +628,7 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                     />
                   </div>
                   <div>
-                    <Label>Dalolatnoma raqami</Label>
+                    <Label>{t('act_number') || 'Act Number'}</Label>
                     <Input
                       value={reportData.actNumber}
                       onChange={(e) => setReportData({ ...reportData, actNumber: e.target.value })}
@@ -632,7 +636,7 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
                     />
                   </div>
                   <div>
-                    <Label>Pudratchi nomi</Label>
+                    <Label>{t('contractor_name') || 'Contractor Name'}</Label>
                     <Input
                       value={reportData.contractorName}
                       onChange={(e) => setReportData({ ...reportData, contractorName: e.target.value })}
@@ -646,11 +650,11 @@ export function ReportGenerator({ project, sections = [], items = [], buildings 
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowModal(false)}>
-              Bekor qilish
+              {t('cancel') || 'Cancel'}
             </Button>
             <Button onClick={handleGenerateReport} disabled={!selectedReport}>
               <Printer className="w-4 h-4 mr-2" />
-              Chop etish
+              {t('print') || 'Print'}
             </Button>
           </DialogFooter>
         </DialogContent>

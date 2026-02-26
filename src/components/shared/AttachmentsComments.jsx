@@ -35,6 +35,8 @@ import {
   Plus,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 
 // File type icons mapping
 const FILE_ICONS = {
@@ -371,6 +373,8 @@ export function CommentsPanel({
   readOnly = false,
   showInternalOption = true,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const [newComment, setNewComment] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [editingComment, setEditingComment] = useState(null);
@@ -413,7 +417,7 @@ export function CommentsPanel({
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Izoh yozing..."
+            placeholder={t('write_comment') || "Write a comment..."}
             rows={3}
           />
           <div className="flex items-center justify-between">
@@ -425,7 +429,7 @@ export function CommentsPanel({
                   onChange={(e) => setIsInternal(e.target.checked)}
                   className="rounded border-slate-300"
                 />
-                <span className="text-slate-600">Ichki izoh (faqat xodimlar ko'radi)</span>
+                <span className="text-slate-600">{t('internal_comment') || "Internal comment (only visible to employees)"}</span>
               </label>
             )}
             <Button
@@ -434,7 +438,7 @@ export function CommentsPanel({
               disabled={!newComment.trim()}
             >
               <Send className="w-4 h-4 mr-1" />
-              Yuborish
+              {t('send') || 'Send'}
             </Button>
           </div>
         </div>
@@ -458,14 +462,14 @@ export function CommentsPanel({
                 />
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleSaveEdit}>
-                    Saqlash
+                    {t('save') || 'Save'}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setEditingComment(null)}
                   >
-                    Bekor qilish
+                    {t('cancel') || 'Cancel'}
                   </Button>
                 </div>
               </div>
@@ -482,7 +486,7 @@ export function CommentsPanel({
                         <Calendar className="w-3 h-3" />
                         {format(new Date(comment.createdAt), "dd.MM.yyyy HH:mm")}
                         {comment.updatedAt && (
-                          <span className="text-slate-400">(tahrirlangan)</span>
+                          <span className="text-slate-400">({t('edited') || 'edited'})</span>
                         )}
                       </div>
                     </div>
@@ -490,7 +494,7 @@ export function CommentsPanel({
                   <div className="flex items-center gap-1">
                     {comment.isInternal && (
                       <Badge className="bg-yellow-100 text-yellow-800 text-xs">
-                        Ichki
+                        {t('internal') || 'Internal'}
                       </Badge>
                     )}
                     {!readOnly && (
@@ -502,13 +506,13 @@ export function CommentsPanel({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleEdit(comment)}>
-                            Tahrirlash
+                            {t('edit') || 'Edit'}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => onDelete?.(comment.id)}
                             className="text-red-600"
                           >
-                            O'chirish
+                            {t('delete') || 'Delete'}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -527,7 +531,7 @@ export function CommentsPanel({
       {comments.length === 0 && (
         <div className="text-center py-6 text-slate-400">
           <MessageSquare className="w-8 h-8 mx-auto mb-2" />
-          <p className="text-sm">Izohlar yo'q</p>
+          <p className="text-sm">{t('no_comments') || 'No comments'}</p>
         </div>
       )}
     </div>
