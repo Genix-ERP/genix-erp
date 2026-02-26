@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
 import {
@@ -34,8 +35,10 @@ import {
   DollarSign,
   Trash2,
   Receipt,
+  ChevronDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useSearchParams } from 'react-router-dom';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -44,6 +47,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { procurementService } from '@/api/services/procurement';
 import { financeService } from '@/api/services/finance';
+import { useToast } from "@/components/ui/use-toast";
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -59,11 +63,14 @@ export default function PurchaseOrders() {
   const { getSetting } = useAdminSettings();
   const { taxRates = [] } = useFinancials();
   const { formatCurrency } = useCurrencyFormatter();
+  const { toast } = useToast();
+  const [, setSearchParams] = useSearchParams();
 
   // Get default tax from settings
   const defaultPurchaseTaxId = getSetting('purchase.tax.default_tax_id', '');
-  const defaultPurchaseTax = defaultPurchaseTaxId ? taxRates.find(tr => tr.id === defaultPurchaseTaxId) : null;
+  const defaultPurchaseTax = defaultPurchaseTaxId ? taxRates.find(tr => String(tr.id) === String(defaultPurchaseTaxId)) : null;
   const defaultTaxPercent = defaultPurchaseTax?.rate || 0;
+  const purchaseTaxRates = taxRates.filter(tr => tr.tax_type === 'purchase' || !tr.tax_type);
 
   const {
     suppliers,
@@ -177,7 +184,7 @@ export default function PurchaseOrders() {
   useEffect(() => {
     const fetchBills = async () => {
       try {
-        const bills = await financeService.listPurchaseInvoices({ limit: 1000 });
+        const bills = await financeService.listPurchaseInvoices({ page_size: 100 });
         const billList = Array.isArray(bills) ? bills : bills?.data || bills?.items || [];
         const map = {};
         billList.forEach(bill => {
@@ -551,11 +558,20 @@ export default function PurchaseOrders() {
 
   const handleCreateBill = async (poId) => {
     try {
-      await procurementService.createBillFromPO(poId);
+      const result = await procurementService.createBillFromPO(poId);
       setPoBillMap(prev => ({ ...prev, [poId]: true }));
+      toast({
+        title: t('bill_created_successfully') || 'Vendor bill created successfully',
+        description: result?.invoice_number ? `#${result.invoice_number}` : undefined,
+      });
+      setSearchParams({ tab: 'suppliers', subtab: 'bills' }, { replace: true });
     } catch (error) {
       console.error('Failed to create bill:', error);
-      alert(t('error_creating_bill') || 'Failed to create vendor bill');
+      const msg = error.response?.data?.message || error.message || 'Failed to create vendor bill';
+      toast({
+        title: msg,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -979,12 +995,41 @@ export default function PurchaseOrders() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('tax')} (%)</label>
-                <Input
-                  type="number"
-                  placeholder="12"
-                  value={newPO.tax_percent}
-                  onChange={(e) => setNewPO({...newPO, tax_percent: e.target.value})}
-                />
+                <Popover>
+                  <PopoverAnchor asChild>
+                    <div className="flex">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={newPO.tax_percent}
+                        onChange={(e) => setNewPO({...newPO, tax_percent: e.target.value})}
+                        className="rounded-r-none border-r-0"
+                      />
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="rounded-l-none border-l-0 shrink-0 px-2">
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                    </div>
+                  </PopoverAnchor>
+                  <PopoverContent className="w-56 p-1" align="end">
+                    <div className="space-y-0.5">
+                      {purchaseTaxRates.map(tr => (
+                        <PopoverTrigger asChild key={tr.id}>
+                          <button
+                            className="w-full text-left px-3 py-2 text-sm rounded hover:bg-slate-100 transition-colors"
+                            onClick={() => setNewPO({...newPO, tax_percent: tr.rate})}
+                          >
+                            {tr.name} ({tr.rate}%)
+                          </button>
+                        </PopoverTrigger>
+                      ))}
+                      {purchaseTaxRates.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-slate-500">{t('no_tax_rates') || 'No tax rates available'}</div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>

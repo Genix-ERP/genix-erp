@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Pencil, Trash2, CheckCircle,
-  BookOpen, AlertCircle, ShoppingCart, Package, Landmark, Banknote, FileText, MoreHorizontal
+  Plus, Search, Trash2, CheckCircle, ArrowLeft, Save, Loader2,
+  BookOpen, AlertCircle, ShoppingCart, Package, Landmark, Banknote, FileText, MoreHorizontal, RefreshCw
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -18,6 +19,7 @@ import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
+import financeService from "@/api/services/finance";
 
 const JOURNAL_TYPES = [
   { value: 'general', labelKey: 'general', icon: BookOpen, color: 'bg-slate-100 text-slate-800 border-slate-200' },
@@ -45,68 +47,206 @@ export default function JournalManagement() {
   const { activeCompany } = useCompany();
   const { modal, showError, close } = useAlertModal();
 
+  // List view state
   const [filteredJournals, setFilteredJournals] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedJournal, setSelectedJournal] = useState(null);
+  const [selectedForDelete, setSelectedForDelete] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    type: 'miscellaneous',
-    description: '',
-    auto_sequence: true,
-    number_prefix: '',
-    default_debit_account_id: '',
-    default_credit_account_id: '',
+  // Detail view state
+  const [selectedJournal, setSelectedJournal] = useState(null);
+  const [journalDetail, setJournalDetail] = useState(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [isDirty, setIsDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState("entries");
+
+  // Journal entries for detail view
+  const [journalEntries, setJournalEntries] = useState([]);
+  const [entriesPage, setEntriesPage] = useState(1);
+  const [entriesTotalPages, setEntriesTotalPages] = useState(1);
+  const [isLoadingEntries, setIsLoadingEntries] = useState(false);
+
+  // Payment methods
+  const [journalPaymentMethods, setJournalPaymentMethods] = useState([]);
+  const [allPaymentMethods, setAllPaymentMethods] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+
+  // Create form
+  const [createForm, setCreateForm] = useState({
+    code: '', name: '', type: 'miscellaneous', description: '',
+    auto_sequence: true, number_prefix: '',
+    default_debit_account_id: '', default_credit_account_id: '',
   });
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
 
-  useEffect(() => {
-    setFilteredJournals(journals);
-  }, [journals]);
-
+  // Filtering
   useEffect(() => {
     let filtered = journals;
-
     if (searchQuery) {
       filtered = filtered.filter(j =>
         j.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         j.code?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
     if (typeFilter !== "all") {
       filtered = filtered.filter(j => j.type === typeFilter);
     }
-
     setFilteredJournals(filtered);
   }, [searchQuery, typeFilter, journals]);
 
-  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
+  const summaryStats = useMemo(() => ({
+    total: journals.length,
+    active: journals.filter(j => j.is_active).length,
+    types: [...new Set(journals.map(j => j.type))].length,
+  }), [journals]);
 
   const generateCodeFromName = (name) => {
-    return name
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9\s]/g, '')
-      .replace(/\s+/g, '_')
-      .slice(0, 20);
+    return name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 20);
   };
 
-  const resetForm = () => {
-    setFormData({
-      code: '',
-      name: '',
-      type: 'miscellaneous',
-      description: '',
-      auto_sequence: true,
-      number_prefix: '',
-      default_debit_account_id: '',
-      default_credit_account_id: '',
+  // ========== DETAIL VIEW LOGIC ==========
+
+  const openJournalDetail = useCallback(async (journal) => {
+    setSelectedJournal(journal);
+    setIsLoadingDetail(true);
+    setActiveTab("entries");
+    setJournalEntries([]);
+    setJournalPaymentMethods([]);
+    try {
+      const detail = await financeService.getJournal(journal.id);
+      setJournalDetail(detail);
+      setEditForm({
+        name: detail.name || '',
+        description: detail.description || '',
+        short_code: detail.short_code || '',
+        currency: detail.currency || '',
+        auto_sequence: detail.auto_sequence !== false,
+        number_prefix: detail.number_prefix || '',
+        is_active: detail.is_active !== false,
+        default_debit_account_id: detail.default_debit_account_id || '',
+        default_credit_account_id: detail.default_credit_account_id || '',
+        bank_account_id: detail.bank_account_id || '',
+        suspense_account_id: detail.suspense_account_id || '',
+        profit_account_id: detail.profit_account_id || '',
+        loss_account_id: detail.loss_account_id || '',
+      });
+      setIsDirty(false);
+      // Load journal entries
+      loadJournalEntries(journal.id, 1);
+      // Load payment methods for bank/cash
+      if (detail.type === 'bank' || detail.type === 'cash') {
+        loadJournalPaymentMethods(journal.id);
+        loadAllPaymentMethods();
+        loadBankAccounts();
+      }
+    } catch (err) {
+      console.error('Failed to load journal detail:', err);
+      setJournalDetail(journal);
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  }, []);
+
+  const loadJournalEntries = async (journalId, page) => {
+    setIsLoadingEntries(true);
+    try {
+      const result = await financeService.listJournalEntries({ journal_id: journalId, page, limit: 10 });
+      setJournalEntries(result?.items || result || []);
+      setEntriesPage(result?.page || page);
+      setEntriesTotalPages(result?.total_pages || 1);
+    } catch (err) {
+      console.error('Failed to load journal entries:', err);
+    } finally {
+      setIsLoadingEntries(false);
+    }
+  };
+
+  const loadJournalPaymentMethods = async (journalId) => {
+    try {
+      const result = await financeService.listJournalPaymentMethods(journalId);
+      setJournalPaymentMethods(result || []);
+    } catch (err) {
+      console.error('Failed to load journal payment methods:', err);
+    }
+  };
+
+  const loadAllPaymentMethods = async () => {
+    try {
+      const result = await financeService.listPaymentMethods();
+      setAllPaymentMethods(result || []);
+    } catch (err) {
+      console.error('Failed to load payment methods:', err);
+    }
+  };
+
+  const loadBankAccounts = async () => {
+    try {
+      const result = await financeService.listBankAccounts();
+      setBankAccounts(result || []);
+    } catch (err) {
+      console.error('Failed to load bank accounts:', err);
+    }
+  };
+
+  const handleUpdateField = (field, value) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    setIsDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (!selectedJournal || !isDirty) return;
+    setIsSaving(true);
+    try {
+      await updateJournal(selectedJournal.id, editForm);
+      // Reload detail
+      const detail = await financeService.getJournal(selectedJournal.id);
+      setJournalDetail(detail);
+      setIsDirty(false);
+    } catch (err) {
+      console.error('Failed to save journal:', err);
+      const errorMsg = err.response?.data?.error?.message || err.message || 'Failed to save';
+      showError(errorMsg);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddPaymentMethod = async (direction) => {
+    if (!selectedJournal || allPaymentMethods.length === 0) return;
+    const firstPM = allPaymentMethods[0];
+    try {
+      await financeService.addJournalPaymentMethod(selectedJournal.id, {
+        payment_method_id: firstPM.id,
+        direction,
+        name: firstPM.name,
+      });
+      loadJournalPaymentMethods(selectedJournal.id);
+    } catch (err) {
+      console.error('Failed to add payment method:', err);
+    }
+  };
+
+  const handleRemovePaymentMethod = async (pmId) => {
+    if (!selectedJournal) return;
+    try {
+      await financeService.removeJournalPaymentMethod(selectedJournal.id, pmId);
+      setJournalPaymentMethods(prev => prev.filter(pm => pm.id !== pmId));
+    } catch (err) {
+      console.error('Failed to remove payment method:', err);
+    }
+  };
+
+  // ========== CREATE LOGIC ==========
+
+  const resetCreateForm = () => {
+    setCreateForm({
+      code: '', name: '', type: 'miscellaneous', description: '',
+      auto_sequence: true, number_prefix: '',
+      default_debit_account_id: '', default_credit_account_id: '',
     });
     setCodeManuallyEdited(false);
   };
@@ -114,11 +254,13 @@ export default function JournalManagement() {
   const handleCreate = async () => {
     setIsSaving(true);
     try {
-      await createJournal({ ...formData, organization_id: activeCompany?.id });
-      resetForm();
+      const result = await createJournal({ ...createForm, organization_id: activeCompany?.id });
+      resetCreateForm();
       setShowCreateModal(false);
+      if (result?.id) {
+        openJournalDetail(result);
+      }
     } catch (error) {
-      console.error('Error creating journal:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create journal';
       showError(errorMsg);
     } finally {
@@ -126,311 +268,548 @@ export default function JournalManagement() {
     }
   };
 
-  const handleEdit = (journal) => {
-    setSelectedJournal(journal);
-    setCodeManuallyEdited(true);
-    setFormData({
-      code: journal.code || '',
-      name: journal.name || '',
-      type: journal.type || 'general',
-      description: journal.description || '',
-      auto_sequence: journal.auto_sequence !== false,
-      number_prefix: journal.number_prefix || '',
-      is_active: journal.is_active !== false,
-      default_debit_account_id: journal.default_debit_account_id || '',
-      default_credit_account_id: journal.default_credit_account_id || '',
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdate = async () => {
-    setIsSaving(true);
-    try {
-      await updateJournal(selectedJournal.id, {
-        name: formData.name,
-        description: formData.description,
-        auto_sequence: formData.auto_sequence,
-        number_prefix: formData.number_prefix,
-        is_active: formData.is_active,
-        default_debit_account_id: formData.default_debit_account_id || '',
-        default_credit_account_id: formData.default_credit_account_id || '',
-      });
-      resetForm();
-      setSelectedJournal(null);
-      setShowEditModal(false);
-    } catch (error) {
-      console.error('Error updating journal:', error);
-      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to update journal';
-      showError(errorMsg);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDeleteClick = (journal) => {
-    setSelectedJournal(journal);
+  const handleDeleteClick = (journal, e) => {
+    if (e) e.stopPropagation();
+    setSelectedForDelete(journal);
     setShowDeleteModal(true);
   };
 
   const handleDelete = async () => {
     setIsSaving(true);
     try {
-      await deleteJournal(selectedJournal.id);
-      setSelectedJournal(null);
-      setShowDeleteModal(false);
+      await deleteJournal(selectedForDelete.id);
+      if (selectedJournal?.id === selectedForDelete.id) {
+        setSelectedJournal(null);
+        setJournalDetail(null);
+      }
     } catch (error) {
-      console.error('Error deleting journal:', error);
       const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to delete journal';
       showError(errorMsg);
     } finally {
       setIsSaving(false);
+      setShowDeleteModal(false);
+      setSelectedForDelete(null);
     }
   };
 
-  const summaryStats = {
-    total: journals.length,
-    active: journals.filter(j => j.is_active).length,
-    types: [...new Set(journals.map(j => j.type))].length,
-  };
+  const isBankOrCash = (type) => type === 'bank' || type === 'cash';
 
-  const typeHints = {
-    general: { name: 'General Journal', code: 'GENERAL' },
-    sales: { name: 'Sales Journal', code: 'SALES' },
-    purchase: { name: 'Purchase Journal', code: 'PURCHASE' },
-    cash: { name: 'Cash Journal', code: 'CASH' },
-    bank: { name: 'Bank Journal', code: 'BANK' },
-    miscellaneous: { name: 'Miscellaneous Journal', code: 'MISC' },
-  };
+  // ========== DETAIL VIEW ==========
+  if (selectedJournal) {
+    const detail = journalDetail || selectedJournal;
+    const jt = getJournalType(detail.type);
+    const TypeIcon = jt.icon;
 
-  const renderFormFields = (isEdit = false) => {
-    const hint = typeHints[formData.type] || typeHints.miscellaneous;
     return (
-    <div className="space-y-4 py-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-medium text-slate-700 mb-1 block">
-            {t('code') || 'Code'} *
-          </label>
-          <Input
-            placeholder={t('auto_generated') || 'Auto-generated from name'}
-            value={formData.code}
-            onChange={(e) => {
-              setCodeManuallyEdited(true);
-              setFormData({...formData, code: e.target.value.toUpperCase()});
-            }}
-            disabled={isEdit}
-            maxLength={20}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-slate-700 mb-1 block">
-            {t('journal_type') || 'Type'} *
-          </label>
-          <Select
-            value={formData.type}
-            onValueChange={(value) => setFormData({...formData, type: value})}
-            disabled={isEdit}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {JOURNAL_TYPES.map(jt => {
-                const Icon = jt.icon;
-                return (
-                  <SelectItem key={jt.value} value={jt.value}>
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4" />
-                      {t(jt.labelKey) || jt.value}
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          {t('name')} *
-        </label>
-        <Input
-          placeholder={`e.g., ${hint.name}`}
-          value={formData.name}
-          onChange={(e) => {
-            const name = e.target.value;
-            const updates = { name };
-            if (!codeManuallyEdited && !isEdit) {
-              updates.code = generateCodeFromName(name);
-            }
-            setFormData(prev => ({...prev, ...updates}));
-          }}
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          {t('description')}
-        </label>
-        <Input
-          placeholder={t('optional') || 'Optional description'}
-          value={formData.description}
-          onChange={(e) => setFormData({...formData, description: e.target.value})}
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium text-slate-700 mb-1 block">
-          {t('number_prefix') || 'Number Prefix'}
-        </label>
-        <Input
-          placeholder={`e.g., ${hint.code}-`}
-          value={formData.number_prefix}
-          onChange={(e) => setFormData({...formData, number_prefix: e.target.value})}
-          maxLength={10}
-        />
-      </div>
-
-      {/* Accounting Information - context-sensitive based on journal type */}
-      <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50/50">
-        <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-          {t('accounting_information') || 'Accounting Information'}
-        </h4>
-        {(() => {
-          // Context-sensitive account labels based on journal type (Odoo-style)
-          const accountLabels = {
-            sales: {
-              debit: t('default_receivable_account') || 'Default Receivable Account',
-              credit: t('default_income_account') || 'Default Income Account',
-            },
-            purchase: {
-              debit: t('default_expense_account') || 'Default Expense Account',
-              credit: t('default_payable_account') || 'Default Payable Account',
-            },
-            cash: {
-              debit: t('default_cash_account') || 'Default Cash Account',
-              credit: t('default_cash_account') || 'Default Cash Account',
-            },
-            bank: {
-              debit: t('default_bank_account') || 'Default Bank Account',
-              credit: t('default_bank_account') || 'Default Bank Account',
-            },
-            general: {
-              debit: t('default_debit_account') || 'Default Debit Account',
-              credit: t('default_credit_account') || 'Default Credit Account',
-            },
-            miscellaneous: {
-              debit: t('default_debit_account') || 'Default Debit Account',
-              credit: t('default_credit_account') || 'Default Credit Account',
-            },
-          };
-          const labels = accountLabels[formData.type] || accountLabels.general;
-          const isCashOrBank = formData.type === 'cash' || formData.type === 'bank';
-
-          return (
-            <div className={isCashOrBank ? '' : 'grid grid-cols-2 gap-4'}>
-              {isCashOrBank ? (
-                /* Cash/Bank journals use a single account */
-                <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">
-                    {labels.debit}
-                  </label>
-                  <Select
-                    value={formData.default_debit_account_id || 'none'}
-                    onValueChange={(value) => setFormData({...formData, default_debit_account_id: value === 'none' ? '' : value, default_credit_account_id: value === 'none' ? '' : value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_account') || 'Select account'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t('none') || 'None'}</SelectItem>
-                      {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">
-                      {labels.debit}
-                    </label>
-                    <Select
-                      value={formData.default_debit_account_id || 'none'}
-                      onValueChange={(value) => setFormData({...formData, default_debit_account_id: value === 'none' ? '' : value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_account') || 'Select account'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t('none') || 'None'}</SelectItem>
-                        {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                            {acc.code} - {acc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">
-                      {labels.credit}
-                    </label>
-                    <Select
-                      value={formData.default_credit_account_id || 'none'}
-                      onValueChange={(value) => setFormData({...formData, default_credit_account_id: value === 'none' ? '' : value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_account') || 'Select account'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t('none') || 'None'}</SelectItem>
-                        {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                            {acc.code} - {acc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })()}
-      </div>
-
-      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-        <div>
-          <p className="text-sm font-medium text-slate-700">{t('auto_sequence') || 'Auto Sequence'}</p>
-          <p className="text-xs text-slate-500">{t('auto_number_entries') || 'Automatically number entries'}</p>
-        </div>
-        <Switch
-          checked={formData.auto_sequence}
-          onCheckedChange={(checked) => setFormData({...formData, auto_sequence: checked})}
-        />
-      </div>
-
-      {isEdit && (
-        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-          <div>
-            <p className="text-sm font-medium text-slate-700">{t('active') || 'Active'}</p>
-            <p className="text-xs text-slate-500">{t('can_be_used_in_transactions') || 'Can be used in transactions'}</p>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedJournal(null); setJournalDetail(null); setIsDirty(false); }}>
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              {t('back_to_journals')}
+            </Button>
           </div>
-          <Switch
-            checked={formData.is_active}
-            onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-          />
+          <div className="flex items-center gap-2">
+            <Badge className={jt.color + ' flex items-center gap-1'}>
+              <TypeIcon className="w-3 h-3" />
+              {t(jt.labelKey)}
+            </Badge>
+            <Badge className={editForm.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}>
+              {editForm.is_active ? t('active') : t('inactive')}
+            </Badge>
+            {isDirty && canUpdate(MODULES.FINANCIALS) && (
+              <Button size="sm" onClick={handleSave} disabled={isSaving}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                {t('save_changes')}
+              </Button>
+            )}
+          </div>
         </div>
-      )}
-    </div>
-  );
-  };
 
+        {isLoadingDetail ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            <span className="ml-2 text-slate-500">{t('loading')}</span>
+          </div>
+        ) : (
+          <>
+            {/* Journal Name & Code Header */}
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-slate-500 mb-1 block">{t('name')}</label>
+                    <Input
+                      value={editForm.name}
+                      onChange={(e) => handleUpdateField('name', e.target.value)}
+                      className="text-xl font-bold bg-transparent border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20"
+                      disabled={!canUpdate(MODULES.FINANCIALS)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-500 mb-1 block">{t('type')}</label>
+                      <div className="flex items-center gap-2 h-10 px-3 bg-slate-50 rounded-md border border-slate-200">
+                        <TypeIcon className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-medium">{t(jt.labelKey)}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-500 mb-1 block">{t('code')}</label>
+                      <div className="flex items-center h-10 px-3 bg-slate-50 rounded-md border border-slate-200">
+                        <span className="text-sm font-mono font-medium">{detail.code}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="bg-white border border-slate-200">
+                <TabsTrigger value="entries" className="data-[state=active]:bg-[var(--genix-blue)]/10">
+                  {t('journal_entries_tab')}
+                </TabsTrigger>
+                {isBankOrCash(detail.type) && (
+                  <>
+                    <TabsTrigger value="incoming" className="data-[state=active]:bg-[var(--genix-blue)]/10">
+                      {t('incoming_payments')}
+                    </TabsTrigger>
+                    <TabsTrigger value="outgoing" className="data-[state=active]:bg-[var(--genix-blue)]/10">
+                      {t('outgoing_payments')}
+                    </TabsTrigger>
+                  </>
+                )}
+                <TabsTrigger value="settings" className="data-[state=active]:bg-[var(--genix-blue)]/10">
+                  {t('advanced_settings')}
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Tab: Journal Entries */}
+              <TabsContent value="entries" className="space-y-4 mt-4">
+                {/* Accounting Information */}
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                  <CardContent className="p-6">
+                    <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-4">
+                      {t('accounting_information')}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Account fields */}
+                      {isBankOrCash(detail.type) ? (
+                        <>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">
+                              {detail.type === 'bank' ? t('default_bank_account') : t('default_cash_account')}
+                            </label>
+                            <Select
+                              value={editForm.default_debit_account_id || 'none'}
+                              onValueChange={(v) => {
+                                const val = v === 'none' ? '' : v;
+                                handleUpdateField('default_debit_account_id', val);
+                                handleUpdateField('default_credit_account_id', val);
+                              }}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('suspense_account')}</label>
+                            <Select
+                              value={editForm.suspense_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('suspense_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('profit_account')}</label>
+                            <Select
+                              value={editForm.profit_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('profit_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('loss_account')}</label>
+                            <Select
+                              value={editForm.loss_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('loss_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">
+                              {detail.type === 'sales' ? t('default_receivable_account') : detail.type === 'purchase' ? t('default_expense_account') : t('default_debit_account')}
+                            </label>
+                            <Select
+                              value={editForm.default_debit_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('default_debit_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">
+                              {detail.type === 'sales' ? t('default_income_account') : detail.type === 'purchase' ? t('default_payable_account') : t('default_credit_account')}
+                            </label>
+                            <Select
+                              value={editForm.default_credit_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('default_credit_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Bank Account Number section for bank journals */}
+                    {detail.type === 'bank' && (
+                      <div className="mt-6 pt-4 border-t border-slate-200">
+                        <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-4">
+                          {t('bank_account')}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bank_account')}</label>
+                            <Select
+                              value={editForm.bank_account_id || 'none'}
+                              onValueChange={(v) => handleUpdateField('bank_account_id', v === 'none' ? '' : v)}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">{t('none')}</SelectItem>
+                                {bankAccounts.map(ba => (
+                                  <SelectItem key={ba.id} value={ba.id}>{ba.bank_name} - {ba.account_number}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('short_code')}</label>
+                            <Input
+                              value={editForm.short_code}
+                              onChange={(e) => handleUpdateField('short_code', e.target.value.toUpperCase())}
+                              maxLength={10}
+                              disabled={!canUpdate(MODULES.FINANCIALS)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Journal Entries Table */}
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-semibold">
+                        {t('journal_entries_tab')} {journalDetail?.entry_count > 0 && `(${journalDetail.entry_count})`}
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {isLoadingEntries ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                      </div>
+                    ) : journalEntries.length === 0 ? (
+                      <div className="text-center py-8 text-slate-400 text-sm">
+                        {t('no_entries_for_journal')}
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs font-semibold">{t('entry_number')}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('date')}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('reference')}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('description')}</TableHead>
+                            <TableHead className="text-xs font-semibold text-right">{t('debit')}</TableHead>
+                            <TableHead className="text-xs font-semibold text-right">{t('credit')}</TableHead>
+                            <TableHead className="text-xs font-semibold text-center">{t('status')}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {journalEntries.map(entry => (
+                            <TableRow key={entry.id} className="hover:bg-blue-50/50">
+                              <TableCell className="font-mono text-sm">{entry.entry_number}</TableCell>
+                              <TableCell className="text-sm">{entry.entry_date?.split('T')[0]}</TableCell>
+                              <TableCell className="text-sm text-slate-600">{entry.reference || '-'}</TableCell>
+                              <TableCell className="text-sm">{entry.description || '-'}</TableCell>
+                              <TableCell className="text-sm text-right font-mono">{entry.total_debit?.toLocaleString()}</TableCell>
+                              <TableCell className="text-sm text-right font-mono">{entry.total_credit?.toLocaleString()}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={entry.status === 'posted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                                  {t(entry.status) || entry.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                    {entriesTotalPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 p-3 border-t border-slate-200">
+                        <Button variant="outline" size="sm" disabled={entriesPage <= 1}
+                          onClick={() => loadJournalEntries(selectedJournal.id, entriesPage - 1)}>
+                          &lt;
+                        </Button>
+                        <span className="text-sm text-slate-500">{entriesPage} / {entriesTotalPages}</span>
+                        <Button variant="outline" size="sm" disabled={entriesPage >= entriesTotalPages}
+                          onClick={() => loadJournalEntries(selectedJournal.id, entriesPage + 1)}>
+                          &gt;
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab: Incoming Payments */}
+              {isBankOrCash(detail.type) && (
+                <TabsContent value="incoming" className="mt-4">
+                  <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs font-semibold">{t('payment_method') || 'Payment Method'}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('name')}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('outstanding_receipts_account')}</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {journalPaymentMethods.filter(pm => pm.direction === 'inbound').map(pm => (
+                            <TableRow key={pm.id}>
+                              <TableCell className="text-sm">{pm.pm_name}</TableCell>
+                              <TableCell className="text-sm">{pm.name || pm.pm_name}</TableCell>
+                              <TableCell className="text-sm text-slate-600">{pm.account_name || '-'}</TableCell>
+                              <TableCell>
+                                {canUpdate(MODULES.FINANCIALS) && (
+                                  <Button variant="ghost" size="sm" onClick={() => handleRemovePaymentMethod(pm.id)}
+                                    className="h-7 w-7 p-0 text-red-500 hover:text-red-700">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {journalPaymentMethods.filter(pm => pm.direction === 'inbound').length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-sm text-slate-400 py-4">
+                                —
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                      {canUpdate(MODULES.FINANCIALS) && allPaymentMethods.length > 0 && (
+                        <div className="p-3 border-t border-slate-100">
+                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700"
+                            onClick={() => handleAddPaymentMethod('inbound')}>
+                            <Plus className="w-3 h-3 mr-1" /> {t('add_a_line')}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
+
+              {/* Tab: Outgoing Payments */}
+              {isBankOrCash(detail.type) && (
+                <TabsContent value="outgoing" className="mt-4">
+                  <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50">
+                            <TableHead className="text-xs font-semibold">{t('payment_method') || 'Payment Method'}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('name')}</TableHead>
+                            <TableHead className="text-xs font-semibold">{t('outstanding_payments_account')}</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {journalPaymentMethods.filter(pm => pm.direction === 'outbound').map(pm => (
+                            <TableRow key={pm.id}>
+                              <TableCell className="text-sm">{pm.pm_name}</TableCell>
+                              <TableCell className="text-sm">{pm.name || pm.pm_name}</TableCell>
+                              <TableCell className="text-sm text-slate-600">{pm.account_name || '-'}</TableCell>
+                              <TableCell>
+                                {canUpdate(MODULES.FINANCIALS) && (
+                                  <Button variant="ghost" size="sm" onClick={() => handleRemovePaymentMethod(pm.id)}
+                                    className="h-7 w-7 p-0 text-red-500 hover:text-red-700">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {journalPaymentMethods.filter(pm => pm.direction === 'outbound').length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-sm text-slate-400 py-4">
+                                —
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                      {canUpdate(MODULES.FINANCIALS) && allPaymentMethods.length > 0 && (
+                        <div className="p-3 border-t border-slate-100">
+                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700"
+                            onClick={() => handleAddPaymentMethod('outbound')}>
+                            <Plus className="w-3 h-3 mr-1" /> {t('add_a_line')}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
+
+              {/* Tab: Advanced Settings */}
+              <TabsContent value="settings" className="mt-4">
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                  <CardContent className="p-6 space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
+                      {t('advanced_settings')}
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('short_code')}</label>
+                        <Input
+                          value={editForm.short_code}
+                          onChange={(e) => handleUpdateField('short_code', e.target.value.toUpperCase())}
+                          maxLength={10}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('currency')}</label>
+                        <Input
+                          value={editForm.currency}
+                          onChange={(e) => handleUpdateField('currency', e.target.value.toUpperCase())}
+                          maxLength={10}
+                          placeholder="UZS"
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('number_prefix')}</label>
+                        <Input
+                          value={editForm.number_prefix}
+                          onChange={(e) => handleUpdateField('number_prefix', e.target.value)}
+                          maxLength={10}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description')}</label>
+                        <Input
+                          value={editForm.description}
+                          onChange={(e) => handleUpdateField('description', e.target.value)}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{t('auto_sequence')}</p>
+                          <p className="text-xs text-slate-500">{t('auto_number_entries')}</p>
+                        </div>
+                        <Switch
+                          checked={editForm.auto_sequence}
+                          onCheckedChange={(checked) => handleUpdateField('auto_sequence', checked)}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">{t('active')}</p>
+                          <p className="text-xs text-slate-500">{t('can_be_used_in_transactions')}</p>
+                        </div>
+                        <Switch
+                          checked={editForm.is_active}
+                          onCheckedChange={(checked) => handleUpdateField('is_active', checked)}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+
+        <AlertModal modal={modal} close={close} />
+      </div>
+    );
+  }
+
+  // ========== LIST VIEW ==========
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
@@ -439,7 +818,7 @@ export default function JournalManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('total_journals') || 'Total Journals'}</p>
+                <p className="text-sm text-slate-500">{t('total_journals')}</p>
                 <p className="text-2xl font-bold text-slate-900">{summaryStats.total}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -453,7 +832,7 @@ export default function JournalManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('active') || 'Active'}</p>
+                <p className="text-sm text-slate-500">{t('active')}</p>
                 <p className="text-2xl font-bold text-green-600">{summaryStats.active}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -467,7 +846,7 @@ export default function JournalManagement() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">{t('journal_types') || 'Journal Types'}</p>
+                <p className="text-sm text-slate-500">{t('journal_types')}</p>
                 <p className="text-2xl font-bold text-purple-600">{summaryStats.types}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -488,10 +867,10 @@ export default function JournalManagement() {
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-slate-900">
-                  {t('journals') || 'Journals'}
+                  {t('journals')}
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  {filteredJournals.length} {t('journals_configured') || 'journals configured'}
+                  {filteredJournals.length} {t('journals_configured')}
                 </p>
               </div>
             </div>
@@ -499,7 +878,7 @@ export default function JournalManagement() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder={t('search_journals') || 'Search journals...'}
+                  placeholder={t('search_journals')}
                   className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -507,26 +886,23 @@ export default function JournalManagement() {
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[180px] bg-slate-50">
-                  <SelectValue placeholder={t('journal_type') || 'Type'} />
+                  <SelectValue placeholder={t('journal_type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t('all_types') || 'All Types'}</SelectItem>
+                  <SelectItem value="all">{t('all_types')}</SelectItem>
                   {JOURNAL_TYPES.map(jt => (
                     <SelectItem key={jt.value} value={jt.value}>
-                      {t(jt.labelKey) || jt.value}
+                      {t(jt.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {canCreate(MODULES.FINANCIALS) && (
                 <Button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
+                  onClick={() => { resetCreateForm(); setShowCreateModal(true); }}
                   className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
                 >
-                  <Plus className="w-4 h-4 mr-2" /> {t('create_journal') || 'New Journal'}
+                  <Plus className="w-4 h-4 mr-2" /> {t('create_journal')}
                 </Button>
               )}
             </div>
@@ -546,34 +922,22 @@ export default function JournalManagement() {
                 <BookOpen className="w-10 h-10 text-slate-400" />
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                {searchQuery ? (t('no_journals_found') || 'No journals found') : (t('no_journals_configured') || 'No journals configured')}
+                {searchQuery ? t('no_journals_found') : t('no_journals_configured')}
               </h3>
               <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                {searchQuery
-                  ? (t('try_adjusting_search') || 'Try adjusting your search or filters')
-                  : (t('setup_journals') || 'Create journals to organize your accounting entries')}
+                {searchQuery ? t('try_adjusting_search') : t('setup_journals')}
               </p>
-              {!searchQuery && canCreate(MODULES.FINANCIALS) && (
-                <Button
-                  onClick={() => {
-                    resetForm();
-                    setShowCreateModal(true);
-                  }}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                >
-                  <Plus className="w-4 h-4 mr-2" /> {t('create_journal') || 'Create Journal'}
-                </Button>
-              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-semibold text-slate-700">{t('code') || 'Code'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('code')}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('name')}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('type') || 'Type'}</TableHead>
-                    <TableHead className="font-semibold text-slate-700">{t('default_account') || 'Default Account'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('type')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('short_code')}</TableHead>
+                    <TableHead className="font-semibold text-slate-700">{t('default_account')}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>
                   </TableRow>
@@ -585,7 +949,8 @@ export default function JournalManagement() {
                     return (
                       <TableRow
                         key={journal.id}
-                        className="hover:bg-blue-50/50 transition-colors"
+                        className="hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        onClick={() => openJournalDetail(journal)}
                       >
                         <TableCell className="font-mono text-sm font-medium text-slate-700">
                           {journal.code}
@@ -601,18 +966,18 @@ export default function JournalManagement() {
                         <TableCell>
                           <Badge className={`${jt.color} flex items-center gap-1 w-fit`}>
                             <TypeIcon className="w-3 h-3" />
-                            {t(jt.labelKey) || journal.type}
+                            {t(jt.labelKey)}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-slate-500">
+                          {journal.short_code || '-'}
                         </TableCell>
                         <TableCell>
                           {(() => {
                             const debitAcc = journal.default_debit_account_id
-                              ? (accounts || []).find(a => a.id === journal.default_debit_account_id)
-                              : null;
+                              ? (accounts || []).find(a => a.id === journal.default_debit_account_id) : null;
                             const creditAcc = journal.default_credit_account_id
-                              ? (accounts || []).find(a => a.id === journal.default_credit_account_id)
-                              : null;
-                            // If both are the same (cash/bank), show once
+                              ? (accounts || []).find(a => a.id === journal.default_credit_account_id) : null;
                             if (debitAcc && creditAcc && debitAcc.id === creditAcc.id) {
                               return <span className="text-sm text-slate-700">{debitAcc.code} {debitAcc.name}</span>;
                             }
@@ -632,28 +997,13 @@ export default function JournalManagement() {
                             ? 'bg-green-100 text-green-800 border-green-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                           }>
-                            {journal.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
+                            {journal.is_active ? t('active') : t('inactive')}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            {canUpdate(MODULES.FINANCIALS) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(journal)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Pencil className="w-4 h-4 text-slate-500" />
-                              </Button>
-                            )}
+                          <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
                             {canDelete(MODULES.FINANCIALS) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteClick(journal)}
-                                className="h-8 w-8 p-0"
-                              >
+                              <Button variant="ghost" size="sm" onClick={(e) => handleDeleteClick(journal, e)} className="h-8 w-8 p-0">
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </Button>
                             )}
@@ -675,58 +1025,97 @@ export default function JournalManagement() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-[var(--genix-blue)]" />
-              {t('create_journal') || 'New Journal'}
+              {t('create_journal')}
             </DialogTitle>
             <DialogDescription>
-              {t('create_journal_desc') || 'Create a new accounting journal'}
+              {t('create_journal_desc')}
             </DialogDescription>
           </DialogHeader>
-          {renderFormFields()}
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
+                <Input
+                  placeholder={t('auto_generated')}
+                  value={createForm.code}
+                  onChange={(e) => { setCodeManuallyEdited(true); setCreateForm({...createForm, code: e.target.value.toUpperCase()}); }}
+                  maxLength={20}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('journal_type')} *</label>
+                <Select value={createForm.type} onValueChange={(value) => setCreateForm({...createForm, type: value})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {JOURNAL_TYPES.map(jt => {
+                      const Icon = jt.icon;
+                      return (
+                        <SelectItem key={jt.value} value={jt.value}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-4 h-4" />
+                            {t(jt.labelKey)}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
+              <Input
+                value={createForm.name}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const updates = { name };
+                  if (!codeManuallyEdited) { updates.code = generateCodeFromName(name); }
+                  setCreateForm(prev => ({...prev, ...updates}));
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description')}</label>
+              <Input
+                placeholder={t('optional')}
+                value={createForm.description}
+                onChange={(e) => setCreateForm({...createForm, description: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {createForm.type === 'sales' ? t('default_income_account')
+                  : createForm.type === 'purchase' ? t('default_expense_account')
+                  : createForm.type === 'bank' || createForm.type === 'cash' ? t('default_account')
+                  : t('default_account')}
+              </label>
+              <Select
+                value={createForm.default_debit_account_id}
+                onValueChange={(value) => setCreateForm({...createForm, default_debit_account_id: value, default_credit_account_id: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_account')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(accounts || []).map(acc => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.code} - {acc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="flex gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateModal(false)}
-              className="flex-1"
-              disabled={isSaving}
-            >
+            <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1" disabled={isSaving}>
               {t('cancel')}
             </Button>
             <Button
               onClick={handleCreate}
               className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !formData.name || !formData.code}
+              disabled={isSaving || !createForm.name || !createForm.code}
             >
-              {isSaving ? (t('saving') || 'Saving...') : (t('create_journal') || 'Create Journal')}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Journal Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Pencil className="w-5 h-5 text-[var(--genix-blue)]" />
-              {t('edit_journal') || 'Edit Journal'}
-            </DialogTitle>
-          </DialogHeader>
-          {renderFormFields(true)}
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowEditModal(false)}
-              className="flex-1"
-              disabled={isSaving}
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              onClick={handleUpdate}
-              className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !formData.name}
-            >
-              {isSaving ? (t('saving') || 'Saving...') : (t('edit_journal') || 'Update Journal')}
+              {isSaving ? t('saving') : t('create_journal')}
             </Button>
           </div>
         </DialogContent>
@@ -738,38 +1127,27 @@ export default function JournalManagement() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-500" />
-              {t('delete_journal') || 'Delete Journal'}
+              {t('delete_journal')}
             </DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p className="text-slate-600 mb-4">
-              {t('confirm_delete_journal') || 'Are you sure you want to delete the journal'}{' '}
-              <span className="font-semibold text-slate-900">"{selectedJournal?.name}"</span>?
+              {t('confirm_delete_journal')}{' '}
+              <span className="font-semibold text-slate-900">"{selectedForDelete?.name}"</span>?
             </p>
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">
-                  {t('journal_has_entries_warning') || 'Journals with existing entries cannot be deleted.'}
-                </p>
+                <p className="text-sm text-red-700">{t('journal_has_entries_warning')}</p>
               </div>
             </div>
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1"
-                disabled={isSaving}
-              >
+              <Button variant="outline" onClick={() => setShowDeleteModal(false)} className="flex-1" disabled={isSaving}>
                 {t('cancel')}
               </Button>
-              <Button
-                onClick={handleDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                disabled={isSaving}
-              >
+              <Button onClick={handleDelete} className="flex-1 bg-red-600 hover:bg-red-700 text-white" disabled={isSaving}>
                 <Trash2 className="w-4 h-4 mr-2" />
-                {isSaving ? (t('deleting') || 'Deleting...') : t('delete')}
+                {isSaving ? t('deleting') : t('delete')}
               </Button>
             </div>
           </div>

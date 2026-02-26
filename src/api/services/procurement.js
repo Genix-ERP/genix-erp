@@ -13,6 +13,8 @@ export const procurementService = {
       payment_terms: this._paymentTermsToString(supplier.payment_terms),
       categories: supplier.tags || [],
       status: supplier.is_active ? 'active' : 'inactive',
+      rating: supplier.rating || 0,
+      rating_count: supplier.rating_count || 0,
     }));
   },
 
@@ -24,6 +26,8 @@ export const procurementService = {
       payment_terms: this._paymentTermsToString(supplier.payment_terms),
       categories: supplier.tags || [],
       status: supplier.is_active ? 'active' : 'inactive',
+      rating: supplier.rating || 0,
+      rating_count: supplier.rating_count || 0,
     };
   },
 
@@ -92,6 +96,11 @@ export const procurementService = {
 
   async deleteSupplier(id) {
     await apiClient.delete(`/contacts/${id}`);
+  },
+
+  async rateSupplier(id, rating, comment = '') {
+    const response = await apiClient.post(`/contacts/${id}/rate`, { rating, comment });
+    return response.data.data;
   },
 
   // Purchase Orders

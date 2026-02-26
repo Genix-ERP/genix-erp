@@ -17,7 +17,8 @@ import {
   Target,
   Percent,
   BookOpen,
-  Clock
+  Clock,
+  Receipt
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -37,6 +38,7 @@ import TaxReports from "@/components/finance/TaxReports";
 import GeneralLedger from "@/components/finance/GeneralLedger";
 import AgedReceivables from "@/components/finance/AgedReceivables";
 import AgedPayables from "@/components/finance/AgedPayables";
+import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -92,7 +94,13 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('payments') || "To'lovlar"}</span>
             </TabsTrigger>
 
-            {/* 5. Akt sverka */}
+            {/* 5. Vendor Bills */}
+            <TabsTrigger value="vendor-bills" className={tabTriggerClass}>
+              <Receipt className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('vendor_bills') || 'Vendor Bills'}</span>
+            </TabsTrigger>
+
+            {/* 6. Akt sverka */}
             <TabsTrigger value="reconciliation" className={tabTriggerClass}>
               <FileCheck className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reconciliation_act') || 'Akt sverka'}</span>
@@ -149,6 +157,9 @@ export default function Financials() {
           </TabsContent>
           <TabsContent value="payments" className="mt-6">
             <Payments />
+          </TabsContent>
+          <TabsContent value="vendor-bills" className="mt-6">
+            <FinanceVendorBills />
           </TabsContent>
           <TabsContent value="reconciliation" className="mt-6">
             <ActSverka />

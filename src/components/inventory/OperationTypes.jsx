@@ -23,6 +23,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
@@ -73,6 +74,7 @@ const colorPresets = [
 ];
 
 export default function OperationTypes() {
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -244,10 +246,6 @@ export default function OperationTypes() {
 
   // Operation Type Card Component
   const OperationTypeCard = ({ opType }) => {
-    const totalCount = (opType.count_picking_ready || 0) +
-                       (opType.count_picking_waiting || 0) +
-                       (opType.count_picking_late || 0);
-
     return (
       <div
         className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group"
@@ -305,36 +303,45 @@ export default function OperationTypes() {
             )}
           </div>
 
-          {/* Counters - Odoo style */}
+          {/* Counters */}
           <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-center p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer">
+                <div
+                  className="text-center p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=assigned`)}
+                >
                   <div className="text-lg font-bold text-green-600">{opType.count_picking_ready || 0}</div>
-                  <div className="text-[10px] text-green-700 uppercase tracking-wide">{t('ready') || 'Ready'}</div>
+                  <div className="text-[10px] text-green-700 uppercase tracking-wide">{t('ready') || 'Tayyor'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('ready_operations') || 'Operations ready to process'}</TooltipContent>
+              <TooltipContent>{t('ready_operations') || 'Tayyor operatsiyalar'}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-center p-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer">
+                <div
+                  className="text-center p-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=waiting`)}
+                >
                   <div className="text-lg font-bold text-amber-600">{opType.count_picking_waiting || 0}</div>
-                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Waiting'}</div>
+                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Kutilmoqda'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('waiting_operations') || 'Operations waiting for stock'}</TooltipContent>
+              <TooltipContent>{t('waiting_operations') || 'Kutilayotgan operatsiyalar'}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="text-center p-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer">
+                <div
+                  className="text-center p-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=late`)}
+                >
                   <div className="text-lg font-bold text-red-600">{opType.count_picking_late || 0}</div>
-                  <div className="text-[10px] text-red-700 uppercase tracking-wide">{t('late') || 'Late'}</div>
+                  <div className="text-[10px] text-red-700 uppercase tracking-wide">{t('late') || 'Kechikkan'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('late_operations') || 'Overdue operations'}</TooltipContent>
+              <TooltipContent>{t('late_operations') || 'Kechikkan operatsiyalar'}</TooltipContent>
             </Tooltip>
           </div>
 
@@ -342,9 +349,9 @@ export default function OperationTypes() {
           <Button
             variant="outline"
             className="w-full mt-3 text-slate-700 hover:bg-slate-50"
-            onClick={() => {/* Navigate to operations list */}}
+            onClick={() => navigate(`/inventory/operation-type/${opType.id}`)}
           >
-            {t('open') || 'Open'}
+            {t('open') || 'Ochiq'}
           </Button>
         </div>
       </div>

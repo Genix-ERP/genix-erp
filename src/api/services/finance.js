@@ -169,6 +169,26 @@ export const financeService = {
     return response.data;
   },
 
+  // Payment Methods
+  async listPaymentMethods() {
+    const response = await apiClient.get('/payment-methods');
+    return response.data.data;
+  },
+
+  async listJournalPaymentMethods(journalId) {
+    const response = await apiClient.get(`/journals/${journalId}/payment-methods`);
+    return response.data.data;
+  },
+
+  async addJournalPaymentMethod(journalId, data) {
+    const response = await apiClient.post(`/journals/${journalId}/payment-methods`, data);
+    return response.data.data;
+  },
+
+  async removeJournalPaymentMethod(journalId, pmId) {
+    await apiClient.delete(`/journals/${journalId}/payment-methods/${pmId}`);
+  },
+
   // Journal Entries
   async listJournalEntries(params = {}) {
     const response = await apiClient.get('/journal-entries', { params });
@@ -682,6 +702,11 @@ export const financeService = {
 
   async bulkGenerateReconciliation(data) {
     const response = await apiClient.post('/reconciliation/bulk-generate', data);
+    return response.data.data;
+  },
+
+  async refreshReconciliationAct(id) {
+    const response = await apiClient.post(`/reconciliation/${id}/refresh`);
     return response.data.data;
   },
 
