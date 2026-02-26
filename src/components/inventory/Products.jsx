@@ -34,6 +34,13 @@ import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import COGSCalculator from "./COGSCalculator";
 import apiClient from '@/api/client';
+
+const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
+const getImageUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return API_ORIGIN + url;
+};
 import { useToast } from "@/components/ui/use-toast";
 
 // Import universal ERP components
@@ -1114,8 +1121,12 @@ export default function Products() {
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                              <Package className="w-5 h-5 text-slate-500" />
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
+                              {product.image_url ? (
+                                <img src={getImageUrl(product.image_url)} alt={product.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-5 h-5 text-slate-500" />
+                              )}
                             </div>
                             <div>
                               <p className="font-medium text-slate-900">{product.name}</p>
@@ -1389,6 +1400,54 @@ export default function Products() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
+            {/* Product Image */}
+            <div>
+              <h4 className="font-semibold text-slate-900 mb-3">{t('product_image') || 'Product Image'}</h4>
+              <div className="flex items-start gap-4">
+                {formData.image_url ? (
+                  <div className="relative">
+                    <img
+                      src={getImageUrl(formData.image_url)}
+                      alt={formData.name || 'Product'}
+                      className="w-28 h-28 object-cover rounded-lg border border-slate-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, image_url: ''})}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-28 h-28 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
+                    <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                    <span className="text-xs text-slate-500">{t('upload') || 'Upload'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const fd = new FormData();
+                          fd.append('file', file);
+                          const res = await apiClient.post('/files/upload', fd, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                          });
+                          const url = res.data?.data?.url || res.data?.url;
+                          if (url) setFormData({...formData, image_url: url});
+                        } catch (err) {
+                          console.error('Image upload failed:', err);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
             {/* Basic Info */}
             <div>
               <h4 className="font-semibold text-slate-900 mb-3">{t('basic_information')}</h4>
