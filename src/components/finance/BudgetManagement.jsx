@@ -168,6 +168,13 @@ export default function BudgetManagement() {
     }
   };
 
+  // Normalize date string to YYYY-MM-DD for <input type="date">
+  const toDateInput = (d) => {
+    if (!d) return '';
+    // Handle "2026-01-01T00:00:00Z" or "2026-01-01" formats
+    return d.substring(0, 10);
+  };
+
   const openEditModal = (budget) => {
     setSelectedBudget(budget);
     setFormData({
@@ -175,8 +182,8 @@ export default function BudgetManagement() {
       code: budget.code || '',
       fiscal_year_id: budget.fiscal_year_id || '',
       budget_type: budget.budget_type || 'expense',
-      start_date: budget.start_date || '',
-      end_date: budget.end_date || '',
+      start_date: toDateInput(budget.start_date),
+      end_date: toDateInput(budget.end_date),
       total_amount: budget.total_amount?.toString() || '',
       description: budget.description || '',
       status: budget.status || 'draft',
@@ -220,9 +227,20 @@ export default function BudgetManagement() {
     return budgetLines.filter(l => l.budget_id === budgetId);
   };
 
-  const getAccountName = (accountId) => {
-    const account = accounts.find(a => a.id === accountId);
-    return account ? `${account.code} - ${account.name}` : accountId;
+  const getAccountName = (line) => {
+    // Use backend-returned account_name/account_code if available
+    if (line && typeof line === 'object') {
+      if (line.account_name && line.account_code) {
+        return `${line.account_code} - ${line.account_name}`;
+      }
+      if (line.account_name) return line.account_name;
+      const accountId = line.account_id;
+      const account = accounts.find(a => a.id === accountId);
+      return account ? `${account.code} - ${account.name}` : accountId;
+    }
+    // Fallback: passed as raw accountId string
+    const account = accounts.find(a => a.id === line);
+    return account ? `${account.code} - ${account.name}` : line;
   };
 
   const getStatusBadge = (status) => {
@@ -331,6 +349,9 @@ export default function BudgetManagement() {
                   {t('variance') || 'Variance'}
                 </p>
                 <p className={`text-lg font-bold ${stats.variance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                  {formatCurrency(stats.variance)}
+                </p>
+                <p className={`text-xs ${stats.variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {stats.variancePercent}%
                 </p>
               </div>
@@ -435,21 +456,26 @@ export default function BudgetManagement() {
                         ) : '-'}
                       </TableCell>
                       <TableCell>
-                        <div className="w-40">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className={usage.isOverBudget ? 'text-red-600 font-medium' : usage.isWarning ? 'text-amber-600 font-medium' : 'text-slate-600'}>
+                        <div className="min-w-[180px]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-xs font-medium ${usage.isOverBudget ? 'text-red-600' : usage.isWarning ? 'text-amber-600' : 'text-slate-700'}`}>
                               {usage.percentage.toFixed(0)}%
                             </span>
-                            <span className="text-slate-500">
-                              {formatCurrency(usage.totalActual)} / {formatCurrency(usage.totalPlanned || budget.total_amount || 0)}
-                            </span>
+                            {usage.isOverBudget && (
+                              <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0">
+                                {t('over_budget') || 'Over'}
+                              </Badge>
+                            )}
                           </div>
                           <Progress
                             value={Math.min(usage.percentage, 100)}
                             className={`h-2 ${usage.isOverBudget ? '[&>div]:bg-red-500' : usage.isWarning ? '[&>div]:bg-amber-500' : '[&>div]:bg-green-500'}`}
                           />
-                          {usage.isWarning && (
-                            <div className="flex items-center gap-1 mt-1">
+                          <div className="text-[11px] text-slate-500 mt-1">
+                            {formatCurrency(usage.totalActual)} / {formatCurrency(usage.totalPlanned || budget.total_amount || 0)}
+                          </div>
+                          {usage.isWarning && !usage.isOverBudget && (
+                            <div className="flex items-center gap-1 mt-0.5">
                               <AlertTriangle className="w-3 h-3 text-amber-500" />
                               <span className="text-[10px] text-amber-600">{t('budget_warning') || 'Warning'} ({usage.warningThreshold}%)</span>
                             </div>
@@ -716,7 +742,7 @@ export default function BudgetManagement() {
 
                     return (
                       <TableRow key={line.id}>
-                        <TableCell>{getAccountName(line.account_id)}</TableCell>
+                        <TableCell>{getAccountName(line)}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(planned)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(line.actual_amount || 0)}</TableCell>
                         <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>

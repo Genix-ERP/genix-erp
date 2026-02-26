@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus, Search, CreditCard, Calendar, DollarSign, CheckCircle, Clock,
+  Plus, Search, CreditCard, Calendar, CheckCircle, Clock,
   AlertCircle, ArrowUpRight, ArrowDownLeft, Building2, User, Wallet,
   Filter, Download, MoreHorizontal, Eye
 } from "lucide-react";
@@ -28,6 +28,7 @@ export default function Payments() {
   const {
     payments,
     accounts,
+    journals,
     vendorBills,
     customerInvoices,
     createPayment,
@@ -51,11 +52,11 @@ export default function Payments() {
     payment_method: 'bank_transfer',
     payment_date: new Date().toISOString().split('T')[0],
     amount: '',
-    currency: 'USD',
+    currency: '',
     reference: '',
     description: '',
     contact_id: '',
-    account_id: '',
+    journal_id: '',
     bill_id: '',
     invoice_id: '',
     invoice_party_name: '',
@@ -132,11 +133,11 @@ export default function Payments() {
       payment_method: 'bank_transfer',
       payment_date: new Date().toISOString().split('T')[0],
       amount: '',
-      currency: 'USD',
+      currency: '',
       reference: '',
       description: '',
       contact_id: '',
-      account_id: '',
+      journal_id: bankCashJournals.length > 0 ? bankCashJournals[0].id : '',
       bill_id: '',
       invoice_id: '',
       invoice_party_name: '',
@@ -174,7 +175,7 @@ export default function Payments() {
         amount: paymentAmount,
         reference: newPayment.reference,
         notes: newPayment.description,
-        bank_account_id: newPayment.account_id || undefined,
+        journal_id: newPayment.journal_id || undefined,
         payment_type: newPayment.payment_type,
         payment_method: newPayment.payment_method,
         party_name: newPayment.invoice_party_name || selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name || '',
@@ -217,11 +218,11 @@ export default function Payments() {
       payment_method: 'bank_transfer',
       payment_date: new Date().toISOString().split('T')[0],
       amount: amountDue.toString(),
-      currency: 'USD',
+      currency: '',
       reference: `${t('payment_for') || 'Payment for'} ${invoice.invoice_number}`,
       description: '',
       contact_id: contactId,
-      account_id: '',
+      journal_id: bankCashJournals.length > 0 ? bankCashJournals[0].id : '',
       bill_id: !isCustomer ? invoice.id : '',
       invoice_id: isCustomer ? invoice.id : '',
       invoice_party_name: partyName,
@@ -275,7 +276,7 @@ export default function Payments() {
     return labels[method] || method;
   };
 
-  const bankAccounts = accounts.filter(a => a.is_bank_account || (a.category === 'asset' && a.code?.startsWith('1')));
+  const bankCashJournals = (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
 
   const isCustomerTab = activeTab === 'customer';
 
@@ -530,40 +531,36 @@ export default function Payments() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('amount')} *
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="pl-9"
-                    value={formatPriceInput(newPayment.amount)}
-                    onChange={(e) => setNewPayment({...newPayment, amount: parsePriceInput(e.target.value)})}
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('bank_account')}
+                  {t('journal')} *
                 </label>
                 <Select
-                  value={newPayment.account_id}
-                  onValueChange={(value) => setNewPayment({...newPayment, account_id: value})}
+                  value={newPayment.journal_id}
+                  onValueChange={(value) => setNewPayment({...newPayment, journal_id: value})}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={t('select_account')} />
+                    <SelectValue placeholder={t('select_journal')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {bankAccounts.map(account => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.code} - {account.name}
+                    {bankCashJournals.map(j => (
+                      <SelectItem key={j.id} value={j.id}>
+                        {j.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('amount')} *
+                </label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={formatPriceInput(newPayment.amount)}
+                  onChange={(e) => setNewPayment({...newPayment, amount: parsePriceInput(e.target.value)})}
+                  required
+                />
               </div>
             </div>
 
@@ -601,7 +598,7 @@ export default function Payments() {
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date}
+                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id}
               >
                 {isSaving ? t('saving') : t('create_payment')}
               </Button>
@@ -682,9 +679,9 @@ export default function Payments() {
                   </div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">{t('method')}</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('journal')}</p>
                   <p className="text-sm font-semibold text-slate-900">
-                    {getPaymentMethodLabel(selectedPayment.payment_method)}
+                    {selectedPayment.journal_name || getPaymentMethodLabel(selectedPayment.payment_method)}
                   </p>
                 </div>
               </div>
@@ -883,10 +880,7 @@ export default function Payments() {
                       </TableHead>
                       <TableHead className="font-semibold text-slate-700">{t('method')}</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <DollarSign className="w-4 h-4" />
-                          {t('amount')}
-                        </div>
+                        {t('amount')}
                       </TableHead>
                       <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-center">{t('actions')}</TableHead>

@@ -560,6 +560,8 @@ export function FinancialsProvider({ children }) {
           reference: paymentData.reference || '',
           notes: paymentData.notes || paymentData.description || '',
           bank_account_id: paymentData.bank_account_id || undefined,
+          journal_id: paymentData.journal_id || undefined,
+          allocations: paymentData.allocations || undefined,
         });
         // Map backend response to frontend format for UI consistency
         const newPayment = {
@@ -591,6 +593,21 @@ export function FinancialsProvider({ children }) {
       try {
         await financeService.confirmPayment(id);
         setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'confirmed' } : p));
+        // Refetch invoices and bills since confirming a payment updates their paid amounts
+        salesService.listInvoices().then(resp => {
+          const arr = Array.isArray(resp) ? resp : (resp?.items || []);
+          setCustomerInvoices(arr.map(inv => ({
+            ...inv,
+            invoice_type: 'customer_invoice',
+            total_amount: inv.total_amount || 0,
+            amount_due: inv.amount_due ?? (inv.total_amount - (inv.amount_paid || 0)),
+            amount_paid: inv.amount_paid || 0,
+          })));
+        }).catch(() => {});
+        financeService.listPurchaseInvoices().then(resp => {
+          const arr = Array.isArray(resp) ? resp : (resp?.data || resp?.items || []);
+          setVendorBills(arr);
+        }).catch(() => {});
         return;
       } catch (err) { console.error('API error:', err); }
     }
@@ -1308,7 +1325,13 @@ export function FinancialsProvider({ children }) {
   const createBudgetLine = useCallback(async (lineData) => {
     try {
       const newLine = await financeService.createBudgetLine(lineData);
-      setBudgetLines(prev => [...prev, newLine]);
+      // Re-fetch all budget lines to get computed actual amounts from journal entries
+      const refreshedLines = await financeService.listBudgetLines().catch(() => null);
+      if (refreshedLines) {
+        setBudgetLines(refreshedLines);
+      } else {
+        setBudgetLines(prev => [...prev, newLine]);
+      }
       return newLine;
     } catch (error) {
       console.error('Failed to create budget line:', error);
@@ -1554,9 +1577,22 @@ export function FinancialsProvider({ children }) {
 
   const bulkGenerateReconciliation = useCallback(async (data) => {
     if (backendAvailable) {
-      return await financeService.bulkGenerateReconciliation(data);
+      const result = await financeService.bulkGenerateReconciliation(data);
+      // Reload acts list after bulk generation
+      const acts = await financeService.listReconciliationActs().catch(() => []);
+      setReconciliationActs(acts || []);
+      return result;
     }
     return { count: 0, message: 'Backend not available' };
+  }, [backendAvailable]);
+
+  const refreshReconciliationAct = useCallback(async (id) => {
+    if (backendAvailable) {
+      const result = await financeService.refreshReconciliationAct(id);
+      setReconciliationActs(prev => prev.map(a => a.id === id ? { ...a, ...result } : a));
+      return result;
+    }
+    return null;
   }, [backendAvailable]);
 
   const exportReconciliationAct = useCallback(async (id, format) => {
@@ -1616,7 +1652,7 @@ export function FinancialsProvider({ children }) {
       cashRegisters, createCashRegister,
       cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
       // Reconciliation Acts (Akt sverka)
-      reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, exportReconciliationAct,
+      reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct,
       // Exchange Diffs (Kurs farqi)
       exchangeDiffs, syncExchangeRates, revalueCurrency,
       // Reports

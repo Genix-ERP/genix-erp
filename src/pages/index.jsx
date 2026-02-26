@@ -32,6 +32,7 @@ import EmployeeContracts from "./EmployeeContracts";
 import Cargo from "./Cargo";
 import POS from "./POS";
 import Construction from "./Construction";
+import OperationTypeDetail from "./OperationTypeDetail";
 import ForgotPassword from "./ForgotPassword";
 import ResetPassword from "./ResetPassword";
 
@@ -182,6 +183,7 @@ function PagesContent() {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="aiassistant" element={<AIAssistant />} />
                 <Route path="inventory" element={<ModuleRoute moduleId="inventory"><Inventory /></ModuleRoute>} />
+                <Route path="inventory/operation-type/:id" element={<ModuleRoute moduleId="inventory"><OperationTypeDetail /></ModuleRoute>} />
                 <Route path="workflows" element={<Workflows />} />
                 <Route path="hr" element={<ModuleRoute moduleId="hr"><HR /></ModuleRoute>} />
                 <Route path="leave-management" element={<ModuleRoute moduleId="hr"><LeaveManagement /></ModuleRoute>} />
