@@ -100,8 +100,10 @@ export default function TaxRates({ hideReports = false }) {
   const handleCreate = async () => {
     setIsSaving(true);
     try {
+      const autoCode = formData.name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 20) || ('TAX' + Date.now());
       const taxData = {
         ...formData,
+        code: autoCode,
         rate: parseFloat(formData.rate) || 0,
         type: 'percentage' // Backend requires type: percentage or fixed
       };
@@ -136,8 +138,10 @@ export default function TaxRates({ hideReports = false }) {
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
+      const autoCode = formData.name.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 20) || ('TAX' + Date.now());
       const taxData = {
         ...formData,
+        code: autoCode,
         rate: parseFloat(formData.rate) || 0
       };
 
@@ -370,12 +374,12 @@ export default function TaxRates({ hideReports = false }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('code') || 'Code'} *
+                  {t('name')} *
                 </label>
                 <Input
-                  placeholder="e.g., VAT20"
-                  value={formData.code}
-                  onChange={(e) => setFormData({...formData, code: e.target.value})}
+                  placeholder="e.g., VAT 20%"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
                 />
               </div>
@@ -395,18 +399,6 @@ export default function TaxRates({ hideReports = false }) {
                   <Percent className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('name')} *
-              </label>
-              <Input
-                placeholder="e.g., VAT 20%"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                required
-              />
             </div>
 
             <div>
@@ -493,7 +485,7 @@ export default function TaxRates({ hideReports = false }) {
               <Button
                 onClick={handleCreate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !formData.name || !formData.code || !formData.rate}
+                disabled={isSaving || !formData.name || !formData.rate}
               >
                 {isSaving ? (t('saving') || 'Saving...') : (t('create_tax_rate') || 'Create Tax Rate')}
               </Button>
@@ -515,12 +507,12 @@ export default function TaxRates({ hideReports = false }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('code') || 'Code'} *
+                  {t('name')} *
                 </label>
                 <Input
-                  placeholder="e.g., VAT20"
-                  value={formData.code}
-                  onChange={(e) => setFormData({...formData, code: e.target.value})}
+                  placeholder="e.g., VAT 20%"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
                 />
               </div>
@@ -540,18 +532,6 @@ export default function TaxRates({ hideReports = false }) {
                   <Percent className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('name')} *
-              </label>
-              <Input
-                placeholder="e.g., VAT 20%"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                required
-              />
             </div>
 
             <div>
@@ -628,7 +608,7 @@ export default function TaxRates({ hideReports = false }) {
               <Button
                 onClick={handleUpdate}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !formData.name || !formData.code || !formData.rate}
+                disabled={isSaving || !formData.name || !formData.rate}
               >
                 {isSaving ? (t('saving') || 'Saving...') : (t('update_tax_rate') || 'Update Tax Rate')}
               </Button>

@@ -107,6 +107,11 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  async getOperationType(id) {
+    const response = await apiClient.get(`/operation-types/${id}`);
+    return response.data.data;
+  },
+
   async createOperationType(data) {
     const response = await apiClient.post('/operation-types', data);
     return response.data.data;

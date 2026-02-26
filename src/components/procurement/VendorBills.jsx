@@ -51,12 +51,15 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services/inventory';
+import { financeService } from '@/api/services/finance';
+import { useProcurement } from '@/components/contexts/ProcurementContext';
 
 export default function VendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { suppliers, purchaseOrders: contextPOs } = useProcurement();
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -88,20 +91,13 @@ export default function VendorBills() {
 
   // Products list for dropdown
   const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Sample vendors (in real app, fetch from API)
-  const vendors = [
-    { id: '1', name: t('tech_supplies_ltd') || 'Tech Supplies Ltd' },
-    { id: '2', name: t('office_equipment_co') || 'Office Equipment Co' },
-    { id: '3', name: t('industrial_parts_inc') || 'Industrial Parts Inc' }
-  ];
+  // Use real suppliers from context as vendors
+  const vendors = suppliers.filter(s => s.is_active !== false);
 
-  // Sample purchase orders (for linking)
-  const [purchaseOrders, setPurchaseOrders] = useState([
-    { id: 'PO-001', vendor_id: '1', total: 5000000 },
-    { id: 'PO-002', vendor_id: '2', total: 3000000 },
-    { id: 'PO-003', vendor_id: '3', total: 7500000 }
-  ]);
+  // Purchase orders from context
+  const purchaseOrders = contextPOs || [];
 
   // Fetch products for dropdown
   useEffect(() => {
@@ -116,20 +112,43 @@ export default function VendorBills() {
     fetchProducts();
   }, []);
 
-  // Load bills from localStorage
-  useEffect(() => {
-    const storedBills = localStorage.getItem('genix_vendor_bills');
-    if (storedBills) {
-      setBills(JSON.parse(storedBills));
+  // Fetch bills from backend API
+  const fetchBills = async () => {
+    setIsLoading(true);
+    try {
+      const result = await financeService.listPurchaseInvoices({ page_size: 100 });
+      const items = result?.data || result?.items || (Array.isArray(result) ? result : []);
+      const mapped = items.map(inv => ({
+        id: inv.id,
+        bill_number: inv.invoice_number || '',
+        vendor_id: inv.vendor_id || inv.partner_id || '',
+        vendor_name: inv.vendor_name || inv.partner_name || '',
+        bill_date: inv.invoice_date || '',
+        due_date: inv.due_date || '',
+        purchase_order_id: inv.purchase_order_number || inv.purchase_order_id || '',
+        goods_receipt_id: inv.goods_receipt_id || '',
+        subtotal: inv.subtotal || 0,
+        tax_amount: inv.tax_amount || 0,
+        total_amount: inv.total_amount || 0,
+        paid_amount: inv.amount_paid || 0,
+        status: inv.status === 'confirmed' ? 'approved' : inv.status || 'draft',
+        matching_status: inv.three_way_match_status || 'pending',
+        currency: 'UZS',
+        notes: inv.notes || '',
+        created_at: inv.created_at,
+        _raw_id: inv.id,
+      }));
+      setBills(mapped);
+    } catch (error) {
+      console.error('Failed to fetch vendor bills:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  };
 
-  // Save bills to localStorage
   useEffect(() => {
-    if (bills.length > 0) {
-      localStorage.setItem('genix_vendor_bills', JSON.stringify(bills));
-    }
-  }, [bills]);
+    fetchBills();
+  }, []);
 
   // Filter bills
   useEffect(() => {
@@ -150,28 +169,48 @@ export default function VendorBills() {
     setFilteredBills(filtered);
   }, [bills, searchTerm, statusFilter]);
 
-  const handleCreateBill = () => {
-    const billId = `BILL-${String(bills.length + 1).padStart(3, '0')}`;
-    const bill = {
-      ...newBill,
-      id: billId,
-      status: 'draft',
-      matching_status: 'pending',
-      paid_amount: 0,
-      created_at: new Date().toISOString()
-    };
-
-    setBills([bill, ...bills]);
-    setShowBillDialog(false);
-    resetNewBill();
+  const handleCreateBill = async () => {
+    try {
+      const data = {
+        vendor_id: newBill.vendor_id,
+        invoice_date: newBill.bill_date,
+        due_date: newBill.due_date,
+        subtotal: newBill.subtotal,
+        tax_amount: newBill.tax_amount,
+        total_amount: newBill.total_amount,
+        notes: newBill.notes,
+        purchase_order_id: newBill.purchase_order_id || undefined,
+        lines: newBill.lines.map(l => ({
+          product_id: l.product_id,
+          description: l.description || l.product_name,
+          quantity: l.quantity,
+          unit_price: l.unit_price,
+          amount: l.amount,
+        })),
+      };
+      await financeService.createPurchaseInvoice(data);
+      setShowBillDialog(false);
+      resetNewBill();
+      fetchBills();
+    } catch (error) {
+      console.error('Failed to create bill:', error);
+    }
   };
 
-  const handleUpdateBill = () => {
-    setBills(bills.map(bill =>
-      bill.id === editingBill.id ? editingBill : bill
-    ));
-    setShowBillDialog(false);
-    setEditingBill(null);
+  const handleUpdateBill = async () => {
+    try {
+      const data = {
+        due_date: editingBill.due_date,
+        notes: editingBill.notes,
+        status: editingBill.status,
+      };
+      await financeService.updatePurchaseInvoice(editingBill.id, data);
+      setShowBillDialog(false);
+      setEditingBill(null);
+      fetchBills();
+    } catch (error) {
+      console.error('Failed to update bill:', error);
+    }
   };
 
   const handleDeleteBill = (bill) => {
@@ -179,35 +218,44 @@ export default function VendorBills() {
     setShowDeleteDialog(true);
   };
 
-  const confirmDeleteBill = () => {
+  const confirmDeleteBill = async () => {
     if (billToDelete) {
-      setBills(bills.filter(bill => bill.id !== billToDelete.id));
-      setShowDeleteDialog(false);
-      setBillToDelete(null);
+      try {
+        await financeService.deletePurchaseInvoice(billToDelete.id);
+        setShowDeleteDialog(false);
+        setBillToDelete(null);
+        fetchBills();
+      } catch (error) {
+        console.error('Failed to delete bill:', error);
+      }
     }
   };
 
-  const handleApproveBill = (billId) => {
-    setBills(bills.map(bill =>
-      bill.id === billId ? { ...bill, status: 'approved' } : bill
-    ));
+  const handleApproveBill = async (billId) => {
+    try {
+      await financeService.updatePurchaseInvoice(billId, { status: 'approved' });
+      fetchBills();
+    } catch (error) {
+      console.error('Failed to approve bill:', error);
+    }
   };
 
-  const handleMarkAsPaid = (billId) => {
-    setBills(bills.map(bill =>
-      bill.id === billId ? {
-        ...bill,
-        status: 'paid',
-        paid_amount: bill.total_amount,
-        payment_date: new Date().toISOString().split('T')[0]
-      } : bill
-    ));
+  const handleMarkAsPaid = async (billId) => {
+    try {
+      await financeService.updatePurchaseInvoice(billId, { status: 'paid' });
+      fetchBills();
+    } catch (error) {
+      console.error('Failed to mark bill as paid:', error);
+    }
   };
 
-  const handleRejectBill = (billId) => {
-    setBills(bills.map(bill =>
-      bill.id === billId ? { ...bill, status: 'rejected' } : bill
-    ));
+  const handleRejectBill = async (billId) => {
+    try {
+      await financeService.updatePurchaseInvoice(billId, { status: 'rejected' });
+      fetchBills();
+    } catch (error) {
+      console.error('Failed to reject bill:', error);
+    }
   };
 
   const resetNewBill = () => {
@@ -471,7 +519,11 @@ export default function VendorBills() {
       {/* Bills Table */}
       <Card>
         <CardContent className="pt-6">
-          {filteredBills.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : filteredBills.length === 0 ? (
             <div className="text-center py-12">
               <Receipt className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">{t('no_bills_found') || 'No bills found'}</h3>
@@ -704,9 +756,9 @@ export default function VendorBills() {
                   <SelectContent>
                     <SelectItem value="none">{t('none') || 'None'}</SelectItem>
                     {purchaseOrders
-                      .filter(po => po.vendor_id === (editingBill?.vendor_id || newBill.vendor_id))
+                      .filter(po => (po.vendor_id || po.supplier_id) === (editingBill?.vendor_id || newBill.vendor_id))
                       .map(po => (
-                        <SelectItem key={po.id} value={po.id}>{po.id}</SelectItem>
+                        <SelectItem key={po.id} value={po.id}>{po.po_number || po.order_number || po.id}</SelectItem>
                       ))}
                   </SelectContent>
                 </Select>
@@ -924,12 +976,18 @@ export default function VendorBills() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedBill.lines.map((line) => (
-                      <TableRow key={line.id}>
+                    {(selectedBill.lines || []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                          {t('no_line_items') || 'No line items'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (selectedBill.lines || []).map((line, idx) => (
+                      <TableRow key={line.id || idx}>
                         <TableCell>{line.product_name || line.description}</TableCell>
                         <TableCell className="text-right">{line.quantity}</TableCell>
-                        <TableCell className="text-right">{line.unit_price.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-semibold">{line.amount.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{(line.unit_price || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-semibold">{(line.amount || (line.quantity || 0) * (line.unit_price || 0)).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

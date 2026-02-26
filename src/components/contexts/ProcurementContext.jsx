@@ -772,40 +772,62 @@ export function ProcurementProvider({ children }) {
 
   // Supplier rating update
   const updateSupplierRating = useCallback(async (supplierId, rating, comment = '') => {
+    if (backendAvailable) {
+      try {
+        const result = await procurementService.rateSupplier(supplierId, rating, comment);
+        // Update local state with new average rating from backend
+        setSuppliers(prev => prev.map(s =>
+          s.id === supplierId
+            ? { ...s, rating: result.rating, rating_count: result.rating_count }
+            : s
+        ));
+        return;
+      } catch (err) {
+        console.error('Failed to rate supplier via backend:', err);
+      }
+    }
+    // Fallback: local-only update
     const supplier = getSupplierById(supplierId);
     if (supplier) {
       const currentRating = supplier.rating || 0;
-      const totalOrders = supplier.total_orders || 1;
-      const newRating = ((currentRating * (totalOrders - 1)) + rating) / totalOrders;
+      const ratingCount = supplier.rating_count || 0;
+      const newRating = ratingCount > 0
+        ? ((currentRating * ratingCount) + rating) / (ratingCount + 1)
+        : rating;
 
-      await updateSupplier(supplierId, {
-        rating: Math.round(newRating * 10) / 10,
-        last_rating_date: new Date().toISOString().split('T')[0],
-        last_rating_comment: comment,
-      });
+      setSuppliers(prev => prev.map(s =>
+        s.id === supplierId
+          ? { ...s, rating: Math.round(newRating * 10) / 10, rating_count: ratingCount + 1 }
+          : s
+      ));
     }
-  }, [getSupplierById, updateSupplier]);
+  }, [backendAvailable, getSupplierById]);
 
   // Summary statistics
   const getSupplierStats = useCallback(() => {
     const activeSuppliers = suppliers.filter(s => s.status === 'active').length;
 
-    // Calculate total spent from purchase orders (only received/completed orders)
-    const totalSpent = purchaseOrders.reduce((sum, po) => {
-      // Include orders that are received, completed, or have partial delivery
-      if (['received', 'completed', 'partial', 'approved', 'ordered'].includes(po.status)) {
-        return sum + (po.total_amount || po.total || 0);
+    // Build a set of current supplier IDs for filtering
+    const supplierIds = new Set(suppliers.map(s => s.id));
+
+    // Calculate total spent from purchase orders only for listed suppliers
+    let totalSpent = 0;
+    let totalOrders = 0;
+    purchaseOrders.forEach(po => {
+      const vendorId = po.vendor_id || po.supplier_id;
+      if (vendorId && supplierIds.has(vendorId)) {
+        totalOrders++;
+        if (['received', 'completed', 'partial', 'approved', 'ordered'].includes(po.status)) {
+          totalSpent += (po.total_amount || po.total || 0);
+        }
       }
-      return sum;
-    }, 0);
+    });
 
-    // Calculate average rating from suppliers
-    const avgRating = suppliers.length > 0
-      ? suppliers.reduce((sum, s) => sum + (s.rating || 0), 0) / suppliers.length
+    // Calculate average rating from suppliers (only those with ratings)
+    const ratedSuppliers = suppliers.filter(s => s.rating > 0);
+    const avgRating = ratedSuppliers.length > 0
+      ? ratedSuppliers.reduce((sum, s) => sum + s.rating, 0) / ratedSuppliers.length
       : 0;
-
-    // Count total orders
-    const totalOrders = purchaseOrders.length;
 
     return {
       totalSuppliers: suppliers.length,
