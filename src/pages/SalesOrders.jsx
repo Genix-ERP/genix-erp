@@ -22,10 +22,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Plus, Search, ShoppingBag, TrendingUp, Package, DollarSign, Truck,
   CheckCircle, FileText, Receipt, RotateCcw, Tag, BarChart3, Upload, Download, Eye, Printer, Trash2, X,
-  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning
+  LayoutDashboard, Building2, Edit, ToggleLeft, ToggleRight, MessageSquareWarning, ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -73,8 +74,9 @@ export default function SalesOrders() {
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
-  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => tr.id === defaultSalesTaxId) : null;
+  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => String(tr.id) === String(defaultSalesTaxId)) : null;
   const defaultTaxPercent = defaultSalesTax?.rate || 0;
+  const salesTaxRates = taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type);
   const {
     quotations = [],
     invoices = [],
@@ -722,14 +724,18 @@ export default function SalesOrders() {
     }
   };
 
-  const handleDeleteOrder = () => {
-    if (orderToDelete) {
-      // Since we don't have a delete function in the context, we'll need to update the status to cancelled
-      updateSalesOrder(orderToDelete.id, { status: 'cancelled' });
-      addAuditLog('delete', orderToDelete.id, orderToDelete.order_number);
-      setShowDeleteDialog(false);
-      setOrderToDelete(null);
+  const handleDeleteOrder = async (orderId) => {
+    const id = orderId || orderToDelete?.id;
+    if (!id) return;
+    try {
+      await salesService.cancelOrder(id);
+      addAuditLog('delete', id, orderToDelete?.order_number || orderId);
+      await refreshModulesData();
+    } catch (error) {
+      console.error('Error cancelling order:', error);
     }
+    setShowDeleteDialog(false);
+    setOrderToDelete(null);
   };
 
   const handleUpdatePaymentStatus = async (orderId, paymentStatus) => {
@@ -1498,12 +1504,41 @@ export default function SalesOrders() {
               <div className="grid grid-cols-2 gap-4 border-t pt-4">
                 <div>
                   <Label>{t('tax')} (%)</Label>
-                  <Input
-                    type="number"
-                    placeholder="12"
-                    value={newOrder.tax_percent}
-                    onChange={(e) => setNewOrder({...newOrder, tax_percent: e.target.value})}
-                  />
+                  <Popover>
+                    <PopoverAnchor asChild>
+                      <div className="flex">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={newOrder.tax_percent}
+                          onChange={(e) => setNewOrder({...newOrder, tax_percent: e.target.value})}
+                          className="rounded-r-none border-r-0"
+                        />
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="icon" className="rounded-l-none border-l-0 shrink-0 px-2">
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </PopoverTrigger>
+                      </div>
+                    </PopoverAnchor>
+                    <PopoverContent className="w-56 p-1" align="end">
+                      <div className="space-y-0.5">
+                        {salesTaxRates.map(tr => (
+                          <PopoverTrigger asChild key={tr.id}>
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm rounded hover:bg-slate-100 transition-colors"
+                              onClick={() => setNewOrder({...newOrder, tax_percent: tr.rate})}
+                            >
+                              {tr.name} ({tr.rate}%)
+                            </button>
+                          </PopoverTrigger>
+                        ))}
+                        {salesTaxRates.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-slate-500">{t('no_tax_rates') || 'No tax rates available'}</div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <Label>{t('shipping')}</Label>
@@ -2087,11 +2122,41 @@ export default function SalesOrders() {
                 <div className="grid grid-cols-2 gap-4 border-t pt-4">
                   <div>
                     <Label>{t('tax')} (%)</Label>
-                    <Input
-                      type="number"
-                      value={editingOrder.tax_percent || 0}
-                      onChange={(e) => setEditingOrder({...editingOrder, tax_percent: e.target.value})}
-                    />
+                    <Popover>
+                      <PopoverAnchor asChild>
+                        <div className="flex">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={editingOrder.tax_percent || 0}
+                            onChange={(e) => setEditingOrder({...editingOrder, tax_percent: e.target.value})}
+                            className="rounded-r-none border-r-0"
+                          />
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="icon" className="rounded-l-none border-l-0 shrink-0 px-2">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                        </div>
+                      </PopoverAnchor>
+                      <PopoverContent className="w-56 p-1" align="end">
+                        <div className="space-y-0.5">
+                          {salesTaxRates.map(tr => (
+                            <PopoverTrigger asChild key={tr.id}>
+                              <button
+                                className="w-full text-left px-3 py-2 text-sm rounded hover:bg-slate-100 transition-colors"
+                                onClick={() => setEditingOrder({...editingOrder, tax_percent: tr.rate})}
+                              >
+                                {tr.name} ({tr.rate}%)
+                              </button>
+                            </PopoverTrigger>
+                          ))}
+                          {salesTaxRates.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-500">{t('no_tax_rates') || 'No tax rates available'}</div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div>
                     <Label>{t('shipping')}</Label>

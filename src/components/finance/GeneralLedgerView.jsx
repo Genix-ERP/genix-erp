@@ -233,127 +233,147 @@ export default function GeneralLedgerView() {
               {t('no_data') || 'No data found'}
             </div>
           ) : (
-            filteredAccounts.map(acc => {
-              const isExpanded = expandedAccounts[acc.account_id];
-              const accType = getAccountType(acc.account_id);
-              const hasTransactions = acc.transactions && acc.transactions.length > 0;
+            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/80">
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="text-xs font-semibold">{t('account') || 'Account'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('opening') || 'Opening'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('debit') || 'Debit'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('credit') || 'Credit'}</TableHead>
+                    <TableHead className="w-[130px] text-right text-xs font-semibold">{t('closing') || 'Closing'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAccounts.map(acc => {
+                    const isExpanded = expandedAccounts[acc.account_id];
+                    const accType = getAccountType(acc.account_id);
+                    const hasTransactions = acc.transactions && acc.transactions.length > 0;
 
-              return (
-                <Card key={acc.account_id} className="bg-white/80 backdrop-blur-sm border-slate-200/60 overflow-hidden">
-                  {/* Account Header */}
-                  <div
-                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors"
-                    onClick={() => hasTransactions && toggleAccount(acc.account_id)}
-                  >
-                    <div className="flex items-center gap-3">
-                      {hasTransactions ? (
-                        isExpanded ?
-                          <ChevronDown className="w-4 h-4 text-slate-400" /> :
-                          <ChevronRight className="w-4 h-4 text-slate-400" />
-                      ) : (
-                        <div className="w-4" />
-                      )}
-                      <span className="font-mono text-sm text-slate-500">{acc.account_code}</span>
-                      <span className="font-medium text-slate-800">{acc.account_name}</span>
-                      {accType && (
-                        <Badge variant="outline" className={`text-xs ${accountTypeColor(accType)}`}>
-                          {accountTypeLabel(accType)}
-                        </Badge>
-                      )}
-                      {hasTransactions && (
-                        <span className="text-xs text-slate-400">
-                          ({acc.transactions.length} {t('transactions') || 'transactions'})
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div className="text-right min-w-[100px]">
-                        <div className="text-xs text-slate-400">{t('opening') || 'Opening'}</div>
-                        <div className="font-medium">{formatCurrency(acc.opening_balance)}</div>
-                      </div>
-                      <div className="text-right min-w-[100px]">
-                        <div className="text-xs text-slate-400">{t('debit') || 'Debit'}</div>
-                        <div className="font-medium text-blue-600">{formatCurrency(acc.total_debit)}</div>
-                      </div>
-                      <div className="text-right min-w-[100px]">
-                        <div className="text-xs text-slate-400">{t('credit') || 'Credit'}</div>
-                        <div className="font-medium text-red-600">{formatCurrency(acc.total_credit)}</div>
-                      </div>
-                      <div className="text-right min-w-[100px]">
-                        <div className="text-xs text-slate-400">{t('closing') || 'Closing'}</div>
-                        <div className="font-semibold">{formatCurrency(acc.closing_balance)}</div>
-                      </div>
-                    </div>
-                  </div>
+                    return (
+                      <React.Fragment key={acc.account_id}>
+                        {/* Account Row */}
+                        <TableRow
+                          className={`cursor-pointer hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-slate-50/60' : ''}`}
+                          onClick={() => hasTransactions && toggleAccount(acc.account_id)}
+                        >
+                          <TableCell className="px-2 py-3">
+                            {hasTransactions ? (
+                              isExpanded ?
+                                <ChevronDown className="w-4 h-4 text-slate-400" /> :
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                            ) : (
+                              <div className="w-4" />
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm text-slate-500">{acc.account_code}</span>
+                              <span className="font-medium text-slate-800">{acc.account_name}</span>
+                              {accType && (
+                                <Badge variant="outline" className={`text-xs ${accountTypeColor(accType)}`}>
+                                  {accountTypeLabel(accType)}
+                                </Badge>
+                              )}
+                              {hasTransactions && (
+                                <span className="text-xs text-slate-400">
+                                  ({acc.transactions.length} {t('transactions') || 'transactions'})
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-medium">
+                            {formatCurrency(acc.opening_balance)}
+                          </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-medium text-blue-600">
+                            {formatCurrency(acc.total_debit)}
+                          </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-medium text-red-600">
+                            {formatCurrency(acc.total_credit)}
+                          </TableCell>
+                          <TableCell className="text-right py-3 text-sm font-semibold">
+                            {formatCurrency(acc.closing_balance)}
+                          </TableCell>
+                        </TableRow>
 
-                  {/* Transactions Table */}
-                  {isExpanded && hasTransactions && (
-                    <div className="border-t border-slate-100">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-slate-50/50">
-                            <TableHead className="w-[100px] text-xs">{t('date') || 'Date'}</TableHead>
-                            <TableHead className="w-[120px] text-xs">{t('entry_number') || 'Entry #'}</TableHead>
-                            <TableHead className="text-xs">{t('description') || 'Description'}</TableHead>
-                            <TableHead className="w-[120px] text-xs">{t('reference') || 'Reference'}</TableHead>
-                            <TableHead className="w-[120px] text-right text-xs">{t('debit') || 'Debit'}</TableHead>
-                            <TableHead className="w-[120px] text-right text-xs">{t('credit') || 'Credit'}</TableHead>
-                            <TableHead className="w-[130px] text-right text-xs">{t('balance') || 'Balance'}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {/* Opening balance row */}
-                          <TableRow className="bg-slate-50/30">
-                            <TableCell colSpan={6} className="text-xs font-medium text-slate-500 italic">
-                              {t('opening_balance') || 'Opening Balance'}
-                            </TableCell>
-                            <TableCell className="text-right text-xs font-medium">
-                              {formatCurrency(acc.opening_balance)}
-                            </TableCell>
-                          </TableRow>
-                          {acc.transactions.map((tx, idx) => (
-                            <TableRow key={idx} className="hover:bg-slate-50/50">
-                              <TableCell className="text-xs text-slate-600">{tx.date}</TableCell>
-                              <TableCell className="text-xs font-mono text-slate-600">{tx.entry_number}</TableCell>
-                              <TableCell className="text-xs text-slate-700">{tx.description || '-'}</TableCell>
-                              <TableCell className="text-xs text-slate-500">{tx.reference || '-'}</TableCell>
-                              <TableCell className="text-right text-xs">
-                                {tx.debit_amount > 0 ? (
-                                  <span className="text-blue-600">{formatCurrency(tx.debit_amount)}</span>
-                                ) : '-'}
-                              </TableCell>
-                              <TableCell className="text-right text-xs">
-                                {tx.credit_amount > 0 ? (
-                                  <span className="text-red-600">{formatCurrency(tx.credit_amount)}</span>
-                                ) : '-'}
-                              </TableCell>
-                              <TableCell className="text-right text-xs font-medium">
-                                {formatCurrency(tx.running_balance)}
+                        {/* Expanded Transactions */}
+                        {isExpanded && hasTransactions && (
+                          <>
+                            {/* Sub-header */}
+                            <TableRow className="bg-slate-100/60">
+                              <TableCell></TableCell>
+                              <TableCell colSpan={5} className="p-0">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-slate-100/60 border-0">
+                                      <TableHead className="w-[100px] text-xs">{t('date') || 'Date'}</TableHead>
+                                      <TableHead className="w-[120px] text-xs">{t('entry_number') || 'Entry #'}</TableHead>
+                                      <TableHead className="text-xs">{t('description') || 'Description'}</TableHead>
+                                      <TableHead className="w-[120px] text-xs">{t('reference') || 'Reference'}</TableHead>
+                                      <TableHead className="w-[120px] text-right text-xs">{t('debit') || 'Debit'}</TableHead>
+                                      <TableHead className="w-[120px] text-right text-xs">{t('credit') || 'Credit'}</TableHead>
+                                      <TableHead className="w-[130px] text-right text-xs">{t('balance') || 'Balance'}</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {/* Opening balance row */}
+                                    <TableRow className="bg-slate-50/30">
+                                      <TableCell colSpan={6} className="text-xs font-medium text-slate-500 italic">
+                                        {t('opening_balance') || 'Opening Balance'}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs font-medium">
+                                        {formatCurrency(acc.opening_balance)}
+                                      </TableCell>
+                                    </TableRow>
+                                    {acc.transactions.map((tx, idx) => (
+                                      <TableRow key={idx} className="hover:bg-slate-50/50">
+                                        <TableCell className="text-xs text-slate-600">{tx.date}</TableCell>
+                                        <TableCell className="text-xs font-mono text-slate-600">{tx.entry_number}</TableCell>
+                                        <TableCell className="text-xs text-slate-700">{tx.description || '-'}</TableCell>
+                                        <TableCell className="text-xs text-slate-500">{tx.reference || '-'}</TableCell>
+                                        <TableCell className="text-right text-xs">
+                                          {tx.debit_amount > 0 ? (
+                                            <span className="text-blue-600">{formatCurrency(tx.debit_amount)}</span>
+                                          ) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs">
+                                          {tx.credit_amount > 0 ? (
+                                            <span className="text-red-600">{formatCurrency(tx.credit_amount)}</span>
+                                          ) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs font-medium">
+                                          {formatCurrency(tx.running_balance)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                    {/* Closing balance row */}
+                                    <TableRow className="bg-slate-50/50 border-t-2 border-slate-200">
+                                      <TableCell colSpan={4} className="text-xs font-semibold text-slate-600">
+                                        {t('closing_balance') || 'Closing Balance'}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs font-semibold text-blue-700">
+                                        {formatCurrency(acc.total_debit)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs font-semibold text-red-700">
+                                        {formatCurrency(acc.total_credit)}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs font-bold">
+                                        {formatCurrency(acc.closing_balance)}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
                               </TableCell>
                             </TableRow>
-                          ))}
-                          {/* Closing balance row */}
-                          <TableRow className="bg-slate-50/50 border-t-2 border-slate-200">
-                            <TableCell colSpan={4} className="text-xs font-semibold text-slate-600">
-                              {t('closing_balance') || 'Closing Balance'}
-                            </TableCell>
-                            <TableCell className="text-right text-xs font-semibold text-blue-700">
-                              {formatCurrency(acc.total_debit)}
-                            </TableCell>
-                            <TableCell className="text-right text-xs font-semibold text-red-700">
-                              {formatCurrency(acc.total_credit)}
-                            </TableCell>
-                            <TableCell className="text-right text-xs font-bold">
-                              {formatCurrency(acc.closing_balance)}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </Card>
-              );
-            })
+                          </>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
           )}
         </div>
       )}

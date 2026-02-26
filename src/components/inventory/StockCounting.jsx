@@ -206,7 +206,7 @@ export default function StockCounting() {
       i.product_id === productId &&
       i.warehouse_id === selectedCount.warehouse_id
     );
-    const systemQty = line?.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
+    const systemQty = line?.system_quantity ?? line?.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
     const parsedCountedQty = parseInt(countedQty) || 0;
     const variance = parsedCountedQty - systemQty;
 
@@ -215,10 +215,13 @@ export default function StockCounting() {
       if (l.product_id === productId) {
         return {
           ...l,
+          counted_quantity: parsedCountedQty,
           counted_qty: parsedCountedQty,
+          variance_quantity: variance,
           variance: variance,
           variance_reason: reason || null,
-          system_qty: systemQty // Ensure system_qty is stored
+          system_quantity: systemQty,
+          system_qty: systemQty,
         };
       }
       return l;
@@ -552,7 +555,8 @@ export default function StockCounting() {
                         const isEditable = selectedCount.status !== 'completed' && selectedCount.status !== 'cancelled';
                         const systemQty = line.system_quantity ?? line.system_qty ?? 0;
                         const countedQty = line.counted_quantity ?? line.counted_qty;
-                        const variance = line.variance_quantity ?? line.variance ?? 0;
+                        const hasCounted = countedQty !== null && countedQty !== undefined;
+                        const variance = hasCounted ? (line.variance_quantity ?? line.variance ?? (countedQty - systemQty)) : 0;
                         const productName = line.product_name || product?.name || t('unknown');
 
                         return (

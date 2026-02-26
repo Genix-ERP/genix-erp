@@ -393,6 +393,89 @@ export default function Products() {
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [newVariantAttribute, setNewVariantAttribute] = useState({ name: '', values: '' });
 
+  // Backend product attributes for variant selection
+  const [backendAttributes, setBackendAttributes] = useState([]);
+  const [selectedAttributeId, setSelectedAttributeId] = useState('');
+  const [selectedValueIds, setSelectedValueIds] = useState([]);
+  const [showCreateAttribute, setShowCreateAttribute] = useState(false);
+  const [newAttrName, setNewAttrName] = useState('');
+  const [newAttrInlineValues, setNewAttrInlineValues] = useState([]); // [{name, price_extra}]
+  const [newAttrValName, setNewAttrValName] = useState('');
+  const [newAttrValPrice, setNewAttrValPrice] = useState('');
+  const [isCreatingAttr, setIsCreatingAttr] = useState(false);
+  const [showAddValue, setShowAddValue] = useState(false);
+  const [newValueName, setNewValueName] = useState('');
+  const [newValuePriceExtra, setNewValuePriceExtra] = useState('');
+  const [isAddingValue, setIsAddingValue] = useState(false);
+
+  const fetchBackendAttributes = async () => {
+    try {
+      const response = await apiClient.get('/product-attributes');
+      setBackendAttributes(response.data?.data || []);
+    } catch (err) {
+      console.error('Failed to load product attributes:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBackendAttributes();
+  }, []);
+
+  const handleCreateInlineAttribute = async () => {
+    if (!newAttrName.trim() || newAttrInlineValues.length === 0) return;
+    setIsCreatingAttr(true);
+    try {
+      // Create attribute first (backend inline values don't support price_extra)
+      const res = await apiClient.post('/product-attributes', {
+        name: newAttrName.trim(),
+        display_type: 'select',
+        create_variant: true,
+        values: [],
+      });
+      const attrId = res.data?.data?.id || res.data?.id;
+      // Add each value with price_extra via separate endpoint
+      if (attrId) {
+        for (let i = 0; i < newAttrInlineValues.length; i++) {
+          const v = newAttrInlineValues[i];
+          await apiClient.post(`/product-attributes/${attrId}/values`, {
+            name: v.name,
+            price_extra: v.price_extra || 0,
+            sort_order: i,
+          });
+        }
+      }
+      await fetchBackendAttributes();
+      setNewAttrName('');
+      setNewAttrInlineValues([]);
+      setNewAttrValName('');
+      setNewAttrValPrice('');
+      setShowCreateAttribute(false);
+    } catch (err) {
+      console.error('Failed to create attribute:', err);
+    } finally {
+      setIsCreatingAttr(false);
+    }
+  };
+
+  const handleAddValueToAttribute = async () => {
+    if (!selectedAttributeId || !newValueName.trim()) return;
+    setIsAddingValue(true);
+    try {
+      await apiClient.post(`/product-attributes/${selectedAttributeId}/values`, {
+        name: newValueName.trim(),
+        price_extra: parseFloat(newValuePriceExtra) || 0,
+      });
+      await fetchBackendAttributes();
+      setNewValueName('');
+      setNewValuePriceExtra('');
+      setShowAddValue(false);
+    } catch (err) {
+      console.error('Failed to add value:', err);
+    } finally {
+      setIsAddingValue(false);
+    }
+  };
+
   // Summary calculations
   const summaryStats = {
     totalProducts: products.length,
@@ -519,6 +602,16 @@ export default function Products() {
     });
     setShowAdvancedFields(false);
     setNewVariantAttribute({ name: '', values: '' });
+    setSelectedAttributeId('');
+    setSelectedValueIds([]);
+    setShowCreateAttribute(false);
+    setNewAttrName('');
+    setNewAttrInlineValues([]);
+    setNewAttrValName('');
+    setNewAttrValPrice('');
+    setShowAddValue(false);
+    setNewValueName('');
+    setNewValuePriceExtra('');
   };
 
   const handleCreate = async () => {
@@ -550,7 +643,28 @@ export default function Products() {
         uom_conversion_factor: parseFloat(formData.uom_conversion_factor) || 1,
       };
 
-      await createProduct(productData);
+      const newProduct = await createProduct(productData);
+
+      // If product has variants, link attributes and generate variants
+      if (formData.has_variants && formData.variant_attributes.length > 0 && newProduct?.id) {
+        try {
+          // Link each attribute + selected values to the product
+          for (const attr of formData.variant_attributes) {
+            await apiClient.post(`/products/${newProduct.id}/attributes`, {
+              product_id: newProduct.id,
+              attribute_id: attr.attribute_id,
+              value_ids: attr.values.map(v => v.id),
+            });
+          }
+          // Auto-generate variant combinations
+          await apiClient.post('/product-variants/generate', {
+            product_id: newProduct.id,
+          });
+        } catch (variantErr) {
+          console.error('Error setting up variants:', variantErr);
+        }
+      }
+
       resetForm();
       setShowCreateModal(false);
     } catch (error) {
@@ -2162,14 +2276,23 @@ export default function Products() {
 
                     {formData.has_variants && (
                       <div className="bg-slate-50 p-4 rounded-lg space-y-4">
-                        {/* Existing variant attributes */}
+                        {/* Added variant attributes */}
                         {formData.variant_attributes.length > 0 && (
                           <div className="space-y-2">
                             {formData.variant_attributes.map((attr, index) => (
-                              <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg border">
+                              <div key={index} className="flex items-center gap-2 bg-white p-3 rounded-lg border">
                                 <div className="flex-1">
                                   <span className="font-medium text-slate-700">{attr.name}:</span>
-                                  <span className="text-slate-600 ml-2">{attr.values.join(', ')}</span>
+                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {attr.values.map((val, vi) => (
+                                      <Badge key={vi} variant="secondary" className="text-xs">
+                                        {val.name}
+                                        {val.price_extra > 0 && (
+                                          <span className="text-green-600 ml-1">+{val.price_extra}</span>
+                                        )}
+                                      </Badge>
+                                    ))}
+                                  </div>
                                 </div>
                                 <Button
                                   type="button"
@@ -2188,51 +2311,282 @@ export default function Products() {
                           </div>
                         )}
 
-                        {/* Add new variant attribute */}
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <Input
-                              placeholder={t('attribute_name') || 'Attribute (e.g., Color)'}
-                              value={newVariantAttribute.name}
-                              onChange={(e) => setNewVariantAttribute({...newVariantAttribute, name: e.target.value})}
-                            />
+                        {/* Select existing attribute or create new */}
+                        <div className="space-y-3">
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <Select
+                                value={selectedAttributeId}
+                                onValueChange={(val) => {
+                                  setSelectedAttributeId(val);
+                                  setSelectedValueIds([]);
+                                  setShowAddValue(false);
+                                  setNewValueName('');
+                                  setNewValuePriceExtra('');
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={t('select_attribute')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {backendAttributes
+                                    .filter(a => !formData.variant_attributes.some(va => va.attribute_id === a.id))
+                                    .map(attr => (
+                                      <SelectItem key={attr.id} value={attr.id}>
+                                        {attr.name} ({(attr.values || []).length})
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                const attr = backendAttributes.find(a => a.id === selectedAttributeId);
+                                if (attr && selectedValueIds.length > 0) {
+                                  const selectedValues = (attr.values || []).filter(v => selectedValueIds.includes(v.id));
+                                  setFormData({
+                                    ...formData,
+                                    variant_attributes: [
+                                      ...formData.variant_attributes,
+                                      {
+                                        attribute_id: attr.id,
+                                        name: attr.name,
+                                        values: selectedValues.map(v => ({ id: v.id, name: v.name, price_extra: v.price_extra || 0 }))
+                                      }
+                                    ]
+                                  });
+                                  setSelectedAttributeId('');
+                                  setSelectedValueIds([]);
+                                }
+                              }}
+                              disabled={!selectedAttributeId || selectedValueIds.length === 0}
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              {t('add_attribute')}
+                            </Button>
                           </div>
-                          <div>
-                            <Input
-                              placeholder={t('attribute_values') || 'Values (comma separated)'}
-                              value={newVariantAttribute.values}
-                              onChange={(e) => setNewVariantAttribute({...newVariantAttribute, values: e.target.value})}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              if (newVariantAttribute.name && newVariantAttribute.values) {
-                                const values = newVariantAttribute.values.split(',').map(v => v.trim()).filter(v => v);
-                                setFormData({
-                                  ...formData,
-                                  variant_attributes: [
-                                    ...formData.variant_attributes,
-                                    { name: newVariantAttribute.name, values }
-                                  ]
-                                });
-                                setNewVariantAttribute({ name: '', values: '' });
-                              }
-                            }}
-                            disabled={!newVariantAttribute.name || !newVariantAttribute.values}
-                          >
-                            <Plus className="w-4 h-4 mr-1" />
-                            {t('add_attribute') || 'Add'}
-                          </Button>
+
+                          {/* Show values of selected attribute */}
+                          {selectedAttributeId && (() => {
+                            const attr = backendAttributes.find(a => a.id === selectedAttributeId);
+                            const values = attr?.values || [];
+                            return (
+                              <div className="bg-white border rounded-lg p-3 space-y-3">
+                                {values.length > 0 && (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-sm font-medium text-slate-700">{t('select_values')}:</p>
+                                      <button
+                                        type="button"
+                                        className="text-xs text-blue-600 hover:underline"
+                                        onClick={() => setSelectedValueIds(
+                                          selectedValueIds.length === values.length ? [] : values.map(v => v.id)
+                                        )}
+                                      >
+                                        {selectedValueIds.length === values.length ? t('deselect_all') : t('select_all')}
+                                      </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {values.map(val => {
+                                        const isSelected = selectedValueIds.includes(val.id);
+                                        return (
+                                          <button
+                                            key={val.id}
+                                            type="button"
+                                            onClick={() => setSelectedValueIds(
+                                              isSelected
+                                                ? selectedValueIds.filter(id => id !== val.id)
+                                                : [...selectedValueIds, val.id]
+                                            )}
+                                            className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                                              isSelected
+                                                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                            }`}
+                                          >
+                                            {val.html_color && (
+                                              <span
+                                                className="inline-block w-3 h-3 rounded-full mr-1.5 border border-slate-300"
+                                                style={{ backgroundColor: val.html_color }}
+                                              />
+                                            )}
+                                            {val.name}
+                                            {val.price_extra > 0 && (
+                                              <span className="text-green-600 ml-1 text-xs">+{val.price_extra}</span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+                                {values.length === 0 && (
+                                  <p className="text-xs text-slate-500">{t('no_values')}</p>
+                                )}
+                                {/* Add new value inline */}
+                                {!showAddValue ? (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                                    onClick={() => setShowAddValue(true)}
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    {t('add_value')}
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-2 pt-1 border-t">
+                                    <Input
+                                      className="h-8 text-sm"
+                                      placeholder={t('value_placeholder')}
+                                      value={newValueName}
+                                      onChange={(e) => setNewValueName(e.target.value)}
+                                    />
+                                    <Input
+                                      className="h-8 text-sm w-28"
+                                      placeholder={t('price_extra')}
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={newValuePriceExtra}
+                                      onChange={(e) => setNewValuePriceExtra(e.target.value)}
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 shrink-0"
+                                      onClick={handleAddValueToAttribute}
+                                      disabled={!newValueName.trim() || isAddingValue}
+                                    >
+                                      {isAddingValue ? '...' : t('add')}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 shrink-0"
+                                      onClick={() => { setShowAddValue(false); setNewValueName(''); setNewValuePriceExtra(''); }}
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Create new attribute inline */}
+                          {!showCreateAttribute ? (
+                            <button
+                              type="button"
+                              className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                              onClick={() => setShowCreateAttribute(true)}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              {t('create_new_attribute')}
+                            </button>
+                          ) : (
+                            <div className="bg-white border rounded-lg p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-slate-700">{t('create_new_attribute')}</p>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => { setShowCreateAttribute(false); setNewAttrName(''); setNewAttrInlineValues([]); setNewAttrValName(''); setNewAttrValPrice(''); }}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </Button>
+                              </div>
+                              <Input
+                                placeholder={t('attribute_name') || 'Attribute'}
+                                value={newAttrName}
+                                onChange={(e) => setNewAttrName(e.target.value)}
+                              />
+                              {/* Added values list */}
+                              {newAttrInlineValues.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {newAttrInlineValues.map((v, i) => (
+                                    <Badge key={i} variant="secondary" className="text-xs gap-1">
+                                      {v.name}
+                                      {v.price_extra > 0 && <span className="text-green-600">+{v.price_extra}</span>}
+                                      <button
+                                        type="button"
+                                        onClick={() => setNewAttrInlineValues(newAttrInlineValues.filter((_, idx) => idx !== i))}
+                                        className="ml-0.5 text-slate-400 hover:text-red-500"
+                                      >×</button>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Add value row */}
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  className="h-8 text-sm"
+                                  placeholder={t('value_name') || 'Value'}
+                                  value={newAttrValName}
+                                  onChange={(e) => setNewAttrValName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newAttrValName.trim()) {
+                                      e.preventDefault();
+                                      setNewAttrInlineValues([...newAttrInlineValues, { name: newAttrValName.trim(), price_extra: parseFloat(newAttrValPrice) || 0 }]);
+                                      setNewAttrValName('');
+                                      setNewAttrValPrice('');
+                                    }
+                                  }}
+                                />
+                                <Input
+                                  className="h-8 text-sm w-28"
+                                  placeholder={t('price_extra')}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={newAttrValPrice}
+                                  onChange={(e) => setNewAttrValPrice(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && newAttrValName.trim()) {
+                                      e.preventDefault();
+                                      setNewAttrInlineValues([...newAttrInlineValues, { name: newAttrValName.trim(), price_extra: parseFloat(newAttrValPrice) || 0 }]);
+                                      setNewAttrValName('');
+                                      setNewAttrValPrice('');
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 shrink-0"
+                                  onClick={() => {
+                                    if (newAttrValName.trim()) {
+                                      setNewAttrInlineValues([...newAttrInlineValues, { name: newAttrValName.trim(), price_extra: parseFloat(newAttrValPrice) || 0 }]);
+                                      setNewAttrValName('');
+                                      setNewAttrValPrice('');
+                                    }
+                                  }}
+                                  disabled={!newAttrValName.trim()}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleCreateInlineAttribute}
+                                disabled={!newAttrName.trim() || newAttrInlineValues.length === 0 || isCreatingAttr}
+                              >
+                                {isCreatingAttr ? t('creating') : t('create_attribute')}
+                              </Button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Variant preview */}
                         {formData.variant_attributes.length > 0 && (
-                          <div className="text-sm text-slate-600">
-                            <p className="font-medium mb-1">{t('variants_will_be_generated') || 'Variants will be generated for all combinations:'}</p>
+                          <div className="text-sm text-slate-600 bg-white border rounded-lg p-3">
+                            <p className="font-medium mb-1">{t('variants_will_be_generated')}</p>
                             <p className="text-xs text-slate-500">
-                              {formData.variant_attributes.reduce((acc, attr) => acc * attr.values.length, 1)} {t('variants_total') || 'variants total'}
+                              {formData.variant_attributes.reduce((acc, attr) => acc * attr.values.length, 1)} {t('variants_total')}
                             </p>
                           </div>
                         )}

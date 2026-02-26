@@ -57,6 +57,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { useSearchParams } from "react-router-dom";
 import { useProcurement } from "@/components/contexts/ProcurementContext";
 import {
   ImportModal,
@@ -87,7 +88,8 @@ export default function Suppliers() {
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
-  const [activeTab, setActiveTab] = useState("list");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("subtab") || "list");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
@@ -489,7 +491,7 @@ export default function Suppliers() {
                         >
                           {renderStars(supplier.rating)}
                           <span className="text-xs text-slate-500 ml-1">
-                            ({supplier.rating || 0})
+                            ({supplier.rating_count || 0})
                           </span>
                         </button>
                       </TableCell>
