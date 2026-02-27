@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +96,7 @@ export default function StockCounting() {
 
   const [activeTab, setActiveTab] = useState("list");
   const [selectedCount, setSelectedCount] = useState(null);
+  const [lineInputValues, setLineInputValues] = useState({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -207,7 +208,7 @@ export default function StockCounting() {
       i.warehouse_id === selectedCount.warehouse_id
     );
     const systemQty = line?.system_quantity ?? line?.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
-    const parsedCountedQty = parseInt(countedQty) || 0;
+    const parsedCountedQty = typeof countedQty === 'number' ? countedQty : (parseInt(countedQty, 10) || 0);
     const variance = parsedCountedQty - systemQty;
 
     // Update the line locally immediately for better UX
@@ -571,10 +572,26 @@ export default function StockCounting() {
                             <TableCell className="text-center">
                               {isEditable ? (
                                 <Input
-                                  type="number"
-                                  value={countedQty ?? ''}
-                                  onChange={(e) => handleUpdateLine(line.product_id, e.target.value, line.variance_reason)}
-                                  className="w-24 text-center mx-auto"
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={lineInputValues[line.product_id] !== undefined
+                                    ? lineInputValues[line.product_id]
+                                    : (countedQty ?? '')}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^\d]/g, '');
+                                    setLineInputValues(prev => ({ ...prev, [line.product_id]: raw }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const raw = e.target.value.replace(/[^\d]/g, '');
+                                    const qty = raw === '' ? 0 : parseInt(raw, 10);
+                                    setLineInputValues(prev => {
+                                      const next = { ...prev };
+                                      delete next[line.product_id];
+                                      return next;
+                                    });
+                                    handleUpdateLine(line.product_id, qty, line.variance_reason);
+                                  }}
+                                  className="w-24 text-center mx-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   placeholder="0"
                                 />
                               ) : (
@@ -743,55 +760,62 @@ export default function StockCounting() {
 
                   return (
                     <>
-                      <div className="flex items-center gap-2 pb-2 border-b">
-                        <Checkbox
-                          id="select-all"
-                          checked={newCount.selected_products.length === 0 || newCount.selected_products.length === displayProducts.length}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setNewCount({ ...newCount, selected_products: [] }); // Empty = all products
-                            } else {
-                              setNewCount({ ...newCount, selected_products: [] });
-                            }
-                          }}
-                        />
-                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                          {t('all_products')} ({displayProducts.length})
-                        </label>
-                      </div>
-                      {displayProducts.map(product => (
-                        <div key={product.id} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`product-${product.id}`}
-                            checked={newCount.selected_products.length === 0 || newCount.selected_products.includes(product.id)}
-                            onCheckedChange={(checked) => {
-                              if (newCount.selected_products.length === 0) {
-                                // Currently "all" is selected, switch to specific selection
-                                const allIds = displayProducts.map(p => p.id);
-                                if (!checked) {
-                                  setNewCount({ ...newCount, selected_products: allIds.filter(id => id !== product.id) });
-                                }
-                              } else {
-                                if (checked) {
-                                  const newSelected = [...newCount.selected_products, product.id];
-                                  // If all selected, switch back to empty (all)
-                                  if (newSelected.length === displayProducts.length) {
-                                    setNewCount({ ...newCount, selected_products: [] });
+                      {(() => {
+                        const allIds = displayProducts.map(p => p.id);
+                        // empty array means all selected
+                        const isAllSelected = newCount.selected_products.length === 0;
+                        const isProductSelected = (id) => isAllSelected || newCount.selected_products.includes(id);
+                        return (
+                          <>
+                            <div className="flex items-center gap-2 pb-2 border-b">
+                              <Checkbox
+                                id="select-all"
+                                checked={isAllSelected}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setNewCount({ ...newCount, selected_products: [] }); // empty = all
                                   } else {
-                                    setNewCount({ ...newCount, selected_products: newSelected });
+                                    setNewCount({ ...newCount, selected_products: [] }); // keep all, user must uncheck individual
                                   }
-                                } else {
-                                  setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
-                                }
-                              }
-                            }}
-                          />
-                          <label htmlFor={`product-${product.id}`} className="text-sm cursor-pointer flex-1 flex justify-between">
-                            <span>{product.name}</span>
-                            <span className="text-slate-500">{product.system_qty} {t('units')}</span>
-                          </label>
-                        </div>
-                      ))}
+                                }}
+                              />
+                              <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                                {t('all_products')} ({displayProducts.length})
+                              </label>
+                            </div>
+                            {displayProducts.map(product => (
+                              <div key={product.id} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`product-${product.id}`}
+                                  checked={isProductSelected(product.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (isAllSelected) {
+                                      // expand to explicit list then remove/keep
+                                      if (checked) {
+                                        // already selected (all mode), nothing to do
+                                      } else {
+                                        setNewCount({ ...newCount, selected_products: allIds.filter(id => id !== product.id) });
+                                      }
+                                    } else {
+                                      if (checked) {
+                                        const newSelected = [...newCount.selected_products, product.id];
+                                        // if all are now selected, collapse back to empty (all)
+                                        setNewCount({ ...newCount, selected_products: newSelected.length === allIds.length ? [] : newSelected });
+                                      } else {
+                                        setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
+                                      }
+                                    }
+                                  }}
+                                />
+                                <label htmlFor={`product-${product.id}`} className="text-sm cursor-pointer flex-1 flex justify-between">
+                                  <span>{product.name}</span>
+                                  <span className="text-slate-500">{product.system_qty} {t('units')}</span>
+                                </label>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
                     </>
                   );
                 })()}

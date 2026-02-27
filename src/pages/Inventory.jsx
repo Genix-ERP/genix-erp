@@ -24,7 +24,7 @@ import {
   Settings2,
   MapPin,
   CalendarClock,
-  BarChart3
+  BarChart3,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,6 +42,7 @@ import InventoryValuation from "@/components/inventory/InventoryValuation";
 import Planning from "@/components/inventory/Planning";
 // ReorderRules and Replenishment are now integrated into Planning component
 import OperationTypes from "@/components/inventory/OperationTypes";
+import StockOperations from "@/components/inventory/StockOperations";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import StockReport from "@/components/inventory/StockReport";
 
@@ -283,6 +284,14 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
+              value="stock-ops"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('stock_operations') || "Operations"}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
               value="locations"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
             >
@@ -394,6 +403,11 @@ export default function Inventory() {
           {/* Operation Types Tab */}
           <TabsContent value="operations" className="mt-6">
             <OperationTypes />
+          </TabsContent>
+
+          {/* Stock Operations Tab (TT: Receipt, Delivery, Internal, Write-off) */}
+          <TabsContent value="stock-ops" className="mt-6">
+            <StockOperations />
           </TabsContent>
 
           {/* Locations Tab */}

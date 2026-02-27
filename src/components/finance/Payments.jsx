@@ -18,6 +18,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useFinancials } from "@/components/contexts/FinancialsContext";
+import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
 
@@ -30,11 +31,13 @@ export default function Payments() {
     accounts,
     journals,
     vendorBills,
-    customerInvoices,
     createPayment,
     confirmPayment,
     isLoading
   } = useFinancials();
+  // Use SalesContext invoices so newly created SO invoices appear immediately
+  const { invoices: salesInvoices } = useSales();
+  const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState("customer");
@@ -71,6 +74,13 @@ export default function Payments() {
   const unpaidInvoices = (customerInvoices || []).filter(inv =>
     inv.status !== 'cancelled' && inv.status !== 'paid'
   ).filter(inv => ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0);
+
+  // Auto-select first bank/cash journal when journals load and modal is open with no journal selected
+  useEffect(() => {
+    if (showCreateModal && !newPayment.journal_id && bankCashJournals.length > 0) {
+      setNewPayment(prev => ({ ...prev, journal_id: bankCashJournals[0].id }));
+    }
+  }, [showCreateModal, bankCashJournals.length, newPayment.journal_id]);
 
   // Load contacts when modal opens
   useEffect(() => {
@@ -541,11 +551,20 @@ export default function Payments() {
                     <SelectValue placeholder={t('select_journal')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {bankCashJournals.map(j => (
-                      <SelectItem key={j.id} value={j.id}>
-                        {j.name}
+                    {bankCashJournals.length === 0 ? (
+                      <SelectItem value="__none__" disabled>
+                        {t('no_journals_available') || 'No journals available'}
                       </SelectItem>
-                    ))}
+                    ) : (
+                      bankCashJournals.map(j => (
+                        <SelectItem key={j.id} value={j.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{j.type === 'cash' ? '💵' : '🏦'}</span>
+                            <span>{j.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
