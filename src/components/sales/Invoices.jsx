@@ -73,11 +73,16 @@ export default function Invoices() {
   const { activeCompany } = useCompany();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { getSetting } = useAdminSettings();
-  const { taxRates = [] } = useFinancials();
+  const { taxRates = [], journals = [] } = useFinancials();
+  const bankCashJournals = journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
-  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => tr.id === defaultSalesTaxId) : null;
+  const salesTaxRates = taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type);
+  // Prefer the explicitly configured default, fall back to first active sales tax
+  const defaultSalesTax = defaultSalesTaxId
+    ? taxRates.find(tr => String(tr.id) === String(defaultSalesTaxId))
+    : salesTaxRates.find(tr => tr.is_active !== false) || null;
 
   const {
     invoices,
@@ -128,13 +133,13 @@ export default function Invoices() {
     due_date: "",
     items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     discount_amount: 0,
-    tax_percent: 12,
+    tax_percent: defaultSalesTax?.rate || 0,
     notes: "",
   });
 
   const [paymentData, setPaymentData] = useState({
     amount: 0,
-    method: "cash",
+    journal_id: '',
     date: new Date().toISOString().split("T")[0],
     write_off: false,
     write_off_amount: 0,
@@ -281,7 +286,7 @@ export default function Invoices() {
       due_date: "",
       items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_amount: 0,
-      tax_percent: 12,
+      tax_percent: defaultSalesTax?.rate || 0,
       notes: "",
     });
   };
@@ -307,7 +312,7 @@ export default function Invoices() {
         due_date: fullInvoice.due_date || "",
         items: items.length > 0 ? items : [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: fullInvoice.discount_amount || 0,
-        tax_percent: fullInvoice.tax_percent || 12,
+        tax_percent: fullInvoice.tax_percent || defaultSalesTax?.rate || 0,
         notes: fullInvoice.notes || "",
       });
       setEditMode(true);
@@ -323,7 +328,7 @@ export default function Invoices() {
         due_date: invoice.due_date || "",
         items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: invoice.discount_amount || 0,
-        tax_percent: invoice.tax_percent || 12,
+        tax_percent: invoice.tax_percent || defaultSalesTax?.rate || 0,
         notes: invoice.notes || "",
       });
       setEditMode(true);
@@ -357,20 +362,26 @@ export default function Invoices() {
 
   const handlePayment = (invoice) => {
     setSelectedInvoice(invoice);
+    const defaultJournal = bankCashJournals.find(j => j.type === 'bank') || bankCashJournals[0];
     setPaymentData({
       amount: invoice.balance || 0,
-      method: "cash",
+      journal_id: defaultJournal?.id || '',
       date: new Date().toISOString().split("T")[0],
+      write_off: false,
+      write_off_amount: 0,
     });
     setShowPaymentModal(true);
   };
 
   const handlePaymentSubmit = async () => {
-    if (selectedInvoice && paymentData.amount > 0) {
+    if (selectedInvoice && parseFloat(paymentData.amount) > 0) {
+      // Derive payment method from selected journal type
+      const selectedJournal = bankCashJournals.find(j => j.id === paymentData.journal_id);
+      const method = selectedJournal?.type === 'cash' ? 'cash' : 'bank_transfer';
       await recordPayment(
         selectedInvoice.id,
         paymentData.amount,
-        paymentData.method,
+        method,
         paymentData.date,
         paymentData.write_off ? paymentData.write_off_amount : 0
       );
@@ -993,7 +1004,7 @@ export default function Invoices() {
                 />
               </div>
 
-              {paymentData.amount > 0 && paymentData.amount < (selectedInvoice?.balance || 0) && (
+              {parseFloat(paymentData.amount) > 0 && parseFloat(paymentData.amount) < (selectedInvoice?.balance || 0) && (
                 <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <input
                     type="checkbox"
@@ -1004,7 +1015,7 @@ export default function Invoices() {
                         ...paymentData,
                         write_off: e.target.checked,
                         write_off_amount: e.target.checked
-                          ? (selectedInvoice?.balance || 0) - paymentData.amount
+                          ? (selectedInvoice?.balance || 0) - parseFloat(paymentData.amount) || 0
                           : 0,
                       })
                     }
@@ -1013,7 +1024,7 @@ export default function Invoices() {
                   <label htmlFor="write-off-check" className="text-sm text-yellow-800 cursor-pointer">
                     {t('write_off_difference') || 'Write off'}{' '}
                     <span className="font-semibold">
-                      {formatCurrency((selectedInvoice?.balance || 0) - paymentData.amount)}
+                      {formatCurrency((selectedInvoice?.balance || 0) - parseFloat(paymentData.amount) || 0)}
                     </span>{' '}
                     {t('payment_difference') || 'difference'}
                   </label>
@@ -1021,35 +1032,33 @@ export default function Invoices() {
               )}
 
               <div className="space-y-2">
-                <Label>{t('payment_method')}</Label>
+                <Label>{t('journal') || 'Journal'} *</Label>
                 <Select
-                  value={paymentData.method}
+                  value={paymentData.journal_id}
                   onValueChange={(value) =>
-                    setPaymentData({ ...paymentData, method: value })
+                    setPaymentData({ ...paymentData, journal_id: value })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder={t('select_journal') || 'Select journal'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4" />
-                        {t('cash')}
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="bank_transfer">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" />
-                        {t('bank_transfer')}
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="card">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" />
-                        {t('card')}
-                      </div>
-                    </SelectItem>
+                    {bankCashJournals.length === 0 ? (
+                      <SelectItem value="__none__" disabled>
+                        {t('no_journals_available') || 'No journals available'}
+                      </SelectItem>
+                    ) : (
+                      bankCashJournals.map(j => (
+                        <SelectItem key={j.id} value={j.id}>
+                          <div className="flex items-center gap-2">
+                            {j.type === 'cash'
+                              ? <Banknote className="w-4 h-4 text-green-600" />
+                              : <CreditCard className="w-4 h-4 text-blue-600" />}
+                            {j.name}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1071,7 +1080,7 @@ export default function Invoices() {
                 </Button>
                 <Button
                   onClick={handlePaymentSubmit}
-                  disabled={paymentData.amount <= 0}
+                  disabled={!(parseFloat(paymentData.amount) > 0) || !paymentData.journal_id}
                 >
                   {t('record_payment')}
                 </Button>
