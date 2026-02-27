@@ -68,9 +68,12 @@ export default function PurchaseOrders() {
 
   // Get default tax from settings
   const defaultPurchaseTaxId = getSetting('purchase.tax.default_tax_id', '');
-  const defaultPurchaseTax = defaultPurchaseTaxId ? taxRates.find(tr => String(tr.id) === String(defaultPurchaseTaxId)) : null;
-  const defaultTaxPercent = defaultPurchaseTax?.rate || 0;
   const purchaseTaxRates = taxRates.filter(tr => tr.tax_type === 'purchase' || !tr.tax_type);
+  // Prefer the explicitly configured default, fall back to first active purchase tax
+  const defaultPurchaseTax = defaultPurchaseTaxId
+    ? taxRates.find(tr => String(tr.id) === String(defaultPurchaseTaxId))
+    : purchaseTaxRates.find(tr => tr.is_active !== false) || null;
+  const defaultTaxPercent = defaultPurchaseTax?.rate || 0;
 
   const {
     suppliers,

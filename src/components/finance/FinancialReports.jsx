@@ -151,7 +151,7 @@ function BalanceSheetSection({ title, sections, total, formatCurrency, colorClas
   );
 }
 
-export default function FinancialReports() {
+export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
@@ -381,7 +381,7 @@ export default function FinancialReports() {
       </div>
 
       {/* Reports Tabs */}
-      <Tabs defaultValue="trial-balance" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}

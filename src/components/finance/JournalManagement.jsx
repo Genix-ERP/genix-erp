@@ -63,6 +63,7 @@ export default function JournalManagement() {
   const [editForm, setEditForm] = useState({});
   const [isDirty, setIsDirty] = useState(false);
   const [activeTab, setActiveTab] = useState("entries");
+  const [allowedAccounts, setAllowedAccounts] = useState([]);
 
   // Journal entries for detail view
   const [journalEntries, setJournalEntries] = useState([]);
@@ -125,6 +126,8 @@ export default function JournalManagement() {
         short_code: detail.short_code || '',
         currency: detail.currency || '',
         auto_sequence: detail.auto_sequence !== false,
+        dedicated_payment_sequence: detail.dedicated_payment_sequence || false,
+        auto_check_on_post: detail.auto_check_on_post || false,
         number_prefix: detail.number_prefix || '',
         is_active: detail.is_active !== false,
         default_debit_account_id: detail.default_debit_account_id || '',
@@ -133,7 +136,9 @@ export default function JournalManagement() {
         suspense_account_id: detail.suspense_account_id || '',
         profit_account_id: detail.profit_account_id || '',
         loss_account_id: detail.loss_account_id || '',
+        allowed_account_ids: detail.allowed_account_ids || [],
       });
+      setAllowedAccounts(detail.allowed_account_ids || []);
       setIsDirty(false);
       // Load journal entries
       loadJournalEntries(journal.id, 1);
@@ -261,7 +266,10 @@ export default function JournalManagement() {
         openJournalDetail(result);
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.error?.message || error.message || 'Failed to create journal';
+      const rawMsg = error.response?.data?.error?.message || error.message || '';
+      const errorMsg = rawMsg.toLowerCase().includes('already exists')
+        ? t('journal_code_exists')
+        : rawMsg || t('failed_to_create_journal') || 'Failed to create journal';
       showError(errorMsg);
     } finally {
       setIsSaving(false);
@@ -302,29 +310,57 @@ export default function JournalManagement() {
 
     return (
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => { setSelectedJournal(null); setJournalDetail(null); setIsDirty(false); }}>
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              {t('back_to_journals')}
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge className={jt.color + ' flex items-center gap-1'}>
-              <TypeIcon className="w-3 h-3" />
-              {t(jt.labelKey)}
-            </Badge>
-            <Badge className={editForm.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}>
-              {editForm.is_active ? t('active') : t('inactive')}
-            </Badge>
-            {isDirty && canUpdate(MODULES.FINANCIALS) && (
-              <Button size="sm" onClick={handleSave} disabled={isSaving}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-                {t('save_changes')}
+        {/* Odoo-style Header */}
+        <div className="bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-xl p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedJournal(null); setJournalDetail(null); setIsDirty(false); }}
+                className="shrink-0 text-slate-500 hover:text-slate-700">
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                {t('back_to_journals')}
               </Button>
-            )}
+              <div className="h-5 w-px bg-slate-200 shrink-0" />
+              <div className="flex-1 min-w-0">
+                {canUpdate(MODULES.FINANCIALS) ? (
+                  <Input
+                    value={editForm.name}
+                    onChange={(e) => handleUpdateField('name', e.target.value)}
+                    className="text-2xl font-bold border-0 border-b border-transparent hover:border-slate-300 focus:border-[var(--genix-blue)] rounded-none px-0 h-auto py-0.5 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 w-full"
+                    disabled={!canUpdate(MODULES.FINANCIALS)}
+                  />
+                ) : (
+                  <h1 className="text-2xl font-bold text-slate-900 truncate">{editForm.name}</h1>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className={jt.color + ' flex items-center gap-1 text-xs'}>
+                    <TypeIcon className="w-3 h-3" />
+                    {t(jt.labelKey)}
+                  </Badge>
+                  {activeCompany?.name && (
+                    <span className="text-xs text-slate-500">{activeCompany.name}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {journalDetail?.entry_count > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setActiveTab('entries')}
+                  className="text-[var(--genix-blue)] border-[var(--genix-blue)]/30 hover:bg-[var(--genix-blue)]/5 text-xs">
+                  <BookOpen className="w-3.5 h-3.5 mr-1" />
+                  {journalDetail.entry_count} {t('journal_entries_tab')}
+                </Button>
+              )}
+              <Badge className={editForm.is_active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-slate-100 text-slate-600 border-slate-200'}>
+                {editForm.is_active ? t('active') : t('inactive')}
+              </Badge>
+              {isDirty && canUpdate(MODULES.FINANCIALS) && (
+                <Button size="sm" onClick={handleSave} disabled={isSaving}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white">
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                  {t('save_changes')}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -335,37 +371,6 @@ export default function JournalManagement() {
           </div>
         ) : (
           <>
-            {/* Journal Name & Code Header */}
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
-              <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-slate-500 mb-1 block">{t('name')}</label>
-                    <Input
-                      value={editForm.name}
-                      onChange={(e) => handleUpdateField('name', e.target.value)}
-                      className="text-xl font-bold bg-transparent border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20"
-                      disabled={!canUpdate(MODULES.FINANCIALS)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-slate-500 mb-1 block">{t('type')}</label>
-                      <div className="flex items-center gap-2 h-10 px-3 bg-slate-50 rounded-md border border-slate-200">
-                        <TypeIcon className="w-4 h-4 text-slate-500" />
-                        <span className="text-sm font-medium">{t(jt.labelKey)}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-500 mb-1 block">{t('code')}</label>
-                      <div className="flex items-center h-10 px-3 bg-slate-50 rounded-md border border-slate-200">
-                        <span className="text-sm font-mono font-medium">{detail.code}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -390,40 +395,43 @@ export default function JournalManagement() {
 
               {/* Tab: Journal Entries */}
               <TabsContent value="entries" className="space-y-4 mt-4">
-                {/* Accounting Information */}
+                {/* Accounting Information — Odoo style */}
                 <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
                   <CardContent className="p-6">
-                    <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-4">
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-5">
                       {t('accounting_information')}
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Account fields */}
-                      {isBankOrCash(detail.type) ? (
-                        <>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">
-                              {detail.type === 'bank' ? t('default_bank_account') : t('default_cash_account')}
-                            </label>
-                            <Select
-                              value={editForm.default_debit_account_id || 'none'}
-                              onValueChange={(v) => {
-                                const val = v === 'none' ? '' : v;
-                                handleUpdateField('default_debit_account_id', val);
-                                handleUpdateField('default_credit_account_id', val);
-                              }}
-                              disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+
+                    {/* Bank / Cash accounts */}
+                    {isBankOrCash(detail.type) && (
+                      <div className="space-y-4">
+                        {detail.type === 'bank' && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                            <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('bank_account')}</label>
+                            <div className="md:col-span-2">
+                              <Select
+                                value={editForm.bank_account_id || 'none'}
+                                onValueChange={(v) => handleUpdateField('bank_account_id', v === 'none' ? '' : v)}
+                                disabled={!canUpdate(MODULES.FINANCIALS)}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">{t('none')}</SelectItem>
+                                  {bankAccounts.map(ba => (
+                                    <SelectItem key={ba.id} value={ba.id}>{ba.bank_name} - {ba.account_number}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('suspense_account')}</label>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                          <label className="text-sm font-medium text-slate-700 md:pt-2.5 flex items-center gap-1">
+                            {t('suspense_account')}
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('suspense_account_help') || 'Temporarily holds transactions until reconciled'}>?</span>
+                          </label>
+                          <div className="md:col-span-2">
                             <Select
                               value={editForm.suspense_account_id || 'none'}
                               onValueChange={(v) => handleUpdateField('suspense_account_id', v === 'none' ? '' : v)}
@@ -438,8 +446,14 @@ export default function JournalManagement() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('profit_account')}</label>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                          <label className="text-sm font-medium text-slate-700 md:pt-2.5 flex items-center gap-1">
+                            {t('profit_account')}
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('profit_account_help') || 'Account used when a difference gain is recognized'}>?</span>
+                          </label>
+                          <div className="md:col-span-2">
                             <Select
                               value={editForm.profit_account_id || 'none'}
                               onValueChange={(v) => handleUpdateField('profit_account_id', v === 'none' ? '' : v)}
@@ -454,8 +468,14 @@ export default function JournalManagement() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('loss_account')}</label>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                          <label className="text-sm font-medium text-slate-700 md:pt-2.5 flex items-center gap-1">
+                            {t('loss_account')}
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('loss_account_help') || 'Account used when a difference loss is recognized'}>?</span>
+                          </label>
+                          <div className="md:col-span-2">
                             <Select
                               value={editForm.loss_account_id || 'none'}
                               onValueChange={(v) => handleUpdateField('loss_account_id', v === 'none' ? '' : v)}
@@ -470,13 +490,18 @@ export default function JournalManagement() {
                               </SelectContent>
                             </Select>
                           </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">
-                              {detail.type === 'sales' ? t('default_receivable_account') : detail.type === 'purchase' ? t('default_expense_account') : t('default_debit_account')}
-                            </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Non bank/cash accounts */}
+                    {!isBankOrCash(detail.type) && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                          <label className="text-sm font-medium text-slate-700 md:pt-2.5">
+                            {detail.type === 'sales' ? t('default_receivable_account') : detail.type === 'purchase' ? t('default_expense_account') : t('default_debit_account')}
+                          </label>
+                          <div className="md:col-span-2">
                             <Select
                               value={editForm.default_debit_account_id || 'none'}
                               onValueChange={(v) => handleUpdateField('default_debit_account_id', v === 'none' ? '' : v)}
@@ -491,10 +516,12 @@ export default function JournalManagement() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">
-                              {detail.type === 'sales' ? t('default_income_account') : detail.type === 'purchase' ? t('default_payable_account') : t('default_credit_account')}
-                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                          <label className="text-sm font-medium text-slate-700 md:pt-2.5">
+                            {detail.type === 'sales' ? t('default_income_account') : detail.type === 'purchase' ? t('default_payable_account') : t('default_credit_account')}
+                          </label>
+                          <div className="md:col-span-2">
                             <Select
                               value={editForm.default_credit_account_id || 'none'}
                               onValueChange={(v) => handleUpdateField('default_credit_account_id', v === 'none' ? '' : v)}
@@ -509,45 +536,52 @@ export default function JournalManagement() {
                               </SelectContent>
                             </Select>
                           </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Bank Account Number section for bank journals */}
-                    {detail.type === 'bank' && (
-                      <div className="mt-6 pt-4 border-t border-slate-200">
-                        <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide mb-4">
-                          {t('bank_account')}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('bank_account')}</label>
-                            <Select
-                              value={editForm.bank_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('bank_account_id', v === 'none' ? '' : v)}
-                              disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {bankAccounts.map(ba => (
-                                  <SelectItem key={ba.id} value={ba.id}>{ba.bank_name} - {ba.account_number}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-slate-700 mb-1 block">{t('short_code')}</label>
-                            <Input
-                              value={editForm.short_code}
-                              onChange={(e) => handleUpdateField('short_code', e.target.value.toUpperCase())}
-                              maxLength={10}
-                              disabled={!canUpdate(MODULES.FINANCIALS)}
-                            />
-                          </div>
                         </div>
                       </div>
                     )}
+
+                    {/* Dedicated Payment Sequence, Short Code, Currency — shown for all types */}
+                    <div className="mt-6 pt-5 border-t border-slate-100 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center">
+                        <label className="text-sm font-medium text-slate-700">{t('dedicated_payment_sequence') || 'Dedicated Payment Sequence'}</label>
+                        <div className="md:col-span-2 flex items-center gap-2">
+                          <Switch
+                            checked={editForm.dedicated_payment_sequence || false}
+                            onCheckedChange={(checked) => handleUpdateField('dedicated_payment_sequence', checked)}
+                            disabled={!canUpdate(MODULES.FINANCIALS)}
+                          />
+                          <span className="text-xs text-slate-500">{t('dedicated_payment_sequence_help') || 'Check this if you want to keep a different sequence for payments'}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                        <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('short_code')}</label>
+                        <div className="md:col-span-2">
+                          <Input
+                            value={editForm.short_code}
+                            onChange={(e) => handleUpdateField('short_code', e.target.value.toUpperCase())}
+                            maxLength={10}
+                            placeholder="e.g. BNK1"
+                            disabled={!canUpdate(MODULES.FINANCIALS)}
+                            className="max-w-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                        <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('currency')}</label>
+                        <div className="md:col-span-2">
+                          <Input
+                            value={editForm.currency}
+                            onChange={(e) => handleUpdateField('currency', e.target.value.toUpperCase())}
+                            maxLength={10}
+                            placeholder="UZS"
+                            disabled={!canUpdate(MODULES.FINANCIALS)}
+                            className="max-w-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -723,47 +757,97 @@ export default function JournalManagement() {
               )}
 
               {/* Tab: Advanced Settings */}
-              <TabsContent value="settings" className="mt-4">
+              <TabsContent value="settings" className="mt-4 space-y-4">
+                {/* Control-Access section */}
                 <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
-                  <CardContent className="p-6 space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-800 uppercase tracking-wide">
-                      {t('advanced_settings')}
+                  <CardContent className="p-6 space-y-5">
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                      {t('control_access') || 'Control-Access'}
                     </h4>
+                    <p className="text-xs text-slate-400 -mt-3">{t('control_access_hint') || 'Keep empty for no control'}</p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('short_code')}</label>
-                        <Input
-                          value={editForm.short_code}
-                          onChange={(e) => handleUpdateField('short_code', e.target.value.toUpperCase())}
-                          maxLength={10}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                      <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('allowed_accounts') || 'Allowed Accounts'}</label>
+                      <div className="md:col-span-2">
+                        <Select
+                          value="none"
+                          onValueChange={(v) => {
+                            if (v !== 'none' && !allowedAccounts.includes(v)) {
+                              const updated = [...allowedAccounts, v];
+                              setAllowedAccounts(updated);
+                              handleUpdateField('allowed_account_ids', updated);
+                            }
+                          }}
                           disabled={!canUpdate(MODULES.FINANCIALS)}
-                        />
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('add_allowed_account') || 'Add an account...'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{t('select_account')}</SelectItem>
+                            {(accounts || []).filter(a => a.is_active !== false && !allowedAccounts.includes(a.id)).map(acc => (
+                              <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {allowedAccounts.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {allowedAccounts.map(accId => {
+                              const acc = (accounts || []).find(a => a.id === accId);
+                              return acc ? (
+                                <span key={accId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                                  {acc.code} {acc.name}
+                                  {canUpdate(MODULES.FINANCIALS) && (
+                                    <button onClick={() => {
+                                      const updated = allowedAccounts.filter(id => id !== accId);
+                                      setAllowedAccounts(updated);
+                                      handleUpdateField('allowed_account_ids', updated);
+                                    }} className="text-blue-400 hover:text-blue-700 ml-0.5">×</button>
+                                  )}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('currency')}</label>
-                        <Input
-                          value={editForm.currency}
-                          onChange={(e) => handleUpdateField('currency', e.target.value.toUpperCase())}
-                          maxLength={10}
-                          placeholder="UZS"
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center">
+                      <label className="text-sm font-medium text-slate-700">{t('auto_check_on_post') || 'Auto-Check on Post'}</label>
+                      <div className="md:col-span-2">
+                        <Switch
+                          checked={editForm.auto_check_on_post || false}
+                          onCheckedChange={(checked) => handleUpdateField('auto_check_on_post', checked)}
                           disabled={!canUpdate(MODULES.FINANCIALS)}
                         />
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('number_prefix')}</label>
+                {/* Other settings */}
+                <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                  <CardContent className="p-6 space-y-5">
+                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                      {t('other_settings') || 'Other Settings'}
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                      <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('number_prefix')}</label>
+                      <div className="md:col-span-2">
                         <Input
                           value={editForm.number_prefix}
                           onChange={(e) => handleUpdateField('number_prefix', e.target.value)}
                           maxLength={10}
                           disabled={!canUpdate(MODULES.FINANCIALS)}
+                          className="max-w-xs"
                         />
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description')}</label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
+                      <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('description')}</label>
+                      <div className="md:col-span-2">
                         <Input
                           value={editForm.description}
                           onChange={(e) => handleUpdateField('description', e.target.value)}
@@ -772,29 +856,27 @@ export default function JournalManagement() {
                       </div>
                     </div>
 
-                    <div className="space-y-3 pt-2">
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">{t('auto_sequence')}</p>
-                          <p className="text-xs text-slate-500">{t('auto_number_entries')}</p>
-                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center">
+                      <label className="text-sm font-medium text-slate-700">{t('auto_sequence')}</label>
+                      <div className="md:col-span-2 flex items-center gap-2">
                         <Switch
                           checked={editForm.auto_sequence}
                           onCheckedChange={(checked) => handleUpdateField('auto_sequence', checked)}
                           disabled={!canUpdate(MODULES.FINANCIALS)}
                         />
+                        <span className="text-xs text-slate-500">{t('auto_number_entries')}</span>
                       </div>
+                    </div>
 
-                      <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">{t('active')}</p>
-                          <p className="text-xs text-slate-500">{t('can_be_used_in_transactions')}</p>
-                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center">
+                      <label className="text-sm font-medium text-slate-700">{t('active')}</label>
+                      <div className="md:col-span-2 flex items-center gap-2">
                         <Switch
                           checked={editForm.is_active}
                           onCheckedChange={(checked) => handleUpdateField('is_active', checked)}
                           disabled={!canUpdate(MODULES.FINANCIALS)}
                         />
+                        <span className="text-xs text-slate-500">{t('can_be_used_in_transactions')}</span>
                       </div>
                     </div>
                   </CardContent>

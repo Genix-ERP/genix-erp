@@ -126,6 +126,52 @@ export const inventoryService = {
     await apiClient.delete(`/operation-types/${id}`);
   },
 
+  async listOperationTypeSteps(opTypeId) {
+    const response = await apiClient.get(`/operation-types/${opTypeId}/steps`);
+    return response.data.data;
+  },
+
+  async saveOperationTypeSteps(opTypeId, steps) {
+    const response = await apiClient.put(`/operation-types/${opTypeId}/steps`, steps);
+    return response.data.data;
+  },
+
+  // Stock Operations (TT: Receipt, Delivery, Internal Transfer, Write-off)
+  async listStockOperations(params = {}) {
+    const response = await apiClient.get('/stock-operations', { params });
+    return response.data.data;
+  },
+
+  async getStockOperationSummary() {
+    const response = await apiClient.get('/stock-operations/summary');
+    return response.data.data;
+  },
+
+  async getStockOperation(id) {
+    const response = await apiClient.get(`/stock-operations/${id}`);
+    return response.data.data;
+  },
+
+  async createStockOperation(data) {
+    const response = await apiClient.post('/stock-operations', data);
+    return response.data.data;
+  },
+
+  async validateStockOperation(id) {
+    const response = await apiClient.post(`/stock-operations/${id}/validate`);
+    return response.data.data;
+  },
+
+  async advanceStockOperationStep(id) {
+    const response = await apiClient.post(`/stock-operations/${id}/advance`);
+    return response.data.data;
+  },
+
+  async cancelStockOperation(id) {
+    const response = await apiClient.post(`/stock-operations/${id}/cancel`);
+    return response.data.data;
+  },
+
   // Inventory Stock
   async listInventory(params = {}) {
     const response = await apiClient.get('/inventory', { params });

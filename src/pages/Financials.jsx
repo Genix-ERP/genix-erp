@@ -18,7 +18,8 @@ import {
   Percent,
   BookOpen,
   Clock,
-  Receipt
+  Receipt,
+  TrendingUp
 } from "lucide-react";
 
 import FinanceDashboard from "@/components/finance/FinanceDashboard";
@@ -218,6 +219,13 @@ export default function Financials() {
                   {t('aged_payables') || 'Aged Payables'}
                 </TabsTrigger>
                 <TabsTrigger
+                  value="profit-loss"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  {t('profit_and_loss') || 'Profit & Loss'}
+                </TabsTrigger>
+                <TabsTrigger
                   value="followups"
                   className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=inactive]:text-slate-600"
                 >
@@ -227,6 +235,9 @@ export default function Financials() {
               </TabsList>
               <TabsContent value="financial-reports">
                 <FinancialReports />
+              </TabsContent>
+              <TabsContent value="profit-loss">
+                <FinancialReports defaultTab="profit-loss" />
               </TabsContent>
               <TabsContent value="payables">
                 <AccountsPayable />

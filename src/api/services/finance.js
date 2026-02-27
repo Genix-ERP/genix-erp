@@ -720,6 +720,36 @@ export const financeService = {
     const response = await apiClient.get('/budget/consolidated', { params });
     return response.data.data;
   },
+
+  // ========== Budget Cash Flow (BDDS) ==========
+  async getBudgetCashFlow() {
+    const response = await apiClient.get('/budget/cash-flow');
+    return response.data.data;
+  },
+
+  // ========== Budget Plan vs Actual ==========
+  async getBudgetPlanVsActual(budgetId, groupBy = 'category') {
+    const response = await apiClient.get('/budget/plan-vs-actual', {
+      params: { budget_id: budgetId, group_by: groupBy }
+    });
+    return response.data.data;
+  },
+
+  // ========== Budget Approval Workflow ==========
+  async submitBudgetForApproval(id) {
+    const response = await apiClient.post(`/budget/${id}/submit`);
+    return response.data;
+  },
+
+  async approveBudget(id) {
+    const response = await apiClient.post(`/budget/${id}/approve`);
+    return response.data;
+  },
+
+  async rejectBudget(id, reason) {
+    const response = await apiClient.post(`/budget/${id}/reject`, { reason });
+    return response.data;
+  },
 };
 
 export default financeService;
