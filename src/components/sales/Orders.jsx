@@ -287,7 +287,7 @@ export default function Orders({
                                   <FileText className="w-4 h-4" />
                                 </Button>
                               )}
-                              {canDelete(MODULES.SALES) && order.status !== 'cancelled' && (
+                              {canDelete(MODULES.SALES) && !['cancelled', 'shipped', 'delivered'].includes(order.status) && (
                                 <Button
                                   size="sm"
                                   variant="ghost"

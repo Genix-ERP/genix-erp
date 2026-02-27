@@ -142,7 +142,7 @@ export function SalesProvider({ children }) {
 
   const createInvoiceFromOrder = useCallback(async (orderId) => {
     const newInvoice = await salesService.createInvoiceFromOrder(orderId);
-    setInvoices(prev => [...prev, newInvoice]);
+    setInvoices(prev => [newInvoice, ...prev]);
     return newInvoice;
   }, []);
 
@@ -182,8 +182,8 @@ export function SalesProvider({ children }) {
   }, []);
 
   const recordPayment = useCallback(async (invoiceId, amount, method, date, writeOffAmount = 0) => {
-    const payload = { amount, payment_method: method || 'bank_transfer', payment_date: date };
-    if (writeOffAmount > 0) payload.write_off_amount = writeOffAmount;
+    const payload = { amount: parseFloat(amount) || 0, payment_method: method || 'bank_transfer', payment_date: date };
+    if (writeOffAmount > 0) payload.write_off_amount = parseFloat(writeOffAmount) || 0;
     const result = await salesService.recordPayment(invoiceId, payload);
     // Merge result with existing invoice to preserve fields like customer_name
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...result } : inv));

@@ -13,6 +13,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recha
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { useSales } from '@/components/contexts/SalesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -36,12 +37,14 @@ export default function AccountsReceivable() {
   const { t } = useTranslation(language);
   const dateLocale = getDateLocale(language);
   const {
-    customerInvoices,
     createCustomerInvoice,
     updateCustomerInvoice,
     isLoading,
     refreshData
   } = useFinancials();
+  // Use SalesContext invoices so newly created SO invoices appear immediately
+  const { invoices: salesInvoices } = useSales();
+  const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const { modal, showAlert, showError, showSuccess, close } = useAlertModal();

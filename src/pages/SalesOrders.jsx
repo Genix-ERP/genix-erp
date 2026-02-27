@@ -74,9 +74,12 @@ export default function SalesOrders() {
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
-  const defaultSalesTax = defaultSalesTaxId ? taxRates.find(tr => String(tr.id) === String(defaultSalesTaxId)) : null;
-  const defaultTaxPercent = defaultSalesTax?.rate || 0;
   const salesTaxRates = taxRates.filter(tr => tr.tax_type === 'sales' || !tr.tax_type);
+  // Prefer the explicitly configured default, fall back to first active sales tax
+  const defaultSalesTax = defaultSalesTaxId
+    ? taxRates.find(tr => String(tr.id) === String(defaultSalesTaxId))
+    : salesTaxRates.find(tr => tr.is_active !== false) || null;
+  const defaultTaxPercent = defaultSalesTax?.rate || 0;
   const {
     quotations = [],
     invoices = [],
