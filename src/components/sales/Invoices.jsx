@@ -989,6 +989,26 @@ export default function Invoices() {
                 </div>
               </div>
 
+              {selectedInvoice.early_discount_amount > 0 && selectedInvoice.early_discount_date &&
+               new Date(selectedInvoice.early_discount_date) >= new Date() && selectedInvoice.amount_paid === 0 && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-1">
+                  <div className="font-medium text-green-700">
+                    {t('early_payment_discount') || 'Early Payment Discount'}
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-600">{t('discount_amount') || 'Discount'}:</span>
+                    <span className="font-medium">{formatCurrency(selectedInvoice.early_discount_amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-600">{t('pay_before') || 'Pay before'}:</span>
+                    <span className="font-medium">{format(new Date(selectedInvoice.early_discount_date), 'dd.MM.yyyy')}</span>
+                  </div>
+                  <div className="text-xs text-green-600 mt-1">
+                    {t('early_discount_hint') || 'Discount will be applied automatically when payment is recorded before the deadline'}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>{t('payment_amount')} *</Label>
                 <Input
@@ -1196,6 +1216,29 @@ export default function Invoices() {
                   </span>
                 </div>
               </div>
+
+              {selectedInvoice.early_discount_amount > 0 && selectedInvoice.early_discount_date && (
+                <div className={`p-3 rounded-lg border text-sm space-y-1 ${
+                  new Date(selectedInvoice.early_discount_date) >= new Date()
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-slate-50 border-slate-200 opacity-60'
+                }`}>
+                  <div className="font-medium text-green-700">
+                    {t('early_payment_discount') || 'Early Payment Discount'}
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{t('discount_amount') || 'Discount'}:</span>
+                    <span className="font-medium">{formatCurrency(selectedInvoice.early_discount_amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{t('pay_before') || 'Pay before'}:</span>
+                    <span className="font-medium">{format(new Date(selectedInvoice.early_discount_date), 'dd.MM.yyyy')}</span>
+                  </div>
+                  {new Date(selectedInvoice.early_discount_date) < new Date() && (
+                    <div className="text-xs text-slate-500 italic">{t('discount_expired') || 'Discount period has expired'}</div>
+                  )}
+                </div>
+              )}
 
               {selectedInvoice.notes && (
                 <div className="p-3 bg-yellow-50 rounded-lg">

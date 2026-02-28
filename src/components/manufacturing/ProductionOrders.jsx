@@ -331,23 +331,25 @@ export default function ProductionOrders() {
 
   const handleRecordOutput = async (orderId, goodQty, rejectQty, packageCount) => {
     try {
-      await updateProductionOrder(orderId, {
+      const outputData = {
         good_quantity: parseFloat(goodQty) || 0,
         reject_quantity: parseFloat(rejectQty) || 0,
         package_count: parseInt(packageCount) || 0
-      });
-      // Update selected order
-      if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => ({
-          ...prev,
-          good_quantity: parseFloat(goodQty) || 0,
-          reject_quantity: parseFloat(rejectQty) || 0,
-          package_count: parseInt(packageCount) || 0
-        }));
+      };
+
+      if (selectedOrder?.current_stage === 'done') {
+        // Combine output update + completion in a single call
+        await completeProductionOrder(orderId, outputData);
+      } else {
+        await updateProductionOrder(orderId, outputData);
       }
+
+      setShowViewModal(false);
+      setSelectedOrder(null);
+      refreshData();
     } catch (error) {
       console.error('Error recording output:', error);
-      alert(t('error_recording_output') || 'Failed to record output');
+      alert(t('error_recording_output') || 'Failed to record output: ' + (error.response?.data?.error?.message || error.message));
     }
   };
 
@@ -777,6 +779,35 @@ export default function ProductionOrders() {
                   })}
                 </div>
 
+                {/* Confirm & Start buttons for draft/confirmed orders */}
+                {selectedOrder.status === 'draft' && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      onClick={async () => {
+                        await handleStatusChange(selectedOrder.id, 'confirm');
+                        setSelectedOrder(prev => ({ ...prev, status: 'confirmed' }));
+                      }}
+                      className="bg-gradient-to-r from-blue-600 to-blue-700"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {t('confirm') || 'Confirm'}
+                    </Button>
+                  </div>
+                )}
+                {(selectedOrder.status === 'confirmed' || selectedOrder.status === 'paused') && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      onClick={async () => {
+                        await handleStatusChange(selectedOrder.id, 'start');
+                        setSelectedOrder(prev => ({ ...prev, status: 'in_progress' }));
+                      }}
+                      className="bg-gradient-to-r from-green-600 to-green-700"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      {t('start_production') || 'Start Production'}
+                    </Button>
+                  </div>
+                )}
                 {/* Advance Stage Button */}
                 {selectedOrder.current_stage !== 'done' && selectedOrder.status === 'in_progress' && (
                   <div className="mt-4 flex justify-center">
@@ -791,8 +822,8 @@ export default function ProductionOrders() {
                 )}
               </div>
 
-              {/* Output Recording - Visible at Cutting Stage */}
-              {(selectedOrder.current_stage === 'cutting' || selectedOrder.current_stage === 'packing' || selectedOrder.current_stage === 'done') && (
+              {/* Output Recording - Visible when production is active */}
+              {(selectedOrder.current_stage === 'in_progress' || selectedOrder.current_stage === 'cutting' || selectedOrder.current_stage === 'packing' || selectedOrder.current_stage === 'done') && (
                 <div className="border-t pt-4">
                   <h4 className="font-semibold mb-4 flex items-center gap-2">
                     <Package className="w-5 h-5" />

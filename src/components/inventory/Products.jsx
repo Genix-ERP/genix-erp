@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw
+  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw, Scale
 } from "lucide-react";
 import {
   Tooltip,
@@ -33,6 +33,7 @@ import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import COGSCalculator from "./COGSCalculator";
+import UnitsOfMeasure from "./UnitsOfMeasure";
 import apiClient from '@/api/client';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -139,6 +140,9 @@ export default function Products() {
   const [editCategoryName, setEditCategoryName] = useState('');
   const [categoryAccounts, setCategoryAccounts] = useState({ ...emptyCategoryAccounts });
 
+  // Units of Measure (fetched from DB for dynamic selects)
+  const [uomList, setUomList] = useState([]);
+
   // Variant management state (for edit modal)
   const [editProductAttributes, setEditProductAttributes] = useState([]);
   const [allAttributes, setAllAttributes] = useState([]);
@@ -152,6 +156,19 @@ export default function Products() {
     }
   }, [defaultCategoryAccounts]);
   const { addAuditLog } = useAuditTrail('products');
+
+  // Fetch units of measure for dynamic selects
+  useEffect(() => {
+    const fetchUom = async () => {
+      try {
+        const res = await apiClient.get('/units-of-measure', { params: { limit: 200 } });
+        setUomList(Array.isArray(res.data?.data) ? res.data.data : []);
+      } catch (err) {
+        console.error('Failed to fetch UOM:', err);
+      }
+    };
+    fetchUom();
+  }, []);
 
   // Format number with thousands separators for display in price inputs
   const formatPriceDisplay = (value) => {
@@ -1025,6 +1042,13 @@ export default function Products() {
             <Calculator className="w-4 h-4" />
             {t('cogs') || 'COGS'}
           </TabsTrigger>
+          <TabsTrigger
+            value="units"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <Scale className="w-4 h-4" />
+            {t('units_of_measure')}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1494,6 +1518,11 @@ export default function Products() {
         <TabsContent value="cogs" className="mt-0">
           <COGSCalculator items={items} movements={stockMovements} />
         </TabsContent>
+
+        {/* Units of Measure Tab */}
+        <TabsContent value="units" className="mt-0">
+          <UnitsOfMeasure />
+        </TabsContent>
       </Tabs>
 
       {/* Create/Edit Product Modal */}
@@ -1947,6 +1976,99 @@ export default function Products() {
               </div>
             )}
 
+            {/* Weight & Dimensions */}
+            {formData.type === 'product' && (
+              <div>
+                <h4 className="font-semibold text-slate-900 mb-3">{t('weight_dimensions') || 'Weight & Dimensions'}</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight') || 'Weight'}</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.weight}
+                      onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight_unit') || 'Weight Unit'}</label>
+                    <Select
+                      value={formData.weight_unit}
+                      onValueChange={(value) => setFormData({...formData, weight_unit: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uomList.filter(u => u.category === 'weight').map(u => (
+                          <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
+                        ))}
+                        {uomList.filter(u => u.category === 'weight').length === 0 && (
+                          <>
+                            <SelectItem value="kg">kg</SelectItem>
+                            <SelectItem value="g">g</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('dimension_unit') || 'Dimension Unit'}</label>
+                    <Select
+                      value={formData.dimension_unit}
+                      onValueChange={(value) => setFormData({...formData, dimension_unit: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uomList.filter(u => u.category === 'length').map(u => (
+                          <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
+                        ))}
+                        {uomList.filter(u => u.category === 'length').length === 0 && (
+                          <>
+                            <SelectItem value="cm">cm</SelectItem>
+                            <SelectItem value="m">m</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('length') || 'Length'}</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.length}
+                      onChange={(e) => setFormData({...formData, length: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('width') || 'Width'}</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.width}
+                      onChange={(e) => setFormData({...formData, width: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('height') || 'Height'}</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.height}
+                      onChange={(e) => setFormData({...formData, height: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Options */}
             <div>
               <h4 className="font-semibold text-slate-900 mb-3">{t('options')}</h4>
@@ -2173,87 +2295,6 @@ export default function Products() {
                         placeholder="978-0-123456-47-2"
                         value={formData.isbn}
                         onChange={(e) => setFormData({...formData, isbn: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Weight & Dimensions */}
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-3">{t('weight_dimensions') || 'Weight & Dimensions'}</h4>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="col-span-2">
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight') || 'Weight'}</label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.weight}
-                          onChange={(e) => setFormData({...formData, weight: e.target.value})}
-                          className="flex-1"
-                        />
-                        <Select
-                          value={formData.weight_unit}
-                          onValueChange={(value) => setFormData({...formData, weight_unit: value})}
-                        >
-                          <SelectTrigger className="w-20">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="kg">kg</SelectItem>
-                            <SelectItem value="g">g</SelectItem>
-                            <SelectItem value="lb">lb</SelectItem>
-                            <SelectItem value="oz">oz</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('dimension_unit') || 'Dimension Unit'}</label>
-                      <Select
-                        value={formData.dimension_unit}
-                        onValueChange={(value) => setFormData({...formData, dimension_unit: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cm">cm</SelectItem>
-                          <SelectItem value="m">m</SelectItem>
-                          <SelectItem value="in">in</SelectItem>
-                          <SelectItem value="ft">ft</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('length') || 'Length'}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.length}
-                        onChange={(e) => setFormData({...formData, length: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('width') || 'Width'}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.width}
-                        onChange={(e) => setFormData({...formData, width: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('height') || 'Height'}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.height}
-                        onChange={(e) => setFormData({...formData, height: e.target.value})}
                       />
                     </div>
                   </div>
@@ -2714,12 +2755,9 @@ export default function Products() {
                   </div>
                 </div>
 
-                {/* Units of Measure (SAP-style) */}
+                {/* Units of Measure */}
                 <div>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    {t('units_of_measure') || 'Units of Measure'}
-                    <Badge className="bg-purple-100 text-purple-700 text-xs">SAP</Badge>
-                  </h4>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('units_of_measure') || 'Units of Measure'}</h4>
                   <div className="grid grid-cols-4 gap-4">
                     <div>
                       <label className="text-sm font-medium text-slate-700 mb-1 block">{t('inventory_uom') || 'Inventory UoM'}</label>
@@ -2731,16 +2769,12 @@ export default function Products() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
-                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
-                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
-                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
-                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
-                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
-                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
-                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
-                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
-                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                          {uomList.map(u => (
+                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
+                          ))}
+                          {uomList.length === 0 && (
+                            <SelectItem value="unit">Unit</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2754,16 +2788,12 @@ export default function Products() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
-                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
-                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
-                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
-                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
-                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
-                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
-                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
-                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
-                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                          {uomList.map(u => (
+                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
+                          ))}
+                          {uomList.length === 0 && (
+                            <SelectItem value="unit">Unit</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2777,16 +2807,12 @@ export default function Products() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unit">{t('uom_unit') || 'Unit (pc)'}</SelectItem>
-                          <SelectItem value="kg">{t('uom_kg') || 'Kilogram (kg)'}</SelectItem>
-                          <SelectItem value="g">{t('uom_g') || 'Gram (g)'}</SelectItem>
-                          <SelectItem value="l">{t('uom_l') || 'Liter (L)'}</SelectItem>
-                          <SelectItem value="ml">{t('uom_ml') || 'Milliliter (mL)'}</SelectItem>
-                          <SelectItem value="m">{t('uom_m') || 'Meter (m)'}</SelectItem>
-                          <SelectItem value="cm">{t('uom_cm') || 'Centimeter (cm)'}</SelectItem>
-                          <SelectItem value="box">{t('uom_box') || 'Box'}</SelectItem>
-                          <SelectItem value="pack">{t('uom_pack') || 'Pack'}</SelectItem>
-                          <SelectItem value="dozen">{t('uom_dozen') || 'Dozen'}</SelectItem>
+                          {uomList.map(u => (
+                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
+                          ))}
+                          {uomList.length === 0 && (
+                            <SelectItem value="unit">Unit</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
