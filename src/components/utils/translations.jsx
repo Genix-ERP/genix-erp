@@ -1389,6 +1389,18 @@ export const translations = {
     "uom_pack": "Pack",
     "uom_dozen": "Dozen",
 
+    // UOM Management
+    "uom_name_placeholder": "Kilogram, Meter, Piece...",
+    "uom_conversion_help": "Ratio to the base unit in this category (e.g. 0.001 for g when kg is base)",
+    "uom_category_quantity": "Quantity",
+    "uom_category_weight": "Weight",
+    "uom_category_volume": "Volume",
+    "uom_category_length": "Length",
+    "uom_category_time": "Time",
+    "uom_category_other": "Other",
+    "delete_uom_confirm": "Are you sure you want to delete this unit of measure?",
+    "all_categories": "All Categories",
+
     // Invoicing & Valuation (Odoo-style)
     "invoicing_valuation": "Invoicing & Valuation",
     "invoicing_policy": "Invoicing Policy",
@@ -4292,6 +4304,7 @@ export const translations = {
     "stage_workflow": "Stage Workflow",
     "manufacturing_stages": "Manufacturing Stages",
     "advance_to_next_stage": "Advance to Next Stage",
+    "start_production": "Start Production",
     "production_output": "Production Output",
     "save_output": "Save Output",
     "output_summary": "Output Summary",
@@ -4805,6 +4818,8 @@ export const translations = {
     "wizard_step2_title": "How will you plan numbers?",
     "wizard_step3_title": "Period & Details",
     "wizard_step4_title": "Enter Budget Lines",
+    "select_category": "Select category",
+    "search_account": "Search account...",
     "wizard_step5_title": "Review & Confirm",
     "budget_type_combined": "Revenue & Expenses",
     "budget_type_combined_title": "Revenue & Expenses (BDR)",
@@ -7132,6 +7147,18 @@ export const translations = {
     "uom_pack": "Paket",
     "uom_dozen": "Dujina (12 ta)",
 
+    // UOM Management
+    "uom_name_placeholder": "Kilogramm, Metr, Dona...",
+    "uom_conversion_help": "Ushbu kategoriyada asosiy birlikka nisbatan koeffitsient (masalan, kg asosiy bo'lsa g uchun 0.001)",
+    "uom_category_quantity": "Miqdor",
+    "uom_category_weight": "Og'irlik",
+    "uom_category_volume": "Hajm",
+    "uom_category_length": "Uzunlik",
+    "uom_category_time": "Vaqt",
+    "uom_category_other": "Boshqa",
+    "delete_uom_confirm": "Bu o'lchov birligini o'chirishni xohlaysizmi?",
+    "all_categories": "Barcha kategoriyalar",
+
     // Invoicing & Valuation (Odoo-style)
     "invoicing_valuation": "Hisob-faktura va baholash",
     "invoicing_policy": "Hisob-faktura siyosati",
@@ -8636,6 +8663,8 @@ export const translations = {
     "wizard_step2_title": "Raqamlarni qanday rejalashtirmoqchisiz?",
     "wizard_step3_title": "Davr va tafsilotlar",
     "wizard_step4_title": "Byudjet qatorlarini kiriting",
+    "select_category": "Kategoriyani tanlang",
+    "search_account": "Hisobni qidirish...",
     "wizard_step5_title": "Ko'rib chiqish va tasdiqlash",
     "budget_type_combined": "Daromad va Xarajatlar",
     "budget_type_combined_title": "Daromad va Xarajatlar (BDR)",
@@ -10310,6 +10339,7 @@ export const translations = {
     "stage_workflow": "Bosqichlar jarayoni",
     "manufacturing_stages": "Ishlab chiqarish bosqichlari",
     "advance_to_next_stage": "Keyingi bosqichga o'tish",
+    "start_production": "Ishlab chiqarishni boshlash",
     "production_output": "Ishlab chiqarish natijasi",
     "save_output": "Natijani saqlash",
     "output_summary": "Natijalar xulosasi",
@@ -12987,6 +13017,18 @@ export const translations = {
     "uom_box": "Коробка",
     "uom_pack": "Упаковка",
     "uom_dozen": "Дюжина",
+
+    // UOM Management
+    "uom_name_placeholder": "Килограмм, Метр, Штука...",
+    "uom_conversion_help": "Соотношение к базовой единице в категории (напр. 0.001 для г, если базовая — кг)",
+    "uom_category_quantity": "Количество",
+    "uom_category_weight": "Вес",
+    "uom_category_volume": "Объём",
+    "uom_category_length": "Длина",
+    "uom_category_time": "Время",
+    "uom_category_other": "Другое",
+    "delete_uom_confirm": "Вы уверены, что хотите удалить эту единицу измерения?",
+    "all_categories": "Все категории",
 
     // Invoicing & Valuation (Odoo-style)
     "invoicing_valuation": "Счёт и оценка",
@@ -16318,6 +16360,8 @@ export const translations = {
     "wizard_step2_title": "Как вы будете планировать цифры?",
     "wizard_step3_title": "Период и детали",
     "wizard_step4_title": "Введите строки бюджета",
+    "select_category": "Выберите категорию",
+    "search_account": "Поиск счёта...",
     "wizard_step5_title": "Проверка и подтверждение",
     "budget_type_combined": "Доходы и расходы",
     "budget_type_combined_title": "Доходы и расходы (БДР)",
@@ -16669,6 +16713,7 @@ export const translations = {
     "stage_workflow": "Этапы производства",
     "manufacturing_stages": "Этапы производства",
     "advance_to_next_stage": "Перейти к следующему этапу",
+    "start_production": "Начать производство",
     "production_output": "Результат производства",
     "save_output": "Сохранить результат",
     "output_summary": "Сводка результатов",

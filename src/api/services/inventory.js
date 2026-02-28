@@ -267,6 +267,29 @@ export const inventoryService = {
   },
 
   // =====================================================
+  // UNITS OF MEASURE
+  // =====================================================
+
+  async listUnitsOfMeasure(params = {}) {
+    const response = await apiClient.get('/units-of-measure', { params });
+    return response.data.data;
+  },
+
+  async createUnitOfMeasure(data) {
+    const response = await apiClient.post('/units-of-measure', data);
+    return response.data.data;
+  },
+
+  async updateUnitOfMeasure(id, data) {
+    const response = await apiClient.put(`/units-of-measure/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteUnitOfMeasure(id) {
+    await apiClient.delete(`/units-of-measure/${id}`);
+  },
+
+  // =====================================================
   // PACKAGE TYPES (box sizes, pallets, containers)
   // =====================================================
 
