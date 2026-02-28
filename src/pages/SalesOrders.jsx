@@ -420,12 +420,18 @@ export default function SalesOrders() {
     if (field === 'product_id' && value) {
       const selectedProduct = products.find(p => p.id === value);
       if (selectedProduct) {
+        // Auto-set UOM: prefer sales_unit, fallback to default unit
+        const unitId = selectedProduct.sales_unit_id || selectedProduct.unit_id || null;
+        const unitName = selectedProduct.sales_unit_name || selectedProduct.unit_name || '';
+
         newLines[index] = {
           ...newLines[index],
           product_name: selectedProduct.name,
           product_id: selectedProduct.id,
           unit_price: selectedProduct.list_price || selectedProduct.cost_price || 0,
           lead_time_days: selectedProduct.lead_time_days || 0,
+          unit_id: unitId,
+          unit_name: unitName,
           product: selectedProduct,
           variant_id: null, // Reset variant when product changes
           variant_name: null,
@@ -1373,8 +1379,8 @@ export default function SalesOrders() {
                     const hasPackagings = productPackagings[line.product_id]?.length > 0;
                     return (
                     <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                      <div className="grid grid-cols-12 gap-2 items-start">
-                        <div className="col-span-3">
+                      <div className="flex gap-2 items-start">
+                        <div className="flex-[2] min-w-0">
                           <Select
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
@@ -1392,7 +1398,7 @@ export default function SalesOrders() {
                           </Select>
                         </div>
                         {hasVariants && (
-                          <div className="col-span-2">
+                          <div className="flex-[2] min-w-0">
                             <Select
                               value={line.variant_id || ''}
                               onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'variant_id', value, isDeliveryDateManual)}
@@ -1411,7 +1417,7 @@ export default function SalesOrders() {
                           </div>
                         )}
                         {hasPackagings && (
-                          <div className="col-span-2">
+                          <div className="flex-[2] min-w-0">
                             <Select
                               value={line.packaging_id || 'none'}
                               onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'packaging_id', value === 'none' ? null : value, isDeliveryDateManual)}
@@ -1432,7 +1438,7 @@ export default function SalesOrders() {
                         )}
                         {line.packaging_id ? (
                           <>
-                            <div className="col-span-1">
+                            <div className="flex-[1] min-w-0">
                               <Input
                                 type="number"
                                 min="1"
@@ -1441,7 +1447,7 @@ export default function SalesOrders() {
                                 onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'packaging_qty', e.target.value, isDeliveryDateManual)}
                               />
                             </div>
-                            <div className="col-span-1">
+                            <div className="flex-[1] min-w-0">
                               <Input
                                 type="number"
                                 placeholder={t('total_qty') || 'Total'}
@@ -1453,16 +1459,19 @@ export default function SalesOrders() {
                             </div>
                           </>
                         ) : (
-                          <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
+                          <div className="flex-[1] min-w-0 flex items-center gap-1">
                             <Input
                               type="number"
                               placeholder={t('qty')}
                               value={line.quantity}
                               onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
                             />
+                            {line.unit_name && (
+                              <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                            )}
                           </div>
                         )}
-                        <div className={line.packaging_id ? "col-span-1" : "col-span-2"}>
+                        <div className="flex-[2] min-w-0">
                           <Input
                             type="text"
                             inputMode="decimal"
@@ -1472,7 +1481,7 @@ export default function SalesOrders() {
                           />
                         </div>
                         {!line.packaging_id && (
-                          <div className={hasVariants && hasPackagings ? "col-span-1" : hasVariants || hasPackagings ? "col-span-2" : "col-span-4"}>
+                          <div className="flex-[2] min-w-0">
                             <Input
                               placeholder={t('note')}
                               value={line.description}
@@ -1480,13 +1489,13 @@ export default function SalesOrders() {
                             />
                           </div>
                         )}
-                        <div className="col-span-1 flex items-center justify-end">
+                        <div className="flex-shrink-0">
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => handleRemoveLine(newOrder, setNewOrder, index, isDeliveryDateManual)}
                             disabled={newOrder.lines.length === 1}
-                            className="text-red-600 h-9"
+                            className="text-red-600 h-9 w-9 p-0"
                           >
                             <X className="w-4 h-4" />
                           </Button>
@@ -1761,7 +1770,7 @@ export default function SalesOrders() {
                         <div key={i} className="flex justify-between items-center border-b border-slate-200 pb-2 last:border-0 last:pb-0">
                           <div>
                             <span className="font-medium">{line.description || line.product_name || 'Product'}</span>
-                            <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}</p>
+                            <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}{line.unit_name ? ` ${line.unit_name}` : ''}</p>
                           </div>
                           <div className="text-right">
                             <span className="font-medium">{formatCurrency(line.quantity * line.unit_price)}</span>
@@ -1993,8 +2002,8 @@ export default function SalesOrders() {
                       const hasPackagings = productPackagings[line.product_id]?.length > 0;
                       return (
                       <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                        <div className="grid grid-cols-12 gap-2 items-start">
-                          <div className="col-span-3">
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-[2] min-w-0">
                             <Select
                               value={line.product_id || ''}
                               onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
@@ -2012,7 +2021,7 @@ export default function SalesOrders() {
                             </Select>
                           </div>
                           {hasVariants && (
-                            <div className="col-span-2">
+                            <div className="flex-[2] min-w-0">
                               <Select
                                 value={line.variant_id || ''}
                                 onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'variant_id', value, isEditDeliveryDateManual)}
@@ -2031,7 +2040,7 @@ export default function SalesOrders() {
                             </div>
                           )}
                           {hasPackagings && (
-                            <div className="col-span-2">
+                            <div className="flex-[2] min-w-0">
                               <Select
                                 value={line.packaging_id || 'none'}
                                 onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_id', value === 'none' ? null : value, isEditDeliveryDateManual)}
@@ -2052,7 +2061,7 @@ export default function SalesOrders() {
                           )}
                           {line.packaging_id ? (
                             <>
-                              <div className="col-span-1">
+                              <div className="flex-[1] min-w-0">
                                 <Input
                                   type="number"
                                   min="1"
@@ -2061,7 +2070,7 @@ export default function SalesOrders() {
                                   onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_qty', e.target.value, isEditDeliveryDateManual)}
                                 />
                               </div>
-                              <div className="col-span-1">
+                              <div className="flex-[1] min-w-0">
                                 <Input
                                   type="number"
                                   placeholder={t('total_qty') || 'Total'}
@@ -2073,16 +2082,19 @@ export default function SalesOrders() {
                               </div>
                             </>
                           ) : (
-                            <div className={hasVariants || hasPackagings ? "col-span-2" : "col-span-2"}>
+                            <div className="flex-[1] min-w-0 flex items-center gap-1">
                               <Input
                                 type="number"
-                                placeholder={t('quantity')}
+                                placeholder={t('qty')}
                                 value={line.quantity}
                                 onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
                               />
+                              {line.unit_name && (
+                                <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                              )}
                             </div>
                           )}
-                          <div className="col-span-2">
+                          <div className="flex-[2] min-w-0">
                             <Input
                               type="text"
                               inputMode="decimal"
@@ -2091,20 +2103,22 @@ export default function SalesOrders() {
                               onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', parsePriceInput(e.target.value), isEditDeliveryDateManual)}
                             />
                           </div>
-                          <div className={hasVariants || hasPackagings ? "col-span-1" : "col-span-2"}>
-                            <Input
-                              placeholder={t('description')}
-                              value={line.description || ''}
-                              onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
-                            />
-                          </div>
-                          <div className="col-span-1 flex justify-end">
+                          {!line.packaging_id && (
+                            <div className="flex-[2] min-w-0">
+                              <Input
+                                placeholder={t('note')}
+                                value={line.description || ''}
+                                onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'description', e.target.value, isEditDeliveryDateManual)}
+                              />
+                            </div>
+                          )}
+                          <div className="flex-shrink-0">
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => handleRemoveLine(editingOrder, setEditingOrder, index, isEditDeliveryDateManual)}
                               disabled={editingOrder.lines.length === 1}
-                              className="text-red-600"
+                              className="text-red-600 h-9 w-9 p-0"
                             >
                               <X className="w-4 h-4" />
                             </Button>

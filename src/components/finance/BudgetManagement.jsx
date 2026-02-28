@@ -26,6 +26,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { MODULES } from "@/config/permissions";
 import { format } from "date-fns";
 import financeService from '@/api/services/finance';
+import AccountCombobox from '@/components/shared/AccountCombobox';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,14 @@ const APPROACHES = [
 ];
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const BUDGET_CATEGORIES = [
+  { value: 'operational', label_en: 'Operational Expenses', label_uz: 'Operatsion xarajatlar', label_ru: 'Операционные расходы' },
+  { value: 'salaries', label_en: 'Salaries & Wages', label_uz: 'Ish haqi va maosh', label_ru: 'Зарплаты и оклады' },
+  { value: 'marketing', label_en: 'Marketing & Sales', label_uz: 'Marketing va sotish', label_ru: 'Маркетинг и продажи' },
+  { value: 'infrastructure', label_en: 'Infrastructure & Rent', label_uz: 'Infratuzilma va ijara', label_ru: 'Инфраструктура и аренда' },
+  { value: 'revenue', label_en: 'Revenue & Income', label_uz: 'Daromad va foyda', label_ru: 'Доход и прибыль' },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +271,30 @@ export default function BudgetManagement() {
 
   const totalRevenue = wizardLines.filter(l => l.line_type === 'revenue').reduce((s, l) => s + parseFloat(l.budgeted_amount || 0), 0);
   const totalExpense = wizardLines.filter(l => l.line_type !== 'revenue').reduce((s, l) => s + parseFloat(l.budgeted_amount || 0), 0);
+
+  const getCategoryLabel = (cat) => {
+    const c = BUDGET_CATEGORIES.find(b => b.value === cat);
+    if (!c) return cat || '';
+    if (language === 'uz') return c.label_uz;
+    if (language === 'ru') return c.label_ru;
+    return c.label_en;
+  };
+
+  const getFilteredAccounts = (lineType) => {
+    return accounts.filter(a => {
+      const code = String(a.code || '');
+      if (lineType === 'revenue') {
+        return a.account_type === 'revenue' || a.type === 'revenue' ||
+          (code >= '4000' && code < '5000');
+      }
+      if (lineType === 'expense') {
+        return a.account_type === 'expense' || a.type === 'expense' ||
+          (code >= '5000' && code < '9000');
+      }
+      // investment or other — show all
+      return true;
+    });
+  };
 
   const saveWizard = async (status = 'draft') => {
     setIsSaving(true);
@@ -729,18 +762,24 @@ export default function BudgetManagement() {
                   <div key={line._id || line.id || idx} className="border rounded-lg p-3 bg-white space-y-3">
                     <div className="grid grid-cols-12 gap-2 items-start">
                       <div className="col-span-4">
-                        <Label className="text-xs mb-1 block">{t('category') || 'Category'}</Label>
-                        <Input value={line.category_name || ''} placeholder={t('category_name') || 'Category'} className="text-sm"
-                          onChange={e => updateLine(idx, 'category_name', e.target.value)} />
+                        <Label className="text-xs mb-1 block">{t('category') || 'Category'} *</Label>
+                        <Select value={line.category_name || ''} onValueChange={v => updateLine(idx, 'category_name', v)}>
+                          <SelectTrigger className="text-sm"><SelectValue placeholder={t('select_category') || 'Select category'} /></SelectTrigger>
+                          <SelectContent>
+                            {BUDGET_CATEGORIES.map(c => (
+                              <SelectItem key={c.value} value={c.value}>{getCategoryLabel(c.value)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="col-span-4">
                         <Label className="text-xs mb-1 block">{t('account') || 'Account'}</Label>
-                        <Select value={line.account_id} onValueChange={v => updateLine(idx, 'account_id', v)}>
-                          <SelectTrigger className="text-sm"><SelectValue placeholder={t('account') || 'Account'} /></SelectTrigger>
-                          <SelectContent>
-                            {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.code} - {a.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <AccountCombobox
+                          accounts={getFilteredAccounts(line.line_type)}
+                          value={line.account_id}
+                          onValueChange={v => updateLine(idx, 'account_id', v)}
+                          placeholder={t('search_account') || 'Search account...'}
+                        />
                       </div>
                       <div className="col-span-3">
                         <Label className="text-xs mb-1 block">{t('type') || 'Type'}</Label>
