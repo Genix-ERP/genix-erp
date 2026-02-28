@@ -341,12 +341,18 @@ export default function PurchaseOrders() {
           }
         }
 
+        // Auto-set UOM: prefer purchase_unit, fallback to default unit
+        const unitId = selectedProduct.purchase_unit_id || selectedProduct.unit_id || null;
+        const unitName = selectedProduct.purchase_unit_name || selectedProduct.unit_name || '';
+
         newLines[index] = {
           ...newLines[index],
           product_name: selectedProduct.name,
           product_id: selectedProduct.id,
           unit_price: unitPrice,
           lead_time_days: leadTimeDays,
+          unit_id: unitId,
+          unit_name: unitName,
           product: selectedProduct,
           variant_id: null,
           variant_name: null,
@@ -887,8 +893,8 @@ export default function PurchaseOrders() {
                   const hasPackagings = productPackagings[line.product_id]?.length > 0;
                   return (
                   <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                    <div className="grid grid-cols-12 gap-2 items-start">
-                      <div className={hasVariants ? "col-span-4" : "col-span-5"}>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-[2] min-w-0">
                         <Select
                           value={line.product_id || ''}
                           onValueChange={(value) => handleLineChange(index, 'product_id', value)}
@@ -906,7 +912,7 @@ export default function PurchaseOrders() {
                         </Select>
                       </div>
                       {hasVariants && (
-                        <div className="col-span-3">
+                        <div className="flex-[2] min-w-0">
                           <Select
                             value={line.variant_id || ''}
                             onValueChange={(value) => handleLineChange(index, 'variant_id', value)}
@@ -924,15 +930,18 @@ export default function PurchaseOrders() {
                           </Select>
                         </div>
                       )}
-                      <div className="col-span-2">
+                      <div className="flex-[1] min-w-0 flex items-center gap-1">
                         <Input
                           type="number"
-                          placeholder={t('quantity') || 'Qty'}
+                          placeholder={t('qty') || 'Qty'}
                           value={line.quantity}
                           onChange={(e) => handleLineChange(index, 'quantity', e.target.value)}
                         />
+                        {line.unit_name && (
+                          <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                        )}
                       </div>
-                      <div className={hasVariants ? "col-span-2" : "col-span-3"}>
+                      <div className="flex-[2] min-w-0">
                         <Input
                           type="text"
                           inputMode="decimal"
@@ -941,13 +950,13 @@ export default function PurchaseOrders() {
                           onChange={(e) => handleLineChange(index, 'unit_price', parsePriceInput(e.target.value))}
                         />
                       </div>
-                      <div className="col-span-1 flex justify-end">
+                      <div className="flex-shrink-0">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleRemoveLine(index)}
                           disabled={newPO.lines.length === 1}
-                          className="text-red-600"
+                          className="text-red-600 h-9 w-9 p-0"
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -1252,6 +1261,7 @@ export default function PurchaseOrders() {
                         <TableRow className="bg-slate-50">
                           <TableHead>{t('product') || 'Product'}</TableHead>
                           <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>
+                          <TableHead>{t('uom') || 'UOM'}</TableHead>
                           <TableHead className="text-right">{t('unit_price') || 'Unit Price'}</TableHead>
                           <TableHead className="text-right">{t('total') || 'Total'}</TableHead>
                         </TableRow>
@@ -1261,6 +1271,7 @@ export default function PurchaseOrders() {
                           <TableRow key={line.id || idx}>
                             <TableCell className="font-medium">{line.product_name || line.description}</TableCell>
                             <TableCell className="text-right">{line.quantity}</TableCell>
+                            <TableCell className="text-slate-500 text-sm">{line.unit_name || '-'}</TableCell>
                             <TableCell className="text-right">{(line.unit_price || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right font-semibold">{((line.quantity || 0) * (line.unit_price || 0)).toLocaleString()}</TableCell>
                           </TableRow>

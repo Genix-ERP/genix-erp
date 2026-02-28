@@ -92,8 +92,8 @@ export const productionOrdersService = {
     return response.data.data;
   },
 
-  async complete(id) {
-    const response = await apiClient.post(`/production-orders/${id}/complete`);
+  async complete(id, data = {}) {
+    const response = await apiClient.post(`/production-orders/${id}/complete`, data);
     return response.data.data;
   },
 

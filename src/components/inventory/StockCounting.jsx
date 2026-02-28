@@ -764,18 +764,20 @@ export default function StockCounting() {
                         const allIds = displayProducts.map(p => p.id);
                         // empty array means all selected
                         const isAllSelected = newCount.selected_products.length === 0;
-                        const isProductSelected = (id) => isAllSelected || newCount.selected_products.includes(id);
+                        const realSelected = newCount.selected_products.filter(id => allIds.includes(id));
+                        const isProductSelected = (id) => isAllSelected || realSelected.includes(id);
+                        const allIndividuallySelected = realSelected.length === allIds.length;
                         return (
                           <>
                             <div className="flex items-center gap-2 pb-2 border-b">
                               <Checkbox
                                 id="select-all"
-                                checked={isAllSelected}
+                                checked={isAllSelected || allIndividuallySelected}
                                 onCheckedChange={(checked) => {
                                   if (checked) {
                                     setNewCount({ ...newCount, selected_products: [] }); // empty = all
                                   } else {
-                                    setNewCount({ ...newCount, selected_products: [] }); // keep all, user must uncheck individual
+                                    setNewCount({ ...newCount, selected_products: ['__none__'] }); // unselect all
                                   }
                                 }}
                               />
@@ -798,11 +800,12 @@ export default function StockCounting() {
                                       }
                                     } else {
                                       if (checked) {
-                                        const newSelected = [...newCount.selected_products, product.id];
+                                        const newSelected = [...realSelected, product.id];
                                         // if all are now selected, collapse back to empty (all)
                                         setNewCount({ ...newCount, selected_products: newSelected.length === allIds.length ? [] : newSelected });
                                       } else {
-                                        setNewCount({ ...newCount, selected_products: newCount.selected_products.filter(id => id !== product.id) });
+                                        const remaining = realSelected.filter(id => id !== product.id);
+                                        setNewCount({ ...newCount, selected_products: remaining.length === 0 ? ['__none__'] : remaining });
                                       }
                                     }
                                   }}
