@@ -229,6 +229,7 @@ export default function SalesOrders() {
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
+    tax_rate_id: '',
     tax_amount: 0,
     shipping_cost: 0,
     total_amount: 0,
@@ -242,7 +243,7 @@ export default function SalesOrders() {
   // Pre-fill default tax from settings
   useEffect(() => {
     if (defaultTaxPercent > 0 && newOrder.tax_percent === 0) {
-      setNewOrder(prev => ({ ...prev, tax_percent: defaultTaxPercent }));
+      setNewOrder(prev => ({ ...prev, tax_percent: defaultTaxPercent, tax_rate_id: defaultSalesTax?.id || '' }));
     }
   }, [defaultTaxPercent]);
 
@@ -353,7 +354,7 @@ export default function SalesOrders() {
     return subtotal;
   };
 
-  // Calculate tax considering price_include flag
+  // Calculate tax considering price_include flag (like Odoo)
   // When price_include=true, the entered prices already contain tax, so we back-calculate
   const calculateTaxFromRate = (rawSubtotal, taxPercent, taxRateObj) => {
     const rate = parseFloat(taxPercent) || 0;
@@ -595,7 +596,8 @@ export default function SalesOrders() {
   const handleCreateOrder = async () => {
     const rawSubtotal = calculateOrderTotals(newOrder.lines);
     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
-    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+    const selectedTax = newOrder.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newOrder.tax_rate_id)) : defaultSalesTax;
+    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
     const subtotal = taxCalc.subtotal;
     const taxAmount = taxCalc.taxAmount;
     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
@@ -686,7 +688,8 @@ export default function SalesOrders() {
   const handleEditOrder = async () => {
     const rawSubtotal = calculateOrderTotals(editingOrder.lines);
     const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
-    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+    const selectedTax = editingOrder.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(editingOrder.tax_rate_id)) : defaultSalesTax;
+    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
     const subtotal = taxCalc.subtotal;
     const taxAmount = taxCalc.taxAmount;
     const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;
@@ -738,6 +741,7 @@ export default function SalesOrders() {
     if (!id) return;
     try {
       await salesService.cancelOrder(id);
+      await salesService.deleteOrder(id);
       addAuditLog('delete', id, orderToDelete?.order_number || orderId);
       await refreshModulesData();
     } catch (error) {
@@ -1379,8 +1383,9 @@ export default function SalesOrders() {
                     const hasPackagings = productPackagings[line.product_id]?.length > 0;
                     return (
                     <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                      <div className="flex gap-2 items-start">
+                      <div className="flex gap-2 items-end">
                         <div className="flex-[2] min-w-0">
+                          {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
                           <Select
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
@@ -1399,6 +1404,7 @@ export default function SalesOrders() {
                         </div>
                         {hasVariants && (
                           <div className="flex-[2] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('variant')}</Label>}
                             <Select
                               value={line.variant_id || ''}
                               onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'variant_id', value, isDeliveryDateManual)}
@@ -1418,6 +1424,7 @@ export default function SalesOrders() {
                         )}
                         {hasPackagings && (
                           <div className="flex-[2] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('packaging')}</Label>}
                             <Select
                               value={line.packaging_id || 'none'}
                               onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'packaging_id', value === 'none' ? null : value, isDeliveryDateManual)}
@@ -1439,6 +1446,7 @@ export default function SalesOrders() {
                         {line.packaging_id ? (
                           <>
                             <div className="flex-[1] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('packs') || 'Packs'}</Label>}
                               <Input
                                 type="number"
                                 min="1"
@@ -1448,6 +1456,7 @@ export default function SalesOrders() {
                               />
                             </div>
                             <div className="flex-[1] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('total_qty') || 'Total'}</Label>}
                               <Input
                                 type="number"
                                 placeholder={t('total_qty') || 'Total'}
@@ -1459,19 +1468,23 @@ export default function SalesOrders() {
                             </div>
                           </>
                         ) : (
-                          <div className="flex-[1] min-w-0 flex items-center gap-1">
-                            <Input
-                              type="number"
-                              placeholder={t('qty')}
-                              value={line.quantity}
-                              onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
-                            />
-                            {line.unit_name && (
-                              <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
-                            )}
+                          <div className="flex-[1] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('qty')}</Label>}
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                placeholder={t('qty')}
+                                value={line.quantity}
+                                onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'quantity', e.target.value, isDeliveryDateManual)}
+                              />
+                              {line.unit_name && (
+                                <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                              )}
+                            </div>
                           </div>
                         )}
                         <div className="flex-[2] min-w-0">
+                          {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
                           <Input
                             type="text"
                             inputMode="decimal"
@@ -1482,6 +1495,7 @@ export default function SalesOrders() {
                         </div>
                         {!line.packaging_id && (
                           <div className="flex-[2] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('note')}</Label>}
                             <Input
                               placeholder={t('note')}
                               value={line.description}
@@ -1539,9 +1553,9 @@ export default function SalesOrders() {
                           <PopoverTrigger asChild key={tr.id}>
                             <button
                               className="w-full text-left px-3 py-2 text-sm rounded hover:bg-slate-100 transition-colors"
-                              onClick={() => setNewOrder({...newOrder, tax_percent: tr.rate})}
+                              onClick={() => setNewOrder({...newOrder, tax_percent: tr.rate, tax_rate_id: tr.id})}
                             >
-                              {tr.name} ({tr.rate}%)
+                              {tr.name} ({tr.rate}%){tr.price_include ? ` (${t('incl') || 'incl.'})` : ''}
                             </button>
                           </PopoverTrigger>
                         ))}
@@ -1617,7 +1631,8 @@ export default function SalesOrders() {
                   {(() => {
                     const rawSubtotal = calculateOrderTotals(newOrder.lines);
                     const taxPercent = parseFloat(newOrder.tax_percent) || 0;
-                    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+                    const selectedTax = newOrder.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newOrder.tax_rate_id)) : defaultSalesTax;
+                    const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
                     const subtotal = taxCalc.subtotal;
                     const taxAmount = taxCalc.taxAmount;
                     const shippingCost = parseFloat(newOrder.shipping_cost) || 0;
@@ -2002,8 +2017,9 @@ export default function SalesOrders() {
                       const hasPackagings = productPackagings[line.product_id]?.length > 0;
                       return (
                       <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                        <div className="flex gap-2 items-start">
+                        <div className="flex gap-2 items-end">
                           <div className="flex-[2] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
                             <Select
                               value={line.product_id || ''}
                               onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
@@ -2022,6 +2038,7 @@ export default function SalesOrders() {
                           </div>
                           {hasVariants && (
                             <div className="flex-[2] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('variant')}</Label>}
                               <Select
                                 value={line.variant_id || ''}
                                 onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'variant_id', value, isEditDeliveryDateManual)}
@@ -2041,6 +2058,7 @@ export default function SalesOrders() {
                           )}
                           {hasPackagings && (
                             <div className="flex-[2] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('packaging')}</Label>}
                               <Select
                                 value={line.packaging_id || 'none'}
                                 onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'packaging_id', value === 'none' ? null : value, isEditDeliveryDateManual)}
@@ -2062,6 +2080,7 @@ export default function SalesOrders() {
                           {line.packaging_id ? (
                             <>
                               <div className="flex-[1] min-w-0">
+                                {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('packs') || 'Packs'}</Label>}
                                 <Input
                                   type="number"
                                   min="1"
@@ -2071,6 +2090,7 @@ export default function SalesOrders() {
                                 />
                               </div>
                               <div className="flex-[1] min-w-0">
+                                {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('total_qty') || 'Total'}</Label>}
                                 <Input
                                   type="number"
                                   placeholder={t('total_qty') || 'Total'}
@@ -2082,19 +2102,23 @@ export default function SalesOrders() {
                               </div>
                             </>
                           ) : (
-                            <div className="flex-[1] min-w-0 flex items-center gap-1">
-                              <Input
-                                type="number"
-                                placeholder={t('qty')}
-                                value={line.quantity}
-                                onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
-                              />
-                              {line.unit_name && (
-                                <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
-                              )}
+                            <div className="flex-[1] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('qty')}</Label>}
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  placeholder={t('qty')}
+                                  value={line.quantity}
+                                  onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'quantity', e.target.value, isEditDeliveryDateManual)}
+                                />
+                                {line.unit_name && (
+                                  <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                                )}
+                              </div>
                             </div>
                           )}
                           <div className="flex-[2] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
                             <Input
                               type="text"
                               inputMode="decimal"
@@ -2105,6 +2129,7 @@ export default function SalesOrders() {
                           </div>
                           {!line.packaging_id && (
                             <div className="flex-[2] min-w-0">
+                              {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('note')}</Label>}
                               <Input
                                 placeholder={t('note')}
                                 value={line.description || ''}
@@ -2192,7 +2217,8 @@ export default function SalesOrders() {
                     {(() => {
                       const rawSubtotal = calculateOrderTotals(editingOrder.lines);
                       const taxPercent = parseFloat(editingOrder.tax_percent) || 0;
-                      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultSalesTax);
+                      const selectedTax = editingOrder.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(editingOrder.tax_rate_id)) : defaultSalesTax;
+                      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
                       const subtotal = taxCalc.subtotal;
                       const taxAmount = taxCalc.taxAmount;
                       const shippingCost = parseFloat(editingOrder.shipping_cost) || 0;

@@ -129,6 +129,7 @@ export default function PurchaseOrders() {
     expected_delivery_date: new Date().toISOString().split('T')[0],
     total_amount: 0,
     tax_percent: 0,
+    tax_rate_id: '',
     payment_terms: 'net_30',
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
@@ -136,7 +137,7 @@ export default function PurchaseOrders() {
   // Pre-fill default tax from settings
   useEffect(() => {
     if (defaultTaxPercent > 0 && newPO.tax_percent === 0) {
-      setNewPO(prev => ({ ...prev, tax_percent: defaultTaxPercent }));
+      setNewPO(prev => ({ ...prev, tax_percent: defaultTaxPercent, tax_rate_id: defaultPurchaseTax?.id || '' }));
     }
   }, [defaultTaxPercent]);
 
@@ -437,7 +438,8 @@ export default function PurchaseOrders() {
       const supplier = getSupplierById(newPO.supplier_id);
       const rawSubtotal = calculateOrderTotal(newPO.lines);
       const taxPercent = parseFloat(newPO.tax_percent) || 0;
-      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultPurchaseTax);
+      const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
+      const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
       const subtotal = taxCalc.subtotal;
       const taxAmount = taxCalc.taxAmount;
       const totalAmount = subtotal + taxAmount;
@@ -551,6 +553,9 @@ export default function PurchaseOrders() {
       if (Object.keys(updates).length > 0) {
         await updatePurchaseOrder(editPO.id, updates);
       }
+      if (editPO.status === 'cancelled') {
+        await deletePurchaseOrder(editPO.id);
+      }
       setShowEditModal(false);
       setEditPO(null);
     } catch (error) {
@@ -563,6 +568,9 @@ export default function PurchaseOrders() {
   const updatePOStatus = async (poId, newStatus) => {
     const updates = { status: newStatus };
     await updatePurchaseOrder(poId, updates);
+    if (newStatus === 'cancelled') {
+      await deletePurchaseOrder(poId);
+    }
   };
 
   const handleCreateBill = async (poId) => {
@@ -773,7 +781,24 @@ export default function PurchaseOrders() {
       </Tabs>
 
       {/* Create PO Modal */}
-      <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) setIsDeliveryDateManual(false); }}>
+      <Dialog open={showCreateModal} onOpenChange={(open) => {
+        setShowCreateModal(open);
+        if (!open) {
+          setIsDeliveryDateManual(false);
+          setNewPO({
+            po_number: '',
+            supplier_id: '',
+            vendor_name: '',
+            warehouse_id: warehouses.length === 1 ? warehouses[0].id : '',
+            order_date: new Date().toISOString().split('T')[0],
+            expected_delivery_date: new Date().toISOString().split('T')[0],
+            total_amount: 0,
+            tax_percent: defaultTaxPercent || 0,
+            payment_terms: 'net_30',
+            lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
+          });
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('new_purchase_order') || 'New Purchase Order'}</DialogTitle>
@@ -893,8 +918,9 @@ export default function PurchaseOrders() {
                   const hasPackagings = productPackagings[line.product_id]?.length > 0;
                   return (
                   <div key={index} className="bg-slate-50 p-3 rounded space-y-2">
-                    <div className="flex gap-2 items-start">
+                    <div className="flex gap-2 items-end">
                       <div className="flex-[2] min-w-0">
+                        {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
                         <Select
                           value={line.product_id || ''}
                           onValueChange={(value) => handleLineChange(index, 'product_id', value)}
@@ -913,6 +939,7 @@ export default function PurchaseOrders() {
                       </div>
                       {hasVariants && (
                         <div className="flex-[2] min-w-0">
+                          {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('variant')}</label>}
                           <Select
                             value={line.variant_id || ''}
                             onValueChange={(value) => handleLineChange(index, 'variant_id', value)}
@@ -930,18 +957,22 @@ export default function PurchaseOrders() {
                           </Select>
                         </div>
                       )}
-                      <div className="flex-[1] min-w-0 flex items-center gap-1">
-                        <Input
-                          type="number"
-                          placeholder={t('qty') || 'Qty'}
-                          value={line.quantity}
-                          onChange={(e) => handleLineChange(index, 'quantity', e.target.value)}
-                        />
-                        {line.unit_name && (
-                          <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
-                        )}
+                      <div className="flex-[1] min-w-0">
+                        {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('qty')}</label>}
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            placeholder={t('qty') || 'Qty'}
+                            value={line.quantity}
+                            onChange={(e) => handleLineChange(index, 'quantity', e.target.value)}
+                          />
+                          {line.unit_name && (
+                            <span className="text-xs text-slate-500 whitespace-nowrap">{line.unit_name}</span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex-[2] min-w-0">
+                        {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('price')}</label>}
                         <Input
                           type="text"
                           inputMode="decimal"
@@ -1030,9 +1061,9 @@ export default function PurchaseOrders() {
                         <PopoverTrigger asChild key={tr.id}>
                           <button
                             className="w-full text-left px-3 py-2 text-sm rounded hover:bg-slate-100 transition-colors"
-                            onClick={() => setNewPO({...newPO, tax_percent: tr.rate})}
+                            onClick={() => setNewPO({...newPO, tax_percent: tr.rate, tax_rate_id: tr.id})}
                           >
-                            {tr.name} ({tr.rate}%)
+                            {tr.name} ({tr.rate}%){tr.price_include ? ` (${t('incl') || 'incl.'})` : ''}
                           </button>
                         </PopoverTrigger>
                       ))}
@@ -1048,7 +1079,8 @@ export default function PurchaseOrders() {
                 {(() => {
                   const rawSubtotal = calculateOrderTotal(newPO.lines);
                   const taxPercent = parseFloat(newPO.tax_percent) || 0;
-                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, defaultPurchaseTax);
+                  const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
+                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
                   const total = taxCalc.subtotal + taxCalc.taxAmount;
                   return (
                     <>

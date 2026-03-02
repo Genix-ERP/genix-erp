@@ -75,6 +75,8 @@ export default function Payments() {
     inv.status !== 'cancelled' && inv.status !== 'paid'
   ).filter(inv => ((inv.total_amount || 0) - (inv.amount_paid || 0)) > 0);
 
+  const bankCashJournals = (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
+
   // Auto-select first bank/cash journal when journals load and modal is open with no journal selected
   useEffect(() => {
     if (showCreateModal && !newPayment.journal_id && bankCashJournals.length > 0) {
@@ -285,8 +287,6 @@ export default function Payments() {
     };
     return labels[method] || method;
   };
-
-  const bankCashJournals = (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
 
   const isCustomerTab = activeTab === 'customer';
 
