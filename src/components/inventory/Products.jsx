@@ -2001,35 +2001,13 @@ export default function Products() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {uomList.filter(u => u.category === 'weight').map(u => (
+                        {uomList.map(u => (
                           <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
                         ))}
-                        {uomList.filter(u => u.category === 'weight').length === 0 && (
+                        {uomList.length === 0 && (
                           <>
                             <SelectItem value="kg">kg</SelectItem>
                             <SelectItem value="g">g</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('dimension_unit') || 'Dimension Unit'}</label>
-                    <Select
-                      value={formData.dimension_unit}
-                      onValueChange={(value) => setFormData({...formData, dimension_unit: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uomList.filter(u => u.category === 'length').map(u => (
-                          <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
-                        ))}
-                        {uomList.filter(u => u.category === 'length').length === 0 && (
-                          <>
-                            <SelectItem value="cm">cm</SelectItem>
-                            <SelectItem value="m">m</SelectItem>
                           </>
                         )}
                       </SelectContent>

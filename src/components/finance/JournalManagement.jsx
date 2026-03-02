@@ -82,7 +82,6 @@ export default function JournalManagement() {
     auto_sequence: true, number_prefix: '',
     default_debit_account_id: '', default_credit_account_id: '',
   });
-  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
 
   // Filtering
   useEffect(() => {
@@ -253,7 +252,6 @@ export default function JournalManagement() {
       auto_sequence: true, number_prefix: '',
       default_debit_account_id: '', default_credit_account_id: '',
     });
-    setCodeManuallyEdited(false);
   };
 
   const handleCreate = async () => {
@@ -1114,35 +1112,24 @@ export default function JournalManagement() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code')} *</label>
-                <Input
-                  placeholder={t('auto_generated')}
-                  value={createForm.code}
-                  onChange={(e) => { setCodeManuallyEdited(true); setCreateForm({...createForm, code: e.target.value.toUpperCase()}); }}
-                  maxLength={20}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('journal_type')} *</label>
-                <Select value={createForm.type} onValueChange={(value) => setCreateForm({...createForm, type: value})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {JOURNAL_TYPES.map(jt => {
-                      const Icon = jt.icon;
-                      return (
-                        <SelectItem key={jt.value} value={jt.value}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="w-4 h-4" />
-                            {t(jt.labelKey)}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('journal_type')} *</label>
+              <Select value={createForm.type} onValueChange={(value) => setCreateForm({...createForm, type: value})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {JOURNAL_TYPES.map(jt => {
+                    const Icon = jt.icon;
+                    return (
+                      <SelectItem key={jt.value} value={jt.value}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-4 h-4" />
+                          {t(jt.labelKey)}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name')} *</label>
@@ -1150,9 +1137,7 @@ export default function JournalManagement() {
                 value={createForm.name}
                 onChange={(e) => {
                   const name = e.target.value;
-                  const updates = { name };
-                  if (!codeManuallyEdited) { updates.code = generateCodeFromName(name); }
-                  setCreateForm(prev => ({...prev, ...updates}));
+                  setCreateForm(prev => ({...prev, name, code: generateCodeFromName(name)}));
                 }}
               />
             </div>
@@ -1195,7 +1180,7 @@ export default function JournalManagement() {
             <Button
               onClick={handleCreate}
               className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !createForm.name || !createForm.code}
+              disabled={isSaving || !createForm.name}
             >
               {isSaving ? t('saving') : t('create_journal')}
             </Button>
