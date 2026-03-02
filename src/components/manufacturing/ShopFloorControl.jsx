@@ -97,10 +97,10 @@ export default function ShopFloorControl() {
     });
   }, [workOrders, selectedWorkCenter]);
 
-  // Get available work orders (ready or in_progress)
+  // Get available work orders (pending, ready, in_progress, or paused)
   const availableWorkOrders = useMemo(() => {
     return filteredWorkOrders.filter(wo =>
-      wo.status === 'ready' || wo.status === 'in_progress' || wo.status === 'paused'
+      wo.status === 'pending' || wo.status === 'ready' || wo.status === 'in_progress' || wo.status === 'paused'
     );
   }, [filteredWorkOrders]);
 
@@ -346,20 +346,21 @@ export default function ShopFloorControl() {
                 availableWorkOrders.map(wo => {
                   const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
                   const timeSpent = calculateTimeSpent(wo);
-                  const progress = wo.quantity_planned ? ((wo.quantity_produced || 0) / wo.quantity_planned) * 100 : 0;
+                  const totalQty = wo.quantity_to_produce || wo.quantity_planned || 0;
+                  const progress = totalQty ? ((wo.quantity_produced || 0) / totalQty) * 100 : 0;
 
                   return (
                     <TableRow key={wo.id}>
-                      <TableCell className="font-medium">{wo.id}</TableCell>
-                      <TableCell>{wo.operation_name}</TableCell>
+                      <TableCell className="font-medium">{wo.work_order_number || wo.code || wo.id?.substring(0, 8)}</TableCell>
+                      <TableCell>{wo.operation_name || wo.name || '-'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {workCenters.find(wc => wc.id === wo.work_center_id)?.name || '-'}
+                          {wo.work_center_name || workCenters.find(wc => wc.id === wo.work_center_id)?.name || '-'}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <span className="font-medium">{wo.quantity_produced || 0}</span>
-                        <span className="text-slate-400"> / {wo.quantity_planned}</span>
+                        <span className="text-slate-400"> / {wo.quantity_to_produce || wo.quantity_planned}</span>
                       </TableCell>
                       <TableCell>
                         <div className="w-24">
@@ -381,7 +382,7 @@ export default function ShopFloorControl() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {wo.status === 'ready' && (
+                          {(wo.status === 'ready' || wo.status === 'pending') && (
                             <Button
                               size="sm"
                               onClick={() => handleStartWorkOrder(wo)}
