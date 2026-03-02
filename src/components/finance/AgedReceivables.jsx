@@ -102,6 +102,20 @@ export default function AgedReceivables() {
 
   const pct = (val) => totals.total > 0 ? ((val / totals.total) * 100).toFixed(1) : '0.0';
 
+  // Format amount with sign: positive = debt, negative = payment/credit
+  const formatAmount = (amount) => {
+    if (amount === 0 || amount === undefined || amount === null) return '-';
+    if (amount < 0) return `-${formatCurrency(Math.abs(amount))}`;
+    return formatCurrency(amount);
+  };
+
+  // Color based on sign: positive (debt) = normal bucket color, negative (payment) = blue
+  const amountColor = (amount, bucketColor) => {
+    if (amount < 0) return 'text-blue-600';
+    if (amount > 0) return bucketColor;
+    return '';
+  };
+
   const SortHeader = ({ field, children, className = '' }) => (
     <TableHead
       className={`cursor-pointer select-none hover:bg-slate-50 ${className}`}
@@ -171,14 +185,14 @@ export default function AgedReceivables() {
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t('total') || 'Total'}</p>
-              <p className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(totals.total)}</p>
+              <p className={`text-lg font-bold mt-1 ${totals.total < 0 ? 'text-blue-600' : 'text-slate-900'}`}>{formatAmount(totals.total)}</p>
               <p className="text-xs text-slate-400 mt-0.5">{filteredContacts.length} {t('partners') || 'partners'}</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-green-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-green-600 uppercase tracking-wide">{t('not_due') || 'Not Due'}</p>
-              <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(totals.current)}</p>
+              <p className={`text-lg font-bold mt-1 ${totals.current < 0 ? 'text-blue-600' : 'text-green-700'}`}>{formatAmount(totals.current)}</p>
               <p className="text-xs text-green-500 mt-0.5">{pct(totals.current)}%</p>
             </CardContent>
           </Card>
@@ -250,23 +264,23 @@ export default function AgedReceivables() {
                           }
                         </TableCell>
                         <TableCell className="font-medium text-slate-900">{contact.contact_name}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-green-600">
-                          {contact.current > 0 ? formatCurrency(contact.current) : '-'}
+                        <TableCell className={`text-right font-mono text-sm ${amountColor(contact.current, 'text-green-600')}`}>
+                          {formatAmount(contact.current)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-yellow-600">
-                          {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
+                        <TableCell className={`text-right font-mono text-sm ${amountColor(contact.days_1_to_30, 'text-yellow-600')}`}>
+                          {formatAmount(contact.days_1_to_30)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-orange-600">
-                          {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
+                        <TableCell className={`text-right font-mono text-sm ${amountColor(contact.days_31_to_60, 'text-orange-600')}`}>
+                          {formatAmount(contact.days_31_to_60)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-red-600">
-                          {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
+                        <TableCell className={`text-right font-mono text-sm ${amountColor(contact.days_61_to_90, 'text-red-600')}`}>
+                          {formatAmount(contact.days_61_to_90)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-red-800">
-                          {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
+                        <TableCell className={`text-right font-mono text-sm ${amountColor(contact.over_90_days, 'text-red-800')}`}>
+                          {formatAmount(contact.over_90_days)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm font-bold text-slate-900">
-                          {formatCurrency(contact.total_amount)}
+                        <TableCell className={`text-right font-mono text-sm font-bold ${contact.total_amount < 0 ? 'text-blue-600' : 'text-slate-900'}`}>
+                          {formatAmount(contact.total_amount)}
                         </TableCell>
                       </TableRow>
 
@@ -289,23 +303,23 @@ export default function AgedReceivables() {
                             </div>
                           </TableCell>
                           {/* Place amount in correct bucket column */}
-                          <TableCell className="text-right font-mono text-xs text-green-600">
-                            {inv.aging_bucket === 'current' ? formatCurrency(inv.amount_due) : ''}
+                          <TableCell className={`text-right font-mono text-xs ${inv.aging_bucket === 'current' ? amountColor(inv.amount_due, 'text-green-600') : ''}`}>
+                            {inv.aging_bucket === 'current' ? formatAmount(inv.amount_due) : ''}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-yellow-600">
-                            {inv.aging_bucket === '1-30' ? formatCurrency(inv.amount_due) : ''}
+                          <TableCell className={`text-right font-mono text-xs ${inv.aging_bucket === '1-30' ? amountColor(inv.amount_due, 'text-yellow-600') : ''}`}>
+                            {inv.aging_bucket === '1-30' ? formatAmount(inv.amount_due) : ''}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-orange-600">
-                            {inv.aging_bucket === '31-60' ? formatCurrency(inv.amount_due) : ''}
+                          <TableCell className={`text-right font-mono text-xs ${inv.aging_bucket === '31-60' ? amountColor(inv.amount_due, 'text-orange-600') : ''}`}>
+                            {inv.aging_bucket === '31-60' ? formatAmount(inv.amount_due) : ''}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-red-600">
-                            {inv.aging_bucket === '61-90' ? formatCurrency(inv.amount_due) : ''}
+                          <TableCell className={`text-right font-mono text-xs ${inv.aging_bucket === '61-90' ? amountColor(inv.amount_due, 'text-red-600') : ''}`}>
+                            {inv.aging_bucket === '61-90' ? formatAmount(inv.amount_due) : ''}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-red-800">
-                            {inv.aging_bucket === '90+' ? formatCurrency(inv.amount_due) : ''}
+                          <TableCell className={`text-right font-mono text-xs ${inv.aging_bucket === '90+' ? amountColor(inv.amount_due, 'text-red-800') : ''}`}>
+                            {inv.aging_bucket === '90+' ? formatAmount(inv.amount_due) : ''}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-slate-600">
-                            {formatCurrency(inv.amount_due)}
+                          <TableCell className={`text-right font-mono text-xs ${inv.amount_due < 0 ? 'text-blue-600' : 'text-slate-600'}`}>
+                            {formatAmount(inv.amount_due)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -316,23 +330,23 @@ export default function AgedReceivables() {
                   <TableRow className="bg-slate-100/80 border-t-2 border-slate-300">
                     <TableCell></TableCell>
                     <TableCell className="font-bold text-slate-900">{t('total') || 'Total'}</TableCell>
-                    <TableCell className="text-right font-mono font-bold text-green-700">
-                      {totals.current > 0 ? formatCurrency(totals.current) : '-'}
+                    <TableCell className={`text-right font-mono font-bold ${amountColor(totals.current, 'text-green-700')}`}>
+                      {formatAmount(totals.current)}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-yellow-700">
-                      {totals.days1to30 > 0 ? formatCurrency(totals.days1to30) : '-'}
+                    <TableCell className={`text-right font-mono font-bold ${amountColor(totals.days1to30, 'text-yellow-700')}`}>
+                      {formatAmount(totals.days1to30)}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-orange-700">
-                      {totals.days31to60 > 0 ? formatCurrency(totals.days31to60) : '-'}
+                    <TableCell className={`text-right font-mono font-bold ${amountColor(totals.days31to60, 'text-orange-700')}`}>
+                      {formatAmount(totals.days31to60)}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-red-700">
-                      {totals.days61to90 > 0 ? formatCurrency(totals.days61to90) : '-'}
+                    <TableCell className={`text-right font-mono font-bold ${amountColor(totals.days61to90, 'text-red-700')}`}>
+                      {formatAmount(totals.days61to90)}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-red-800">
-                      {totals.over90 > 0 ? formatCurrency(totals.over90) : '-'}
+                    <TableCell className={`text-right font-mono font-bold ${amountColor(totals.over90, 'text-red-800')}`}>
+                      {formatAmount(totals.over90)}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(totals.total)}
+                    <TableCell className={`text-right font-mono font-bold ${totals.total < 0 ? 'text-blue-600' : 'text-slate-900'}`}>
+                      {formatAmount(totals.total)}
                     </TableCell>
                   </TableRow>
                 </TableBody>

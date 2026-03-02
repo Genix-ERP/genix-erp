@@ -345,6 +345,129 @@ export const constructionService = {
   },
 
   // =====================================================
+  // WBS (Work Breakdown Structure)
+  // =====================================================
+
+  async listWBS(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/wbs`, { params });
+    return response.data.data;
+  },
+
+  async getWBSTree(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/wbs/tree`, { params });
+    return response.data.data;
+  },
+
+  async createWBS(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/wbs`, data);
+    return response.data.data;
+  },
+
+  async updateWBS(id, data) {
+    const response = await apiClient.put(`/construction/wbs/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteWBS(id) {
+    await apiClient.delete(`/construction/wbs/${id}`);
+  },
+
+  async reorderWBS(items) {
+    const response = await apiClient.post('/construction/wbs/reorder', { items });
+    return response.data.data;
+  },
+
+  // =====================================================
+  // ACTIVITY LOG
+  // =====================================================
+
+  async listActivityLog(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/activity-log`, { params });
+    return response.data;
+  },
+
+  // =====================================================
+  // ESTIMATES (Versioned Smeta)
+  // =====================================================
+
+  async listEstimates(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/estimates`);
+    return response.data.data;
+  },
+
+  async getEstimate(id) {
+    const response = await apiClient.get(`/construction/estimates/${id}`);
+    return response.data.data;
+  },
+
+  async createEstimate(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/estimates`, data);
+    return response.data.data;
+  },
+
+  async updateEstimate(id, data) {
+    const response = await apiClient.put(`/construction/estimates/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteEstimate(id) {
+    await apiClient.delete(`/construction/estimates/${id}`);
+  },
+
+  async approveEstimate(id) {
+    const response = await apiClient.post(`/construction/estimates/${id}/approve`);
+    return response.data.data;
+  },
+
+  async duplicateEstimate(id) {
+    const response = await apiClient.post(`/construction/estimates/${id}/duplicate`);
+    return response.data.data;
+  },
+
+  // Estimate Lines
+  async listEstimateLines(estimateId) {
+    const response = await apiClient.get(`/construction/estimates/${estimateId}/lines`);
+    return response.data.data;
+  },
+
+  async createEstimateLine(estimateId, data) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines`, data);
+    return response.data.data;
+  },
+
+  async updateEstimateLine(estimateId, lineId, data) {
+    const response = await apiClient.put(`/construction/estimates/${estimateId}/lines/${lineId}`, data);
+    return response.data.data;
+  },
+
+  async deleteEstimateLine(estimateId, lineId) {
+    await apiClient.delete(`/construction/estimates/${estimateId}/lines/${lineId}`);
+  },
+
+  // =====================================================
+  // CONSTRUCTION DAILY LOGS (WBS-linked progress)
+  // =====================================================
+
+  async listConstructionDailyLogs(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/daily-logs`, { params });
+    return response.data;
+  },
+
+  async createConstructionDailyLog(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/daily-logs`, data);
+    return response.data.data;
+  },
+
+  async updateConstructionDailyLog(id, data) {
+    const response = await apiClient.put(`/construction/daily-logs/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteConstructionDailyLog(id) {
+    await apiClient.delete(`/construction/daily-logs/${id}`);
+  },
+
+  // =====================================================
   // ORGANIZATIONS (for vendor selection)
   // =====================================================
 
