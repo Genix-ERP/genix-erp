@@ -692,19 +692,19 @@ export function ProcurementProvider({ children }) {
           backendUpdates.notes = updates.notes;
         }
         if (updates.status) {
-          // Map frontend status values to backend status values
-          // Frontend: draft -> sent -> confirmed -> received
-          // Backend: draft -> pending_approval -> approved -> ordered -> partial -> received
+          // Block statuses that must go through dedicated endpoints
+          // 'confirmed'/'approved' -> use approvePurchaseOrder() which calls POST /:id/approve
+          // 'received' -> use receivePurchaseOrder() which calls POST /:id/receive
+          const blockedStatuses = ['confirmed', 'approved', 'received'];
+          if (blockedStatuses.includes(updates.status)) {
+            throw new Error(`Status '${updates.status}' cannot be set via generic update. Use the dedicated endpoint.`);
+          }
           const statusMap = {
             'draft': 'draft',
-            'sent': 'ordered',          // Frontend 'sent' = Backend 'ordered' (order sent to vendor)
-            'confirmed': 'approved',     // Frontend 'confirmed' = Backend 'approved' (vendor confirmed)
-            'received': 'received',
+            'sent': 'ordered',
             'cancelled': 'cancelled',
             'partial': 'partial',
-            // Also accept backend values directly
             'pending_approval': 'pending_approval',
-            'approved': 'approved',
             'ordered': 'ordered',
           };
           backendUpdates.status = statusMap[updates.status] || updates.status;
@@ -749,24 +749,27 @@ export function ProcurementProvider({ children }) {
   const approvePurchaseOrder = useCallback(async (id) => {
     if (backendAvailable) {
       try {
-        const approved = await procurementService.approveOrder(id);
-        setPurchaseOrders(prev => prev.map(po => po.id === id ? approved : po));
-        return approved;
+        await procurementService.approveOrder(id);
+        // Backend returns {message, status}, not full PO — update local state with confirmed status
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'confirmed' } : po));
+        return { id, status: 'confirmed' };
       } catch (error) {
         console.error('Failed to approve PO via API:', error);
+        throw error;
       }
     }
-    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'approved' } : po));
+    setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'confirmed' } : po));
   }, [backendAvailable]);
 
   const receivePurchaseOrder = useCallback(async (id, data) => {
     if (backendAvailable) {
       try {
-        const received = await procurementService.receiveOrder(id, data);
-        setPurchaseOrders(prev => prev.map(po => po.id === id ? received : po));
-        return received;
+        await procurementService.receiveOrder(id, data);
+        setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'received' } : po));
+        return { id, status: 'received' };
       } catch (error) {
         console.error('Failed to receive PO via API:', error);
+        throw error;
       }
     }
     setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'received', ...data } : po));
@@ -858,13 +861,23 @@ export function ProcurementProvider({ children }) {
 
         if (suppliersData) setSuppliers(suppliersData);
         if (posData) {
-          // Map backend PO fields to frontend format
+          // Reverse status mapping: backend → frontend
+          const reverseStatusMap = {
+            'ordered': 'sent',
+            'approved': 'confirmed',
+            'pending_approval': 'pending_approval',
+            'draft': 'draft',
+            'partial': 'partial',
+            'received': 'received',
+            'cancelled': 'cancelled',
+          };
           const mappedPOs = posData.map(po => ({
             ...po,
             po_number: po.order_number,
             supplier_id: po.vendor_id,
             supplier_name: po.vendor_name,
             expected_delivery_date: po.expected_date,
+            status: reverseStatusMap[po.status] || po.status,
           }));
           setPurchaseOrders(mappedPOs);
         }

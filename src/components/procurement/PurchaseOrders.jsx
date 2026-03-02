@@ -81,6 +81,8 @@ export default function PurchaseOrders() {
     createPurchaseOrder,
     updatePurchaseOrder,
     deletePurchaseOrder,
+    approvePurchaseOrder,
+    receivePurchaseOrder,
     getSupplierById,
     isLoading,
   } = useProcurement();
@@ -727,12 +729,12 @@ export default function PurchaseOrders() {
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'sent' && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'confirmed')}>
+                                <Button size="sm" variant="ghost" onClick={() => approvePurchaseOrder(po.id)}>
                                   {t('confirm') || 'Confirm'}
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'confirmed' && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePOStatus(po.id, 'received')}>
+                                <Button size="sm" variant="ghost" onClick={() => receivePurchaseOrder(po.id, {})}>
                                   <Truck className="w-4 h-4" />
                                 </Button>
                               )}
@@ -1199,8 +1201,6 @@ export default function PurchaseOrders() {
                   <SelectContent>
                     <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
                     <SelectItem value="sent">{t('sent') || 'Sent'}</SelectItem>
-                    <SelectItem value="confirmed">{t('confirmed') || 'Confirmed'}</SelectItem>
-                    <SelectItem value="received">{t('received') || 'Received'}</SelectItem>
                     <SelectItem value="cancelled">{t('cancelled') || 'Cancelled'}</SelectItem>
                   </SelectContent>
                 </Select>
