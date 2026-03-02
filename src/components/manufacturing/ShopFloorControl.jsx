@@ -28,6 +28,7 @@ import {
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { workOrdersService } from '@/api/services/manufacturing';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
 const WORK_ORDER_STATUS = {
@@ -42,7 +43,7 @@ const WORK_ORDER_STATUS = {
 export default function ShopFloorControl() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { workOrders, workCenters, updateWorkOrder } = useManufacturing();
+  const { workOrders, workCenters, startWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
@@ -121,22 +122,21 @@ export default function ShopFloorControl() {
   };
 
   // Handle start work order - directly starts without modal
-  const handleStartWorkOrder = (workOrder) => {
-    // Create time log
-    const newLog = {
-      id: `TL-${Date.now()}`,
-      work_order_id: workOrder.id,
-      start_time: new Date().toISOString(),
-      end_time: null,
-    };
+  const handleStartWorkOrder = async (workOrder) => {
+    try {
+      await startWorkOrder(workOrder.id);
 
-    setTimeLogs(prev => [...prev, newLog]);
-
-    // Update work order status
-    updateWorkOrder(workOrder.id, {
-      status: 'in_progress',
-      actual_start_time: new Date().toISOString(),
-    });
+      // Create time log
+      const newLog = {
+        id: `TL-${Date.now()}`,
+        work_order_id: workOrder.id,
+        start_time: new Date().toISOString(),
+        end_time: null,
+      };
+      setTimeLogs(prev => [...prev, newLog]);
+    } catch (error) {
+      console.error('Failed to start work order:', error);
+    }
   };
 
   // Handle pause work order
@@ -145,23 +145,24 @@ export default function ShopFloorControl() {
     setShowPauseModal(true);
   };
 
-  const confirmPauseWorkOrder = () => {
+  const confirmPauseWorkOrder = async () => {
     if (!activeWorkOrder) return;
 
-    // End current time log
-    setTimeLogs(prev => prev.map(log => {
-      if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
-        return { ...log, end_time: new Date().toISOString() };
-      }
-      return log;
-    }));
+    try {
+      await workOrdersService.pause(activeWorkOrder.id);
 
-    // Update work order status
-    updateWorkOrder(activeWorkOrder.id, {
-      status: 'paused',
-      pause_reason: pauseData.reason,
-      pause_notes: pauseData.notes,
-    });
+      // End current time log
+      setTimeLogs(prev => prev.map(log => {
+        if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
+          return { ...log, end_time: new Date().toISOString() };
+        }
+        return log;
+      }));
+
+      await refreshData();
+    } catch (error) {
+      console.error('Failed to pause work order:', error);
+    }
 
     setShowPauseModal(false);
     setPauseData({ reason: '', notes: '' });
@@ -179,29 +180,29 @@ export default function ShopFloorControl() {
     setShowCompleteModal(true);
   };
 
-  const confirmCompleteWorkOrder = () => {
+  const confirmCompleteWorkOrder = async () => {
     if (!activeWorkOrder) return;
 
-    // End current time log
-    setTimeLogs(prev => prev.map(log => {
-      if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
-        return { ...log, end_time: new Date().toISOString() };
-      }
-      return log;
-    }));
+    try {
+      const timeSpent = calculateTimeSpent(activeWorkOrder);
 
-    // Calculate total time
-    const timeSpent = calculateTimeSpent(activeWorkOrder);
+      await completeWorkOrder(activeWorkOrder.id, {
+        quantity_produced: parseFloat(completionData.quantity_produced) || 0,
+        quantity_scrapped: parseFloat(completionData.quantity_scrapped) || 0,
+        actual_duration: timeSpent.totalMinutes,
+        notes: completionData.notes,
+      });
 
-    // Update work order
-    updateWorkOrder(activeWorkOrder.id, {
-      status: 'completed',
-      actual_end_time: new Date().toISOString(),
-      quantity_produced: parseFloat(completionData.quantity_produced) || 0,
-      quantity_scrapped: parseFloat(completionData.quantity_scrapped) || 0,
-      actual_duration: timeSpent.totalMinutes,
-      completion_notes: completionData.notes,
-    });
+      // End current time log
+      setTimeLogs(prev => prev.map(log => {
+        if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
+          return { ...log, end_time: new Date().toISOString() };
+        }
+        return log;
+      }));
+    } catch (error) {
+      console.error('Failed to complete work order:', error);
+    }
 
     setShowCompleteModal(false);
     setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
