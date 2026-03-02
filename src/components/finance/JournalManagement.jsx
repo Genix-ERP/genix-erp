@@ -32,12 +32,17 @@ const JOURNAL_TYPES = [
 
 const getJournalType = (type) => JOURNAL_TYPES.find(jt => jt.value === type) || JOURNAL_TYPES[0];
 
+const PM_CODE_TO_KEY = { CASH: 'cash', BANK: 'bank_transfer', CARD: 'credit_card', CHECK: 'check' };
+
 export default function JournalManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+
+  const tPM = (code, fallbackName) => t(PM_CODE_TO_KEY[code]) || fallbackName || code;
   const {
     journals,
     accounts,
+    currencies,
     createJournal,
     updateJournal,
     deleteJournal,
@@ -219,18 +224,36 @@ export default function JournalManagement() {
     }
   };
 
-  const handleAddPaymentMethod = async (direction) => {
-    if (!selectedJournal || allPaymentMethods.length === 0) return;
-    const firstPM = allPaymentMethods[0];
+  const handleAddPaymentMethod = async (direction, pmId) => {
+    if (!selectedJournal || !pmId) return;
+    const pm = allPaymentMethods.find(p => p.id === pmId);
+    if (!pm) return;
     try {
       await financeService.addJournalPaymentMethod(selectedJournal.id, {
-        payment_method_id: firstPM.id,
+        payment_method_id: pm.id,
         direction,
-        name: firstPM.name,
+        name: pm.name,
       });
       loadJournalPaymentMethods(selectedJournal.id);
     } catch (err) {
       console.error('Failed to add payment method:', err);
+    }
+  };
+
+  const getAvailablePMs = (direction) => {
+    const linked = new Set(journalPaymentMethods.filter(pm => pm.direction === direction).map(pm => pm.payment_method_id));
+    return allPaymentMethods.filter(pm => !linked.has(pm.id));
+  };
+
+  const handleUpdatePMAccount = async (pmId, accountId) => {
+    if (!selectedJournal) return;
+    try {
+      await financeService.updateJournalPaymentMethod(selectedJournal.id, pmId, {
+        outstanding_account_id: accountId || null,
+      });
+      loadJournalPaymentMethods(selectedJournal.id);
+    } catch (err) {
+      console.error('Failed to update payment method account:', err);
     }
   };
 
@@ -569,14 +592,21 @@ export default function JournalManagement() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
                         <label className="text-sm font-medium text-slate-700 md:pt-2.5">{t('currency')}</label>
                         <div className="md:col-span-2">
-                          <Input
-                            value={editForm.currency}
-                            onChange={(e) => handleUpdateField('currency', e.target.value.toUpperCase())}
-                            maxLength={10}
-                            placeholder="UZS"
+                          <Select
+                            value={editForm.currency || '_none'}
+                            onValueChange={v => handleUpdateField('currency', v === '_none' ? '' : v)}
                             disabled={!canUpdate(MODULES.FINANCIALS)}
-                            className="max-w-xs"
-                          />
+                          >
+                            <SelectTrigger className="max-w-xs">
+                              <SelectValue placeholder={t('select_currency') || 'Select currency'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="_none">—</SelectItem>
+                              {(currencies || []).map(c => (
+                                <SelectItem key={c.id} value={c.code}>{c.code} — {c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                     </div>
@@ -667,9 +697,28 @@ export default function JournalManagement() {
                         <TableBody>
                           {journalPaymentMethods.filter(pm => pm.direction === 'inbound').map(pm => (
                             <TableRow key={pm.id}>
-                              <TableCell className="text-sm">{pm.pm_name}</TableCell>
-                              <TableCell className="text-sm">{pm.name || pm.pm_name}</TableCell>
-                              <TableCell className="text-sm text-slate-600">{pm.account_name || '-'}</TableCell>
+                              <TableCell className="text-sm">{tPM(pm.pm_code, pm.pm_name)}</TableCell>
+                              <TableCell className="text-sm">{pm.name || tPM(pm.pm_code, pm.pm_name)}</TableCell>
+                              <TableCell>
+                                {canUpdate(MODULES.FINANCIALS) ? (
+                                  <Select
+                                    value={pm.outstanding_account_id || '_none'}
+                                    onValueChange={v => handleUpdatePMAccount(pm.id, v === '_none' ? null : v)}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm">
+                                      <SelectValue placeholder={t('select_account') || 'Select account'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="_none">—</SelectItem>
+                                      {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id}>{acc.code} {acc.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-sm text-slate-600">{pm.account_name || '—'}</span>
+                                )}
+                              </TableCell>
                               <TableCell>
                                 {canUpdate(MODULES.FINANCIALS) && (
                                   <Button variant="ghost" size="sm" onClick={() => handleRemovePaymentMethod(pm.id)}
@@ -689,12 +738,21 @@ export default function JournalManagement() {
                           )}
                         </TableBody>
                       </Table>
-                      {canUpdate(MODULES.FINANCIALS) && allPaymentMethods.length > 0 && (
-                        <div className="p-3 border-t border-slate-100">
-                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700"
-                            onClick={() => handleAddPaymentMethod('inbound')}>
-                            <Plus className="w-3 h-3 mr-1" /> {t('add_a_line')}
-                          </Button>
+                      {canUpdate(MODULES.FINANCIALS) && getAvailablePMs('inbound').length > 0 && (
+                        <div className="p-3 border-t border-slate-100 flex items-center gap-2">
+                          <Select key={`add-in-${journalPaymentMethods.length}`} onValueChange={v => handleAddPaymentMethod('inbound', v)}>
+                            <SelectTrigger className="w-auto h-8 text-sm text-blue-600 border-dashed">
+                              <div className="flex items-center gap-1">
+                                <Plus className="w-3 h-3" />
+                                {t('add_a_line') || 'Add a line'}
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getAvailablePMs('inbound').map(pm => (
+                                <SelectItem key={pm.id} value={pm.id}>{tPM(pm.code, pm.name)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       )}
                     </CardContent>
@@ -719,9 +777,28 @@ export default function JournalManagement() {
                         <TableBody>
                           {journalPaymentMethods.filter(pm => pm.direction === 'outbound').map(pm => (
                             <TableRow key={pm.id}>
-                              <TableCell className="text-sm">{pm.pm_name}</TableCell>
-                              <TableCell className="text-sm">{pm.name || pm.pm_name}</TableCell>
-                              <TableCell className="text-sm text-slate-600">{pm.account_name || '-'}</TableCell>
+                              <TableCell className="text-sm">{tPM(pm.pm_code, pm.pm_name)}</TableCell>
+                              <TableCell className="text-sm">{pm.name || tPM(pm.pm_code, pm.pm_name)}</TableCell>
+                              <TableCell>
+                                {canUpdate(MODULES.FINANCIALS) ? (
+                                  <Select
+                                    value={pm.outstanding_account_id || '_none'}
+                                    onValueChange={v => handleUpdatePMAccount(pm.id, v === '_none' ? null : v)}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm">
+                                      <SelectValue placeholder={t('select_account') || 'Select account'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="_none">—</SelectItem>
+                                      {(accounts || []).filter(a => a.is_active !== false).map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id}>{acc.code} {acc.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-sm text-slate-600">{pm.account_name || '—'}</span>
+                                )}
+                              </TableCell>
                               <TableCell>
                                 {canUpdate(MODULES.FINANCIALS) && (
                                   <Button variant="ghost" size="sm" onClick={() => handleRemovePaymentMethod(pm.id)}
@@ -741,12 +818,21 @@ export default function JournalManagement() {
                           )}
                         </TableBody>
                       </Table>
-                      {canUpdate(MODULES.FINANCIALS) && allPaymentMethods.length > 0 && (
-                        <div className="p-3 border-t border-slate-100">
-                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700"
-                            onClick={() => handleAddPaymentMethod('outbound')}>
-                            <Plus className="w-3 h-3 mr-1" /> {t('add_a_line')}
-                          </Button>
+                      {canUpdate(MODULES.FINANCIALS) && getAvailablePMs('outbound').length > 0 && (
+                        <div className="p-3 border-t border-slate-100 flex items-center gap-2">
+                          <Select key={`add-out-${journalPaymentMethods.length}`} onValueChange={v => handleAddPaymentMethod('outbound', v)}>
+                            <SelectTrigger className="w-auto h-8 text-sm text-blue-600 border-dashed">
+                              <div className="flex items-center gap-1">
+                                <Plus className="w-3 h-3" />
+                                {t('add_a_line') || 'Add a line'}
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getAvailablePMs('outbound').map(pm => (
+                                <SelectItem key={pm.id} value={pm.id}>{tPM(pm.code, pm.name)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       )}
                     </CardContent>
