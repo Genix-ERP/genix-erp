@@ -21,7 +21,7 @@ export default function DepartmentManagement({ departments, onRefresh }) {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ code: '', name: '' });
+  const [form, setForm] = useState({ name: '' });
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredDepartments = departments.filter(dept => {
@@ -31,7 +31,7 @@ export default function DepartmentManagement({ departments, onRefresh }) {
   });
 
   const handleSave = async () => {
-    if (!form.code || !form.name) {
+    if (!form.name) {
       toast({
         title: t('error') || 'Error',
         description: t('fill_required_fields') || 'Please fill all required fields',
@@ -42,9 +42,9 @@ export default function DepartmentManagement({ departments, onRefresh }) {
 
     try {
       if (editing) {
-        await apiClient.put(`/departments/${editing.id}`, { code: form.code, name: form.name });
+        await apiClient.put(`/departments/${editing.id}`, { name: form.name });
       } else {
-        await apiClient.post('/departments', { code: form.code, name: form.name });
+        await apiClient.post('/departments', { name: form.name });
       }
 
       toast({
@@ -56,7 +56,7 @@ export default function DepartmentManagement({ departments, onRefresh }) {
 
       setShowModal(false);
       setEditing(null);
-      setForm({ code: '', name: '' });
+      setForm({ name: '' });
       onRefresh?.();
     } catch (error) {
       console.error('Error saving department:', error);
@@ -89,10 +89,10 @@ export default function DepartmentManagement({ departments, onRefresh }) {
   const openModal = (dept = null) => {
     if (dept) {
       setEditing(dept);
-      setForm({ code: dept.code, name: dept.name });
+      setForm({ name: dept.name });
     } else {
       setEditing(null);
-      setForm({ code: '', name: '' });
+      setForm({ name: '' });
     }
     setShowModal(true);
   };
@@ -233,16 +233,6 @@ export default function DepartmentManagement({ departments, onRefresh }) {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">
-                {t('code') || 'Code'} *
-              </label>
-              <Input
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-                placeholder={t('enter_code') || 'Enter code'}
-              />
-            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">
                 {t('name') || 'Name'} *

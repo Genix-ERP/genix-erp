@@ -12,23 +12,76 @@ import {
   Camera,
   Users,
   Clock,
+  Layers,
+  Receipt,
   ChevronLeft,
   ChevronRight,
   Loader2
 } from 'lucide-react';
 
-const ACTION_TYPE_CONFIG = {
-  progress: { icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-100', label: 'Progress' },
-  estimate: { icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Smeta' },
-  act: { icon: FileText, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Akt' },
-  material: { icon: Package, color: 'text-orange-600', bg: 'bg-orange-100', label: 'Material' },
-  photo: { icon: Camera, color: 'text-pink-600', bg: 'bg-pink-100', label: 'Foto' },
-  team: { icon: Users, color: 'text-cyan-600', bg: 'bg-cyan-100', label: 'Jamoa' },
-  wbs: { icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-100', label: 'WBS' },
-  status_change: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-100', label: 'Holat' },
+// Translates hardcoded Uzbek descriptions stored in the DB into the current UI language.
+// Patterns match the fmt.Sprintf templates used in the Go backend.
+const translateActivityDesc = (desc, t) => {
+  if (!desc) return desc;
+
+  // Exact matches first
+  const exact = {
+    'Smeta tasdiqlandi': 'act_estimate_approved',
+    "Smeta o'chirildi": 'act_estimate_deleted',
+    "WBS band o'chirildi": 'act_wbs_deleted',
+    "Kunlik yozuv o'chirildi": 'act_daily_log_deleted',
+  };
+  if (exact[desc]) return t(exact[desc]);
+
+  // Prefix patterns with dynamic parts preserved
+  if (desc.startsWith('Bosqich yaratildi: ')) {
+    return `${t('act_stage_created')}: ${desc.slice('Bosqich yaratildi: '.length)}`;
+  }
+  if (desc.startsWith('Smeta yaratildi: ')) {
+    return `${t('act_estimate_created')}: ${desc.slice('Smeta yaratildi: '.length)}`;
+  }
+  if (desc.startsWith('Smeta nusxalandi: ')) {
+    return `${t('act_estimate_copied')}: ${desc.slice('Smeta nusxalandi: '.length)}`;
+  }
+  if (desc.startsWith('WBS yaratildi: ')) {
+    return `${t('act_wbs_created')}: ${desc.slice('WBS yaratildi: '.length)}`;
+  }
+  if (desc.startsWith('Xarajat yaratildi: ')) {
+    return `${t('act_expense_created')}: ${desc.slice('Xarajat yaratildi: '.length)}`;
+  }
+  if (desc.startsWith('Xarajat tasdiqlandi: ')) {
+    return `${t('act_expense_approved')}: ${desc.slice('Xarajat tasdiqlandi: '.length)}`;
+  }
+  if (desc.startsWith('Xarajat bekor qilindi: ')) {
+    return `${t('act_expense_cancelled')}: ${desc.slice('Xarajat bekor qilindi: '.length)}`;
+  }
+  if (desc.startsWith('Kunlik yozuv: ')) {
+    // "Kunlik yozuv: 1122.00 m bajarildi" → "Daily log: 1122.00 m completed"
+    const inner = desc.slice('Kunlik yozuv: '.length).replace(' bajarildi', ` ${t('act_completed')}`);
+    return `${t('act_daily_log')}: ${inner}`;
+  }
+  if (desc.startsWith('Loyiha foydalanishga topshirildi')) {
+    const suffix = desc.slice('Loyiha foydalanishga topshirildi'.length);
+    return `${t('act_project_commissioned')}${suffix}`;
+  }
+
+  return desc; // unknown pattern — show as-is
 };
 
 const ActivityTab = ({ projectId, t }) => {
+  const ACTION_TYPE_CONFIG = {
+    progress:      { icon: TrendingUp, color: 'text-green-600',  bg: 'bg-green-100',  label: t('progress') || 'Progress' },
+    estimate:      { icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-100', label: t('estimate') || 'Estimate' },
+    act:           { icon: FileText,   color: 'text-blue-600',   bg: 'bg-blue-100',   label: t('act') || 'Act' },
+    material:      { icon: Package,    color: 'text-orange-600', bg: 'bg-orange-100', label: t('material') || 'Material' },
+    photo:         { icon: Camera,     color: 'text-pink-600',   bg: 'bg-pink-100',   label: t('photo') || 'Photo' },
+    team:          { icon: Users,      color: 'text-cyan-600',   bg: 'bg-cyan-100',   label: t('team') || 'Team' },
+    wbs:           { icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-100', label: 'WBS' },
+    stage:         { icon: Layers,     color: 'text-teal-600',   bg: 'bg-teal-100',   label: t('stages') || 'Stage' },
+    expense:       { icon: Receipt,    color: 'text-rose-600',   bg: 'bg-rose-100',   label: t('expenses') || 'Expense' },
+    project:       { icon: TrendingUp, color: 'text-blue-700',   bg: 'bg-blue-100',   label: t('project') || 'Project' },
+    status_change: { icon: Clock,      color: 'text-amber-600',  bg: 'bg-amber-100',  label: t('status_change') || 'Status' },
+  };
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -126,7 +179,7 @@ const ActivityTab = ({ projectId, t }) => {
                   <IconComponent className={`w-4 h-4 ${config.color}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700">{activity.description}</p>
+                  <p className="text-sm text-slate-700">{translateActivityDesc(activity.description, t)}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-slate-400">{activity.user_name || t('system') || 'Tizim'}</span>
                     <span className="text-xs text-slate-300">|</span>
