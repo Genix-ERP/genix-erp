@@ -45,9 +45,7 @@ export default function ShopFloorControl() {
   const { workOrders, workCenters, updateWorkOrder } = useManufacturing();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
-  const [selectedWorker, setSelectedWorker] = useState('');
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
-  const [showStartModal, setShowStartModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [timeLogs, setTimeLogs] = useState([]);
@@ -122,20 +120,12 @@ export default function ShopFloorControl() {
     return { hours, minutes, totalMinutes, formatted: `${hours}h ${minutes}m` };
   };
 
-  // Handle start work order
+  // Handle start work order - directly starts without modal
   const handleStartWorkOrder = (workOrder) => {
-    setActiveWorkOrder(workOrder);
-    setShowStartModal(true);
-  };
-
-  const confirmStartWorkOrder = () => {
-    if (!activeWorkOrder || !selectedWorker) return;
-
     // Create time log
     const newLog = {
       id: `TL-${Date.now()}`,
-      work_order_id: activeWorkOrder.id,
-      worker_id: selectedWorker,
+      work_order_id: workOrder.id,
       start_time: new Date().toISOString(),
       end_time: null,
     };
@@ -143,13 +133,10 @@ export default function ShopFloorControl() {
     setTimeLogs(prev => [...prev, newLog]);
 
     // Update work order status
-    updateWorkOrder(activeWorkOrder.id, {
+    updateWorkOrder(workOrder.id, {
       status: 'in_progress',
       actual_start_time: new Date().toISOString(),
     });
-
-    setShowStartModal(false);
-    setSelectedWorker('');
   };
 
   // Handle pause work order
@@ -433,61 +420,6 @@ export default function ShopFloorControl() {
           </Table>
         </CardContent>
       </Card>
-
-      {/* Start Work Order Modal */}
-      <Dialog open={showStartModal} onOpenChange={setShowStartModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('start_work_order') || "Ish buyurtmasini boshlash"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {activeWorkOrder && (
-              <div className="p-4 bg-slate-50 rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">{t('work_order') || "Ish buyurtmasi"}</span>
-                  <span className="font-medium">{activeWorkOrder.id}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">{t('operation') || "Operatsiya"}</span>
-                  <span className="font-medium">{activeWorkOrder.operation_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">{t('quantity') || "Miqdor"}</span>
-                  <span className="font-medium">{activeWorkOrder.quantity_planned}</span>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>{t('select_worker') || "Ishchini tanlang"} *</Label>
-              <Select value={selectedWorker} onValueChange={setSelectedWorker}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_worker') || "Ishchini tanlang"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="worker1">John Doe</SelectItem>
-                  <SelectItem value="worker2">Jane Smith</SelectItem>
-                  <SelectItem value="worker3">Bob Johnson</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setShowStartModal(false)}>
-                {t('cancel') || "Bekor qilish"}
-              </Button>
-              <Button
-                onClick={confirmStartWorkOrder}
-                disabled={!selectedWorker}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                {t('start_work') || "Ishni boshlash"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Pause Work Order Modal */}
       <Dialog open={showPauseModal} onOpenChange={setShowPauseModal}>
