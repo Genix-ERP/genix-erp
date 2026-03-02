@@ -53,6 +53,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services/inventory';
 import { financeService } from '@/api/services/finance';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function VendorBills() {
   const { language } = useLanguage();
@@ -72,6 +73,9 @@ export default function VendorBills() {
   const [billToDelete, setBillToDelete] = useState(null);
   const [selectedBill, setSelectedBill] = useState(null);
   const [editingBill, setEditingBill] = useState(null);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentBill, setPaymentBill] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [newBill, setNewBill] = useState({
     vendor_id: '',
     vendor_name: '',
@@ -240,12 +244,25 @@ export default function VendorBills() {
     }
   };
 
-  const handleMarkAsPaid = async (billId) => {
+  const handleOpenPayment = (bill) => {
+    const amountDue = (bill.total_amount || 0) - (bill.amount_paid || 0);
+    setPaymentBill(bill);
+    setPaymentAmount(amountDue.toString());
+    setShowPaymentDialog(true);
+  };
+
+  const handleSubmitPayment = async () => {
+    if (!paymentBill || !paymentAmount) return;
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) return;
     try {
-      await financeService.updatePurchaseInvoice(billId, { status: 'paid' });
+      await financeService.updatePurchaseInvoice(paymentBill.id, { amount_paid: amount });
       fetchBills();
+      setShowPaymentDialog(false);
+      setPaymentBill(null);
+      setPaymentAmount('');
     } catch (error) {
-      console.error('Failed to mark bill as paid:', error);
+      console.error('Failed to record payment:', error);
     }
   };
 
@@ -369,6 +386,8 @@ export default function VendorBills() {
       draft: { variant: 'secondary', icon: FileText, label: t('draft') || 'Draft' },
       pending_approval: { variant: 'warning', icon: Clock, label: t('pending_approval') || 'Pending' },
       approved: { variant: 'default', icon: CheckCircle, label: t('approved') || 'Approved' },
+      partial: { variant: 'warning', icon: DollarSign, label: t('partially_paid') || 'Partial' },
+      partially_paid: { variant: 'warning', icon: DollarSign, label: t('partially_paid') || 'Partial' },
       paid: { variant: 'success', icon: DollarSign, label: t('paid') || 'Paid' },
       rejected: { variant: 'destructive', icon: XCircle, label: t('rejected') || 'Rejected' },
       overdue: { variant: 'destructive', icon: AlertTriangle, label: t('overdue') || 'Overdue' }
@@ -620,12 +639,13 @@ export default function VendorBills() {
                               </Button>
                             </>
                           )}
-                          {bill.status === 'approved' && (
+                          {(bill.status === 'approved' || bill.status === 'partial' || bill.status === 'partially_paid') && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleMarkAsPaid(bill.id)}
+                              onClick={() => handleOpenPayment(bill)}
                               className="text-green-600"
+                              title={t('record_payment') || 'Record Payment'}
                             >
                               <DollarSign className="w-4 h-4" />
                             </Button>
@@ -1145,6 +1165,61 @@ export default function VendorBills() {
             <Button variant="destructive" onClick={confirmDeleteBill}>
               <Trash2 className="w-4 h-4 mr-2" />
               {t('delete') || 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog open={showPaymentDialog} onOpenChange={(open) => { if (!open) { setShowPaymentDialog(false); setPaymentBill(null); setPaymentAmount(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('record_payment') || 'Record Payment'}</DialogTitle>
+          </DialogHeader>
+          {paymentBill && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('bill_number') || 'Bill'}:</span>
+                  <span className="font-medium">{paymentBill.invoice_number || paymentBill.bill_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('total_amount') || 'Total'}:</span>
+                  <span className="font-medium">{formatCurrency(paymentBill.total_amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('paid') || 'Paid'}:</span>
+                  <span className="font-medium">{formatCurrency(paymentBill.amount_paid || 0)}</span>
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span>{t('amount_due') || 'Amount Due'}:</span>
+                  <span className="text-orange-600">{formatCurrency((paymentBill.total_amount || 0) - (paymentBill.amount_paid || 0))}</span>
+                </div>
+              </div>
+              <div>
+                <Label>{t('payment_amount') || 'Payment Amount'} *</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={formatPriceInput(paymentAmount)}
+                  onChange={(e) => setPaymentAmount(parsePriceInput(e.target.value))}
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowPaymentDialog(false); setPaymentBill(null); setPaymentAmount(''); }}>
+              {t('cancel') || 'Cancel'}
+            </Button>
+            <Button
+              onClick={handleSubmitPayment}
+              disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <DollarSign className="w-4 h-4 mr-1" />
+              {t('confirm_payment') || 'Confirm Payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

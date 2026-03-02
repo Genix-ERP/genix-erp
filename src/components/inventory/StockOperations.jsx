@@ -19,7 +19,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-import { inventoryService } from '@/api/services';
+import { inventoryService, contactsService } from '@/api/services';
 import { format } from 'date-fns';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -45,12 +45,13 @@ const STATE_CONFIG = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const StateBadge = ({ state }) => {
+const StateBadge = ({ state, t }) => {
   const cfg = STATE_CONFIG[state] || STATE_CONFIG.draft;
   const Icon = cfg.icon;
+  const label = t ? (t(state) || cfg.label) : cfg.label;
   return (
     <Badge className={`${cfg.color} gap-1 text-xs`}>
-      <Icon className="w-3 h-3" />{cfg.label}
+      <Icon className="w-3 h-3" />{label}
     </Badge>
   );
 };
@@ -135,7 +136,7 @@ export default function StockOperations() {
         inventoryService.getStockOperationSummary().catch(() => []),
         inventoryService.listOperationTypes({ include_inactive: false }),
         inventoryService.listProducts ? inventoryService.listProducts().catch(() => []) : Promise.resolve([]),
-        inventoryService.listContacts ? inventoryService.listContacts().catch(() => []) : Promise.resolve([]),
+        contactsService.list().catch(() => []),
       ]);
       setOperations(ops || []);
       setSummary(sum || []);
@@ -398,7 +399,7 @@ export default function StockOperations() {
                       <TableCell>
                         <StepProgress current={op.current_step} total={op.total_steps} />
                       </TableCell>
-                      <TableCell><StateBadge state={op.state} /></TableCell>
+                      <TableCell><StateBadge state={op.state} t={t} /></TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); openDetail(op); }}>
                           <Eye className="w-4 h-4" />
@@ -607,7 +608,7 @@ export default function StockOperations() {
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-bold font-mono">{op.name}</h2>
-              <StateBadge state={op.state} />
+              <StateBadge state={op.state} t={t} />
               <DirectionBadge direction={op.direction} t={t} />
             </div>
             {op.partner_name && <p className="text-sm text-slate-500">{op.partner_name}</p>}
@@ -675,11 +676,14 @@ export default function StockOperations() {
             <CardContent className="space-y-3 text-sm">
               {[
                 [t('document') || 'Document', op.name],
-                [t('direction') || 'Direction', op.direction],
+                [t('direction') || 'Direction', (() => {
+                  const d = DIRECTIONS.find(x => x.value === op.direction);
+                  return d ? (t(d.labelKey) || op.direction) : op.direction;
+                })()],
                 [t('date') || 'Date', op.date ? format(new Date(op.date), 'dd.MM.yyyy HH:mm') : '—'],
                 [t('partner') || 'Partner', op.partner_name || '—'],
                 [t('source_document') || 'Source', op.source_document || '—'],
-                [t('priority') || 'Priority', op.priority || 'normal'],
+                [t('priority') || 'Priority', t(`priority_${op.priority}`) || op.priority || 'normal'],
               ].map(([label, val]) => (
                 <div key={label} className="flex justify-between">
                   <span className="text-slate-500">{label}</span>
@@ -774,7 +778,7 @@ export default function StockOperations() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{log.step_name || `Step ${log.step_sequence}`}</span>
-                        <StateBadge state={log.state} />
+                        <StateBadge state={log.state} t={t} />
                       </div>
                       {log.started_at && (
                         <p className="text-xs text-slate-400">
