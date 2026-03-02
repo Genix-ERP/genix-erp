@@ -3,98 +3,40 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
+import { Calculator, TrendingUp, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import inventoryService from '@/api/services/inventory';
 
-export default function COGSCalculator({ items, movements }) {
+export default function COGSCalculator() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const [cogsCalculations, setCogsCalculations] = useState([]);
+  const [cogsData, setCogsData] = useState([]);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  const calculateFIFOCOGS = useCallback((item, saleQuantity) => {
-    // Simulate FIFO calculation for demo
-    const avgCost = item.unit_cost || 0;
-    return {
-      method: 'FIFO',
-      unitCost: avgCost,
-      totalCost: avgCost * saleQuantity,
-      explanation: `FIFO: Using oldest stock first at ${formatCurrency(avgCost)} per unit`
-    };
-  }, [formatCurrency]); // formatCurrency dependency
-
-  const calculateWACCOGS = useCallback((item, saleQuantity) => {
-    // Simulate WAC calculation for demo
-    const avgCost = item.unit_cost || 0;
-    return {
-      method: 'WAC',
-      unitCost: avgCost,
-      totalCost: avgCost * saleQuantity,
-      explanation: `Weighted Average: ${formatCurrency(avgCost)} per unit based on inventory pool`
-    };
-  }, [formatCurrency]); // formatCurrency dependency
-
-  const calculateLIFOCOGS = useCallback((item, saleQuantity) => {
-    // Simulate LIFO calculation for demo
-    const avgCost = (item.unit_cost || 0) * 1.05; // Slightly higher for demo
-    return {
-      method: 'LIFO',
-      unitCost: avgCost,
-      totalCost: avgCost * saleQuantity,
-      explanation: `LIFO: Using newest stock first at ${formatCurrency(avgCost)} per unit`
-    };
-  }, [formatCurrency]); // formatCurrency dependency
-
-  const calculateCOGS = useCallback(() => {
+  const fetchCOGS = useCallback(async () => {
     setIsCalculating(true);
-
-    // Guard against empty/undefined items
-    if (!items || items.length === 0) {
-      setCogsCalculations([]);
+    try {
+      const data = await inventoryService.getCOGSData();
+      setCogsData(data || []);
+    } catch (e) {
+      console.error('Failed to fetch COGS data', e);
+    } finally {
       setIsCalculating(false);
-      return;
     }
-
-    // Simulate COGS calculations for recent outbound movements
-    const calculations = items.slice(0, 10).map((item) => {
-      const sampleSaleQty = Math.floor(Math.random() * 50) + 10;
-
-      // Use cost_price if unit_cost is not available (Products use cost_price)
-      const itemWithCost = {
-        ...item,
-        unit_cost: item.unit_cost || item.cost_price || 0
-      };
-
-      const fifo = calculateFIFOCOGS(itemWithCost, sampleSaleQty);
-      const wac = calculateWACCOGS(itemWithCost, sampleSaleQty);
-      const lifo = calculateLIFOCOGS(itemWithCost, sampleSaleQty);
-
-      return {
-        id: item.id,
-        sku: item.sku || item.code,
-        name: item.name,
-        saleQuantity: sampleSaleQty,
-        currentMethod: item.costing_method || 'fifo',
-        calculations: { fifo, wac, lifo }
-      };
-    });
-
-    setCogsCalculations(calculations);
-    setIsCalculating(false);
-  }, [items, calculateFIFOCOGS, calculateWACCOGS, calculateLIFOCOGS]); // Dependencies for calculateCOGS
+  }, []);
 
   useEffect(() => {
-    calculateCOGS();
-  }, [calculateCOGS]); // Now calculateCOGS is stable
+    fetchCOGS();
+  }, [fetchCOGS]);
 
   const getMethodColor = (method) => {
     const colors = {
       fifo: "bg-green-100 text-green-800",
-      wac: "bg-blue-100 text-blue-800", 
+      wac: "bg-blue-100 text-blue-800",
       lifo: "bg-orange-100 text-orange-800"
     };
     return colors[method] || colors.fifo;
@@ -117,11 +59,11 @@ export default function COGSCalculator({ items, movements }) {
               <CardTitle>{t('cogs_calculator')}</CardTitle>
             </div>
             <Button
-              onClick={calculateCOGS}
+              onClick={fetchCOGS}
               disabled={isCalculating}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
             >
-              {isCalculating ? t('loading') : t('recalculate_cogs')}
+              {isCalculating ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />{t('loading')}</> : t('recalculate_cogs')}
             </Button>
           </div>
         </CardHeader>
@@ -144,87 +86,86 @@ export default function COGSCalculator({ items, movements }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('item')}</TableHead>
-                  <TableHead>{t('sale_qty')}</TableHead>
-                  <TableHead>{t('current_method')}</TableHead>
-                  <TableHead>{t('fifo_cogs')}</TableHead>
-                  <TableHead>{t('wac_cogs')}</TableHead>
-                  <TableHead>{t('lifo_cogs')}</TableHead>
-                  <TableHead>{t('impact')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cogsCalculations.map((calc) => {
-                  const compliance = getComplianceStatus(calc.currentMethod);
-                  const ComplianceIcon = compliance.icon;
-                  
-                  return (
-                    <TableRow key={calc.id} className="hover:bg-slate-50/80">
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{calc.name}</p>
-                          <p className="text-sm text-slate-500">{calc.sku}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{calc.saleQuantity}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <Badge className={getMethodColor(calc.currentMethod)}>
-                            {calc.currentMethod?.toUpperCase() || 'FIFO'}
-                          </Badge>
-                          <div className="flex items-center gap-1">
-                            <ComplianceIcon className={`w-3 h-3 ${compliance.status === 'compliant' ? 'text-green-500' : 'text-orange-500'}`} />
-                            <span className="text-xs text-slate-500">{compliance.text}</span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{formatCurrency(calc.calculations.fifo.totalCost)}</div>
-                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.fifo.unitCost)}/unit</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{formatCurrency(calc.calculations.wac.totalCost)}</div>
-                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.wac.unitCost)}/unit</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{formatCurrency(calc.calculations.lifo.totalCost)}</div>
-                          <div className="text-xs text-slate-500">{formatCurrency(calc.calculations.lifo.unitCost)}/unit</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {(() => {
-                            const fifo = calc.calculations.fifo.totalCost;
-                            const current = calc.calculations[calc.currentMethod]?.totalCost || fifo;
-                            const diff = current - fifo;
-                            const pctDiff = fifo > 0 ? ((diff / fifo) * 100) : 0;
-                            
-                            return (
-                              <div className={`${diff > 0 ? 'text-red-600' : diff < 0 ? 'text-green-600' : 'text-slate-600'}`}>
-                                {diff > 0 ? '+' : ''}{formatCurrency(diff)}
-                                <div className="text-xs">({pctDiff.toFixed(1)}%)</div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          {cogsData.length === 0 && !isCalculating ? (
+            <div className="text-center py-8 text-sm text-slate-400">
+              {t('no_sales_data') || 'No sales data found. COGS is calculated from confirmed sales orders and completed POS orders.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('item')}</TableHead>
+                    <TableHead>{t('sale_qty')}</TableHead>
+                    <TableHead>{t('current_method')}</TableHead>
+                    <TableHead>{t('fifo_cogs')}</TableHead>
+                    <TableHead>{t('wac_cogs')}</TableHead>
+                    <TableHead>{t('lifo_cogs')}</TableHead>
+                    <TableHead>{t('impact')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cogsData.map((item) => {
+                    const compliance = getComplianceStatus(item.costing_method);
+                    const ComplianceIcon = compliance.icon;
+                    const fifo = item.fifo_total;
+                    const current = item.costing_method === 'wac' ? item.wac_total : item.costing_method === 'lifo' ? item.lifo_total : fifo;
+                    const diff = current - fifo;
+                    const pctDiff = fifo > 0 ? ((diff / fifo) * 100) : 0;
 
-          {cogsCalculations.length > 0 && (
+                    return (
+                      <TableRow key={item.product_id} className="hover:bg-slate-50/80">
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{item.product_name}</p>
+                            <p className="text-sm text-slate-500">{item.product_code}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.sale_qty}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Badge className={getMethodColor(item.costing_method)}>
+                              {item.costing_method?.toUpperCase() || 'FIFO'}
+                            </Badge>
+                            <div className="flex items-center gap-1">
+                              <ComplianceIcon className={`w-3 h-3 ${compliance.status === 'compliant' ? 'text-green-500' : 'text-orange-500'}`} />
+                              <span className="text-xs text-slate-500">{compliance.text}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{formatCurrency(item.fifo_total)}</div>
+                            <div className="text-xs text-slate-500">{formatCurrency(item.fifo_unit)}/unit</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{formatCurrency(item.wac_total)}</div>
+                            <div className="text-xs text-slate-500">{formatCurrency(item.wac_unit)}/unit</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{formatCurrency(item.lifo_total)}</div>
+                            <div className="text-xs text-slate-500">{formatCurrency(item.lifo_unit)}/unit</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className={`text-sm ${diff > 0 ? 'text-red-600' : diff < 0 ? 'text-green-600' : 'text-slate-600'}`}>
+                            {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+                            <div className="text-xs">({pctDiff.toFixed(1)}%)</div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {cogsData.length > 0 && (
             <div className="mt-6 p-4 bg-slate-50 rounded-lg">
               <h4 className="font-semibold mb-2 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
@@ -234,19 +175,19 @@ export default function COGSCalculator({ items, movements }) {
                 <div>
                   <div className="font-medium">{t('total_fifo_cogs')}</div>
                   <div className="text-lg text-green-600">
-                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.fifo.totalCost, 0))}
+                    {formatCurrency(cogsData.reduce((sum, item) => sum + item.fifo_total, 0))}
                   </div>
                 </div>
                 <div>
                   <div className="font-medium">{t('total_wac_cogs')}</div>
                   <div className="text-lg text-blue-600">
-                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.wac.totalCost, 0))}
+                    {formatCurrency(cogsData.reduce((sum, item) => sum + item.wac_total, 0))}
                   </div>
                 </div>
                 <div>
                   <div className="font-medium">{t('total_lifo_cogs')}</div>
                   <div className="text-lg text-orange-600">
-                    {formatCurrency(cogsCalculations.reduce((sum, calc) => sum + calc.calculations.lifo.totalCost, 0))}
+                    {formatCurrency(cogsData.reduce((sum, item) => sum + item.lifo_total, 0))}
                   </div>
                 </div>
               </div>
