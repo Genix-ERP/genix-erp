@@ -26,6 +26,12 @@ export const inventoryService = {
     await apiClient.delete(`/products/${id}`);
   },
 
+  // Product Variants
+  async listProductVariants(productId) {
+    const response = await apiClient.get('/product-variants', { params: { product_id: productId } });
+    return response.data.data;
+  },
+
   // Product Categories
   async listCategories(params = {}) {
     const response = await apiClient.get('/product-categories', { params });

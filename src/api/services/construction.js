@@ -475,6 +475,134 @@ export const constructionService = {
     const response = await apiClient.get('/organizations');
     return response.data.data;
   },
+
+  // =====================================================
+  // CONSTRUCTION STAGES (Bosqichlar)
+  // =====================================================
+
+  async listStages(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/stages`);
+    return response.data.data;
+  },
+
+  async createStage(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/stages`, data);
+    return response.data.data;
+  },
+
+  async updateStage(stageId, data) {
+    const response = await apiClient.put(`/construction/stages/${stageId}`, data);
+    return response.data.data;
+  },
+
+  async deleteStage(stageId) {
+    await apiClient.delete(`/construction/stages/${stageId}`);
+  },
+
+  // =====================================================
+  // COST CATEGORIES & ACCOUNT MAPPING
+  // =====================================================
+
+  async listCostCategories() {
+    const response = await apiClient.get('/construction/cost-categories');
+    return response.data.data;
+  },
+
+  async createCostCategory(data) {
+    const response = await apiClient.post('/construction/cost-categories', data);
+    return response.data.data;
+  },
+
+  async updateCostCategory(id, data) {
+    const response = await apiClient.put(`/construction/cost-categories/${id}`, data);
+    return response.data.data;
+  },
+
+  async getAccountMapping() {
+    const response = await apiClient.get('/construction/account-mapping');
+    return response.data.data;
+  },
+
+  async upsertAccountMapping(entries) {
+    // entries: [{key, account_id}, ...]
+    const response = await apiClient.put('/construction/account-mapping', entries);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // EXPENSE LINES (Xarajat operatsiyalari)
+  // =====================================================
+
+  async listExpenseLines(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/expenses`, { params });
+    return response.data.data;
+  },
+
+  async createExpenseLine(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/expenses`, data);
+    return response.data.data;
+  },
+
+  async updateExpenseLine(id, data) {
+    const response = await apiClient.put(`/construction/expenses/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteExpenseLine(id) {
+    await apiClient.delete(`/construction/expenses/${id}`);
+  },
+
+  async approveExpenseLine(id) {
+    const response = await apiClient.put(`/construction/expenses/${id}/approve`);
+    return response.data.data;
+  },
+
+  async cancelExpenseLine(id, reason = '') {
+    const response = await apiClient.put(`/construction/expenses/${id}/cancel`, { reason });
+    return response.data.data;
+  },
+
+  // =====================================================
+  // PORTFOLIO DASHBOARD
+  // =====================================================
+
+  async getPortfolioDashboard() {
+    const response = await apiClient.get('/construction/dashboard');
+    return response.data.data;
+  },
+
+  // =====================================================
+  // PROJECT COMPLETION
+  // =====================================================
+
+  async commissionProject(projectId, data = {}) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/commission`, data);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // REPORTS
+  // =====================================================
+
+  async getProjectSummaryReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/summary`);
+    return response.data.data;
+  },
+
+  async getStageBudgetReport(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/budget`);
+    return response.data.data;
+  },
+
+  async getMaterialsReport(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/materials`, { params });
+    return response.data.data;
+  },
+
+  async getJournalEntriesReport(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reports/journal-entries`, { params });
+    return response.data.data;
+  },
 };
 
 export default constructionService;
