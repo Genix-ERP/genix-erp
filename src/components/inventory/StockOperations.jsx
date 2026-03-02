@@ -5,14 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Plus, PackagePlus, Truck, ArrowRightLeft, Trash2, ChevronRight,
-  ChevronLeft, CheckCircle2, Clock, XCircle, Search, RefreshCw,
+  CheckCircle2, Clock, XCircle, Search, RefreshCw,
   ArrowLeft, Eye, Play, AlertTriangle, FileText, Loader2,
-  ClipboardList, Package
+  ClipboardList, Package, Pencil, Save, Copy, Calendar
 } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -56,13 +57,6 @@ const StateBadge = ({ state, t }) => {
   );
 };
 
-const DirectionIcon = ({ direction, className = "w-4 h-4" }) => {
-  const d = DIRECTIONS.find(x => x.value === direction);
-  if (!d) return null;
-  const Icon = d.icon;
-  return <Icon className={className} />;
-};
-
 const DirectionBadge = ({ direction, t }) => {
   const d = DIRECTIONS.find(x => x.value === direction);
   if (!d) return <Badge>{direction}</Badge>;
@@ -102,11 +96,12 @@ export default function StockOperations() {
   const { canCreate, canUpdate, MODULES: MOD } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
 
-  const [view, setView] = useState('list'); // 'list' | 'detail' | 'create'
+  const [view, setView] = useState('list');
   const [activeDirection, setActiveDirection] = useState('receipt');
   const [operations, setOperations] = useState([]);
   const [summary, setSummary] = useState([]);
   const [operationTypes, setOperationTypes] = useState([]);
+  const [allOperationTypes, setAllOperationTypes] = useState([]);
   const [products, setProducts] = useState([]);
   const [partners, setPartners] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,12 +111,25 @@ export default function StockOperations() {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
+  // Detail view editing state
+  const [editingLines, setEditingLines] = useState(false);
+  const [lineEdits, setLineEdits] = useState({});
+  const [linesSaving, setLinesSaving] = useState(false);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerEdits, setHeaderEdits] = useState({});
+  const [showAddLineDialog, setShowAddLineDialog] = useState(false);
+  const [newLine, setNewLine] = useState({ product_id: '', expected_qty: 1, done_qty: 0, uom: 'unit', quality_status: 'good', unit_price: '' });
+
+  // Backorder dialog
+  const [showBackorderDialog, setShowBackorderDialog] = useState(false);
+
   // Create form state
   const [form, setForm] = useState({
     operation_type_id: '',
     direction: 'receipt',
     partner_id: '',
     source_document: '',
+    scheduled_date: '',
     priority: 'normal',
     note: '',
     write_off_reason: '',
@@ -140,6 +148,7 @@ export default function StockOperations() {
       ]);
       setOperations(ops || []);
       setSummary(sum || []);
+      setAllOperationTypes(opTypes || []);
       setOperationTypes((opTypes || []).filter(ot => {
         const dir = ot.operation_type;
         if (activeDirection === 'receipt') return dir === 'incoming';
@@ -158,7 +167,6 @@ export default function StockOperations() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Summary counts per direction
   const getCount = (direction, state) => {
     return summary
       .filter(s => s.direction === direction && (state === 'all' || s.state === state))
@@ -181,11 +189,24 @@ export default function StockOperations() {
       const full = await inventoryService.getStockOperation(op.id);
       setSelectedOp(full);
       setView('detail');
+      setEditingLines(false);
+      setEditingHeader(false);
+      setLineEdits({});
     } catch {
       setSelectedOp(op);
       setView('detail');
     }
   };
+
+  const refreshDetail = async () => {
+    if (!selectedOp) return;
+    try {
+      const full = await inventoryService.getStockOperation(selectedOp.id);
+      setSelectedOp(full);
+    } catch {}
+  };
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
   const handleValidate = async () => {
     if (!selectedOp) return;
@@ -201,14 +222,52 @@ export default function StockOperations() {
 
   const handleAdvance = async () => {
     if (!selectedOp) return;
+    const op = selectedOp;
+    const isLastStep = op.current_step >= op.total_steps;
+
+    // If completing and there are partial lines, show backorder dialog
+    if (isLastStep && op.lines?.some(l => l.done_qty < l.expected_qty && l.expected_qty > 0)) {
+      setShowBackorderDialog(true);
+      return;
+    }
+
     setIsActionLoading(true);
     try {
       const result = await inventoryService.advanceStockOperationStep(selectedOp.id);
-      setSelectedOp(prev => ({
-        ...prev,
-        state: result.state,
-        current_step: result.current_step,
-      }));
+      await refreshDetail();
+      setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
+      loadData();
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCompleteWithBackorder = async () => {
+    setShowBackorderDialog(false);
+    setIsActionLoading(true);
+    try {
+      // First advance (complete) the operation
+      const result = await inventoryService.advanceStockOperationStep(selectedOp.id);
+      // Then create backorder for remaining quantities
+      const backorder = await inventoryService.createBackorder(selectedOp.id);
+      await refreshDetail();
+      loadData();
+      // Show confirmation
+      alert(`${t('backorder_created') || 'Backorder created'}: ${backorder.name}`);
+    } catch (e) {
+      console.error('Failed to create backorder', e);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCompleteNoBackorder = async () => {
+    setShowBackorderDialog(false);
+    setIsActionLoading(true);
+    try {
+      const result = await inventoryService.advanceStockOperationStep(selectedOp.id);
+      await refreshDetail();
+      setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
       loadData();
     } finally {
       setIsActionLoading(false);
@@ -227,15 +286,110 @@ export default function StockOperations() {
     }
   };
 
+  // ── Line editing ────────────────────────────────────────────────────────────
+
+  const startEditingLines = () => {
+    const edits = {};
+    selectedOp?.lines?.forEach(l => {
+      edits[l.id] = { done_qty: l.done_qty, lot_number: l.lot_number || '', quality_status: l.quality_status, unit_price: l.unit_price || '' };
+    });
+    setLineEdits(edits);
+    setEditingLines(true);
+  };
+
+  const saveLineEdits = async () => {
+    if (!selectedOp) return;
+    setLinesSaving(true);
+    try {
+      const lines = Object.entries(lineEdits).map(([id, edits]) => ({
+        id,
+        done_qty: parseFloat(edits.done_qty) || 0,
+        lot_number: edits.lot_number,
+        quality_status: edits.quality_status,
+        unit_price: edits.unit_price !== '' ? parseFloat(edits.unit_price) : undefined,
+      }));
+      await inventoryService.updateStockOperationLines(selectedOp.id, lines);
+      await refreshDetail();
+      setEditingLines(false);
+    } catch (e) {
+      console.error('Failed to save line edits', e);
+    } finally {
+      setLinesSaving(false);
+    }
+  };
+
+  const handleDeleteLine = async (lineId) => {
+    if (!selectedOp) return;
+    try {
+      await inventoryService.deleteStockOperationLine(selectedOp.id, lineId);
+      await refreshDetail();
+    } catch (e) {
+      console.error('Failed to delete line', e);
+    }
+  };
+
+  const handleAddLine = async () => {
+    if (!selectedOp || !newLine.product_id) return;
+    setIsActionLoading(true);
+    try {
+      const data = {
+        ...newLine,
+        expected_qty: parseFloat(newLine.expected_qty) || 0,
+        done_qty: parseFloat(newLine.done_qty) || 0,
+        unit_price: newLine.unit_price !== '' ? parseFloat(newLine.unit_price) : undefined,
+      };
+      await inventoryService.addStockOperationLine(selectedOp.id, data);
+      await refreshDetail();
+      setShowAddLineDialog(false);
+      setNewLine({ product_id: '', expected_qty: 1, done_qty: 0, uom: 'unit', quality_status: 'good', unit_price: '' });
+    } catch (e) {
+      console.error('Failed to add line', e);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // ── Header editing (draft only) ────────────────────────────────────────────
+
+  const startEditingHeader = () => {
+    const op = selectedOp;
+    setHeaderEdits({
+      partner_id: op.partner_id || '',
+      source_document: op.source_document || '',
+      scheduled_date: op.scheduled_date ? op.scheduled_date.slice(0, 10) : '',
+      priority: op.priority || 'normal',
+      note: op.note || '',
+      write_off_reason: op.write_off_reason || '',
+    });
+    setEditingHeader(true);
+  };
+
+  const saveHeaderEdits = async () => {
+    if (!selectedOp) return;
+    setIsActionLoading(true);
+    try {
+      await inventoryService.updateStockOperation(selectedOp.id, headerEdits);
+      await refreshDetail();
+      setEditingHeader(false);
+    } catch (e) {
+      console.error('Failed to update operation', e);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // ── Create ──────────────────────────────────────────────────────────────────
+
   const handleCreate = async () => {
     if (!form.operation_type_id || !form.direction) return;
     setIsActionLoading(true);
     try {
-      const result = await inventoryService.createStockOperation(form);
+      const payload = { ...form };
+      if (!payload.scheduled_date) delete payload.scheduled_date;
+      const result = await inventoryService.createStockOperation(payload);
       setShowCreateDialog(false);
       resetForm();
       loadData();
-      // Open the newly created operation
       const full = await inventoryService.getStockOperation(result.id);
       setSelectedOp(full);
       setView('detail');
@@ -252,6 +406,7 @@ export default function StockOperations() {
       direction: activeDirection,
       partner_id: '',
       source_document: '',
+      scheduled_date: '',
       priority: 'normal',
       note: '',
       write_off_reason: '',
@@ -280,6 +435,17 @@ export default function StockOperations() {
       const lines = [...prev.lines];
       lines[idx] = { ...lines[idx], [field]: value };
       return { ...prev, lines };
+    });
+  };
+
+  // Filter operation types for create dialog based on selected direction
+  const getFilteredOpTypes = (dir) => {
+    return (allOperationTypes || []).filter(ot => {
+      const d = ot.operation_type;
+      if (dir === 'receipt') return d === 'incoming';
+      if (dir === 'delivery') return d === 'outgoing';
+      if (dir === 'internal') return d === 'internal';
+      return true;
     });
   };
 
@@ -428,7 +594,7 @@ export default function StockOperations() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setForm(f => ({ ...f, direction: value }))}
+                    onClick={() => setForm(f => ({ ...f, direction: value, operation_type_id: '' }))}
                     className={`p-3 rounded-lg border-2 text-left transition-all flex items-center gap-2 ${
                       form.direction === value ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
                     }`}
@@ -447,15 +613,15 @@ export default function StockOperations() {
                     <SelectValue placeholder={t('select_operation_type') || 'Select operation type'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {operationTypes.map(ot => (
+                    {getFilteredOpTypes(form.direction).map(ot => (
                       <SelectItem key={ot.id} value={ot.id}>{ot.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Partner & Source Doc */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Partner, Source Doc, Scheduled Date */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label>{form.direction === 'receipt' ? (t('vendor') || 'Vendor') : (t('customer') || 'Customer')}</Label>
                   <Select value={form.partner_id} onValueChange={v => setForm(f => ({ ...f, partner_id: v }))}>
@@ -478,6 +644,30 @@ export default function StockOperations() {
                     onChange={e => setForm(f => ({ ...f, source_document: e.target.value }))}
                   />
                 </div>
+                <div>
+                  <Label>{t('scheduled_date') || 'Scheduled Date'}</Label>
+                  <Input
+                    type="date"
+                    className="mt-1"
+                    value={form.scheduled_date}
+                    onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Priority */}
+              <div>
+                <Label>{t('priority') || 'Priority'}</Label>
+                <Select value={form.priority} onValueChange={v => setForm(f => ({ ...f, priority: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">{t('priority_normal') || 'Normal'}</SelectItem>
+                    <SelectItem value="high">{t('priority_high') || 'High'}</SelectItem>
+                    <SelectItem value="urgent">{t('priority_urgent') || 'Urgent'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Write-off reason */}
@@ -508,7 +698,7 @@ export default function StockOperations() {
                 <div className="space-y-2">
                   {form.lines.map((line, idx) => (
                     <div key={idx} className="grid grid-cols-12 gap-2 items-center p-2 bg-slate-50 rounded-lg">
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <Select value={line.product_id} onValueChange={v => updateLine(idx, 'product_id', v)}>
                           <SelectTrigger className="text-sm">
                             <SelectValue placeholder={t('product') || 'Product'} />
@@ -527,7 +717,7 @@ export default function StockOperations() {
                           step="0.01"
                           value={line.expected_qty}
                           onChange={e => updateLine(idx, 'expected_qty', parseFloat(e.target.value) || 0)}
-                          placeholder={t('qty') || 'Qty'}
+                          placeholder={t('expected') || 'Expected'}
                           className="text-sm"
                         />
                       </div>
@@ -539,7 +729,7 @@ export default function StockOperations() {
                           className="text-sm"
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="col-span-3">
                         <Select value={line.quality_status} onValueChange={v => updateLine(idx, 'quality_status', v)}>
                           <SelectTrigger className="text-sm">
                             <SelectValue />
@@ -597,12 +787,14 @@ export default function StockOperations() {
     const op = selectedOp;
     const canAct = canUpdate(MOD.INVENTORY) && op.state !== 'done' && op.state !== 'cancelled';
     const isLastStep = op.current_step >= op.total_steps;
+    const isDraft = op.state === 'draft';
+    const isActive = op.state === 'in_progress' || op.state === 'waiting';
 
     return (
       <div className="space-y-5">
         {/* Back + Header */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={() => setView('list')}>
+          <Button variant="ghost" onClick={() => { setView('list'); setEditingLines(false); setEditingHeader(false); }}>
             <ArrowLeft className="w-4 h-4 mr-1" />{t('back') || 'Back'}
           </Button>
           <div className="flex-1">
@@ -610,17 +802,35 @@ export default function StockOperations() {
               <h2 className="text-xl font-bold font-mono">{op.name}</h2>
               <StateBadge state={op.state} t={t} />
               <DirectionBadge direction={op.direction} t={t} />
+              {op.priority === 'urgent' && <Badge className="bg-red-100 text-red-700 text-xs">{t('priority_urgent') || 'Urgent'}</Badge>}
+              {op.priority === 'high' && <Badge className="bg-amber-100 text-amber-700 text-xs">{t('priority_high') || 'High'}</Badge>}
             </div>
             {op.partner_name && <p className="text-sm text-slate-500">{op.partner_name}</p>}
           </div>
           <div className="flex items-center gap-2">
-            {canAct && op.state === 'draft' && (
+            {canAct && isDraft && !editingHeader && (
+              <Button variant="outline" size="sm" onClick={startEditingHeader}>
+                <Pencil className="w-4 h-4 mr-1" />{t('edit') || 'Edit'}
+              </Button>
+            )}
+            {editingHeader && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditingHeader(false)}>
+                  {t('cancel') || 'Cancel'}
+                </Button>
+                <Button size="sm" onClick={saveHeaderEdits} disabled={isActionLoading}>
+                  {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                  {t('save') || 'Save'}
+                </Button>
+              </>
+            )}
+            {canAct && isDraft && !editingHeader && (
               <Button onClick={handleValidate} disabled={isActionLoading} variant="outline">
                 {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
                 {t('validate') || 'Validate'}
               </Button>
             )}
-            {canAct && op.state === 'in_progress' && (
+            {canAct && isActive && (
               <Button
                 onClick={handleAdvance}
                 disabled={isActionLoading}
@@ -632,7 +842,7 @@ export default function StockOperations() {
                 {isLastStep ? (t('complete') || 'Complete') : (t('next_step') || 'Next Step')}
               </Button>
             )}
-            {canAct && (
+            {canAct && !editingHeader && (
               <Button variant="outline" onClick={handleCancel} disabled={isActionLoading} className="text-red-600 border-red-300 hover:bg-red-50">
                 <XCircle className="w-4 h-4 mr-1" />{t('cancel') || 'Cancel'}
               </Button>
@@ -674,33 +884,103 @@ export default function StockOperations() {
           <Card>
             <CardHeader><CardTitle className="text-base">{t('details') || 'Details'}</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
-              {[
-                [t('document') || 'Document', op.name],
-                [t('direction') || 'Direction', (() => {
-                  const d = DIRECTIONS.find(x => x.value === op.direction);
-                  return d ? (t(d.labelKey) || op.direction) : op.direction;
-                })()],
-                [t('date') || 'Date', op.date ? format(new Date(op.date), 'dd.MM.yyyy HH:mm') : '—'],
-                [t('partner') || 'Partner', op.partner_name || '—'],
-                [t('source_document') || 'Source', op.source_document || '—'],
-                [t('priority') || 'Priority', t(`priority_${op.priority}`) || op.priority || 'normal'],
-              ].map(([label, val]) => (
-                <div key={label} className="flex justify-between">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="font-medium text-right">{val}</span>
+              {editingHeader ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs">{op.direction === 'receipt' ? (t('vendor') || 'Vendor') : (t('customer') || 'Customer')}</Label>
+                    <Select value={headerEdits.partner_id} onValueChange={v => setHeaderEdits(h => ({ ...h, partner_id: v }))}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder={t('select_partner') || 'Select partner'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">{t('none') || 'None'}</SelectItem>
+                        {partners.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('source_document') || 'Source Document'}</Label>
+                    <Input className="mt-1" value={headerEdits.source_document} onChange={e => setHeaderEdits(h => ({ ...h, source_document: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('scheduled_date') || 'Scheduled Date'}</Label>
+                    <Input type="date" className="mt-1" value={headerEdits.scheduled_date} onChange={e => setHeaderEdits(h => ({ ...h, scheduled_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('priority') || 'Priority'}</Label>
+                    <Select value={headerEdits.priority} onValueChange={v => setHeaderEdits(h => ({ ...h, priority: v }))}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">{t('priority_normal') || 'Normal'}</SelectItem>
+                        <SelectItem value="high">{t('priority_high') || 'High'}</SelectItem>
+                        <SelectItem value="urgent">{t('priority_urgent') || 'Urgent'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('note') || 'Note'}</Label>
+                    <Textarea className="mt-1" rows={2} value={headerEdits.note} onChange={e => setHeaderEdits(h => ({ ...h, note: e.target.value }))} />
+                  </div>
+                  {op.direction === 'write_off' && (
+                    <div>
+                      <Label className="text-xs">{t('write_off_reason') || 'Write-off Reason'}</Label>
+                      <Select value={headerEdits.write_off_reason} onValueChange={v => setHeaderEdits(h => ({ ...h, write_off_reason: v }))}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder={t('select_reason') || 'Select reason'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WRITE_OFF_REASONS.map(r => (
+                            <SelectItem key={r} value={r}>{t(`writeoff_${r}`) || r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
-              ))}
-              {op.write_off_reason && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">{t('write_off_reason') || 'Reason'}</span>
-                  <Badge className="bg-red-100 text-red-700">{t(`writeoff_${op.write_off_reason}`) || op.write_off_reason}</Badge>
-                </div>
-              )}
-              {op.note && (
-                <div className="pt-2 border-t">
-                  <p className="text-slate-500 text-xs mb-1">{t('note') || 'Note'}</p>
-                  <p className="text-slate-700">{op.note}</p>
-                </div>
+              ) : (
+                <>
+                  {[
+                    [t('document') || 'Document', op.name],
+                    [t('direction') || 'Direction', (() => {
+                      const d = DIRECTIONS.find(x => x.value === op.direction);
+                      return d ? (t(d.labelKey) || op.direction) : op.direction;
+                    })()],
+                    [t('date') || 'Date', op.date ? format(new Date(op.date), 'dd.MM.yyyy HH:mm') : '—'],
+                    [t('scheduled_date') || 'Scheduled', op.scheduled_date ? format(new Date(op.scheduled_date), 'dd.MM.yyyy') : '—'],
+                    [t('partner') || 'Partner', op.partner_name || '—'],
+                    [t('source_document') || 'Source', op.source_document || '—'],
+                    [t('priority') || 'Priority', t(`priority_${op.priority}`) || op.priority || 'normal'],
+                  ].map(([label, val]) => (
+                    <div key={label} className="flex justify-between">
+                      <span className="text-slate-500">{label}</span>
+                      <span className="font-medium text-right">{val}</span>
+                    </div>
+                  ))}
+                  {op.write_off_reason && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t('write_off_reason') || 'Reason'}</span>
+                      <Badge className="bg-red-100 text-red-700">{t(`writeoff_${op.write_off_reason}`) || op.write_off_reason}</Badge>
+                    </div>
+                  )}
+                  {op.backorder_id && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t('backorder') || 'Backorder'}</span>
+                      <Badge className="bg-purple-100 text-purple-700 text-xs cursor-pointer" onClick={() => openDetail({ id: op.backorder_id })}>
+                        <Copy className="w-3 h-3 mr-1" />{t('view_backorder') || 'View'}
+                      </Badge>
+                    </div>
+                  )}
+                  {op.note && (
+                    <div className="pt-2 border-t">
+                      <p className="text-slate-500 text-xs mb-1">{t('note') || 'Note'}</p>
+                      <p className="text-slate-700">{op.note}</p>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -709,15 +989,50 @@ export default function StockOperations() {
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Package className="w-4 h-4" />
-                  {t('product_lines') || 'Product Lines'}
-                  <Badge variant="outline">{op.lines?.length || 0}</Badge>
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    {t('product_lines') || 'Product Lines'}
+                    <Badge variant="outline">{op.lines?.length || 0}</Badge>
+                  </CardTitle>
+                  {canAct && (
+                    <div className="flex items-center gap-2">
+                      {!editingLines ? (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => setShowAddLineDialog(true)}>
+                            <Plus className="w-3 h-3 mr-1" />{t('add_line') || 'Add'}
+                          </Button>
+                          {op.lines?.length > 0 && (
+                            <Button variant="outline" size="sm" onClick={startEditingLines}>
+                              <Pencil className="w-3 h-3 mr-1" />{t('edit_quantities') || 'Edit Qty'}
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => setEditingLines(false)}>
+                            {t('cancel') || 'Cancel'}
+                          </Button>
+                          <Button size="sm" onClick={saveLineEdits} disabled={linesSaving}>
+                            {linesSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                            {t('save') || 'Save'}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {!op.lines || op.lines.length === 0 ? (
-                  <p className="text-sm text-slate-400 px-4 py-6 text-center">{t('no_lines') || 'No product lines'}</p>
+                  <div className="text-center py-6">
+                    <p className="text-sm text-slate-400">{t('no_lines') || 'No product lines'}</p>
+                    {canAct && (
+                      <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowAddLineDialog(true)}>
+                        <Plus className="w-3 h-3 mr-1" />{t('add_line') || 'Add Line'}
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -727,6 +1042,8 @@ export default function StockOperations() {
                         <TableHead className="text-right">{t('done') || 'Done'}</TableHead>
                         <TableHead>{t('lot') || 'Lot'}</TableHead>
                         <TableHead>{t('quality') || 'Quality'}</TableHead>
+                        {editingLines && <TableHead className="text-right">{t('unit_price') || 'Price'}</TableHead>}
+                        {canAct && <TableHead></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -737,17 +1054,91 @@ export default function StockOperations() {
                             {line.product_code && <p className="text-xs text-slate-400">{line.product_code}</p>}
                           </TableCell>
                           <TableCell className="text-right">{line.expected_qty} {line.uom}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            <span className={line.done_qty < line.expected_qty && line.expected_qty > 0 ? 'text-amber-600' : 'text-green-600'}>
-                              {line.done_qty} {line.uom}
-                            </span>
+                          <TableCell className="text-right">
+                            {editingLines ? (
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-20 text-right text-sm ml-auto"
+                                value={lineEdits[line.id]?.done_qty ?? line.done_qty}
+                                onChange={e => setLineEdits(prev => ({
+                                  ...prev,
+                                  [line.id]: { ...prev[line.id], done_qty: e.target.value }
+                                }))}
+                              />
+                            ) : (
+                              <span className={`font-medium ${line.done_qty < line.expected_qty && line.expected_qty > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                                {line.done_qty} {line.uom}
+                              </span>
+                            )}
                           </TableCell>
-                          <TableCell className="text-sm text-slate-500">{line.lot_number || '—'}</TableCell>
                           <TableCell>
-                            {line.quality_status === 'good' && <Badge className="bg-green-100 text-green-700 text-xs">{t('good') || 'Good'}</Badge>}
-                            {line.quality_status === 'defective' && <Badge className="bg-amber-100 text-amber-700 text-xs">{t('defective') || 'Defective'}</Badge>}
-                            {line.quality_status === 'rejected' && <Badge className="bg-red-100 text-red-700 text-xs">{t('rejected') || 'Rejected'}</Badge>}
+                            {editingLines ? (
+                              <Input
+                                className="w-24 text-sm"
+                                value={lineEdits[line.id]?.lot_number ?? line.lot_number ?? ''}
+                                onChange={e => setLineEdits(prev => ({
+                                  ...prev,
+                                  [line.id]: { ...prev[line.id], lot_number: e.target.value }
+                                }))}
+                                placeholder={t('lot') || 'Lot'}
+                              />
+                            ) : (
+                              <span className="text-sm text-slate-500">{line.lot_number || '—'}</span>
+                            )}
                           </TableCell>
+                          <TableCell>
+                            {editingLines ? (
+                              <Select
+                                value={lineEdits[line.id]?.quality_status ?? line.quality_status}
+                                onValueChange={v => setLineEdits(prev => ({
+                                  ...prev,
+                                  [line.id]: { ...prev[line.id], quality_status: v }
+                                }))}
+                              >
+                                <SelectTrigger className="text-sm w-28">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="good">{t('good') || 'Good'}</SelectItem>
+                                  <SelectItem value="defective">{t('defective') || 'Defective'}</SelectItem>
+                                  <SelectItem value="rejected">{t('rejected') || 'Rejected'}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <>
+                                {line.quality_status === 'good' && <Badge className="bg-green-100 text-green-700 text-xs">{t('good') || 'Good'}</Badge>}
+                                {line.quality_status === 'defective' && <Badge className="bg-amber-100 text-amber-700 text-xs">{t('defective') || 'Defective'}</Badge>}
+                                {line.quality_status === 'rejected' && <Badge className="bg-red-100 text-red-700 text-xs">{t('rejected') || 'Rejected'}</Badge>}
+                              </>
+                            )}
+                          </TableCell>
+                          {editingLines && (
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-24 text-right text-sm ml-auto"
+                                value={lineEdits[line.id]?.unit_price ?? line.unit_price ?? ''}
+                                onChange={e => setLineEdits(prev => ({
+                                  ...prev,
+                                  [line.id]: { ...prev[line.id], unit_price: e.target.value }
+                                }))}
+                                placeholder={t('price') || 'Price'}
+                              />
+                            </TableCell>
+                          )}
+                          {canAct && (
+                            <TableCell>
+                              {!editingLines && (
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteLine(line.id)} className="text-red-400 hover:text-red-600">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -796,6 +1187,109 @@ export default function StockOperations() {
             </CardContent>
           </Card>
         )}
+
+        {/* Add Line Dialog */}
+        <Dialog open={showAddLineDialog} onOpenChange={setShowAddLineDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('add_line') || 'Add Product Line'}</DialogTitle>
+              <DialogDescription>{t('add_line_desc') || 'Add a product to this operation'}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <Label>{t('product') || 'Product'} *</Label>
+                <Select value={newLine.product_id} onValueChange={v => setNewLine(l => ({ ...l, product_id: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={t('select_product') || 'Select product'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('expected') || 'Expected Qty'}</Label>
+                  <Input type="number" min="0" step="0.01" className="mt-1" value={newLine.expected_qty} onChange={e => setNewLine(l => ({ ...l, expected_qty: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('done') || 'Done Qty'}</Label>
+                  <Input type="number" min="0" step="0.01" className="mt-1" value={newLine.done_qty} onChange={e => setNewLine(l => ({ ...l, done_qty: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('lot') || 'Lot Number'}</Label>
+                  <Input className="mt-1" value={newLine.lot_number || ''} onChange={e => setNewLine(l => ({ ...l, lot_number: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('unit_price') || 'Unit Price'}</Label>
+                  <Input type="number" min="0" step="0.01" className="mt-1" value={newLine.unit_price} onChange={e => setNewLine(l => ({ ...l, unit_price: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <Label>{t('quality') || 'Quality'}</Label>
+                <Select value={newLine.quality_status} onValueChange={v => setNewLine(l => ({ ...l, quality_status: v }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="good">{t('good') || 'Good'}</SelectItem>
+                    <SelectItem value="defective">{t('defective') || 'Defective'}</SelectItem>
+                    <SelectItem value="rejected">{t('rejected') || 'Rejected'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddLineDialog(false)}>{t('cancel') || 'Cancel'}</Button>
+              <Button onClick={handleAddLine} disabled={isActionLoading || !newLine.product_id}>
+                {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+                {t('add') || 'Add'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Backorder Dialog */}
+        <Dialog open={showBackorderDialog} onOpenChange={setShowBackorderDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t('partial_completion') || 'Partial Completion'}</DialogTitle>
+              <DialogDescription>
+                {t('backorder_desc') || 'Some lines have done qty less than expected. Would you like to create a backorder for the remaining quantities?'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                {selectedOp?.lines?.filter(l => l.done_qty < l.expected_qty && l.expected_qty > 0).map(l => (
+                  <div key={l.id} className="flex justify-between text-sm">
+                    <span className="text-slate-700">{l.product_name}</span>
+                    <span className="text-amber-700 font-medium">
+                      {l.expected_qty - l.done_qty} {l.uom} {t('remaining') || 'remaining'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowBackorderDialog(false)}>
+                {t('cancel') || 'Cancel'}
+              </Button>
+              <Button variant="outline" onClick={handleCompleteNoBackorder} disabled={isActionLoading}>
+                {t('no_backorder') || 'Complete without backorder'}
+              </Button>
+              <Button onClick={handleCompleteWithBackorder} disabled={isActionLoading}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                {t('create_backorder') || 'Create Backorder'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

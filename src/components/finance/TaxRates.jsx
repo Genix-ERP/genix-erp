@@ -447,7 +447,8 @@ export default function TaxRates({ hideReports = false }) {
               </div>
               <Switch
                 checked={formData.is_compound}
-                onCheckedChange={(checked) => setFormData({...formData, is_compound: checked})}
+                onCheckedChange={(checked) => setFormData({...formData, is_compound: checked, ...(checked ? {price_include: false} : {})})}
+                disabled={formData.price_include}
               />
             </div>
 
@@ -458,7 +459,8 @@ export default function TaxRates({ hideReports = false }) {
               </div>
               <Switch
                 checked={formData.price_include}
-                onCheckedChange={(checked) => setFormData({...formData, price_include: checked})}
+                onCheckedChange={(checked) => setFormData({...formData, price_include: checked, ...(checked ? {is_compound: false} : {})})}
+                disabled={formData.is_compound}
               />
             </div>
 
@@ -570,7 +572,8 @@ export default function TaxRates({ hideReports = false }) {
               </div>
               <Switch
                 checked={formData.is_compound}
-                onCheckedChange={(checked) => setFormData({...formData, is_compound: checked})}
+                onCheckedChange={(checked) => setFormData({...formData, is_compound: checked, ...(checked ? {price_include: false} : {})})}
+                disabled={formData.price_include}
               />
             </div>
 
@@ -581,7 +584,8 @@ export default function TaxRates({ hideReports = false }) {
               </div>
               <Switch
                 checked={formData.price_include}
-                onCheckedChange={(checked) => setFormData({...formData, price_include: checked})}
+                onCheckedChange={(checked) => setFormData({...formData, price_include: checked, ...(checked ? {is_compound: false} : {})})}
+                disabled={formData.is_compound}
               />
             </div>
 
