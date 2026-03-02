@@ -227,6 +227,11 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  async getCOGSData() {
+    const response = await apiClient.get('/inventory/cogs');
+    return response.data.data;
+  },
+
   // Carriers
   async listCarriers(params = {}) {
     const response = await apiClient.get('/carriers', { params });

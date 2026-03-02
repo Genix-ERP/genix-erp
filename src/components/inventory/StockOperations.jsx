@@ -303,7 +303,6 @@ export default function StockOperations() {
     try {
       const lines = Object.entries(lineEdits).map(([id, edits]) => ({
         id,
-        done_qty: parseFloat(edits.done_qty) || 0,
         lot_number: edits.lot_number,
         quality_status: edits.quality_status,
         unit_price: edits.unit_price !== '' ? parseFloat(edits.unit_price) : undefined,
@@ -315,6 +314,19 @@ export default function StockOperations() {
       console.error('Failed to save line edits', e);
     } finally {
       setLinesSaving(false);
+    }
+  };
+
+  const saveDoneQty = async (lineId, newQty, originalQty) => {
+    const qty = parseFloat(newQty) || 0;
+    if (qty === originalQty) return;
+    try {
+      await inventoryService.updateStockOperationLines(selectedOp.id, [
+        { id: lineId, done_qty: qty }
+      ]);
+      await refreshDetail();
+    } catch (e) {
+      console.error('Failed to save done qty', e);
     }
   };
 
@@ -888,12 +900,12 @@ export default function StockOperations() {
                 <div className="space-y-3">
                   <div>
                     <Label className="text-xs">{op.direction === 'receipt' ? (t('vendor') || 'Vendor') : (t('customer') || 'Customer')}</Label>
-                    <Select value={headerEdits.partner_id} onValueChange={v => setHeaderEdits(h => ({ ...h, partner_id: v }))}>
+                    <Select value={headerEdits.partner_id || '_none'} onValueChange={v => setHeaderEdits(h => ({ ...h, partner_id: v === '_none' ? '' : v }))}>
                       <SelectTrigger className="mt-1">
                         <SelectValue placeholder={t('select_partner') || 'Select partner'} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">{t('none') || 'None'}</SelectItem>
+                        <SelectItem value="_none">{t('none') || 'None'}</SelectItem>
                         {partners.map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
@@ -1055,18 +1067,20 @@ export default function StockOperations() {
                           </TableCell>
                           <TableCell className="text-right">{line.expected_qty} {line.uom}</TableCell>
                           <TableCell className="text-right">
-                            {editingLines ? (
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="w-20 text-right text-sm ml-auto"
-                                value={lineEdits[line.id]?.done_qty ?? line.done_qty}
-                                onChange={e => setLineEdits(prev => ({
-                                  ...prev,
-                                  [line.id]: { ...prev[line.id], done_qty: e.target.value }
-                                }))}
-                              />
+                            {canAct ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="w-20 text-right text-sm"
+                                  defaultValue={line.done_qty}
+                                  key={`${line.id}-${line.done_qty}`}
+                                  onBlur={e => saveDoneQty(line.id, e.target.value, line.done_qty)}
+                                  onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                />
+                                <span className="text-xs text-slate-400">{line.uom}</span>
+                              </div>
                             ) : (
                               <span className={`font-medium ${line.done_qty < line.expected_qty && line.expected_qty > 0 ? 'text-amber-600' : 'text-green-600'}`}>
                                 {line.done_qty} {line.uom}

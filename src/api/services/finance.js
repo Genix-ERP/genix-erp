@@ -185,6 +185,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async updateJournalPaymentMethod(journalId, pmId, data) {
+    const response = await apiClient.put(`/journals/${journalId}/payment-methods/${pmId}`, data);
+    return response.data.data;
+  },
+
   async removeJournalPaymentMethod(journalId, pmId) {
     await apiClient.delete(`/journals/${journalId}/payment-methods/${pmId}`);
   },
