@@ -172,6 +172,30 @@ export const inventoryService = {
     return response.data.data;
   },
 
+  async updateStockOperation(id, data) {
+    const response = await apiClient.put(`/stock-operations/${id}`, data);
+    return response.data.data;
+  },
+
+  async updateStockOperationLines(id, lines) {
+    const response = await apiClient.put(`/stock-operations/${id}/lines`, { lines });
+    return response.data.data;
+  },
+
+  async addStockOperationLine(id, data) {
+    const response = await apiClient.post(`/stock-operations/${id}/lines`, data);
+    return response.data.data;
+  },
+
+  async deleteStockOperationLine(id, lineId) {
+    await apiClient.delete(`/stock-operations/${id}/lines/${lineId}`);
+  },
+
+  async createBackorder(id) {
+    const response = await apiClient.post(`/stock-operations/${id}/backorder`);
+    return response.data.data;
+  },
+
   // Inventory Stock
   async listInventory(params = {}) {
     const response = await apiClient.get('/inventory', { params });
