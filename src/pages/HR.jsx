@@ -11,14 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DepartmentManagement from "@/components/hr/DepartmentManagement";
-import RoleManagement from "@/components/hr/RoleManagement";
+import JobPositionManagement from "@/components/hr/JobPositionManagement";
 import {
   Users,
   Search,
   Plus,
+  Briefcase,
   UserCheck,
   UserX,
-  Briefcase,
   Brain,
   Eye,
   Pencil,
@@ -176,6 +176,7 @@ export default function HR() {
     email: '',
     phone: '+998',
     job_title: '',
+    job_position_id: '',
     department: '',
     hire_date: new Date().toISOString().split('T')[0],
     salary: '',
@@ -188,6 +189,7 @@ export default function HR() {
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [jobPositions, setJobPositions] = useState([]);
   const generatePassword = () => {
     const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
     const digits = '23456789';
@@ -801,9 +803,9 @@ Only return the JSON, no other text.`;
     }).catch(() => {});
   }, []);
 
-  const refreshRoles = useCallback(() => {
-    apiClient.get('/roles').then(res => {
-      setRoles(res.data?.data || res.data || []);
+  const refreshJobPositions = useCallback(() => {
+    apiClient.get('/job-positions').then(res => {
+      setJobPositions(res.data?.data || res.data || []);
     }).catch(() => {});
   }, []);
 
@@ -819,6 +821,8 @@ Only return the JSON, no other text.`;
     apiClient.get('/roles').then(res => {
       setRoles(res.data?.data || res.data || []);
     }).catch(() => {});
+    // Load job positions
+    refreshJobPositions();
   }, [loadEmployees]);
 
   // Generate insights when employees data changes
@@ -915,12 +919,12 @@ Only return the JSON, no other text.`;
               <span className="sm:hidden">{t('departments') || 'Departments'}</span>
             </TabsTrigger>
             <TabsTrigger
-              value="roles"
+              value="job_positions"
               className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
             >
-              <Shield className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{t('roles') || 'Roles'}</span>
-              <span className="sm:hidden">{t('roles') || 'Roles'}</span>
+              <Briefcase className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">{t('job_positions') || 'Job Positions'}</span>
+              <span className="sm:hidden">{t('job_positions') || 'Job Positions'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1092,43 +1096,55 @@ Only return the JSON, no other text.`;
             <DialogHeader>
               <DialogTitle>{t('add_employee')}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>{t('full_name')} *</Label>
-                <Input
-                  value={newEmployee.full_name}
-                  onChange={e => setNewEmployee({...newEmployee, full_name: e.target.value})}
-                  placeholder={t('enter_full_name')}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t('email')} *</Label>
-                <Input
-                  type="email"
-                  value={newEmployee.email}
-                  onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
-                  placeholder={t('enter_email')}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t('phone')} *</Label>
-                <Input
-                  value={newEmployee.phone}
-                  onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                  placeholder={t('enter_phone')}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('employee_role') || t('role') || 'Role'} *</Label>
+            <div className="overflow-y-auto max-h-[70vh] pr-1">
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs">{t('full_name')} *</Label>
+                  <Input
+                    value={newEmployee.full_name}
+                    onChange={e => setNewEmployee({...newEmployee, full_name: e.target.value})}
+                    placeholder={t('enter_full_name')}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('email')} *</Label>
+                  <Input
+                    type="email"
+                    value={newEmployee.email}
+                    onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
+                    placeholder={t('enter_email')}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('phone')} *</Label>
+                  <Input
+                    value={newEmployee.phone}
+                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
+                    placeholder={t('enter_phone')}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('job_position') || 'Job Position'}</Label>
+                  <Select
+                    value={newEmployee.job_position_id}
+                    onValueChange={value => setNewEmployee({...newEmployee, job_position_id: value})}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_job_position') || 'Select position'} /></SelectTrigger>
+                    <SelectContent>
+                      {jobPositions.map(jp => (
+                        <SelectItem key={jp.id} value={jp.id}>{jp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('employee_role') || 'Role'} *</Label>
                   <Select
                     value={newEmployee.job_title}
                     onValueChange={value => setNewEmployee({...newEmployee, job_title: value})}
                   >
-                    <SelectTrigger><SelectValue placeholder={t('select_role') || "Rolni tanlang"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('select_role') || 'Select role'} /></SelectTrigger>
                     <SelectContent>
                       {roles.map(role => (
                         <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
@@ -1136,13 +1152,13 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>{t('department')}</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('department')}</Label>
                   <Select
                     value={newEmployee.department}
                     onValueChange={value => setNewEmployee({...newEmployee, department: value})}
                   >
-                    <SelectTrigger><SelectValue placeholder={t('select_department') || "Bo'limni tanlang"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('select_department') || 'Select dept'} /></SelectTrigger>
                     <SelectContent>
                       {departments.map(dept => (
                         <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
@@ -1150,19 +1166,16 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>{t('hire_date')}</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('hire_date')}</Label>
                   <Input
                     type="date"
                     value={newEmployee.hire_date}
                     onChange={e => setNewEmployee({...newEmployee, hire_date: e.target.value})}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('salary')}</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('salary')}</Label>
                   <Input
                     type="number"
                     value={newEmployee.salary}
@@ -1170,8 +1183,8 @@ Only return the JSON, no other text.`;
                     placeholder="0.00"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>{t('status')}</Label>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('status')}</Label>
                   <Select
                     value={newEmployee.status}
                     onValueChange={value => setNewEmployee({...newEmployee, status: value})}
@@ -1183,58 +1196,57 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
+                {organizations.length > 0 && (
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">{t('companies') || 'Companies'}</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {newEmployee.organization_ids.length > 0
+                              ? organizations.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
+                              : (t('select_companies') || 'Select companies')}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                        <div className="max-h-36 overflow-y-auto">
+                          {organizations.map(org => (
+                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={newEmployee.organization_ids.includes(org.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked
+                                    ? [...newEmployee.organization_ids, org.id]
+                                    : newEmployee.organization_ids.filter(id => id !== org.id);
+                                  setNewEmployee({...newEmployee, organization_ids: ids});
+                                }}
+                                className="rounded border-slate-300"
+                              />
+                              <span className="text-sm">{org.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
               </div>
-
-              {organizations.length > 0 && (
-                <div className="space-y-2">
-                  <Label>{t('companies') || 'Kompaniyalar'}</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between font-normal">
-                        <span className="truncate">
-                          {newEmployee.organization_ids.length > 0
-                            ? organizations.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
-                            : (t('select_companies') || 'Kompaniyalarni tanlang')}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                      <div className="max-h-48 overflow-y-auto">
-                        {organizations.map(org => (
-                          <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={newEmployee.organization_ids.includes(org.id)}
-                              onChange={(e) => {
-                                const ids = e.target.checked
-                                  ? [...newEmployee.organization_ids, org.id]
-                                  : newEmployee.organization_ids.filter(id => id !== org.id);
-                                setNewEmployee({...newEmployee, organization_ids: ids});
-                              }}
-                              className="rounded border-slate-300"
-                            />
-                            <span className="text-sm">{org.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setShowAddModal(false)}>
-                  {t('cancel')}
-                </Button>
-                <Button
-                  onClick={handleAddEmployee}
-                  disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone}
-                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                >
-                  {isSubmitting ? t('saving') : t('add_employee')}
-                </Button>
-              </div>
+            </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-3">
+              <Button variant="outline" onClick={() => setShowAddModal(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleAddEmployee}
+                disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone}
+                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+              >
+                {isSubmitting ? t('saving') : t('add_employee')}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -1730,9 +1742,10 @@ Only return the JSON, no other text.`;
             <DepartmentManagement departments={departments} onRefresh={refreshDepartments} />
           </TabsContent>
 
-          <TabsContent value="roles">
-            <RoleManagement roles={roles} onRefresh={refreshRoles} />
+          <TabsContent value="job_positions">
+            <JobPositionManagement jobPositions={jobPositions} onRefresh={refreshJobPositions} />
           </TabsContent>
+
         </Tabs>
       </div>
     </div>

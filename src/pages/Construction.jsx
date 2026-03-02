@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useConstructionContext } from '@/components/contexts/ConstructionContext';
 import { constructionService } from '@/api/services/construction';
 import { hrService } from '@/api/services/hr';
+import { inventoryService } from '@/api/services/inventory';
 import { Core as Integrations } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -51,8 +53,6 @@ import {
   Settings,
   MoreHorizontal,
   ArrowLeft,
-  Layers,
-  List,
   PlusCircle,
   Receipt,
   Hammer,
@@ -61,7 +61,8 @@ import {
   Columns3,
   Upload,
   X,
-  Image
+  Image,
+  Layers
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -73,6 +74,9 @@ import { WBSTree } from '@/components/construction/WBSTree';
 import ActivityTab from '@/components/construction/tabs/ActivityTab';
 import EstimatesTab from '@/components/construction/tabs/EstimatesTab';
 import DailyJournalTab from '@/components/construction/tabs/DailyJournalTab';
+import StagesTab from '@/components/construction/tabs/StagesTab';
+import ExpensesTab from '@/components/construction/tabs/ExpensesTab';
+import BudgetTab from '@/components/construction/tabs/BudgetTab';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -641,8 +645,6 @@ const ProjectDetailView = ({
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [sections, setSections] = useState([]);
-  const [items, setItems] = useState([]);
-  const [selectedSection, setSelectedSection] = useState(null);
   const [team, setTeam] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -654,8 +656,6 @@ const ProjectDetailView = ({
 
   // Modals
   const [showBuildingModal, setShowBuildingModal] = useState(false);
-  const [showSectionModal, setShowSectionModal] = useState(false);
-  const [showItemModal, setShowItemModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
 const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
@@ -664,8 +664,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   // Import/Export modals
   const [showBuildingImportModal, setShowBuildingImportModal] = useState(false);
   const [showBuildingExportModal, setShowBuildingExportModal] = useState(false);
-  const [showSmetaImportModal, setShowSmetaImportModal] = useState(false);
-  const [showSmetaExportModal, setShowSmetaExportModal] = useState(false);
 
   // Forms
   const [buildingForm, setBuildingForm] = useState({
@@ -673,12 +671,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
     status: 'draft'
   });
-  const [sectionForm, setSectionForm] = useState({ code: '', name: '', description: '' });
-  const [itemForm, setItemForm] = useState({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
-    id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
+    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
   });
+  const [inventoryProducts, setInventoryProducts] = useState([]);
+  const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
+  const [variantsByProduct, setVariantsByProduct] = useState({});
+  const [confirmApprove, setConfirmApprove] = useState({ open: false, requestId: null });
   const [dailyLogForm, setDailyLogForm] = useState({
     id: null,
     report_date: new Date().toISOString().split('T')[0],
@@ -727,27 +727,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     { key: 'estimated_cost', label: t('estimated_cost') || 'Taxminiy narx' },
   ];
 
-  // Smeta export/import columns (sections with items)
-  const smetaExportColumns = [
-    { key: 'section_name', label: t('section') || "Bo'lim" },
-    { key: 'section_code', label: t('section_code') || "Bo'lim kodi" },
-    { key: 'item_code', label: t('item_code') || 'Ish kodi' },
-    { key: 'item_name', label: t('item_name') || 'Ish nomi' },
-    { key: 'unit', label: t('unit') || "O'lchov birligi" },
-    { key: 'quantity', label: t('quantity') || 'Miqdor' },
-    { key: 'unit_price', label: t('unit_price') || 'Birlik narxi', render: (v) => formatCurrency(v || 0) },
-    { key: 'total_price', label: t('total') || 'Jami', render: (v) => formatCurrency(v || 0) },
-  ];
-
-  const smetaImportColumns = [
-    { key: 'section_name', label: t('section') || "Bo'lim", required: true },
-    { key: 'section_code', label: t('section_code') || "Bo'lim kodi" },
-    { key: 'item_code', label: t('item_code') || 'Ish kodi' },
-    { key: 'item_name', label: t('item_name') || 'Ish nomi', required: true },
-    { key: 'unit', label: t('unit') || "O'lchov birligi" },
-    { key: 'quantity', label: t('quantity') || 'Miqdor' },
-    { key: 'unit_price', label: t('unit_price') || 'Birlik narxi' },
-  ];
 
   // Handle building import
   const handleBuildingImport = async (data) => {
@@ -774,106 +753,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
-  // Handle smeta import
-  const handleSmetaImport = async (data) => {
-    try {
-      // Group items by section
-      const sectionMap = new Map();
-      for (const row of data) {
-        const sectionKey = row.section_name || 'Default';
-        if (!sectionMap.has(sectionKey)) {
-          sectionMap.set(sectionKey, {
-            code: row.section_code || '',
-            name: sectionKey,
-            items: []
-          });
-        }
-        if (row.item_name) {
-          sectionMap.get(sectionKey).items.push({
-            code: row.item_code || '',
-            name: row.item_name,
-            unit: row.unit || 'dona',
-            quantity: row.quantity ? parseFloat(row.quantity) : 0,
-            unit_price: row.unit_price ? parseFloat(row.unit_price) : 0,
-          });
-        }
-      }
-
-      // Create sections and items
-      for (const [, sectionData] of sectionMap) {
-        // Check if section already exists
-        let section = sections.find(s => s.name === sectionData.name);
-        if (!section) {
-          section = await constructionService.createSection(project.id, {
-            code: sectionData.code,
-            name: sectionData.name,
-            description: ''
-          });
-        }
-
-        // Create items for this section
-        for (const item of sectionData.items) {
-          await constructionService.createItem(section.id, item);
-        }
-      }
-
-      // Reload sections
-      const sectionsData = await constructionService.listSections(project.id);
-      setSections(sectionsData || []);
-      setShowSmetaImportModal(false);
-    } catch (error) {
-      console.error('Error importing smeta:', error);
-    }
-  };
-
-  // Prepare smeta data for export (flatten sections and items)
-  const getSmetaExportData = async () => {
-    const exportData = [];
-    for (const section of sections) {
-      try {
-        const sectionItems = await constructionService.listItems(section.id);
-        if (sectionItems && sectionItems.length > 0) {
-          for (const item of sectionItems) {
-            exportData.push({
-              section_name: section.name,
-              section_code: section.code || '',
-              item_code: item.code || '',
-              item_name: item.name,
-              unit: item.unit || '',
-              quantity: item.quantity || 0,
-              unit_price: item.unit_price || 0,
-              total_price: (item.quantity || 0) * (item.unit_price || 0),
-            });
-          }
-        } else {
-          // Include section even if no items
-          exportData.push({
-            section_name: section.name,
-            section_code: section.code || '',
-            item_code: '',
-            item_name: '',
-            unit: '',
-            quantity: 0,
-            unit_price: 0,
-            total_price: 0,
-          });
-        }
-      } catch (e) {
-        console.error('Error loading items for section:', section.id, e);
-      }
-    }
-    return exportData;
-  };
-
-  const [smetaExportData, setSmetaExportData] = useState([]);
-
-  // Load smeta export data when export modal opens
-  useEffect(() => {
-    if (showSmetaExportModal) {
-      getSmetaExportData().then(data => setSmetaExportData(data));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSmetaExportModal, sections]);
 
   // Load data based on active tab
   useEffect(() => {
@@ -909,10 +788,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               setWbsTree(wbsData || []);
             } catch (e) { setBuildings([]); setWbsTree([]); }
             break;
-          case 'smeta':
-            const sectionsData = await constructionService.listSections(project.id);
-            setSections(sectionsData || []);
-            break;
           case 'team':
             try {
               const [teamData, employeesData] = await Promise.all([
@@ -937,8 +812,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'materials':
             try {
-              const materialsData = await constructionService.listMaterialRequests(project.id);
+              const [materialsData, productsData, warehousesData] = await Promise.all([
+                constructionService.listMaterialRequests(project.id),
+                inventoryService.listProducts({ limit: 500, is_stockable: true }),
+                inventoryService.listWarehouses({ limit: 100 })
+              ]);
               setMaterialRequests(materialsData || []);
+              setInventoryProducts(productsData?.items || productsData || []);
+              setInventoryWarehouses(warehousesData?.items || warehousesData || []);
             } catch (e) { setMaterialRequests([]); }
             break;
           case 'estimates':
@@ -963,21 +844,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     loadData();
   }, [project?.id, activeSubTab]);
 
-  // Load items when section is selected
-  useEffect(() => {
-    if (selectedSection?.id) {
-      const loadItems = async () => {
-        try {
-          const itemsData = await constructionService.listItems(selectedSection.id);
-          setItems(itemsData || []);
-        } catch (error) {
-          console.error('Error loading items:', error);
-          setItems([]);
-        }
-      };
-      loadItems();
-    }
-  }, [selectedSection?.id]);
 
   // Handle building creation/update
   const handleCreateBuilding = async (e) => {
@@ -1012,80 +878,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
-  // Handle section creation
-  const handleCreateSection = async (e) => {
-    e.preventDefault();
-    try {
-      await constructionService.createSection(project.id, sectionForm);
-      const sectionsData = await constructionService.listSections(project.id);
-      setSections(sectionsData || []);
-      setShowSectionModal(false);
-      setSectionForm({ code: '', name: '', description: '' });
-    } catch (error) {
-      console.error('Error creating section:', error);
-    }
-  };
-
-  // Handle section deletion
-  const handleDeleteSection = async (sectionId) => {
-    if (!confirm(t('confirm_delete_section') || "Bo'limni o'chirmoqchimisiz? Barcha ishlar ham o'chiriladi!")) return;
-    try {
-      await constructionService.deleteSection(sectionId);
-      const sectionsData = await constructionService.listSections(project.id);
-      setSections(sectionsData || []);
-      if (selectedSection?.id === sectionId) {
-        setSelectedSection(null);
-        setItems([]);
-      }
-    } catch (error) {
-      console.error('Error deleting section:', error);
-    }
-  };
-
-  // Handle section status change (approve/unapprove)
-  const handleApproveSectionStatus = async (sectionId, newStatus) => {
-    try {
-      await constructionService.updateSection(sectionId, { status: newStatus });
-      const sectionsData = await constructionService.listSections(project.id);
-      setSections(sectionsData || []);
-    } catch (error) {
-      console.error('Error updating section status:', error);
-    }
-  };
-
-  // Handle item creation
-  const handleCreateItem = async (e) => {
-    e.preventDefault();
-    if (!selectedSection?.id) return;
-    try {
-      await constructionService.createItem(selectedSection.id, {
-        ...itemForm,
-        quantity: parseFloat(itemForm.quantity) || 0,
-        unit_price: parseFloat(itemForm.unit_price) || 0
-      });
-      const itemsData = await constructionService.listItems(selectedSection.id);
-      setItems(itemsData || []);
-      setShowItemModal(false);
-      setItemForm({ code: '', name: '', unit: '', quantity: '', unit_price: '' });
-    } catch (error) {
-      console.error('Error creating item:', error);
-    }
-  };
-
-  // Handle item deletion
-  const handleDeleteItem = async (itemId) => {
-    if (!confirm(t('confirm_delete_item') || "Ishni o'chirmoqchimisiz?")) return;
-    try {
-      await constructionService.deleteItem(itemId);
-      const itemsData = await constructionService.listItems(selectedSection.id);
-      setItems(itemsData || []);
-      // Refresh sections to update totals
-      const sectionsData = await constructionService.listSections(project.id);
-      setSections(sectionsData || []);
-    } catch (error) {
-      console.error('Error deleting item:', error);
-    }
-  };
 
   // Handle team member creation
   const handleCreateTeamMember = async (e) => {
@@ -1118,10 +910,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     e.preventDefault();
     try {
       const requestData = {
-        request_number: materialRequestForm.request_number,
         request_date: materialRequestForm.request_date,
         required_date: materialRequestForm.required_date,
-        notes: materialRequestForm.notes
+        notes: materialRequestForm.notes,
+        items: materialRequestForm.items
       };
 
       if (materialRequestForm.id) {
@@ -1133,10 +925,82 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setMaterialRequests(materialsData || []);
       setShowMaterialRequestModal(false);
       setMaterialRequestForm({
-        id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
+        id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
       });
     } catch (error) {
       console.error('Error saving material request:', error);
+    }
+  };
+
+  // Add a blank item line to the material request form
+  const addMaterialRequestItem = () => {
+    setMaterialRequestForm(prev => ({
+      ...prev,
+      items: [...prev.items, { product_id: '', variant_id: '', warehouse_id: '', quantity: 1, unit_cost: 0, product_name: '', unit_name: '' }]
+    }));
+  };
+
+  // Update a specific item field
+  const updateMaterialRequestItem = async (index, field, value) => {
+    setMaterialRequestForm(prev => {
+      const items = [...prev.items];
+      items[index] = { ...items[index], [field]: value };
+
+      if (field === 'product_id') {
+        const product = inventoryProducts.find(p => p.id === value);
+        if (product) {
+          items[index].product_name = product.name;
+          items[index].unit_name = product.unit_name || '';
+          items[index].unit_cost = product.cost_price || 0;
+          items[index].variant_id = ''; // reset variant when product changes
+          // Load variants if needed
+          if (product.has_variants && !variantsByProduct[value]) {
+            inventoryService.listProductVariants(value).then(variants => {
+              setVariantsByProduct(prev2 => ({ ...prev2, [value]: variants || [] }));
+            });
+          }
+        }
+      }
+
+      if (field === 'variant_id') {
+        const productId = items[index].product_id;
+        const variants = variantsByProduct[productId] || [];
+        const variant = variants.find(v => v.id === value);
+        if (variant) {
+          // Use variant cost_price if set, otherwise keep product's
+          if (variant.cost_price && variant.cost_price > 0) {
+            items[index].unit_cost = variant.cost_price;
+          }
+          items[index].variant_name = variant.variant_name || variant.display_name || '';
+        }
+      }
+
+      return { ...prev, items };
+    });
+  };
+
+  // Remove an item line
+  const removeMaterialRequestItem = (index) => {
+    setMaterialRequestForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Confirm/Approve a material request
+  const handleApproveMaterialRequest = (requestId) => {
+    setConfirmApprove({ open: true, requestId });
+  };
+
+  const doApproveMaterialRequest = async () => {
+    const requestId = confirmApprove.requestId;
+    setConfirmApprove({ open: false, requestId: null });
+    try {
+      await constructionService.approveMaterialRequest(requestId, {});
+      const materialsData = await constructionService.listMaterialRequests(project.id);
+      setMaterialRequests(materialsData || []);
+    } catch (error) {
+      console.error('Error approving material request:', error);
     }
   };
 
@@ -1388,7 +1252,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         <ReportGenerator
           project={project}
           sections={sections}
-          items={items}
+          items={[]}
           buildings={buildings}
         />
         <Button variant="outline">
@@ -1407,10 +1271,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <TabsTrigger value="buildings" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Building2 className="w-4 h-4 mr-2" />
             {t('buildings') || 'Binolar'}
-          </TabsTrigger>
-          <TabsTrigger value="smeta" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <FolderTree className="w-4 h-4 mr-2" />
-            {t('smeta') || 'Smeta'}
           </TabsTrigger>
           <TabsTrigger value="estimates" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -1443,6 +1303,18 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <TabsTrigger value="activity" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Clock className="w-4 h-4 mr-2" />
             {t('activity') || 'Faoliyat'}
+          </TabsTrigger>
+          <TabsTrigger value="stages" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Layers className="w-4 h-4 mr-2" />
+            {t('stages') || 'Bosqichlar'}
+          </TabsTrigger>
+          <TabsTrigger value="expenses" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Receipt className="w-4 h-4 mr-2" />
+            {t('expenses') || 'Xarajatlar'}
+          </TabsTrigger>
+          <TabsTrigger value="budget" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            {t('budget_plan_actual') || 'Byudjet (reja/fakt)'}
           </TabsTrigger>
         </TabsList>
 
@@ -1689,194 +1561,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           </Card>
         </TabsContent>
 
-        {/* Smeta Tab */}
-        <TabsContent value="smeta" className="mt-6">
-          {/* Smeta Header with Import/Export */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-800">{t('smeta') || 'Smeta'}</h3>
-            <ImportExportButtons
-              onImport={() => setShowSmetaImportModal(true)}
-              onExport={() => setShowSmetaExportModal(true)}
-              exportDisabled={sections.length === 0}
-            />
-          </div>
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Sections List */}
-            <Card className="lg:col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">{t('sections') || "Bo'limlar"}</CardTitle>
-                <Button size="sm" onClick={() => setShowSectionModal(true)}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[500px]">
-                  {loading ? (
-                    <div className="p-4 text-center text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
-                  ) : sections.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <FolderTree className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-500 text-sm">{t('no_sections') || "Bo'limlar yo'q"}</p>
-                      <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowSectionModal(true)}>
-                        <Plus className="w-4 h-4 mr-1" />
-                        {t('add_section') || "Bo'lim qo'shish"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {sections.map((section) => (
-                        <div
-                          key={section.id}
-                          className={`p-4 cursor-pointer hover:bg-slate-50 group ${selectedSection?.id === section.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
-                          onClick={() => setSelectedSection(section)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-slate-500 font-mono">{section.code}</p>
-                              <p className="font-medium text-sm truncate">{section.name}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {section.items_count || 0} {t('items') || 'ta'}
-                              </Badge>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                                  >
-                                    <MoreHorizontal className="w-3 h-3" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                  {section.status !== 'approved' && (
-                                    <DropdownMenuItem onClick={() => handleApproveSectionStatus(section.id, 'approved')}>
-                                      <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                                      {t('approve') || 'Tasdiqlash'}
-                                    </DropdownMenuItem>
-                                  )}
-                                  {section.status === 'approved' && (
-                                    <DropdownMenuItem onClick={() => handleApproveSectionStatus(section.id, 'draft')}>
-                                      <Clock className="w-4 h-4 mr-2 text-orange-600" />
-                                      {t('unapprove') || 'Bekor qilish'}
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem
-                                    onClick={() => handleDeleteSection(section.id)}
-                                    className="text-red-600"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('delete') || "O'chirish"}
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-sm text-slate-600">
-                              {formatCurrency(section.total_cost || 0)}
-                            </p>
-                            <Badge
-                              className={`text-xs ${section.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}
-                            >
-                              {section.status === 'approved' ? (t('approved') || 'Tasdiqlangan') : (t('pending') || 'Kutilmoqda')}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            {/* Items List */}
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">
-                  {selectedSection ? `${selectedSection.name} - ${t('items') || 'Ishlar'}` : (t('select_section') || "Bo'limni tanlang")}
-                </CardTitle>
-                {selectedSection && (
-                  <Button size="sm" onClick={() => setShowItemModal(true)}>
-                    <Plus className="w-4 h-4 mr-1" />
-                    {t('add_item') || 'Ish qo\'shish'}
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {!selectedSection ? (
-                  <div className="text-center py-12">
-                    <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500">{t('select_section_first') || "Avval bo'limni tanlang"}</p>
-                  </div>
-                ) : items.length === 0 ? (
-                  <div className="text-center py-12">
-                    <List className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500">{t('no_items') || 'Ishlar mavjud emas'}</p>
-                    <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowItemModal(true)}>
-                      <Plus className="w-4 h-4 mr-1" />
-                      {t('add_item') || 'Ish qo\'shish'}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-3 px-2">{t('code') || 'Kod'}</th>
-                          <th className="text-left py-3 px-2">{t('name') || 'Nomi'}</th>
-                          <th className="text-right py-3 px-2">{t('unit') || "O'lchov"}</th>
-                          <th className="text-right py-3 px-2">{t('quantity') || 'Miqdor'}</th>
-                          <th className="text-right py-3 px-2">{t('unit_price') || 'Narx'}</th>
-                          <th className="text-right py-3 px-2">{t('total') || 'Jami'}</th>
-                          <th className="text-right py-3 px-2">{t('progress') || '%'}</th>
-                          <th className="text-center py-3 px-2 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item) => (
-                          <tr key={item.id} className="border-b hover:bg-slate-50 group">
-                            <td className="py-3 px-2 font-mono text-xs">{item.code || '-'}</td>
-                            <td className="py-3 px-2">{item.name}</td>
-                            <td className="py-3 px-2 text-right">{item.unit}</td>
-                            <td className="py-3 px-2 text-right">{item.quantity || 0}</td>
-                            <td className="py-3 px-2 text-right">{formatCurrency(item.unit_price || 0)}</td>
-                            <td className="py-3 px-2 text-right font-medium">{formatCurrency(item.total_price || 0)}</td>
-                            <td className="py-3 px-2 text-right">
-                              <Badge variant={item.completion_percent >= 100 ? 'default' : 'outline'}>
-                                {item.completion_percent || 0}%
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-2 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => handleDeleteItem(item.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="font-semibold bg-slate-50">
-                          <td colSpan={5} className="py-3 px-2 text-right">{t('total') || 'Jami'}:</td>
-                          <td className="py-3 px-2 text-right">{formatCurrency(items.reduce((sum, i) => sum + (i.total_price || 0), 0))}</td>
-                          <td colSpan={2}></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Estimates Tab (Versioned Smeta with WBS) */}
+        {/* Estimates Tab */}
         <TabsContent value="estimates" className="mt-6">
           <EstimatesTab project={project} wbsItems={wbsTree} />
         </TabsContent>
@@ -1956,7 +1641,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 <CardTitle>{t('material_requests') || 'Material so\'rovlari'}</CardTitle>
                 <Button size="sm" onClick={() => {
                   setMaterialRequestForm({
-                    id: null, request_number: '', request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft'
+                    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
                   });
                   setShowMaterialRequestModal(true);
                 }}>
@@ -1972,7 +1657,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {materialRequests.map((req) => (
+                    {materialRequests.map((req) => {
+                      let items = [];
+                      try {
+                        items = Array.isArray(req.items) ? req.items : (typeof req.items === 'string' ? JSON.parse(req.items || '[]') : []);
+                      } catch (_) { items = []; }
+                      const totalCost = items.reduce((sum, it) => sum + (parseFloat(it.quantity || 0) * parseFloat(it.unit_cost || 0)), 0);
+                      return (
                       <div key={req.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -1991,53 +1682,87 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 <span>{t('required_date') || 'Kerakli sana'}: {format(new Date(req.required_date), 'dd.MM.yyyy')}</span>
                               )}
                             </div>
+                            {items.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {items.map((item, i) => (
+                                  <div key={i} className="text-xs text-slate-600 flex justify-between">
+                                    <span>{item.product_name || item.product_id}</span>
+                                    <span>{item.quantity} × {formatCurrency(item.unit_cost || 0)}</span>
+                                  </div>
+                                ))}
+                                {totalCost > 0 && (
+                                  <div className="text-xs font-medium text-slate-700 border-t pt-1 flex justify-between">
+                                    <span>Total</span>
+                                    <span>{formatCurrency(totalCost)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             {req.notes && (
                               <p className="text-sm text-slate-600 mt-2">{req.notes}</p>
                             )}
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                setMaterialRequestForm({
-                                  id: req.id,
-                                  request_number: req.request_number || '',
-                                  request_date: req.request_date || new Date().toISOString().split('T')[0],
-                                  required_date: req.required_date || '',
-                                  notes: req.notes || '',
-                                  status: req.status || 'draft'
-                                });
-                                setShowMaterialRequestModal(true);
-                              }}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                {t('edit') || 'Tahrirlash'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-red-600"
-                                onClick={async () => {
-                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-                                    try {
-                                      await constructionService.deleteMaterialRequest(req.id);
-                                      const materialsData = await constructionService.listMaterialRequests(project.id);
-                                      setMaterialRequests(materialsData || []);
-                                    } catch (error) {
-                                      console.error('Error deleting material request:', error);
-                                    }
-                                  }
-                                }}
+                          <div className="flex items-center gap-1 ml-2">
+                            {req.status === 'draft' && items.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-300 hover:bg-green-50 h-8 px-2 text-xs"
+                                onClick={() => handleApproveMaterialRequest(req.id)}
                               >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {t('delete') || "O'chirish"}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                {t('confirm') || 'Tasdiqlash'}
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {req.status === 'draft' && (
+                                  <DropdownMenuItem onClick={() => {
+                                    let parsedItems = [];
+                                    try { parsedItems = Array.isArray(req.items) ? req.items : (typeof req.items === 'string' ? JSON.parse(req.items || '[]') : []); } catch (_) {}
+                                    setMaterialRequestForm({
+                                      id: req.id,
+                                      request_date: req.request_date ? req.request_date.split('T')[0] : new Date().toISOString().split('T')[0],
+                                      required_date: req.required_date ? req.required_date.split('T')[0] : '',
+                                      notes: req.notes || '',
+                                      status: req.status || 'draft',
+                                      items: parsedItems
+                                    });
+                                    setShowMaterialRequestModal(true);
+                                  }}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    {t('edit') || 'Tahrirlash'}
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={async () => {
+                                    if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
+                                      try {
+                                        await constructionService.deleteMaterialRequest(req.id);
+                                        const materialsData = await constructionService.listMaterialRequests(project.id);
+                                        setMaterialRequests(materialsData || []);
+                                      } catch (error) {
+                                        console.error('Error deleting material request:', error);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  {t('delete') || "O'chirish"}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -2314,6 +2039,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Stages Tab */}
+        <TabsContent value="stages" className="mt-6">
+          <StagesTab project={project} />
+        </TabsContent>
+
+        {/* Expenses Tab */}
+        <TabsContent value="expenses" className="mt-6">
+          <ExpensesTab project={project} />
+        </TabsContent>
+
+        {/* Budget Plan vs Actual Tab */}
+        <TabsContent value="budget" className="mt-6">
+          <BudgetTab project={project} />
+        </TabsContent>
       </Tabs>
 
       {/* Building Modal */}
@@ -2455,125 +2195,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         title={`${project.name} - ${t('buildings') || 'Binolar'}`}
       />
 
-      {/* Smeta Import Modal */}
-      <ImportModal
-        open={showSmetaImportModal}
-        onClose={() => setShowSmetaImportModal(false)}
-        onImport={handleSmetaImport}
-        columns={smetaImportColumns}
-        entityName={t('smeta') || 'Smeta'}
-        templateColumns={smetaImportColumns}
-      />
-
-      {/* Smeta Export Modal */}
-      <ExportModal
-        open={showSmetaExportModal}
-        onClose={() => setShowSmetaExportModal(false)}
-        data={smetaExportData}
-        columns={smetaExportColumns}
-        entityName={t('smeta') || 'Smeta'}
-        title={`${project.name} - ${t('smeta') || 'Smeta'}`}
-      />
-
-      {/* Section Modal */}
-      <Dialog open={showSectionModal} onOpenChange={setShowSectionModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('new_section') || "Yangi bo'lim"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateSection} className="space-y-4">
-            <div>
-              <Label>{t('name') || 'Nomi'} *</Label>
-              <Input
-                value={sectionForm.name}
-                onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
-                placeholder={t('section_name_placeholder') || "Foundation works"}
-                required
-              />
-            </div>
-            <div>
-              <Label>{t('description') || 'Tavsif'}</Label>
-              <Textarea
-                value={sectionForm.description}
-                onChange={(e) => setSectionForm({ ...sectionForm, description: e.target.value })}
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowSectionModal(false)}>
-                {t('cancel') || 'Bekor qilish'}
-              </Button>
-              <Button type="submit">{t('create') || 'Yaratish'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Item Modal */}
-      <Dialog open={showItemModal} onOpenChange={setShowItemModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('new_item') || 'Yangi ish'}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateItem} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('code') || 'Kod'}</Label>
-                <Input
-                  value={itemForm.code}
-                  onChange={(e) => setItemForm({ ...itemForm, code: e.target.value })}
-                  placeholder="ISH-001"
-                />
-              </div>
-              <div>
-                <Label>{t('unit') || "O'lchov"} *</Label>
-                <Input
-                  value={itemForm.unit}
-                  onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                  placeholder="m³"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <Label>{t('name') || 'Nomi'} *</Label>
-              <Input
-                value={itemForm.name}
-                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
-                placeholder="Beton quyish"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('quantity') || 'Miqdor'} *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={itemForm.quantity}
-                  onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label>{t('unit_price') || 'Birlik narxi'} *</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatPriceInput(itemForm.unit_price)}
-                  onChange={(e) => setItemForm({ ...itemForm, unit_price: parsePriceInput(e.target.value) })}
-                  required
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowItemModal(false)}>
-                {t('cancel') || 'Bekor qilish'}
-              </Button>
-              <Button type="submit">{t('create') || 'Yaratish'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       {/* Team Member Modal */}
       <Dialog open={showTeamModal} onOpenChange={setShowTeamModal}>
@@ -2652,20 +2273,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Material Request Modal */}
       <Dialog open={showMaterialRequestModal} onOpenChange={setShowMaterialRequestModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{materialRequestForm.id ? (t('edit_material_request') || "Material so'rovini tahrirlash") : (t('new_material_request') || "Yangi material so'rovi")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateMaterialRequest} className="space-y-4">
-            <div>
-              <Label>{t('request_number') || "So'rov raqami"} *</Label>
-              <Input
-                value={materialRequestForm.request_number}
-                onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, request_number: e.target.value })}
-                placeholder="MR-2024-001"
-                required
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('request_date') || "So'rov sanasi"} *</Label>
@@ -2685,26 +2297,166 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 />
               </div>
             </div>
+
+            {/* Product Line Items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>{t('materials') || 'Materiallar'}</Label>
+                <Button type="button" size="sm" variant="outline" onClick={addMaterialRequestItem}>
+                  <Plus className="w-3 h-3 mr-1" />
+                  {t('add_item') || "Qo'shish"}
+                </Button>
+              </div>
+              {materialRequestForm.items.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4 border rounded-lg">{t('no_items') || 'Material qo\'shilmagan'}</p>
+              )}
+              {materialRequestForm.items.length > 0 && (
+                <div className="space-y-3 border rounded-lg p-3">
+                  {materialRequestForm.items.map((item, index) => {
+                    const product = inventoryProducts.find(p => p.id === item.product_id);
+                    const productVariants = product?.has_variants ? (variantsByProduct[item.product_id] || []) : [];
+                    return (
+                      <div key={index} className="space-y-2 pb-3 border-b last:border-b-0 last:pb-0">
+                        {/* Row 1: Warehouse + Delete */}
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <Select
+                              value={item.warehouse_id}
+                              onValueChange={(val) => updateMaterialRequestItem(index, 'warehouse_id', val)}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder={t('warehouse') || 'Ombor'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {inventoryWarehouses.map(w => (
+                                  <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 shrink-0" onClick={() => removeMaterialRequestItem(index)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        {/* Row 2: Product */}
+                        <Select
+                          value={item.product_id}
+                          onValueChange={(val) => updateMaterialRequestItem(index, 'product_id', val)}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {inventoryProducts.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name} {p.code ? `(${p.code})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Row 3: Variant | Qty + UOM | Price */}
+                        <div className="flex gap-2 items-center">
+                          {product?.has_variants && (
+                            <div className="flex-1">
+                              <Select
+                                value={item.variant_id}
+                                onValueChange={(val) => updateMaterialRequestItem(index, 'variant_id', val)}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder={t('select_variant') || 'Variant'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {productVariants.map(v => (
+                                    <SelectItem key={v.id} value={v.id}>
+                                      {v.display_name || v.variant_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="any"
+                              className="h-8 text-xs w-16"
+                              placeholder={t('qty') || 'Miqdor'}
+                              value={item.quantity === 0 ? '' : item.quantity}
+                              onChange={(e) => updateMaterialRequestItem(index, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                            />
+                            {item.unit_name && (
+                              <span className="text-xs text-slate-400 whitespace-nowrap">{item.unit_name}</span>
+                            )}
+                          </div>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            className="h-8 text-xs w-28 shrink-0"
+                            placeholder={t('unit_price') || 'Narx'}
+                            value={item.unit_cost === 0 ? '' : item.unit_cost}
+                            onChange={(e) => updateMaterialRequestItem(index, 'unit_cost', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Total row */}
+                  {materialRequestForm.items.length > 0 && (() => {
+                    const total = materialRequestForm.items.reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.unit_cost) || 0), 0);
+                    return total > 0 ? (
+                      <div className="flex justify-between text-sm font-medium pt-1">
+                        <span>{t('total') || 'Jami'}</span>
+                        <span>{formatCurrency(total)}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+            </div>
+
             <div>
               <Label>{t('notes') || 'Izohlar'}</Label>
               <Textarea
                 value={materialRequestForm.notes}
                 onChange={(e) => setMaterialRequestForm({ ...materialRequestForm, notes: e.target.value })}
                 placeholder={t('notes_placeholder') || "Qo'shimcha ma'lumotlar..."}
-                rows={3}
+                rows={2}
               />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowMaterialRequestModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" disabled={!materialRequestForm.request_number || !materialRequestForm.request_date}>
-                {t('create') || 'Yaratish'}
+              <Button type="submit" disabled={!materialRequestForm.request_date}>
+                {materialRequestForm.id ? (t('save') || 'Saqlash') : (t('create') || 'Yaratish')}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Approve Material Request Confirm */}
+      <AlertDialog open={confirmApprove.open} onOpenChange={(open) => setConfirmApprove(prev => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('confirm_approve_request')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('confirm_approve_request_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
+            <AlertDialogAction onClick={doApproveMaterialRequest}>
+              {t('confirm') || 'Tasdiqlash'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Daily Log Modal */}
       <Dialog open={showDailyLogModal} onOpenChange={setShowDailyLogModal}>
