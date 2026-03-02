@@ -1516,7 +1516,7 @@ export default function Products() {
 
         {/* COGS Tab */}
         <TabsContent value="cogs" className="mt-0">
-          <COGSCalculator items={items} movements={stockMovements} />
+          <COGSCalculator />
         </TabsContent>
 
         {/* Units of Measure Tab */}
