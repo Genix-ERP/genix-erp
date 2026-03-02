@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { AVAILABLE_MODULES } from '@/components/contexts/EmployeePermissionsContext';
 import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
+import RoleManagement from '@/components/hr/RoleManagement';
 
 // PAY_PERIODS is defined inside component to use translations
 
@@ -73,7 +74,14 @@ export default function HRSettings() {
 
   const { isAppInstalled } = useInstalledApps();
 
-  // Departments and Roles are now managed in the HR module page directly
+  // Roles state
+  const [roles, setRoles] = useState([]);
+
+  const refreshRoles = useCallback(() => {
+    apiClient.get('/roles').then(res => {
+      setRoles(res.data?.data || res.data || []);
+    }).catch(() => {});
+  }, []);
 
   // Employee company assignment state
   const [employees, setEmployees] = useState([]);
@@ -226,7 +234,8 @@ export default function HRSettings() {
   // Load data on mount
   useEffect(() => {
     loadEmployees();
-  }, [loadEmployees]);
+    refreshRoles();
+  }, [loadEmployees, refreshRoles]);
 
   return (
     <div className="space-y-4">
@@ -504,6 +513,9 @@ export default function HRSettings() {
           </div>
         </div>
       </SettingsSection>
+
+      {/* Role Management */}
+      <RoleManagement roles={roles} onRefresh={refreshRoles} />
 
       {/* Company Assignment Modal */}
       <Dialog open={showCompanyAssignModal} onOpenChange={setShowCompanyAssignModal}>

@@ -39,6 +39,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 
 const EstimatesTab = ({ project, wbsItems = [] }) => {
   const { language } = useLanguage();
@@ -65,6 +66,71 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   });
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', description: '', onConfirm: null, variant: 'default' });
 
+  // Import/Export
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportData, setExportData] = useState([]);
+
+  const exportColumns = [
+    { key: 'wbs_code', label: 'WBS' },
+    { key: 'name', label: t('name') || 'Nomi' },
+    { key: 'uom', label: t('unit') || "O'lchov birligi" },
+    { key: 'quantity', label: t('quantity') || 'Miqdor' },
+    { key: 'material_rate', label: t('material') || 'Material', render: (v) => formatCurrency(v || 0) },
+    { key: 'labor_rate', label: t('labor') || 'Ish haqi', render: (v) => formatCurrency(v || 0) },
+    { key: 'equipment_rate', label: t('equipment') || 'Jihozlar', render: (v) => formatCurrency(v || 0) },
+    { key: 'unit_rate', label: t('unit_rate') || 'Birlik narxi', render: (v) => formatCurrency(v || 0) },
+    { key: 'total_amount', label: t('total') || 'Jami', render: (v) => formatCurrency(v || 0) },
+  ];
+
+  const importColumns = [
+    { key: 'name', label: t('name') || 'Nomi', required: true },
+    { key: 'uom', label: t('unit') || "O'lchov birligi" },
+    { key: 'quantity', label: t('quantity') || 'Miqdor' },
+    { key: 'material_rate', label: t('material') || 'Material' },
+    { key: 'labor_rate', label: t('labor') || 'Ish haqi' },
+    { key: 'equipment_rate', label: t('equipment') || 'Jihozlar' },
+  ];
+
+  const handleImport = async (data) => {
+    if (!selectedEstimate?.id || selectedEstimate.state !== 'draft') return;
+    try {
+      for (const row of data) {
+        await constructionService.createEstimateLine(selectedEstimate.id, {
+          name: row.name,
+          uom: row.uom || 'шт',
+          quantity: row.quantity ? parseFloat(row.quantity) : 0,
+          material_rate: row.material_rate ? parseFloat(row.material_rate) : 0,
+          labor_rate: row.labor_rate ? parseFloat(row.labor_rate) : 0,
+          equipment_rate: row.equipment_rate ? parseFloat(row.equipment_rate) : 0,
+          sort_order: 0,
+        });
+      }
+      const estData = await constructionService.getEstimate(selectedEstimate.id);
+      setLines(estData?.lines || []);
+      await loadEstimates();
+      setShowImportModal(false);
+    } catch (error) {
+      console.error('Error importing estimate lines:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (showExportModal && lines.length > 0) {
+      setExportData(lines.map(line => ({
+        wbs_code: line.wbs_code || '',
+        name: line.name,
+        uom: line.uom,
+        quantity: line.quantity,
+        material_rate: line.material_rate,
+        labor_rate: line.labor_rate,
+        equipment_rate: line.equipment_rate,
+        unit_rate: line.unit_rate || ((line.material_rate || 0) + (line.labor_rate || 0) + (line.equipment_rate || 0)),
+        total_amount: line.total_amount || 0,
+      })));
+    }
+  }, [showExportModal, lines]);
+
   // Load estimates
   const loadEstimates = useCallback(async () => {
     if (!project?.id) return;
@@ -72,10 +138,13 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     try {
       const data = await constructionService.listEstimates(project.id);
       setEstimates(data || []);
-      // Auto-select current estimate
-      const current = (data || []).find(e => e.is_current);
-      if (current && !selectedEstimate) {
-        setSelectedEstimate(current);
+      // Auto-select current estimate or refresh selected
+      if (selectedEstimate) {
+        const updated = (data || []).find(e => e.id === selectedEstimate.id);
+        if (updated) setSelectedEstimate(updated);
+      } else {
+        const current = (data || []).find(e => e.is_current);
+        if (current) setSelectedEstimate(current);
       }
     } catch (error) {
       console.error('Error loading estimates:', error);
@@ -189,9 +258,9 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         name: lineForm.name,
         uom: lineForm.uom || 'шт',
         quantity: parseFloat(lineForm.quantity) || 0,
-        material_rate: parsePriceInput(lineForm.material_rate),
-        labor_rate: parsePriceInput(lineForm.labor_rate),
-        equipment_rate: parsePriceInput(lineForm.equipment_rate),
+        material_rate: parseFloat(parsePriceInput(lineForm.material_rate)) || 0,
+        labor_rate: parseFloat(parsePriceInput(lineForm.labor_rate)) || 0,
+        equipment_rate: parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0,
         sort_order: parseInt(lineForm.sort_order) || 0,
       };
 
@@ -259,7 +328,18 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   flattenWBS(wbsItems);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className="space-y-4">
+      {/* Import/Export Header */}
+      <div className="flex items-center justify-end">
+        <ImportExportButtons
+          onImport={() => setShowImportModal(true)}
+          onExport={() => setShowExportModal(true)}
+          importDisabled={!selectedEstimate || selectedEstimate.state !== 'draft'}
+          exportDisabled={!selectedEstimate || lines.length === 0}
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
       {/* Estimates List */}
       <Card className="lg:col-span-1">
         <CardHeader className="flex flex-row items-center justify-between">
@@ -293,7 +373,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs font-mono">v{est.version}</Badge>
-                          {est.is_current && <Badge className="bg-blue-500 text-white text-xs">Joriy</Badge>}
+                          {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Current'}</Badge>}
                         </div>
                         <p className="font-medium text-sm mt-1 truncate">{est.name}</p>
                       </div>
@@ -491,6 +571,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Create Estimate Modal */}
       <Dialog open={showEstimateModal} onOpenChange={setShowEstimateModal}>
@@ -654,6 +735,26 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Modal */}
+      <ImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImport}
+        columns={importColumns}
+        entityName={t('estimate_lines') || 'Smeta qatorlari'}
+        templateColumns={importColumns}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        open={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        data={exportData}
+        columns={exportColumns}
+        entityName={t('estimate_lines') || 'Smeta qatorlari'}
+        title={selectedEstimate ? `${selectedEstimate.name} (v${selectedEstimate.version})` : ''}
+      />
     </div>
   );
 };
