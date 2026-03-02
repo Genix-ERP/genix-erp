@@ -265,6 +265,7 @@ export default function ProductionOrders() {
   const getStageColor = (stage) => {
     const colors = {
       draft: 'bg-gray-100 text-gray-700',
+      in_progress: 'bg-amber-100 text-amber-700',
       mixing: 'bg-purple-100 text-purple-700',
       rising: 'bg-blue-100 text-blue-700',
       drying: 'bg-amber-100 text-amber-700',
@@ -272,12 +273,16 @@ export default function ProductionOrders() {
       packing: 'bg-cyan-100 text-cyan-700',
       done: 'bg-green-100 text-green-700'
     };
-    return colors[stage] || colors.draft;
+    if (colors[stage]) return colors[stage];
+    // op_X stages get a blue color
+    if (stage && stage.startsWith('op_')) return 'bg-blue-100 text-blue-700';
+    return colors.draft;
   };
 
-  const getStageLabel = (stage) => {
+  const getStageLabel = (stage, order) => {
     const labels = {
       draft: t('stage_draft') || 'Draft',
+      in_progress: t('in_progress') || 'In Progress',
       mixing: t('stage_mixing') || 'Mixing',
       rising: t('stage_rising') || 'Rising',
       drying: t('stage_drying') || 'Drying',
@@ -285,7 +290,15 @@ export default function ProductionOrders() {
       packing: t('stage_packing') || 'Packing',
       done: t('stage_done') || 'Done'
     };
-    return labels[stage] || stage;
+    if (labels[stage]) return labels[stage];
+
+    // For op_X stages, resolve from BOM operations
+    if (stage && stage.startsWith('op_') && order) {
+      const stages = getOrderStages(order);
+      const found = stages.find(s => s.key === stage);
+      if (found) return found.label;
+    }
+    return stage;
   };
 
   const getShiftLabel = (shift) => {
@@ -470,7 +483,7 @@ export default function ProductionOrders() {
                         </TableCell>
                         <TableCell>
                           <Badge className={getStageColor(order.current_stage || 'draft')}>
-                            {getStageLabel(order.current_stage || 'draft')}
+                            {getStageLabel(order.current_stage || 'draft', order)}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -823,7 +836,7 @@ export default function ProductionOrders() {
               </div>
 
               {/* Output Recording - Visible when production is active */}
-              {(selectedOrder.current_stage === 'in_progress' || selectedOrder.current_stage === 'cutting' || selectedOrder.current_stage === 'packing' || selectedOrder.current_stage === 'done') && (
+              {(selectedOrder.status === 'in_progress' || selectedOrder.current_stage === 'done' || (selectedOrder.current_stage && selectedOrder.current_stage.startsWith('op_'))) && (
                 <div className="border-t pt-4">
                   <h4 className="font-semibold mb-4 flex items-center gap-2">
                     <Package className="w-5 h-5" />
