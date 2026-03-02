@@ -609,12 +609,14 @@ export default function BOMManagement() {
                       const selectedRouting = routings.find(r => r.id === value);
                       if (selectedRouting) {
                         // Copy operations from routing to BOM
-                        const copiedOperations = selectedRouting.operations.map(op => ({
+                        const copiedOperations = selectedRouting.operations.map((op, idx) => ({
                           operation_name: op.name,
                           work_center_id: op.work_center_id,
                           setup_time_minutes: op.setup_time_minutes || 0,
                           run_time_minutes: op.duration_minutes || 0,
-                          notes: op.description || ''
+                          notes: op.description || '',
+                          sequence: idx + 1,
+                          isNew: true
                         }));
                         setNewBom({...newBom, routing_id: value, operations: copiedOperations});
                       } else {
@@ -917,14 +919,23 @@ export default function BOMManagement() {
                         }
                         const selectedRouting = routings.find(r => r.id === value);
                         if (selectedRouting) {
-                          const copiedOperations = selectedRouting.operations.map(op => ({
+                          // Mark existing operations for deletion
+                          const existingOpIds = (editBom.operations || []).filter(op => op.id).map(op => op.id);
+                          const copiedOperations = selectedRouting.operations.map((op, idx) => ({
                             operation_name: op.name,
                             work_center_id: op.work_center_id,
                             setup_time_minutes: op.setup_time_minutes || 0,
                             run_time_minutes: op.duration_minutes || 0,
-                            notes: op.description || ''
+                            notes: op.description || '',
+                            sequence: idx + 1,
+                            isNew: true
                           }));
-                          setEditBom({...editBom, routing_id: value, operations: copiedOperations});
+                          setEditBom({
+                            ...editBom,
+                            routing_id: value,
+                            operations: copiedOperations,
+                            deletedOperations: [...(editBom.deletedOperations || []), ...existingOpIds]
+                          });
                         } else {
                           setEditBom({...editBom, routing_id: value});
                         }
