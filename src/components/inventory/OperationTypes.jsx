@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Search, Package, Pencil, Trash2, Eye, MoreHorizontal,
-  CheckCircle, Clock, AlertTriangle, RotateCcw, Barcode,
-  PackagePlus, ArrowRightLeft, Truck, Store, Settings2, X
+  Plus, Search, Package, Pencil, Trash2, MoreHorizontal,
+  Barcode, PackagePlus, ArrowRightLeft, Truck, Store, Settings2,
+  GripVertical, ChevronRight, Shield, Clock, FileText, ArrowDown
 } from "lucide-react";
 import {
   Tooltip,
@@ -23,10 +24,12 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { inventoryService } from '@/api/services';
+import { inventoryService, financeService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
 
 // Icon mapping for operation types (by type field: receipt, delivery, internal, pos)
@@ -45,20 +48,6 @@ const getOperationIcon = (type) => {
   }
 };
 
-// Icon mapping by operation_type (incoming, outgoing, internal)
-const getOperationDirectionIcon = (operationType, className = "w-4 h-4") => {
-  switch (operationType) {
-    case 'incoming':
-      return <PackagePlus className={className} />;
-    case 'outgoing':
-      return <Truck className={className} />;
-    case 'internal':
-      return <ArrowRightLeft className={className} />;
-    default:
-      return <Package className={className} />;
-  }
-};
-
 // Color picker presets
 const colorPresets = [
   { color: '#22c55e', name: 'Green' },
@@ -72,6 +61,95 @@ const colorPresets = [
   { color: '#6366f1', name: 'Indigo' },
   { color: '#64748b', name: 'Slate' },
 ];
+
+// Step templates
+const STEP_TEMPLATES = [
+  {
+    key: 'simple_receipt',
+    label: 'Oddiy qabul',
+    steps: [{ name: 'Qabul qilish', responsible_role: 'warehouse_worker' }]
+  },
+  {
+    key: 'checked_receipt',
+    label: 'Tekshiruvli qabul',
+    steps: [
+      { name: 'Qabul qilish', responsible_role: 'warehouse_worker' },
+      { name: 'Sifat tekshiruvi', responsible_role: 'quality_inspector', requires_approval: true }
+    ]
+  },
+  {
+    key: 'full_receipt',
+    label: "To'liq qabul",
+    steps: [
+      { name: 'Qabul qilish', responsible_role: 'warehouse_worker' },
+      { name: 'Sifat tekshiruvi', responsible_role: 'quality_inspector', requires_approval: true },
+      { name: 'Joylashtirish', responsible_role: 'warehouse_worker' }
+    ]
+  },
+  {
+    key: 'simple_delivery',
+    label: "Oddiy jo'natish",
+    steps: [{ name: "Jo'natish", responsible_role: 'warehouse_worker' }]
+  },
+  {
+    key: 'prepared_delivery',
+    label: "Tayyorlashli jo'natish",
+    steps: [
+      { name: "Yig'ish", responsible_role: 'warehouse_worker' },
+      { name: "Jo'natish", responsible_role: 'warehouse_worker' }
+    ]
+  },
+  {
+    key: 'full_delivery',
+    label: "To'liq jo'natish",
+    steps: [
+      { name: "Yig'ish", responsible_role: 'warehouse_worker' },
+      { name: 'Qadoqlash', responsible_role: 'warehouse_worker' },
+      { name: "Jo'natish", responsible_role: 'warehouse_worker' }
+    ]
+  },
+  {
+    key: 'simple_writeoff',
+    label: 'Oddiy hisobdan chiqarish',
+    steps: [{ name: 'Hisobdan chiqarish', responsible_role: 'warehouse_manager' }]
+  },
+  {
+    key: 'commission_writeoff',
+    label: 'Komissiyali hisobdan chiqarish',
+    steps: [
+      { name: 'Tekshirish', responsible_role: 'quality_inspector' },
+      { name: 'Tasdiqlash va chiqarish', responsible_role: 'warehouse_manager', requires_approval: true }
+    ]
+  },
+];
+
+const ROLE_OPTIONS = [
+  { value: 'warehouse_worker', label: 'Omborchi' },
+  { value: 'warehouse_manager', label: 'Ombor menejeri' },
+  { value: 'quality_inspector', label: 'Sifat nazoratchi' },
+  { value: 'supervisor', label: 'Boshqaruvchi' },
+  { value: 'accountant', label: 'Buxgalter' },
+];
+
+const TIMEOUT_OPTIONS = [
+  { value: 'notify', label: 'Xabarnoma yuborish' },
+  { value: 'escalate', label: 'Eskalatsiya qilish' },
+  { value: 'auto_proceed', label: 'Avtomatik davom ettirish' },
+];
+
+const emptyStep = () => ({
+  _tempId: Date.now() + Math.random(),
+  name: '',
+  source_location_id: '',
+  dest_location_id: '',
+  responsible_role: 'warehouse_worker',
+  requires_approval: false,
+  approval_role: '',
+  auto_proceed: false,
+  max_duration_hours: '',
+  on_timeout: 'notify',
+  instructions: '',
+});
 
 export default function OperationTypes() {
   const navigate = useNavigate();
@@ -89,6 +167,19 @@ export default function OperationTypes() {
   const [selectedType, setSelectedType] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Steps state
+  const [steps, setSteps] = useState([]);
+  const [showStepModal, setShowStepModal] = useState(false);
+  const [editingStep, setEditingStep] = useState(null);
+  const [editingStepIndex, setEditingStepIndex] = useState(-1);
+  const [stepsLoading, setStepsLoading] = useState(false);
+  const [stepsSaving, setStepsSaving] = useState(false);
+
+  // Accounting data
+  const [journals, setJournals] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [locations, setLocations] = useState([]);
+
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
     return () => {
@@ -101,7 +192,7 @@ export default function OperationTypes() {
     warehouse_id: '',
     code: '',
     name: '',
-    operation_type: 'internal', // incoming, outgoing, internal
+    operation_type: 'internal',
     type: 'custom',
     color: '#6366f1',
     show_operations: true,
@@ -131,6 +222,54 @@ export default function OperationTypes() {
     fetchData();
   }, []);
 
+  // Load journals, accounts, locations when edit modal opens
+  const loadEditData = useCallback(async (opType) => {
+    try {
+      const [journalsData, accountsData, locationsData, fullOpType] = await Promise.all([
+        financeService.listJournals(),
+        financeService.listAccounts(),
+        inventoryService.listAllLocations(),
+        inventoryService.getOperationType(opType.id)
+      ]);
+      setJournals(journalsData || []);
+      setAccounts(accountsData || []);
+      setLocations(locationsData || []);
+      // Update form with accounting fields from full opType data
+      if (fullOpType) {
+        setFormData(prev => ({
+          ...prev,
+          journal_id: fullOpType.journal_id || '',
+          debit_account_id: fullOpType.debit_account_id || '',
+          credit_account_id: fullOpType.credit_account_id || '',
+          auto_post_accounting: fullOpType.auto_post_accounting || false,
+        }));
+      }
+    } catch (err) {
+      console.error('Error loading edit data:', err);
+    }
+
+    // Load steps
+    setStepsLoading(true);
+    try {
+      const stepsData = await inventoryService.listOperationTypeSteps(opType.id);
+      setSteps((stepsData || []).map(s => ({
+        ...s,
+        _tempId: s.id || Date.now() + Math.random(),
+        source_location_id: s.source_location_id || '',
+        dest_location_id: s.dest_location_id || '',
+        max_duration_hours: s.max_duration_hours || '',
+        instructions: s.instructions || '',
+        approval_role: s.approval_role || '',
+        on_timeout: s.on_timeout || 'notify',
+      })));
+    } catch (err) {
+      console.error('Error loading steps:', err);
+      setSteps([]);
+    } finally {
+      setStepsLoading(false);
+    }
+  }, []);
+
   // Filter operation types
   const filteredTypes = operationTypes.filter(ot => {
     const matchesSearch = !searchQuery ||
@@ -158,7 +297,7 @@ export default function OperationTypes() {
       warehouse_id: warehouses[0]?.id || '',
       code: '',
       name: '',
-      operation_type: 'internal', // incoming, outgoing, internal
+      operation_type: 'internal',
       type: 'custom',
       color: '#6366f1',
       show_operations: true,
@@ -198,7 +337,11 @@ export default function OperationTypes() {
         create_backorder: formData.create_backorder,
         reservation_method: formData.reservation_method,
         is_active: formData.is_active,
-        sequence: formData.sequence
+        sequence: formData.sequence,
+        journal_id: formData.journal_id || '',
+        debit_account_id: formData.debit_account_id || '',
+        credit_account_id: formData.credit_account_id || '',
+        auto_post_accounting: formData.auto_post_accounting || false,
       });
       setOperationTypes(prev => prev.map(ot => ot.id === selectedType.id ? { ...ot, ...updated } : ot));
       setShowEditModal(false);
@@ -229,9 +372,14 @@ export default function OperationTypes() {
       create_backorder: ot.create_backorder !== false,
       reservation_method: ot.reservation_method || 'at_confirm',
       is_active: ot.is_active,
-      sequence: ot.sequence || 10
+      sequence: ot.sequence || 10,
+      journal_id: ot.journal_id || '',
+      debit_account_id: ot.debit_account_id || '',
+      credit_account_id: ot.credit_account_id || '',
+      auto_post_accounting: ot.auto_post_accounting || false,
     });
     setShowEditModal(true);
+    loadEditData(ot);
   };
 
   const openCreateModal = () => {
@@ -242,6 +390,80 @@ export default function OperationTypes() {
       setFormData(prev => ({ ...prev, warehouse_id: warehouses[0].id }));
     }
     setShowCreateModal(true);
+  };
+
+  // --- Steps management ---
+  const handleSaveSteps = async () => {
+    if (!selectedType) return;
+    setStepsSaving(true);
+    try {
+      const payload = steps.map((s, idx) => ({
+        sequence: idx + 1,
+        name: s.name,
+        source_location_id: s.source_location_id || null,
+        dest_location_id: s.dest_location_id || null,
+        responsible_role: s.responsible_role || 'warehouse_worker',
+        requires_approval: s.requires_approval || false,
+        approval_role: s.approval_role || '',
+        auto_proceed: s.auto_proceed || false,
+        max_duration_hours: s.max_duration_hours ? parseFloat(s.max_duration_hours) : null,
+        on_timeout: s.on_timeout || 'notify',
+        instructions: s.instructions || '',
+      }));
+      await inventoryService.saveOperationTypeSteps(selectedType.id, payload);
+    } catch (err) {
+      console.error('Error saving steps:', err);
+    } finally {
+      setStepsSaving(false);
+    }
+  };
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const reordered = Array.from(steps);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    setSteps(reordered);
+  };
+
+  const addStep = () => {
+    const step = emptyStep();
+    setEditingStep(step);
+    setEditingStepIndex(-1);
+    setShowStepModal(true);
+  };
+
+  const editStep = (step, index) => {
+    setEditingStep({ ...step });
+    setEditingStepIndex(index);
+    setShowStepModal(true);
+  };
+
+  const deleteStep = (index) => {
+    setSteps(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const saveStepModal = () => {
+    if (!editingStep?.name) return;
+    if (editingStepIndex === -1) {
+      setSteps(prev => [...prev, { ...editingStep, _tempId: Date.now() + Math.random() }]);
+    } else {
+      setSteps(prev => prev.map((s, i) => i === editingStepIndex ? { ...editingStep } : s));
+    }
+    setShowStepModal(false);
+    setEditingStep(null);
+    setEditingStepIndex(-1);
+  };
+
+  const loadTemplate = (template) => {
+    const newSteps = template.steps.map((s, idx) => ({
+      ...emptyStep(),
+      _tempId: Date.now() + Math.random() + idx,
+      name: s.name,
+      responsible_role: s.responsible_role || 'warehouse_worker',
+      requires_approval: s.requires_approval || false,
+    }));
+    setSteps(newSteps);
   };
 
   // Operation Type Card Component
@@ -304,44 +526,57 @@ export default function OperationTypes() {
           </div>
 
           {/* Counters */}
-          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
+          <div className="grid grid-cols-4 gap-1.5 pt-3 border-t border-slate-100">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="text-center p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=assigned`)}
+                  className="text-center p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=in_progress`)}
                 >
-                  <div className="text-lg font-bold text-green-600">{opType.count_picking_ready || 0}</div>
-                  <div className="text-[10px] text-green-700 uppercase tracking-wide">{t('ready') || 'Tayyor'}</div>
+                  <div className="text-lg font-bold text-blue-600">{opType.count_picking_ready || 0}</div>
+                  <div className="text-[9px] text-blue-700 uppercase tracking-wide">{t('in_progress') || 'Jarayonda'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('ready_operations') || 'Tayyor operatsiyalar'}</TooltipContent>
+              <TooltipContent>{t('in_progress') || 'Jarayonda'}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="text-center p-2 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
+                  className="text-center p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
                   onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=waiting`)}
                 >
                   <div className="text-lg font-bold text-amber-600">{opType.count_picking_waiting || 0}</div>
-                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Kutilmoqda'}</div>
+                  <div className="text-[9px] text-amber-700 uppercase tracking-wide">{t('waiting') || 'Kutilmoqda'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('waiting_operations') || 'Kutilayotgan operatsiyalar'}</TooltipContent>
+              <TooltipContent>{t('waiting') || 'Kutilmoqda'}</TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="text-center p-2 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer"
+                  className="text-center p-1.5 rounded-lg bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=done`)}
+                >
+                  <div className="text-lg font-bold text-green-600">{opType.count_picking_backorders || 0}</div>
+                  <div className="text-[9px] text-green-700 uppercase tracking-wide">{t('done') || 'Bajarildi'}</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{t('done') || 'Bajarildi'}</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className="text-center p-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer"
                   onClick={() => navigate(`/inventory/operation-type/${opType.id}?state=late`)}
                 >
                   <div className="text-lg font-bold text-red-600">{opType.count_picking_late || 0}</div>
-                  <div className="text-[10px] text-red-700 uppercase tracking-wide">{t('late') || 'Kechikkan'}</div>
+                  <div className="text-[9px] text-red-700 uppercase tracking-wide">{t('late') || 'Kechikkan'}</div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{t('late_operations') || 'Kechikkan operatsiyalar'}</TooltipContent>
+              <TooltipContent>{t('late') || 'Kechikkan'}</TooltipContent>
             </Tooltip>
           </div>
 
@@ -356,6 +591,11 @@ export default function OperationTypes() {
         </div>
       </div>
     );
+  };
+
+  // Role label helper
+  const getRoleLabel = (roleValue) => {
+    return ROLE_OPTIONS.find(r => r.value === roleValue)?.label || roleValue;
   };
 
   if (isLoading) {
@@ -560,8 +800,14 @@ export default function OperationTypes() {
       </Dialog>
 
       {/* Edit Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={showEditModal} onOpenChange={(open) => {
+        setShowEditModal(open);
+        if (!open) {
+          setSelectedType(null);
+          setSteps([]);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('edit_operation_type') || "Operatsiya turini tahrirlash"}</DialogTitle>
             <DialogDescription>
@@ -569,79 +815,288 @@ export default function OperationTypes() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('name') || 'Nomi'}
-              </label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
+          <Tabs defaultValue="general" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="general">{t('general') || "Umumiy"}</TabsTrigger>
+              <TabsTrigger value="steps">
+                {"Bosqichlar"}
+                {steps.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
+                    {steps.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="accounting">{"Buxgalteriya"}</TabsTrigger>
+            </TabsList>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-2 block">
-                {t('color') || 'Rang'}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {colorPresets.map(({ color, name }) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, color })}
-                    className={`w-8 h-8 rounded-lg transition-all ${formData.color === color ? 'ring-2 ring-offset-2 ring-slate-400 scale-110' : 'hover:scale-105'}`}
-                    style={{ backgroundColor: color }}
-                    title={name}
+            {/* General Tab */}
+            <TabsContent value="general" className="space-y-4 mt-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('name') || 'Nomi'}
+                </label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-2 block">
+                  {t('color') || 'Rang'}
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {colorPresets.map(({ color, name }) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, color })}
+                      className={`w-8 h-8 rounded-lg transition-all ${formData.color === color ? 'ring-2 ring-offset-2 ring-slate-400 scale-110' : 'hover:scale-105'}`}
+                      style={{ backgroundColor: color }}
+                      title={name}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{t('active') || "Faol"}</p>
+                    <p className="text-xs text-slate-500">{t('active_desc') || "Operatsiya turi faolmi"}</p>
+                  </div>
+                  <Switch
+                    checked={formData.is_active}
+                    onCheckedChange={(v) => setFormData({ ...formData, is_active: v })}
                   />
-                ))}
-              </div>
-            </div>
+                </div>
 
-            <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{t('show_in_dashboard') || "Dashboard'da ko'rsatish"}</p>
+                  </div>
+                  <Switch
+                    checked={formData.show_operations}
+                    onCheckedChange={(v) => setFormData({ ...formData, show_operations: v })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{t('barcode_scanning') || "Barkod skanerlash"}</p>
+                  </div>
+                  <Switch
+                    checked={formData.barcode_enabled}
+                    onCheckedChange={(v) => setFormData({ ...formData, barcode_enabled: v })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{t('create_backorder') || "Backorder yaratish"}</p>
+                    <p className="text-xs text-slate-500">{t('create_backorder_desc') || "Qisman yetkazib berishda avtomatik backorder"}</p>
+                  </div>
+                  <Switch
+                    checked={formData.create_backorder}
+                    onCheckedChange={(v) => setFormData({ ...formData, create_backorder: v })}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Steps Tab */}
+            <TabsContent value="steps" className="space-y-4 mt-4">
+              {/* Template selector */}
+              <div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <FileText className="w-4 h-4" />
+                      {"Shablondan yuklash"}
+                      <ArrowDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    {STEP_TEMPLATES.map(tmpl => (
+                      <DropdownMenuItem key={tmpl.key} onClick={() => loadTemplate(tmpl)}>
+                        <div>
+                          <p className="font-medium">{tmpl.label}</p>
+                          <p className="text-xs text-slate-500">
+                            {tmpl.steps.map(s => s.name).join(' → ')}
+                          </p>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {stepsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[var(--genix-blue)]" />
+                </div>
+              ) : steps.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-3">{"Bosqichlar hali qo'shilmagan"}</p>
+                  <Button variant="outline" size="sm" onClick={addStep}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    {"Bosqich qo'shish"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <DragDropContext onDragEnd={handleDragEnd}>
+                    <Droppable droppableId="steps-list">
+                      {(provided) => (
+                        <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                          {steps.map((step, index) => (
+                            <Draggable key={String(step._tempId)} draggableId={String(step._tempId)} index={index}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                                    snapshot.isDragging ? 'bg-blue-50 border-blue-300 shadow-md' : 'bg-white border-slate-200'
+                                  }`}
+                                >
+                                  <div {...provided.dragHandleProps} className="cursor-grab text-slate-400 hover:text-slate-600">
+                                    <GripVertical className="w-4 h-4" />
+                                  </div>
+                                  <div className="w-7 h-7 rounded-full bg-[var(--genix-blue)] text-white text-xs flex items-center justify-center font-bold shrink-0">
+                                    {index + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-slate-900 truncate">{step.name}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-xs text-slate-500">{getRoleLabel(step.responsible_role)}</span>
+                                      {step.requires_approval && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-200 bg-amber-50">
+                                          <Shield className="w-2.5 h-2.5 mr-0.5" />
+                                          {"Tasdiqlash"}
+                                        </Badge>
+                                      )}
+                                      {step.max_duration_hours && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-slate-500">
+                                          <Clock className="w-2.5 h-2.5 mr-0.5" />
+                                          {step.max_duration_hours}{"s"}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {index < steps.length - 1 && (
+                                    <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                                  )}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => editStep(step, index)}>
+                                      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => deleteStep(index)}>
+                                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
+
+                  <Button variant="outline" size="sm" onClick={addStep} className="w-full">
+                    <Plus className="w-4 h-4 mr-1" />
+                    {"Bosqich qo'shish"}
+                  </Button>
+                </>
+              )}
+
+              {steps.length > 0 && (
+                <Button
+                  onClick={handleSaveSteps}
+                  disabled={stepsSaving}
+                  size="sm"
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+                >
+                  {stepsSaving ? "Saqlanmoqda..." : "Bosqichlarni saqlash"}
+                </Button>
+              )}
+            </TabsContent>
+
+            {/* Accounting Tab */}
+            <TabsContent value="accounting" className="space-y-4 mt-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Jurnal"}
+                </label>
+                <Select
+                  value={formData.journal_id || 'none'}
+                  onValueChange={(v) => setFormData({ ...formData, journal_id: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={"Jurnalni tanlang"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                    {journals.map(j => (
+                      <SelectItem key={j.id} value={j.id}>{j.name} ({j.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Debet hisob"}
+                </label>
+                <Select
+                  value={formData.debit_account_id || 'none'}
+                  onValueChange={(v) => setFormData({ ...formData, debit_account_id: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={"Hisobni tanlang"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                    {accounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>{a.code} - {a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Kredit hisob"}
+                </label>
+                <Select
+                  value={formData.credit_account_id || 'none'}
+                  onValueChange={(v) => setFormData({ ...formData, credit_account_id: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={"Hisobni tanlang"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                    {accounts.map(a => (
+                      <SelectItem key={a.id} value={a.id}>{a.code} - {a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">{t('active') || "Faol"}</p>
-                  <p className="text-xs text-slate-500">{t('active_desc') || "Operatsiya turi faolmi"}</p>
+                  <p className="text-sm font-medium text-slate-700">{"Avtomatik buxgalteriya yozuvi"}</p>
+                  <p className="text-xs text-slate-500">{"Operatsiya tugaganda avtomatik jurnal yozuvi yaratish"}</p>
                 </div>
                 <Switch
-                  checked={formData.is_active}
-                  onCheckedChange={(v) => setFormData({ ...formData, is_active: v })}
+                  checked={formData.auto_post_accounting || false}
+                  onCheckedChange={(v) => setFormData({ ...formData, auto_post_accounting: v })}
                 />
               </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{t('show_in_dashboard') || "Dashboard'da ko'rsatish"}</p>
-                </div>
-                <Switch
-                  checked={formData.show_operations}
-                  onCheckedChange={(v) => setFormData({ ...formData, show_operations: v })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{t('barcode_scanning') || "Barkod skanerlash"}</p>
-                </div>
-                <Switch
-                  checked={formData.barcode_enabled}
-                  onCheckedChange={(v) => setFormData({ ...formData, barcode_enabled: v })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{t('create_backorder') || "Backorder yaratish"}</p>
-                  <p className="text-xs text-slate-500">{t('create_backorder_desc') || "Qisman yetkazib berishda avtomatik backorder"}</p>
-                </div>
-                <Switch
-                  checked={formData.create_backorder}
-                  onCheckedChange={(v) => setFormData({ ...formData, create_backorder: v })}
-                />
-              </div>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>
@@ -653,6 +1108,200 @@ export default function OperationTypes() {
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
             >
               {isSaving ? t('saving') || 'Saqlanmoqda...' : t('save') || 'Saqlash'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Step Edit Modal */}
+      <Dialog open={showStepModal} onOpenChange={(open) => {
+        setShowStepModal(open);
+        if (!open) {
+          setEditingStep(null);
+          setEditingStepIndex(-1);
+        }
+      }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingStepIndex === -1 ? "Yangi bosqich" : "Bosqichni tahrirlash"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {editingStep && (
+            <div className="space-y-4 py-2">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Nomi"} *
+                </label>
+                <Input
+                  value={editingStep.name}
+                  onChange={(e) => setEditingStep({ ...editingStep, name: e.target.value })}
+                  placeholder={"Bosqich nomi"}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {"Manba lokatsiya"}
+                  </label>
+                  <Select
+                    value={editingStep.source_location_id || 'none'}
+                    onValueChange={(v) => setEditingStep({ ...editingStep, source_location_id: v === 'none' ? '' : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={"Tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                      {locations.map(loc => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.complete_name || loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {"Maqsad lokatsiya"}
+                  </label>
+                  <Select
+                    value={editingStep.dest_location_id || 'none'}
+                    onValueChange={(v) => setEditingStep({ ...editingStep, dest_location_id: v === 'none' ? '' : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={"Tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                      {locations.map(loc => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.complete_name || loc.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Mas'ul rol"}
+                </label>
+                <Select
+                  value={editingStep.responsible_role}
+                  onValueChange={(v) => setEditingStep({ ...editingStep, responsible_role: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">{"Tasdiqlash talab etiladi"}</p>
+                </div>
+                <Switch
+                  checked={editingStep.requires_approval}
+                  onCheckedChange={(v) => setEditingStep({ ...editingStep, requires_approval: v })}
+                />
+              </div>
+
+              {editingStep.requires_approval && (
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {"Tasdiqlash roli"}
+                  </label>
+                  <Select
+                    value={editingStep.approval_role || 'none'}
+                    onValueChange={(v) => setEditingStep({ ...editingStep, approval_role: v === 'none' ? '' : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{"Tanlanmagan"}</SelectItem>
+                      {ROLE_OPTIONS.map(r => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">{"Avtomatik davom ettirish"}</p>
+                  <p className="text-xs text-slate-500">{"Bosqich tugaganda keyingisiga o'tish"}</p>
+                </div>
+                <Switch
+                  checked={editingStep.auto_proceed}
+                  onCheckedChange={(v) => setEditingStep({ ...editingStep, auto_proceed: v })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {"Maks. muddat (soat)"}
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={editingStep.max_duration_hours}
+                    onChange={(e) => setEditingStep({ ...editingStep, max_duration_hours: e.target.value })}
+                    placeholder={"Masalan: 24"}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {"Muddat o'tganda"}
+                  </label>
+                  <Select
+                    value={editingStep.on_timeout}
+                    onValueChange={(v) => setEditingStep({ ...editingStep, on_timeout: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEOUT_OPTIONS.map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {"Ko'rsatmalar"}
+                </label>
+                <Textarea
+                  value={editingStep.instructions}
+                  onChange={(e) => setEditingStep({ ...editingStep, instructions: e.target.value })}
+                  placeholder={"Bosqich bo'yicha ko'rsatmalar..."}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStepModal(false)}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              onClick={saveStepModal}
+              disabled={!editingStep?.name}
+              className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
+            >
+              {editingStepIndex === -1 ? "Qo'shish" : "Saqlash"}
             </Button>
           </DialogFooter>
         </DialogContent>

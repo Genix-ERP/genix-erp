@@ -69,6 +69,10 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { format } from 'date-fns';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
+import { WBSTree } from '@/components/construction/WBSTree';
+import ActivityTab from '@/components/construction/tabs/ActivityTab';
+import EstimatesTab from '@/components/construction/tabs/EstimatesTab';
+import DailyJournalTab from '@/components/construction/tabs/DailyJournalTab';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -645,6 +649,7 @@ const ProjectDetailView = ({
   const [dailyLogs, setDailyLogs] = useState([]);
   const [photoReports, setPhotoReports] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
+  const [wbsTree, setWbsTree] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Modals
@@ -896,9 +901,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'buildings':
             try {
-              const buildingsData = await constructionService.listBuildings(project.id);
+              const [buildingsData, wbsData] = await Promise.all([
+                constructionService.listBuildings(project.id),
+                constructionService.getWBSTree(project.id)
+              ]);
               setBuildings(buildingsData || []);
-            } catch (e) { setBuildings([]); }
+              setWbsTree(wbsData || []);
+            } catch (e) { setBuildings([]); setWbsTree([]); }
             break;
           case 'smeta':
             const sectionsData = await constructionService.listSections(project.id);
@@ -931,6 +940,17 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               const materialsData = await constructionService.listMaterialRequests(project.id);
               setMaterialRequests(materialsData || []);
             } catch (e) { setMaterialRequests([]); }
+            break;
+          case 'estimates':
+          case 'daily_journal':
+            try {
+              const [estBuildings, estWbs] = await Promise.all([
+                constructionService.listBuildings(project.id),
+                constructionService.getWBSTree(project.id)
+              ]);
+              setBuildings(estBuildings || []);
+              setWbsTree(estWbs || []);
+            } catch (e) { setWbsTree([]); }
             break;
         }
       } catch (error) {
@@ -1392,6 +1412,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <FolderTree className="w-4 h-4 mr-2" />
             {t('smeta') || 'Smeta'}
           </TabsTrigger>
+          <TabsTrigger value="estimates" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            {t('estimates') || 'Smetalar'}
+          </TabsTrigger>
+          <TabsTrigger value="daily_journal" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Receipt className="w-4 h-4 mr-2" />
+            {t('daily_journal') || 'Kunlik jurnal (WBS)'}
+          </TabsTrigger>
           <TabsTrigger value="team" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Users className="w-4 h-4 mr-2" />
             {t('team') || 'Jamoa'}
@@ -1617,6 +1645,48 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               )}
             </CardContent>
           </Card>
+
+          {/* WBS Tree */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>{t('work_breakdown_structure') || 'Ishlar tuzilmasi (WBS)'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WBSTree
+                items={wbsTree}
+                projectId={project.id}
+                t={t}
+                formatCurrency={formatCurrency}
+                onCreateItem={async (projectId, data) => {
+                  try {
+                    await constructionService.createWBS(projectId, data);
+                    const wbsData = await constructionService.getWBSTree(project.id);
+                    setWbsTree(wbsData || []);
+                  } catch (error) {
+                    console.error('Error creating WBS item:', error);
+                  }
+                }}
+                onUpdateItem={async (id, data) => {
+                  try {
+                    await constructionService.updateWBS(id, data);
+                    const wbsData = await constructionService.getWBSTree(project.id);
+                    setWbsTree(wbsData || []);
+                  } catch (error) {
+                    console.error('Error updating WBS item:', error);
+                  }
+                }}
+                onDeleteItem={async (id) => {
+                  try {
+                    await constructionService.deleteWBS(id);
+                    const wbsData = await constructionService.getWBSTree(project.id);
+                    setWbsTree(wbsData || []);
+                  } catch (error) {
+                    console.error('Error deleting WBS item:', error);
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Smeta Tab */}
@@ -1804,6 +1874,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Estimates Tab (Versioned Smeta with WBS) */}
+        <TabsContent value="estimates" className="mt-6">
+          <EstimatesTab project={project} wbsItems={wbsTree} />
+        </TabsContent>
+
+        {/* Daily Journal Tab (WBS-linked progress) */}
+        <TabsContent value="daily_journal" className="mt-6">
+          <DailyJournalTab project={project} wbsItems={wbsTree} buildings={buildings} />
         </TabsContent>
 
         {/* Team Tab */}
@@ -2228,12 +2308,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Activity Log Tab */}
         <TabsContent value="activity" className="mt-6">
-          <ActivityLogPanel
-            modelName="construction_project"
-            recordId={project.id}
-            users={employees.map(e => ({ id: e.id, name: `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email }))}
-            maxHeight="600px"
-          />
+          <Card>
+            <CardContent className="p-6">
+              <ActivityTab projectId={project.id} t={t} />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

@@ -890,12 +890,15 @@ export default function BudgetManagement() {
               </Button>
             ) : (
               <>
-                <Button variant="outline" onClick={() => saveWizard('draft')} disabled={isSaving}>
+                {(totalRevenue + totalExpense) <= 0 && (
+                  <p className="text-sm text-red-500 mr-2 self-center">{t('budget_amount_required')}</p>
+                )}
+                <Button variant="outline" onClick={() => saveWizard('draft')} disabled={isSaving || (totalRevenue + totalExpense) <= 0}>
                   {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
                   {t('save_as_draft') || 'Save as Draft'}
                 </Button>
                 <Button className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                  onClick={() => saveWizard('active')} disabled={isSaving}>
+                  onClick={() => saveWizard('active')} disabled={isSaving || (totalRevenue + totalExpense) <= 0}>
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
                   {t('save_and_activate') || 'Save & Activate'}
                 </Button>
