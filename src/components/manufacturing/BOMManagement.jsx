@@ -34,13 +34,11 @@ export default function BOMManagement() {
 
   const [products, setProducts] = useState([]);
   const [workCenters, setWorkCenters] = useState([]);
-  const [routings, setRoutings] = useState([]);
   const [newBom, setNewBom] = useState({
     name: '',
     product_id: '',
     quantity: 1,
     bom_type: 'manufacturing',
-    routing_id: '',
     lines: [],
     operations: []
   });
@@ -59,7 +57,7 @@ export default function BOMManagement() {
     notes: ''
   });
 
-  // Load products, work centers, and routings
+  // Load products and work centers
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -70,11 +68,6 @@ export default function BOMManagement() {
         setProducts(productsData || []);
         setWorkCenters(workCentersData || []);
 
-        // Load routings from localStorage
-        const storedRoutings = localStorage.getItem('genix_routings');
-        if (storedRoutings) {
-          setRoutings(JSON.parse(storedRoutings));
-        }
       } catch (error) {
         console.error('Failed to load data:', error);
       }
@@ -619,47 +612,6 @@ export default function BOMManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
-                  <Select
-                    value={newBom.routing_id || 'none'}
-                    onValueChange={(value) => {
-                      if (value === 'none') {
-                        setNewBom({...newBom, routing_id: ''});
-                        return;
-                      }
-                      const selectedRouting = routings.find(r => r.id === value);
-                      if (selectedRouting) {
-                        // Copy operations from routing to BOM
-                        const copiedOperations = selectedRouting.operations.map((op, idx) => ({
-                          operation_name: op.name,
-                          work_center_id: op.work_center_id,
-                          setup_time_minutes: op.setup_time_minutes || 0,
-                          run_time_minutes: op.duration_minutes || 0,
-                          notes: op.description || '',
-                          sequence: idx + 1,
-                          isNew: true
-                        }));
-                        setNewBom({...newBom, routing_id: value, operations: copiedOperations});
-                      } else {
-                        setNewBom({...newBom, routing_id: value});
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
-                      {routings.filter(routing => routing.id).map((routing) => (
-                        <SelectItem key={routing.id} value={routing.id}>
-                          {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-500 mt-1">{t('routing_hint') || 'Select a routing to auto-fill operations'}</p>
-                </div>
               </div>
             </div>
 
@@ -709,11 +661,9 @@ export default function BOMManagement() {
                       value={newComponent.quantity || ''}
                       onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value) || 0})}
                     />
-                    <Input
-                      placeholder={t('unit')}
-                      value={newComponent.unit}
-                      onChange={(e) => setNewComponent({...newComponent, unit: e.target.value})}
-                    />
+                    <div className="h-10 px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm text-slate-700 flex items-center">
+                      {newComponent.unit || t('select_component_first') || 'Select component first'}
+                    </div>
                   </div>
                   <Button onClick={addComponent} size="sm" className="w-full">
                     <Plus className="w-4 h-4 mr-2" /> {t('add_component')}
@@ -756,13 +706,6 @@ export default function BOMManagement() {
 
               {/* Operations Tab */}
               <TabsContent value="operations" className="space-y-4 mt-4">
-                {newBom.routing_id && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                    <span className="font-medium">{t('routing_selected') || 'Routing selected'}:</span>{' '}
-                    {routings.find(r => r.id === newBom.routing_id)?.name || newBom.routing_id}
-                    {' - '}{t('operations_from_routing') || 'Operations loaded from routing. You can still add more below.'}
-                  </div>
-                )}
                 {/* Add Operation Form */}
                 <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                   <div className="grid grid-cols-2 gap-3">
@@ -930,52 +873,6 @@ export default function BOMManagement() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('routing') || 'Routing'}</label>
-                    <Select
-                      value={editBom.routing_id || 'none'}
-                      onValueChange={(value) => {
-                        if (value === 'none') {
-                          setEditBom({...editBom, routing_id: ''});
-                          return;
-                        }
-                        const selectedRouting = routings.find(r => r.id === value);
-                        if (selectedRouting) {
-                          // Mark existing operations for deletion
-                          const existingOpIds = (editBom.operations || []).filter(op => op.id).map(op => op.id);
-                          const copiedOperations = selectedRouting.operations.map((op, idx) => ({
-                            operation_name: op.name,
-                            work_center_id: op.work_center_id,
-                            setup_time_minutes: op.setup_time_minutes || 0,
-                            run_time_minutes: op.duration_minutes || 0,
-                            notes: op.description || '',
-                            sequence: idx + 1,
-                            isNew: true
-                          }));
-                          setEditBom({
-                            ...editBom,
-                            routing_id: value,
-                            operations: copiedOperations,
-                            deletedOperations: [...(editBom.deletedOperations || []), ...existingOpIds]
-                          });
-                        } else {
-                          setEditBom({...editBom, routing_id: value});
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select_routing') || 'Select routing (optional)'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">({t('no_routing') || 'No routing - manual operations'})</SelectItem>
-                        {routings.filter(routing => routing.id).map((routing) => (
-                          <SelectItem key={routing.id} value={routing.id}>
-                            {routing.name} ({routing.operations?.length || 0} {t('operations') || 'ops'})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
               </div>
 
@@ -1025,11 +922,9 @@ export default function BOMManagement() {
                         value={editComponent.quantity || ''}
                         onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value) || 0})}
                       />
-                      <Input
-                        placeholder={t('unit')}
-                        value={editComponent.unit}
-                        onChange={(e) => setEditComponent({...editComponent, unit: e.target.value})}
-                      />
+                      <div className="h-10 px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm text-slate-700 flex items-center">
+                        {editComponent.unit || t('select_component_first') || 'Select component first'}
+                      </div>
                     </div>
                     <Button onClick={addEditComponent} size="sm" className="w-full">
                       <Plus className="w-4 h-4 mr-2" /> {t('add_component')}

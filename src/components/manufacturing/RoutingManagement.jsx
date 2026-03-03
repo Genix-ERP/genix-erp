@@ -47,10 +47,9 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 const EMPTY_OP_FORM = {
   name: '',
   work_center_id: '',
-  description: '',
-  duration_minutes: 30,
+  notes: '',
+  run_time_minutes: 30,
   setup_time_minutes: 0,
-  cost_per_hour: 0,
 };
 
 export default function RoutingManagement() {
@@ -107,10 +106,10 @@ export default function RoutingManagement() {
 
   const calculateTotals = (operations) => {
     const totalMinutes = (operations || []).reduce(
-      (sum, op) => sum + (op.duration_minutes || 0) + (op.setup_time_minutes || 0), 0
+      (sum, op) => sum + (op.run_time_minutes || 0) + (op.setup_time_minutes || 0), 0
     );
     const totalCost = (operations || []).reduce(
-      (sum, op) => sum + ((op.duration_minutes + op.setup_time_minutes) / 60 * (op.cost_per_hour || 0)), 0
+      (sum, op) => sum + ((op.run_time_minutes + op.setup_time_minutes) / 60 * (op.work_center_hourly_cost || 0)), 0
     );
     return { totalMinutes, totalCost };
   };
@@ -121,12 +120,11 @@ export default function RoutingManagement() {
     try {
       const sequence = ((selectedBom.operations?.length || 0) + 1) * 10;
       await bomsService.createOperation(selectedBom.id, {
-        name: opForm.name,
+        operation_name: opForm.name,
         work_center_id: opForm.work_center_id || undefined,
-        description: opForm.description || undefined,
-        duration_minutes: opForm.duration_minutes,
+        notes: opForm.notes || undefined,
+        run_time_minutes: opForm.run_time_minutes,
         setup_time_minutes: opForm.setup_time_minutes,
-        cost_per_hour: opForm.cost_per_hour,
         sequence,
       });
       await reloadData();
@@ -144,12 +142,11 @@ export default function RoutingManagement() {
     setIsSubmitting(true);
     try {
       await bomsService.updateOperation(selectedBom.id, selectedOp.id, {
-        name: opForm.name,
+        operation_name: opForm.name,
         work_center_id: opForm.work_center_id || undefined,
-        description: opForm.description || undefined,
-        duration_minutes: opForm.duration_minutes,
+        notes: opForm.notes || undefined,
+        run_time_minutes: opForm.run_time_minutes,
         setup_time_minutes: opForm.setup_time_minutes,
-        cost_per_hour: opForm.cost_per_hour,
       });
       await reloadData();
       setShowEditOpModal(false);
@@ -186,12 +183,11 @@ export default function RoutingManagement() {
     setSelectedBom(bom);
     setSelectedOp(op);
     setOpForm({
-      name: op.name || '',
+      name: op.operation_name || op.name || '',
       work_center_id: op.work_center_id || '',
-      description: op.description || '',
-      duration_minutes: op.duration_minutes || 30,
+      notes: op.notes || '',
+      run_time_minutes: op.run_time_minutes || 30,
       setup_time_minutes: op.setup_time_minutes || 0,
-      cost_per_hour: op.cost_per_hour || 0,
     });
     setShowEditOpModal(true);
   };
@@ -211,14 +207,7 @@ export default function RoutingManagement() {
           <Label>{t('work_center') || "Ish markazi"}</Label>
           <Select
             value={form.work_center_id}
-            onValueChange={value => {
-              const wc = workCenters.find(w => w.id === value);
-              onChange({
-                ...form,
-                work_center_id: value,
-                cost_per_hour: wc?.hourly_cost || form.cost_per_hour,
-              });
-            }}
+            onValueChange={value => onChange({ ...form, work_center_id: value })}
           >
             <SelectTrigger>
               <SelectValue placeholder={t('select_work_center') || "Tanlang"} />
@@ -232,13 +221,13 @@ export default function RoutingManagement() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>{t('duration_minutes') || "Davomiyligi (daq)"}</Label>
+          <Label>{t('run_time_minutes') || "Ishlash vaqti (daq)"}</Label>
           <Input
             type="number"
-            value={form.duration_minutes}
-            onChange={e => onChange({ ...form, duration_minutes: parseInt(e.target.value) || 0 })}
+            value={form.run_time_minutes}
+            onChange={e => onChange({ ...form, run_time_minutes: parseInt(e.target.value) || 0 })}
             placeholder="30"
           />
         </div>
@@ -251,23 +240,14 @@ export default function RoutingManagement() {
             placeholder="0"
           />
         </div>
-        <div className="space-y-2">
-          <Label>{t('cost_per_hour') || "Soatlik narx"}</Label>
-          <Input
-            type="number"
-            value={form.cost_per_hour}
-            onChange={e => onChange({ ...form, cost_per_hour: parseFloat(e.target.value) || 0 })}
-            placeholder="0"
-          />
-        </div>
       </div>
 
       <div className="space-y-2">
-        <Label>{t('description') || "Tavsif"}</Label>
+        <Label>{t('notes') || "Izoh"}</Label>
         <Textarea
-          value={form.description}
-          onChange={e => onChange({ ...form, description: e.target.value })}
-          placeholder={t('enter_operation_description') || "Operatsiya tavsifini kiriting..."}
+          value={form.notes}
+          onChange={e => onChange({ ...form, notes: e.target.value })}
+          placeholder={t('enter_notes') || "Izoh kiriting..."}
           rows={2}
         />
       </div>
@@ -373,7 +353,7 @@ export default function RoutingManagement() {
                           <div className="group relative p-3 bg-slate-50 rounded-lg border border-slate-200 hover:border-blue-300 transition-colors">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="text-xs">{op.sequence}</Badge>
-                              <span className="font-medium text-sm">{op.name}</span>
+                              <span className="font-medium text-sm">{op.operation_name || op.name}</span>
                               <div className="hidden group-hover:flex gap-1 ml-1">
                                 {canUpdate(MODULES.MANUFACTURING) && (
                                   <Button
@@ -399,7 +379,7 @@ export default function RoutingManagement() {
                             </div>
                             <div className="text-xs text-slate-500">
                               <Clock className="w-3 h-3 inline mr-1" />
-                              {op.duration_minutes || 0}{t('min') || 'min'}
+                              {op.run_time_minutes || 0}{t('min') || 'min'}
                               {(op.setup_time_minutes || 0) > 0 && ` (+${op.setup_time_minutes}${t('min') || 'min'})`}
                             </div>
                             {op.work_center_name && (
@@ -523,19 +503,19 @@ export default function RoutingManagement() {
                 </TableHeader>
                 <TableBody>
                   {[...(selectedBom.operations || [])].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)).map(op => {
-                    const totalMin = (op.duration_minutes || 0) + (op.setup_time_minutes || 0);
-                    const opCost = (totalMin / 60) * (op.cost_per_hour || 0);
+                    const totalMin = (op.run_time_minutes || 0) + (op.setup_time_minutes || 0);
+                    const opCost = (totalMin / 60) * (op.work_center_hourly_cost || 0);
                     return (
                       <TableRow key={op.id}>
                         <TableCell><Badge variant="outline">{op.sequence}</Badge></TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{op.name}</p>
-                            {op.description && <p className="text-sm text-slate-500">{op.description}</p>}
+                            <p className="font-medium">{op.operation_name || op.name}</p>
+                            {op.notes && <p className="text-sm text-slate-500">{op.notes}</p>}
                           </div>
                         </TableCell>
                         <TableCell>{op.work_center_name || workCenters.find(wc => wc.id === op.work_center_id)?.name || '-'}</TableCell>
-                        <TableCell className="text-right">{op.duration_minutes || 0} {t('min') || 'min'}</TableCell>
+                        <TableCell className="text-right">{op.run_time_minutes || 0} {t('min') || 'min'}</TableCell>
                         <TableCell className="text-right">{op.setup_time_minutes || 0} {t('min') || 'min'}</TableCell>
                         <TableCell className="text-right">{formatCurrency(opCost)}</TableCell>
                       </TableRow>
