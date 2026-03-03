@@ -93,6 +93,7 @@ export default function HRSettings() {
   const [availableOrganizations, setAvailableOrganizations] = useState([]);
   const [selectedOrgToAssign, setSelectedOrgToAssign] = useState('');
 
+
   // Load employees
   const loadEmployees = useCallback(async () => {
     try {
@@ -217,6 +218,7 @@ export default function HRSettings() {
     loadAvailableOrganizations();
     setShowCompanyAssignModal(true);
   };
+
 
   // Filter employees based on search
   useEffect(() => {

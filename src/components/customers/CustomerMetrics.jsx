@@ -1,18 +1,15 @@
 import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserPlus, DollarSign, TrendingUp } from "lucide-react";
+import { Users, UserPlus, TrendingUp } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
-import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function CustomerMetrics({ customers, leads, opportunities, language = 'en' }) {
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
 
   const metrics = React.useMemo(() => {
     const totalCustomers = customers.length;
     const totalLeads = leads.length;
     const qualifiedLeads = leads.filter(l => l.status === 'qualified').length;
-    const totalRevenue = customers.reduce((sum, c) => sum + (c.annual_revenue || 0), 0);
     const avgDealSize = opportunities.length > 0 
       ? opportunities.reduce((sum, o) => sum + (o.expected_value || 0), 0) / opportunities.length 
       : 0;
@@ -21,7 +18,6 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
       totalCustomers,
       totalLeads,
       qualifiedLeads,
-      totalRevenue,
       avgDealSize
     };
   }, [customers, leads, opportunities]);
@@ -48,18 +44,8 @@ export default function CustomerMetrics({ customers, leads, opportunities, langu
       gradient: "from-green-50 to-green-100/50"
     },
     {
-      title: t('annual_revenue'),
-      value: formatCurrency(metrics.totalRevenue),
-      change: "+15%",
-      changeText: t('vs_last_month'),
-      icon: DollarSign,
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
-      gradient: "from-emerald-50 to-emerald-100/50"
-    },
-    {
       title: t('avg_deal_size'),
-      value: formatCurrency(Math.round(metrics.avgDealSize)),
+      value: Math.round(metrics.avgDealSize).toLocaleString(),
       change: "+5%",
       changeText: t('vs_last_month'),
       icon: TrendingUp,
