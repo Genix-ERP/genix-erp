@@ -305,7 +305,7 @@ const ExpensesTab = ({ project }) => {
 
       {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editingLine ? t('edit_expense') : t('new_expense')}</DialogTitle>
             <DialogDescription className="sr-only">{editingLine ? t('edit_expense') : t('new_expense')}</DialogDescription>

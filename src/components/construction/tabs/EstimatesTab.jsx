@@ -575,7 +575,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
 
       {/* Create Estimate Modal */}
       <Dialog open={showEstimateModal} onOpenChange={setShowEstimateModal}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('create_estimate') || "Yangi smeta yaratish"}</DialogTitle>
           </DialogHeader>
@@ -629,7 +629,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
 
       {/* Create/Edit Line Modal */}
       <Dialog open={showLineModal} onOpenChange={setShowLineModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{lineForm.id ? (t('edit_line') || "Qatorni tahrirlash") : (t('add_line') || "Qator qo'shish")}</DialogTitle>
           </DialogHeader>

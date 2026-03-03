@@ -667,7 +667,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
   // Forms
   const [buildingForm, setBuildingForm] = useState({
-    name: '', description: '', building_type: '', building_purpose: '',
+    name: '', code: '', description: '', building_type: '', building_purpose: '',
     floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
     status: 'draft'
   });
@@ -679,6 +679,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
   const [variantsByProduct, setVariantsByProduct] = useState({});
   const [confirmApprove, setConfirmApprove] = useState({ open: false, requestId: null });
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, onConfirm: null });
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const [dailyLogForm, setDailyLogForm] = useState({
     id: null,
     report_date: new Date().toISOString().split('T')[0],
@@ -701,6 +703,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoPreview, setPhotoPreview] = useState([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [dailyLogFiles, setDailyLogFiles] = useState([]);
+  const [dailyLogPhotoPreview, setDailyLogPhotoPreview] = useState([]);
+  const [uploadingDailyLog, setUploadingDailyLog] = useState(false);
 
   // Building export/import columns
   const buildingExportColumns = [
@@ -801,8 +806,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           case 'daily_logs':
             try {
               const logsData = await constructionService.listDailyReports(project.id);
+              console.log('Daily logs loaded:', logsData);
               setDailyLogs(logsData || []);
-            } catch (e) { setDailyLogs([]); }
+            } catch (e) {
+              console.error('Error loading daily logs:', e);
+              setDailyLogs([]);
+            }
             break;
           case 'photo_reports':
             try {
@@ -827,7 +836,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             try {
               const [estBuildings, estWbs] = await Promise.all([
                 constructionService.listBuildings(project.id),
-                constructionService.getWBSTree(project.id)
+                constructionService.getWBSTree(project.id),
               ]);
               setBuildings(estBuildings || []);
               setWbsTree(estWbs || []);
@@ -849,8 +858,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const handleCreateBuilding = async (e) => {
     e.preventDefault();
     try {
+      const autoCode = buildingForm.code ||
+        buildingForm.name.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20) ||
+        'BUILDING';
       const formData = {
         ...buildingForm,
+        code: autoCode,
         floors_count: buildingForm.floors_count ? parseInt(buildingForm.floors_count, 10) : 0,
         total_area: buildingForm.total_area ? parseFloat(buildingForm.total_area) : 0,
         apartments_count: buildingForm.apartments_count ? parseInt(buildingForm.apartments_count, 10) : 0,
@@ -869,7 +882,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setBuildings(buildingsData || []);
       setShowBuildingModal(false);
       setBuildingForm({
-        name: '', description: '', building_type: '', building_purpose: '',
+        name: '', code: '', description: '', building_type: '', building_purpose: '',
         floors_count: '', total_area: '', apartments_count: '', estimated_cost: '',
         status: 'draft'
       });
@@ -1004,43 +1017,107 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     }
   };
 
+  // Handle daily log photo selection
+  const handleDailyLogPhotoSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    const newFiles = files.slice(0, 10 - dailyLogPhotoPreview.length);
+    setDailyLogFiles(prev => [...prev, ...newFiles]);
+    newFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setDailyLogPhotoPreview(prev => [...prev, { file, preview: ev.target.result }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle daily log photo removal
+  const handleRemoveDailyLogPhoto = (index) => {
+    const item = dailyLogPhotoPreview[index];
+    if (typeof item !== 'string') {
+      const existingCount = dailyLogPhotoPreview.filter(p => typeof p === 'string').length;
+      const newFileIndex = index - existingCount;
+      if (newFileIndex >= 0) setDailyLogFiles(prev => prev.filter((_, i) => i !== newFileIndex));
+    }
+    setDailyLogPhotoPreview(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Handle daily log creation/update
   const handleCreateDailyLog = async (e) => {
     e.preventDefault();
-    try {
-      const logData = {
-        report_date: dailyLogForm.report_date,
-        weather_morning: dailyLogForm.weather_morning,
-        weather_afternoon: dailyLogForm.weather_afternoon,
-        temperature_min: parseFloat(dailyLogForm.temperature_min) || 0,
-        temperature_max: parseFloat(dailyLogForm.temperature_max) || 0,
-        work_summary: dailyLogForm.work_summary,
-        issues_encountered: dailyLogForm.issues_encountered,
-        safety_notes: dailyLogForm.safety_notes,
-        workers_count: parseInt(dailyLogForm.workers_count) || 0,
-        workers_details: dailyLogForm.workers_details,
-        equipment_used: dailyLogForm.equipment_used,
-        materials_received: dailyLogForm.materials_received
-      };
+    setUploadingDailyLog(true);
 
+    // Upload new photos first
+    const uploadedPhotos = [];
+    for (const file of dailyLogFiles) {
+      try {
+        const uploadResult = await Integrations.UploadFile(file);
+        uploadedPhotos.push({ url: uploadResult.url, filename: file.name, size: file.size, type: file.type });
+      } catch (uploadError) {
+        console.error('Error uploading photo:', uploadError);
+      }
+    }
+
+    // Combine existing photos with newly uploaded ones
+    const existingPhotos = dailyLogPhotoPreview
+      .filter(p => typeof p === 'string')
+      .map(url => {
+        const relativeUrl = url.replace(/^https?:\/\/[^/]+/, '');
+        return { url: relativeUrl, filename: 'existing', size: 0, type: 'image/jpeg' };
+      });
+    const allPhotos = [...existingPhotos, ...uploadedPhotos];
+
+    const logData = {
+      report_date: dailyLogForm.report_date,
+      weather_morning: dailyLogForm.weather_morning,
+      weather_afternoon: dailyLogForm.weather_afternoon,
+      temperature_min: parseFloat(dailyLogForm.temperature_min) || 0,
+      temperature_max: parseFloat(dailyLogForm.temperature_max) || 0,
+      work_summary: dailyLogForm.work_summary,
+      issues_encountered: dailyLogForm.issues_encountered,
+      safety_notes: dailyLogForm.safety_notes,
+      workers_count: parseInt(dailyLogForm.workers_count) || 0,
+      workers_details: dailyLogForm.workers_details,
+      equipment_used: dailyLogForm.equipment_used,
+      materials_received: dailyLogForm.materials_received,
+      photos: allPhotos
+    };
+
+    try {
       if (dailyLogForm.id) {
         await constructionService.updateDailyReport(dailyLogForm.id, logData);
       } else {
         await constructionService.createDailyReport(project.id, logData);
       }
-      const logsData = await constructionService.listDailyReports(project.id);
-      setDailyLogs(logsData || []);
-      setShowDailyLogModal(false);
-      setDailyLogForm({
-        id: null,
-        report_date: new Date().toISOString().split('T')[0],
-        weather_morning: '', weather_afternoon: '',
-        temperature_min: '', temperature_max: '',
-        work_summary: '', issues_encountered: '', safety_notes: '',
-        workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
-      });
     } catch (error) {
       console.error('Error saving daily log:', error);
+      alert(error?.response?.data?.message || 'Failed to save daily log');
+      setUploadingDailyLog(false);
+      return;
+    }
+
+    setUploadingDailyLog(false);
+    // Close modal and reset form immediately after successful save
+    setShowDailyLogModal(false);
+    setDailyLogForm({
+      id: null,
+      report_date: new Date().toISOString().split('T')[0],
+      weather_morning: '', weather_afternoon: '',
+      temperature_min: '', temperature_max: '',
+      work_summary: '', issues_encountered: '', safety_notes: '',
+      workers_count: '', workers_details: '', equipment_used: '', materials_received: ''
+    });
+    setDailyLogFiles([]);
+    setDailyLogPhotoPreview([]);
+
+    // Refresh list separately
+    try {
+      const logsData = await constructionService.listDailyReports(project.id);
+      console.log('Daily logs refreshed:', logsData);
+      setDailyLogs(logsData || []);
+    } catch (error) {
+      console.error('Error refreshing daily logs:', error);
     }
   };
 
@@ -1170,6 +1247,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     return apiBase.replace('/api/v1', '') + url;
   };
 
+  // Extract string value from a JSONB field that the backend stores as [{key: "value"}]
+  const jsonbFieldToString = (val) => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) {
+      return val.map(item => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object') return Object.values(item).join(', ');
+        return String(item);
+      }).join('; ');
+    }
+    if (typeof val === 'object') return Object.values(val).join(', ');
+    return String(val);
+  };
+
   // Helper to parse photos from report (handles both array and JSON string)
   const parsePhotos = (photos) => {
     if (!photos) return [];
@@ -1223,17 +1315,19 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   };
 
   // Handle delete photo report
-  const handleDeletePhotoReport = async (reportId) => {
-    if (!window.confirm(t('confirm_delete') || 'Haqiqatan ham o\'chirmoqchimisiz?')) {
-      return;
-    }
-    try {
-      await constructionService.deletePhotoReport(reportId);
-      const photosData = await constructionService.listPhotoReports(project.id);
-      setPhotoReports(photosData || []);
-    } catch (error) {
-      console.error('Error deleting photo report:', error);
-    }
+  const handleDeletePhotoReport = (reportId) => {
+    setConfirmDelete({
+      open: true,
+      onConfirm: async () => {
+        try {
+          await constructionService.deletePhotoReport(reportId);
+          const photosData = await constructionService.listPhotoReports(project.id);
+          setPhotoReports(photosData || []);
+        } catch (error) {
+          console.error('Error deleting photo report:', error);
+        }
+      }
+    });
   };
 
   return (
@@ -1291,10 +1385,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <TabsTrigger value="daily_logs" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <ClipboardList className="w-4 h-4 mr-2" />
             {t('daily_logs') || 'Kunlik jurnal'}
-          </TabsTrigger>
-          <TabsTrigger value="photo_reports" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Camera className="w-4 h-4 mr-2" />
-            {t('photo_reports') || 'Foto hisobotlar'}
           </TabsTrigger>
           <TabsTrigger value="progress" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <TrendingUp className="w-4 h-4 mr-2" />
@@ -1448,6 +1538,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   setBuildingForm({
                                     id: building.id,
                                     name: building.name,
+                                    code: building.code || '',
                                     description: building.description || '',
                                     building_type: building.building_type || '',
                                     building_purpose: building.building_purpose || '',
@@ -1464,16 +1555,19 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-600"
-                                  onClick={async () => {
-                                    if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-                                      try {
-                                        await constructionService.deleteBuilding(project.id, building.id);
-                                        const buildingsData = await constructionService.listBuildings(project.id);
-                                        setBuildings(buildingsData || []);
-                                      } catch (error) {
-                                        console.error('Error deleting building:', error);
+                                  onClick={() => {
+                                    setConfirmDelete({
+                                      open: true,
+                                      onConfirm: async () => {
+                                        try {
+                                          await constructionService.deleteBuilding(project.id, building.id);
+                                          const buildingsData = await constructionService.listBuildings(project.id);
+                                          setBuildings(buildingsData || []);
+                                        } catch (error) {
+                                          console.error('Error deleting building:', error);
+                                        }
                                       }
-                                    }
+                                    });
                                   }}
                                 >
                                   <Trash2 className="w-4 h-4 mr-2" />
@@ -1741,16 +1835,19 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 )}
                                 <DropdownMenuItem
                                   className="text-red-600"
-                                  onClick={async () => {
-                                    if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-                                      try {
-                                        await constructionService.deleteMaterialRequest(req.id);
-                                        const materialsData = await constructionService.listMaterialRequests(project.id);
-                                        setMaterialRequests(materialsData || []);
-                                      } catch (error) {
-                                        console.error('Error deleting material request:', error);
+                                  onClick={() => {
+                                    setConfirmDelete({
+                                      open: true,
+                                      onConfirm: async () => {
+                                        try {
+                                          await constructionService.deleteMaterialRequest(req.id);
+                                          const materialsData = await constructionService.listMaterialRequests(project.id);
+                                          setMaterialRequests(materialsData || []);
+                                        } catch (error) {
+                                          console.error('Error deleting material request:', error);
+                                        }
                                       }
-                                    }
+                                    });
                                   }}
                                 >
                                   <Trash2 className="w-4 h-4 mr-2" />
@@ -1786,7 +1883,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         <TabsContent value="daily_logs" className="mt-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{t('daily_logs') || 'Kunlik jurnal'}</CardTitle>
+              <CardTitle>{t('daily_logs') || 'Kunlik jurnal'} ({dailyLogs.length})</CardTitle>
               <Button onClick={() => {
                 setDailyLogForm({
                   id: null,
@@ -1830,7 +1927,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
-                              <p className="font-medium">{format(new Date(log.report_date), 'dd.MM.yyyy')}</p>
+                              <p className="font-medium">{log.report_date ? format(new Date(log.report_date), 'dd.MM.yyyy') : '—'}</p>
                               <Badge className={
                                 log.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
                                 log.verification_status === 'rejected' ? 'bg-red-100 text-red-700' :
@@ -1839,9 +1936,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                             </div>
                             {(log.weather_morning || log.weather_afternoon) && (
                               <p className="text-sm text-slate-500 mt-1">
-                                {log.weather_morning && `${t('morning') || 'Ertalab'}: ${log.weather_morning}`}
+                                {log.weather_morning && `${t('morning') || 'Ertalab'}: ${t(log.weather_morning) || log.weather_morning}`}
                                 {log.weather_morning && log.weather_afternoon && ' | '}
-                                {log.weather_afternoon && `${t('afternoon') || 'Kunduzi'}: ${log.weather_afternoon}`}
+                                {log.weather_afternoon && `${t('afternoon') || 'Kunduzi'}: ${t(log.weather_afternoon) || log.weather_afternoon}`}
                               </p>
                             )}
                             {(log.temperature_min || log.temperature_max) && (
@@ -1867,7 +1964,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                               <DropdownMenuItem onClick={() => {
                                 setDailyLogForm({
                                   id: log.id,
-                                  report_date: log.report_date || new Date().toISOString().split('T')[0],
+                                  report_date: log.report_date ? new Date(log.report_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                   weather_morning: log.weather_morning || '',
                                   weather_afternoon: log.weather_afternoon || '',
                                   temperature_min: log.temperature_min || '',
@@ -1876,10 +1973,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                   issues_encountered: log.issues_encountered || '',
                                   safety_notes: log.safety_notes || '',
                                   workers_count: log.workers_count || '',
-                                  workers_details: log.workers_details || '',
-                                  equipment_used: log.equipment_used || '',
-                                  materials_received: log.materials_received || ''
+                                  workers_details: jsonbFieldToString(log.workers_details),
+                                  equipment_used: jsonbFieldToString(log.equipment_used),
+                                  materials_received: jsonbFieldToString(log.materials_received)
                                 });
+                                setDailyLogFiles([]);
+                                setDailyLogPhotoPreview(parsePhotos(log.photos).map(p => getFileUrl(p.url || p)));
                                 setShowDailyLogModal(true);
                               }}>
                                 <Edit className="w-4 h-4 mr-2" />
@@ -1887,16 +1986,19 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-red-600"
-                                onClick={async () => {
-                                  if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-                                    try {
-                                      await constructionService.deleteDailyReport(log.id);
-                                      const logsData = await constructionService.listDailyReports(project.id);
-                                      setDailyLogs(logsData || []);
-                                    } catch (error) {
-                                      console.error('Error deleting daily log:', error);
+                                onClick={() => {
+                                  setConfirmDelete({
+                                    open: true,
+                                    onConfirm: async () => {
+                                      try {
+                                        await constructionService.deleteDailyReport(log.id);
+                                        const logsData = await constructionService.listDailyReports(project.id);
+                                        setDailyLogs(logsData || []);
+                                      } catch (error) {
+                                        console.error('Error deleting daily log:', error);
+                                      }
                                     }
-                                  }
+                                  });
                                 }}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
@@ -1911,101 +2013,25 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                         <div className="flex gap-4 mt-3 text-sm text-slate-600">
                           <span><Users className="w-4 h-4 inline mr-1" />{log.workers_count || 0} {t('workers') || 'ishchi'}</span>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Photo Reports Tab */}
-        <TabsContent value="photo_reports" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{t('photo_reports') || 'Foto hisobotlar'}</CardTitle>
-              <Button onClick={() => setShowPhotoReportModal(true)}>
-                <Camera className="w-4 h-4 mr-2" />
-                {t('new_report') || 'Yangi hisobot'}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {photoReports.length === 0 ? (
-                <div className="text-center py-12">
-                  <Camera className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">{t('no_photo_reports') || 'Foto hisobotlar mavjud emas'}</p>
-                  <Button variant="outline" className="mt-4" onClick={() => setShowPhotoReportModal(true)}>
-                    <Camera className="w-4 h-4 mr-2" />
-                    {t('add_first_report') || 'Birinchi hisobotni qo\'shing'}
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {photoReports.map((report) => (
-                    <Card key={report.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="font-medium">{format(new Date(report.report_date), 'dd.MM.yyyy')}</p>
-                            <Badge className="mt-1">{report.review_status}</Badge>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleViewPhotoReport(report)}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                {t('view') || 'Ko\'rish'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditPhotoReport(report)}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                {t('edit') || 'Tahrirlash'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleDeletePhotoReport(report.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                {t('delete') || 'O\'chirish'}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        {report.title && (
-                          <p className="text-sm font-medium mt-1">{report.title}</p>
-                        )}
-                        {report.description && (
-                          <p className="text-sm text-slate-500 mt-1 line-clamp-2">{report.description}</p>
-                        )}
                         {(() => {
-                          const photos = parsePhotos(report.photos);
+                          const photos = parsePhotos(log.photos);
                           return photos.length > 0 && (
-                            <>
-                              {/* Photo thumbnails */}
-                              <div className="flex gap-1 mt-3 overflow-hidden">
-                                {photos.slice(0, 3).map((photo, idx) => (
-                                  <img
-                                    key={idx}
-                                    src={getFileUrl(photo.url || photo)}
-                                    alt={photo.filename || `Photo ${idx + 1}`}
-                                    className="w-16 h-16 object-cover rounded-md"
-                                  />
-                                ))}
-                                {photos.length > 3 && (
-                                  <div className="w-16 h-16 bg-slate-100 rounded-md flex items-center justify-center text-sm text-slate-500">
-                                    +{photos.length - 3}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
-                                <Camera className="w-3 h-3" />
-                                <span>{photos.length} {t('photos_count') || 'ta rasm'}</span>
-                              </div>
-                            </>
+                            <div className="flex gap-1 mt-3 overflow-hidden">
+                              {photos.slice(0, 4).map((photo, idx) => (
+                                <img
+                                  key={idx}
+                                  src={getFileUrl(photo.url || photo)}
+                                  alt={`photo-${idx}`}
+                                  className="w-14 h-14 object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => setLightboxSrc(getFileUrl(photo.url || photo))}
+                                />
+                              ))}
+                              {photos.length > 4 && (
+                                <div className="w-14 h-14 bg-slate-100 rounded-md flex items-center justify-center text-xs text-slate-500">
+                                  +{photos.length - 4}
+                                </div>
+                              )}
+                            </div>
                           );
                         })()}
                       </CardContent>
@@ -2058,7 +2084,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Building Modal */}
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{buildingForm.id ? (t('edit_building') || "Binoni tahrirlash") : (t('new_building') || "Yangi bino")}</DialogTitle>
           </DialogHeader>
@@ -2198,7 +2224,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Team Member Modal */}
       <Dialog open={showTeamModal} onOpenChange={setShowTeamModal}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('add_team_member') || "Jamoa a'zosini qo'shish"}</DialogTitle>
           </DialogHeader>
@@ -2273,7 +2299,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Material Request Modal */}
       <Dialog open={showMaterialRequestModal} onOpenChange={setShowMaterialRequestModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{materialRequestForm.id ? (t('edit_material_request') || "Material so'rovini tahrirlash") : (t('new_material_request') || "Yangi material so'rovi")}</DialogTitle>
           </DialogHeader>
@@ -2460,7 +2486,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Daily Log Modal */}
       <Dialog open={showDailyLogModal} onOpenChange={setShowDailyLogModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{dailyLogForm.id ? (t('edit_daily_log') || 'Kunlik hisobotni tahrirlash') : (t('new_daily_log') || 'Yangi kunlik hisobot')}</DialogTitle>
           </DialogHeader>
@@ -2590,12 +2616,51 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               />
             </div>
 
+            {/* Photo Upload Section */}
+            <div>
+              <Label>{t('photos') || 'Rasmlar'}</Label>
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 space-y-3">
+                {/* Upload Area */}
+                <label className="flex flex-col items-center cursor-pointer text-center">
+                  <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                  <span className="text-sm text-slate-500">{t('click_to_upload') || 'Rasmlarni yuklash uchun bosing'}</span>
+                  <input
+                    key={`daily-log-upload-${dailyLogForm.id || 'new'}`}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleDailyLogPhotoSelect}
+                    disabled={dailyLogPhotoPreview.length >= 10}
+                  />
+                </label>
+                {/* Photo Previews */}
+                {dailyLogPhotoPreview.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {dailyLogPhotoPreview.map((item, index) => {
+                      const src = typeof item === 'string' ? item : item.preview;
+                      return (
+                        <div key={index} className="relative group">
+                          <img src={src} alt={`photo-${index}`} className="w-full h-16 object-cover rounded" />
+                          <button
+                            type="button"
+                            className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100"
+                            onClick={() => handleRemoveDailyLogPhoto(index)}
+                          >×</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowDailyLogModal(false)}>
+              <Button type="button" variant="outline" onClick={() => { setShowDailyLogModal(false); setDailyLogFiles([]); setDailyLogPhotoPreview([]); }}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" disabled={!dailyLogForm.report_date}>
-                {t('create') || 'Yaratish'}
+              <Button type="submit" disabled={!dailyLogForm.report_date || uploadingDailyLog}>
+                {uploadingDailyLog ? `${t('uploading') || 'Yuklanmoqda'}...` : dailyLogForm.id ? (t('save') || 'Saqlash') : (t('create') || 'Yaratish')}
               </Button>
             </DialogFooter>
           </form>
@@ -2604,7 +2669,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Photo Report Modal */}
       <Dialog open={showPhotoReportModal} onOpenChange={setShowPhotoReportModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {photoReportForm.id
@@ -2784,7 +2849,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
       {/* Daily Log View Modal */}
       <Dialog open={showDailyLogViewModal} onOpenChange={setShowDailyLogViewModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('daily_log_details') || 'Kunlik hisobot tafsilotlari'}</DialogTitle>
           </DialogHeader>
@@ -2808,11 +2873,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500">{t('weather_morning') || 'Ertalab ob-havo'}</p>
-                  <p className="font-medium">{selectedDailyLog.weather_morning || '-'}</p>
+                  <p className="font-medium">{selectedDailyLog.weather_morning ? (t(selectedDailyLog.weather_morning) || selectedDailyLog.weather_morning) : '-'}</p>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500">{t('weather_afternoon') || 'Kunduzi ob-havo'}</p>
-                  <p className="font-medium">{selectedDailyLog.weather_afternoon || '-'}</p>
+                  <p className="font-medium">{selectedDailyLog.weather_afternoon ? (t(selectedDailyLog.weather_afternoon) || selectedDailyLog.weather_afternoon) : '-'}</p>
                 </div>
               </div>
 
@@ -2851,16 +2916,36 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               {selectedDailyLog.equipment_used && (
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('equipment_used') || 'Ishlatilgan jihozlar'}</p>
-                  <p className="text-sm">{selectedDailyLog.equipment_used}</p>
+                  <p className="text-sm">{jsonbFieldToString(selectedDailyLog.equipment_used)}</p>
                 </div>
               )}
 
               {selectedDailyLog.materials_received && (
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('materials_received') || 'Qabul qilingan materiallar'}</p>
-                  <p className="text-sm">{selectedDailyLog.materials_received}</p>
+                  <p className="text-sm">{jsonbFieldToString(selectedDailyLog.materials_received)}</p>
                 </div>
               )}
+
+              {(() => {
+                const photos = parsePhotos(selectedDailyLog.photos);
+                return photos.length > 0 && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-2">{t('photos') || 'Rasmlar'} ({photos.length})</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {photos.map((photo, idx) => (
+                        <a key={idx} href={getFileUrl(photo.url || photo)} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={getFileUrl(photo.url || photo)}
+                            alt={`photo-${idx + 1}`}
+                            className="w-full h-28 object-cover rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
           <DialogFooter>
@@ -2870,7 +2955,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <Button onClick={() => {
               setDailyLogForm({
                 id: selectedDailyLog.id,
-                report_date: selectedDailyLog.report_date || new Date().toISOString().split('T')[0],
+                report_date: selectedDailyLog.report_date ? new Date(selectedDailyLog.report_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                 weather_morning: selectedDailyLog.weather_morning || '',
                 weather_afternoon: selectedDailyLog.weather_afternoon || '',
                 temperature_min: selectedDailyLog.temperature_min || '',
@@ -2879,10 +2964,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 issues_encountered: selectedDailyLog.issues_encountered || '',
                 safety_notes: selectedDailyLog.safety_notes || '',
                 workers_count: selectedDailyLog.workers_count || '',
-                workers_details: selectedDailyLog.workers_details || '',
-                equipment_used: selectedDailyLog.equipment_used || '',
-                materials_received: selectedDailyLog.materials_received || ''
+                workers_details: jsonbFieldToString(selectedDailyLog.workers_details),
+                equipment_used: jsonbFieldToString(selectedDailyLog.equipment_used),
+                materials_received: jsonbFieldToString(selectedDailyLog.materials_received)
               });
+              setDailyLogFiles([]);
+              setDailyLogPhotoPreview(parsePhotos(selectedDailyLog.photos).map(p => getFileUrl(p.url || p)));
               setShowDailyLogViewModal(false);
               setShowDailyLogModal(true);
             }}>
@@ -2892,6 +2979,51 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white bg-black/50 rounded-full w-9 h-9 flex items-center justify-center hover:bg-black/80"
+            onClick={() => setLightboxSrc(null)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="fullscreen"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={confirmDelete.open} onOpenChange={(open) => !open && setConfirmDelete({ open: false, onConfirm: null })}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('confirm_delete') || "O'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
+            <AlertDialogDescription>{t('this_cannot_be_undone')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDelete({ open: false, onConfirm: null })}>
+              {t('cancel') || 'Bekor qilish'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                confirmDelete.onConfirm?.();
+                setConfirmDelete({ open: false, onConfirm: null });
+              }}
+            >
+              {t('delete') || "O'chirish"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -3010,10 +3142,10 @@ export default function Construction() {
     setShowProjectModal(true);
   };
 
-  const handleDeleteProject = async (id) => {
-    if (window.confirm(t('confirm_delete') || "O'chirishni tasdiqlaysizmi?")) {
-      await deleteProject(id);
-    }
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState({ open: false, id: null });
+
+  const handleDeleteProject = (id) => {
+    setConfirmDeleteProject({ open: true, id });
   };
 
   const handleViewProject = (project) => {
@@ -3164,7 +3296,7 @@ export default function Construction() {
 
       {/* Project Modal */}
       <Dialog open={showProjectModal} onOpenChange={setShowProjectModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {editingProject ? (t('edit_project') || 'Loyihani tahrirlash') : (t('new_project') || 'Yangi loyiha')}
@@ -3316,6 +3448,30 @@ export default function Construction() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Project Confirmation */}
+      <AlertDialog open={confirmDeleteProject.open} onOpenChange={(open) => !open && setConfirmDeleteProject({ open: false, id: null })}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('confirm_delete') || "O'chirishni tasdiqlaysizmi?"}</AlertDialogTitle>
+            <AlertDialogDescription>{t('this_cannot_be_undone')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDeleteProject({ open: false, id: null })}>
+              {t('cancel') || 'Bekor qilish'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={async () => {
+                await deleteProject(confirmDeleteProject.id);
+                setConfirmDeleteProject({ open: false, id: null });
+              }}
+            >
+              {t('delete') || "O'chirish"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
