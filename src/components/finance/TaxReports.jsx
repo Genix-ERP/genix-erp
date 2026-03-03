@@ -66,7 +66,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 export default function TaxReports() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
   const [activeTab, setActiveTab] = useState('overview');
@@ -316,7 +316,7 @@ export default function TaxReports() {
               <div>
                 <p className="text-sm text-muted-foreground">{t('output_vat') || 'Output VAT (Sales)'}</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(summary?.sales?.total_tax || 0)}
+                  {formatCurrencyCompact(summary?.sales?.total_tax || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {summary?.sales?.transaction_count || 0} {t('transactions') || 'transactions'}
@@ -333,7 +333,7 @@ export default function TaxReports() {
               <div>
                 <p className="text-sm text-muted-foreground">{t('input_vat') || 'Input VAT (Purchases)'}</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(summary?.purchases?.total_tax || 0)}
+                  {formatCurrencyCompact(summary?.purchases?.total_tax || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {summary?.purchases?.transaction_count || 0} {t('transactions') || 'transactions'}
@@ -350,7 +350,7 @@ export default function TaxReports() {
               <div>
                 <p className="text-sm text-muted-foreground">{t('net_tax_liability') || 'Net Tax Liability'}</p>
                 <p className={`text-2xl font-bold ${(summary?.net_tax_liability || 0) >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
-                  {formatCurrency(Math.abs(summary?.net_tax_liability || 0))}
+                  {formatCurrencyCompact(Math.abs(summary?.net_tax_liability || 0))}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {(summary?.net_tax_liability || 0) >= 0 ? (t('to_pay') || 'To Pay') : (t('refundable') || 'Refundable')}

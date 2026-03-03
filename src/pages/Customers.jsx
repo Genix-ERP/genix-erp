@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,8 @@ import {
   UserPlus,
   Building,
   Target,
-  Trash2
+  Trash2,
+  ShoppingCart,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -49,6 +50,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 export default function Customers() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
@@ -73,7 +75,6 @@ export default function Customers() {
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [industryFilter, setIndustryFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const activeTab = searchParams.get("tab") || "customers";
@@ -122,12 +123,8 @@ export default function Customers() {
     }
 
 
-    if (industryFilter !== "all") {
-      filtered = filtered.filter(customer => customer.industry === industryFilter);
-    }
-
     setFilteredCustomers(filtered);
-  }, [customers, searchQuery, industryFilter]);
+  }, [customers, searchQuery]);
 
   const handleSave = async (customerData) => {
     try {
@@ -312,19 +309,6 @@ export default function Customers() {
                       className="pl-9"
                     />
                   </div>
-                  <Select value={industryFilter} onValueChange={setIndustryFilter}>
-                    <SelectTrigger className="w-full md:w-48">
-                      <SelectValue placeholder={t('industry')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('all')} {t('industry')}</SelectItem>
-                      <SelectItem value="technology">{t('technology')}</SelectItem>
-                      <SelectItem value="healthcare">{t('healthcare')}</SelectItem>
-                      <SelectItem value="retail">{t('retail')}</SelectItem>
-                      <SelectItem value="manufacturing">{t('manufacturing')}</SelectItem>
-                      <SelectItem value="services">{t('services')}</SelectItem>
-                    </SelectContent>
-                  </Select>
                   {canCreate(MODULES.CUSTOMERS) && (
                     <Button
                       onClick={() => {
@@ -353,7 +337,7 @@ export default function Customers() {
                       <TableRow>
                         <TableHead>{t('company_name')}</TableHead>
                         <TableHead>{t('contact')}</TableHead>
-                        <TableHead>{t('industry')}</TableHead>
+                        <TableHead>{t('tags') || 'Tags'}</TableHead>
                         <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -386,9 +370,14 @@ export default function Customers() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {t(customer.industry) || t('other')}
-                            </Badge>
+                            <div className="flex flex-wrap gap-1">
+                              {customer.tags?.length > 0
+                                ? customer.tags.map(tag => (
+                                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                                  ))
+                                : <span className="text-slate-400 text-sm">—</span>
+                              }
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -403,6 +392,15 @@ export default function Customers() {
                                   <PhoneCall className="w-4 h-4" />
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-200"
+                                onClick={() => navigate('/salesorders', { state: { createOrderForCustomer: customer } })}
+                                title={t('create_sales_order') || 'Create Sales Order'}
+                              >
+                                <ShoppingCart className="w-4 h-4" />
+                              </Button>
                               {canUpdate(MODULES.CUSTOMERS) && (
                                 <Button
                                   variant="outline"

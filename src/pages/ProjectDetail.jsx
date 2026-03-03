@@ -68,7 +68,7 @@ export default function ProjectDetail() {
   const { t } = useTranslation(language);
   const { projects, updateProject } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -609,10 +609,10 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(project.budget || 0)}
+                {formatCurrencyCompact(project.budget || 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {formatCurrency(project.spent || 0)} {t('spent') || 'spent'}
+                {formatCurrencyCompact(project.spent || 0)} {t('spent') || 'spent'}
               </p>
             </CardContent>
           </Card>
