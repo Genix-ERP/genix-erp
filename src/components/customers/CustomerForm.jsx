@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
@@ -15,7 +16,9 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     contact_name: customer?.contact_name || "",
     email: customer?.email || "",
     phone: customer?.phone || "",
-    industry: customer?.industry || "technology",
+    tags: customer?.tags || [],
+    notes: customer?.notes || "",
+    expected_revenue: customer?.expected_revenue || "",
     annual_revenue: customer?.annual_revenue || 0,
     employee_count: customer?.employee_count || 0,
     address: customer?.address || {
@@ -26,12 +29,30 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     }
   });
 
+  const [tagInput, setTagInput] = useState("");
+
+  const handleTagKeyDown = (e) => {
+    if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
+      e.preventDefault();
+      const newTag = tagInput.trim().replace(/,$/, '');
+      if (newTag && !formData.tags.includes(newTag)) {
+        setFormData(prev => ({ ...prev, tags: [...prev.tags, newTag] }));
+      }
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tag) => {
+    setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave({
       ...formData,
       annual_revenue: Number(formData.annual_revenue),
-      employee_count: Number(formData.employee_count)
+      employee_count: Number(formData.employee_count),
+      expected_revenue: formData.expected_revenue !== "" ? Number(formData.expected_revenue) : undefined,
     });
   };
 
@@ -104,23 +125,45 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <LabelWithHelp htmlFor="industry" label={t('industry')} helpText={t('help_customer_industry')} />
-                  <Select value={formData.industry} onValueChange={(value) => handleChange("industry", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="technology">{t('technology')}</SelectItem>
-                      <SelectItem value="healthcare">{t('healthcare')}</SelectItem>
-                      <SelectItem value="retail">{t('retail')}</SelectItem>
-                      <SelectItem value="manufacturing">{t('manufacturing')}</SelectItem>
-                      <SelectItem value="services">{t('services')}</SelectItem>
-                      <SelectItem value="logistics">{t('logistics')}</SelectItem>
-                      <SelectItem value="e-commerce">{t('e_commerce')}</SelectItem>
-                      <SelectItem value="other">{t('other')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <LabelWithHelp htmlFor="tags" label={t('tags') || 'Tags'} helpText={t('help_customer_tags') || 'Press Enter or comma to add a tag'} />
+                  <div className="flex flex-wrap gap-1 min-h-[38px] items-center border rounded-md px-3 py-1.5 focus-within:ring-1 focus-within:ring-ring">
+                    {formData.tags.map(tag => (
+                      <Badge key={tag} variant="secondary" className="flex items-center gap-1 text-xs">
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <input
+                      id="tags"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                      placeholder={formData.tags.length === 0 ? (t('add_tags') || 'Add tags...') : ''}
+                      className="flex-1 min-w-[80px] outline-none bg-transparent text-sm"
+                    />
+                  </div>
                 </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="expected_revenue" label={t('expected_revenue') || 'Expected Revenue'} helpText={t('help_customer_expected_revenue') || 'Estimated annual revenue from this customer'} />
+                  <Input
+                    id="expected_revenue"
+                    type="number"
+                    value={formData.expected_revenue}
+                    onChange={(e) => handleChange("expected_revenue", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <LabelWithHelp htmlFor="notes" label={t('note') || 'Note'} helpText={t('help_customer_note') || 'Internal notes about this customer'} />
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => handleChange("notes", e.target.value)}
+                  rows={3}
+                />
               </div>
             </div>
 

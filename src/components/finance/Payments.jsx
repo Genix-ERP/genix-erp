@@ -25,7 +25,7 @@ import { contactsService } from "@/api/services";
 export default function Payments() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     payments,
     accounts,
@@ -756,7 +756,7 @@ export default function Payments() {
                     {isCustomerTab ? t('total_received') : t('total_paid')}
                   </p>
                   <p className={`text-2xl font-bold ${isCustomerTab ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(summaryStats.totalAmount)}
+                    {formatCurrencyCompact(summaryStats.totalAmount)}
                   </p>
                 </div>
                 <div className={`w-12 h-12 ${isCustomerTab ? 'bg-green-100' : 'bg-red-100'} rounded-xl flex items-center justify-center`}>

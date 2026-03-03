@@ -59,7 +59,7 @@ export default function FixedAssets() {
     refreshData
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -369,7 +369,7 @@ export default function FixedAssets() {
               </div>
               <div>
                 <p className="text-xs text-green-600 font-medium">{t('original_cost') || 'Original Cost'}</p>
-                <p className="text-lg font-bold text-green-800">{formatCurrency(stats.totalOriginalCost)}</p>
+                <p className="text-lg font-bold text-green-800">{formatCurrencyCompact(stats.totalOriginalCost)}</p>
               </div>
             </div>
           </CardContent>
@@ -383,7 +383,7 @@ export default function FixedAssets() {
               </div>
               <div>
                 <p className="text-xs text-amber-600 font-medium">{t('accumulated_depreciation') || 'Acc. Depreciation'}</p>
-                <p className="text-lg font-bold text-amber-800">{formatCurrency(stats.totalDepreciation)}</p>
+                <p className="text-lg font-bold text-amber-800">{formatCurrencyCompact(stats.totalDepreciation)}</p>
               </div>
             </div>
           </CardContent>
@@ -397,7 +397,7 @@ export default function FixedAssets() {
               </div>
               <div>
                 <p className="text-xs text-purple-600 font-medium">{t('net_book_value') || 'Net Book Value'}</p>
-                <p className="text-lg font-bold text-purple-800">{formatCurrency(stats.totalNetBookValue)}</p>
+                <p className="text-lg font-bold text-purple-800">{formatCurrencyCompact(stats.totalNetBookValue)}</p>
               </div>
             </div>
           </CardContent>

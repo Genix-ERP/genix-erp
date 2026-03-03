@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
@@ -93,6 +93,7 @@ export default function SalesOrders() {
     useDiscountCode,
   } = useSales();
 
+  const location = useLocation();
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -246,6 +247,21 @@ export default function SalesOrders() {
       setNewOrder(prev => ({ ...prev, tax_percent: defaultTaxPercent, tax_rate_id: defaultSalesTax?.id || '' }));
     }
   }, [defaultTaxPercent]);
+
+  // Open create modal pre-filled with customer from navigation state
+  useEffect(() => {
+    if (location.state?.createOrderForCustomer) {
+      const { id, company_name, name } = location.state.createOrderForCustomer;
+      setNewOrder(prev => ({
+        ...prev,
+        customer_id: id,
+        customer_name: company_name || name || '',
+      }));
+      setShowCreateModal(true);
+      // Clear state so refresh doesn't re-trigger
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
 
   const [discountCodeInput, setDiscountCodeInput] = useState('');
   const [discountValidation, setDiscountValidation] = useState({ valid: false, message: '' });
