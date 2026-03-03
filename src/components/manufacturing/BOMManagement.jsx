@@ -19,7 +19,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 export default function BOMManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { boms, loading, createBOM, updateBOM, deleteBOM } = useManufacturing();
+  const { boms, loading, createBOM, updateBOM, deleteBOM, refreshData } = useManufacturing();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,6 +323,38 @@ export default function BOMManagement() {
         }
       }
 
+      // Handle BOM lines CRUD
+      // 1. Delete removed lines
+      if (editBom.deletedLines && editBom.deletedLines.length > 0) {
+        for (const lineId of editBom.deletedLines) {
+          try {
+            await bomsService.deleteLine(bomId, lineId);
+          } catch (error) {
+            console.error('Error deleting BOM line:', lineId, error);
+          }
+        }
+      }
+
+      // 2. Create new lines (those without an id)
+      for (const line of editBom.lines) {
+        if (!line.id) {
+          try {
+            await bomsService.createLine(bomId, {
+              component_id: line.component_id,
+              quantity: line.quantity,
+              unit_of_measure: line.unit || 'pcs',
+              scrap_percent: line.scrap_percent || 0,
+              is_optional: line.is_optional || false,
+              operation_sequence: line.operation_sequence || 0,
+              notes: line.notes || ''
+            });
+          } catch (error) {
+            console.error('Error creating BOM line:', error);
+          }
+        }
+      }
+
+      await refreshData();
       setShowEditModal(false);
       setEditBom(null);
     } catch (error) {
@@ -348,8 +380,11 @@ export default function BOMManagement() {
   };
 
   const removeEditComponent = (index) => {
+    const line = editBom.lines[index];
     const updated = editBom.lines.filter((_, i) => i !== index);
-    setEditBom({ ...editBom, lines: updated });
+    const deletedLines = [...(editBom.deletedLines || [])];
+    if (line.id) deletedLines.push(line.id);
+    setEditBom({ ...editBom, lines: updated, deletedLines });
   };
 
   // Edit operation handlers
@@ -653,7 +688,7 @@ export default function BOMManagement() {
                         setNewComponent({
                           ...newComponent,
                           component_id: value,
-                          unit: selectedProduct?.unit_of_measure || selectedProduct?.uom || newComponent.unit
+                          unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || 'pcs'
                         });
                       }}
                     >
@@ -969,7 +1004,7 @@ export default function BOMManagement() {
                           setEditComponent({
                             ...editComponent,
                             component_id: value,
-                            unit: selectedProduct?.unit_of_measure || selectedProduct?.uom || editComponent.unit
+                            unit: selectedProduct?.unit_name || selectedProduct?.purchase_unit_name || editComponent.unit
                           });
                         }}
                       >

@@ -518,7 +518,6 @@ export default function ShopFloorControl() {
                   <SelectItem value="break">{language === 'uz' ? "Tanaffus" : language === 'ru' ? "Перерыв" : "Break"}</SelectItem>
                   <SelectItem value="material_shortage">{language === 'uz' ? "Material yetishmovchiligi" : language === 'ru' ? "Нехватка материала" : "Material Shortage"}</SelectItem>
                   <SelectItem value="equipment_issue">{language === 'uz' ? "Jihoz muammosi" : language === 'ru' ? "Проблема с оборудованием" : "Equipment Issue"}</SelectItem>
-                  <SelectItem value="quality_issue">{language === 'uz' ? "Sifat muammosi" : language === 'ru' ? "Проблема качества" : "Quality Issue"}</SelectItem>
                   <SelectItem value="other">{language === 'uz' ? "Boshqa" : language === 'ru' ? "Другое" : "Other"}</SelectItem>
                 </SelectContent>
               </Select>

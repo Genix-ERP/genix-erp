@@ -26,7 +26,6 @@ export default function ManufacturingDashboard() {
     activeProductionOrders,
     completedToday,
     averageOEE,
-    qualityRate
   } = useManufacturing();
 
   const [productionData, setProductionData] = useState([]);
@@ -148,18 +147,6 @@ export default function ManufacturingDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-orange-600" />
-              </div>
-              <Badge className="bg-orange-50 text-orange-700 border-orange-200">{t('quality') || 'Quality'}</Badge>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{Math.round(qualityRate || 0)}%</p>
-            <p className="text-sm text-slate-600">{t('quality_pass_rate') || 'Quality Pass Rate'}</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Charts Row */}

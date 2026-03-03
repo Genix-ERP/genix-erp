@@ -3,7 +3,6 @@ import {
   workCentersService,
   productionOrdersService,
   workOrdersService,
-  qualityChecksService,
   bomsService
 } from '@/api/services';
 import { useCompany } from './CompanyContext';
@@ -167,38 +166,6 @@ const sampleWorkOrders = [
   }
 ];
 
-const sampleQualityChecks = [
-  {
-    id: 'qc_1',
-    code: 'QC-001',
-    production_order_code: 'MO-20250115-003',
-    product_name: 'Circuit Board V2',
-    inspection_date: '2025-01-09T14:00:00Z',
-    inspector_name: 'John Smith',
-    quantity_inspected: 1000,
-    quantity_passed: 988,
-    quantity_failed: 12,
-    result: 'passed',
-    pass_rate: 98.8,
-    defect_type: 'Visual Defect',
-    notes: 'Minor cosmetic issues on 12 units'
-  },
-  {
-    id: 'qc_2',
-    code: 'QC-002',
-    production_order_code: 'MO-20250115-001',
-    product_name: 'Premium Widget',
-    inspection_date: '2025-01-14T10:00:00Z',
-    inspector_name: 'Jane Doe',
-    quantity_inspected: 200,
-    quantity_passed: 198,
-    quantity_failed: 2,
-    result: 'passed',
-    pass_rate: 99.0,
-    notes: '2 units with dimensional errors'
-  }
-];
-
 const sampleBOMs = [
   {
     id: 'bom_1',
@@ -250,7 +217,6 @@ export function ManufacturingProvider({ children }) {
   const [workCenters, setWorkCenters] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
-  const [qualityChecks, setQualityChecks] = useState([]);
   const [boms, setBoms] = useState([]);
   const [manufacturingStats, setManufacturingStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -267,10 +233,6 @@ export function ManufacturingProvider({ children }) {
     defaultCapacityHours: getSetting('manufacturing.work_center.default_capacity', 8),
     defaultEfficiencyRate: getSetting('manufacturing.work_center.efficiency_rate', 100),
 
-    // Quality
-    qualityControlEnabled: getSetting('manufacturing.quality.control_enabled', true),
-    inspectionRequired: getSetting('manufacturing.quality.inspection_required', true),
-
     // Production
     autoConsumeComponents: getSetting('manufacturing.production.auto_consume_components', false),
     backflushEnabled: getSetting('manufacturing.production.backflush_enabled', false)
@@ -281,7 +243,6 @@ export function ManufacturingProvider({ children }) {
     setWorkCenters(demoMode ? sampleWorkCenters : []);
     setProductionOrders(demoMode ? sampleProductionOrders : []);
     setWorkOrders(demoMode ? sampleWorkOrders : []);
-    setQualityChecks(demoMode ? sampleQualityChecks : []);
     setBoms(demoMode ? sampleBOMs : []);
     setManufacturingStats(null);
   }, []);
@@ -301,7 +262,7 @@ export function ManufacturingProvider({ children }) {
 
       if (isBackendAvailable) {
         // Load all manufacturing data from API
-        const [wcData, poData, woData, qcData, bomData, statsData] = await Promise.all([
+        const [wcData, poData, woData, bomData, statsData] = await Promise.all([
           workCentersService.list(companyId).catch(err => {
             console.error('Failed to load work centers:', err);
             return [];
@@ -312,10 +273,6 @@ export function ManufacturingProvider({ children }) {
           }),
           workOrdersService.list(companyId).catch(err => {
             console.error('Failed to load work orders:', err);
-            return [];
-          }),
-          qualityChecksService.list(companyId).catch(err => {
-            console.error('Failed to load quality checks:', err);
             return [];
           }),
           bomsService.list(companyId).catch(err => {
@@ -331,7 +288,6 @@ export function ManufacturingProvider({ children }) {
         setWorkCenters(wcData || []);
         setProductionOrders(poData || []);
         setWorkOrders(woData || []);
-        setQualityChecks(qcData || []);
         setBoms(bomData || []);
         setManufacturingStats(statsData);
       } else {
@@ -561,31 +517,6 @@ export function ManufacturingProvider({ children }) {
   }, [activeCompany]);
 
   // =====================================================
-  // QUALITY CHECK OPERATIONS
-  // =====================================================
-  const createQualityCheck = useCallback(async (data) => {
-    const companyId = activeCompany?.id;
-    try {
-      const newQc = await qualityChecksService.create(data, companyId);
-      setQualityChecks(prev => [newQc, ...prev]);
-      return newQc;
-    } catch (error) {
-      console.error('Failed to create quality check:', error);
-      throw error;
-    }
-  }, [activeCompany]);
-
-  const getQualityStats = useCallback(async (params = {}) => {
-    const companyId = activeCompany?.id;
-    try {
-      return await qualityChecksService.getStats(companyId, params);
-    } catch (error) {
-      console.error('Failed to get quality stats:', error);
-      throw error;
-    }
-  }, [activeCompany]);
-
-  // =====================================================
   // BOM OPERATIONS
   // =====================================================
   const createBOM = useCallback(async (data) => {
@@ -645,17 +576,12 @@ export function ManufacturingProvider({ children }) {
     ? workCenters.reduce((sum, wc) => sum + (wc.current_utilization || 0), 0) / workCenters.length
     : 0;
 
-  const qualityRate = qualityChecks.length > 0
-    ? qualityChecks.reduce((sum, qc) => sum + (qc.pass_rate || 0), 0) / qualityChecks.length
-    : 100;
-
   return (
     <ManufacturingContext.Provider value={{
       // State
       workCenters: Array.isArray(workCenters) ? workCenters : [],
       productionOrders: Array.isArray(productionOrders) ? productionOrders : [],
       workOrders: Array.isArray(workOrders) ? workOrders : [],
-      qualityChecks: Array.isArray(qualityChecks) ? qualityChecks : [],
       boms: Array.isArray(boms) ? boms : [],
       manufacturingStats,
       isLoading,
@@ -668,7 +594,6 @@ export function ManufacturingProvider({ children }) {
       completedToday,
       availableWorkCenters,
       averageOEE,
-      qualityRate,
 
       // Work Center Operations
       createWorkCenter,
@@ -693,10 +618,6 @@ export function ManufacturingProvider({ children }) {
       completeWorkOrder,
       recordWorkOrderTime,
 
-      // Quality Check Operations
-      createQualityCheck,
-      getQualityStats,
-
       // BOM Operations
       createBOM,
       updateBOM,
@@ -712,8 +633,6 @@ export function ManufacturingProvider({ children }) {
       getDefaultLeadTime: () => manufacturingSettings.defaultLeadTimeDays,
       getDefaultCapacity: () => manufacturingSettings.defaultCapacityHours,
       getDefaultEfficiency: () => manufacturingSettings.defaultEfficiencyRate,
-      isQualityControlEnabled: () => manufacturingSettings.qualityControlEnabled,
-      isInspectionRequired: () => manufacturingSettings.inspectionRequired,
       isAutoConsumeEnabled: () => manufacturingSettings.autoConsumeComponents,
       isBackflushEnabled: () => manufacturingSettings.backflushEnabled
     }}>
