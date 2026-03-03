@@ -3079,13 +3079,14 @@ export default function Construction() {
   const getStatusBadge = (status) => {
     const config = {
       [PROJECT_STATUS.DRAFT]: { label: t('draft') || 'Qoralama', color: 'bg-gray-500' },
+      [PROJECT_STATUS.PLANNING]: { label: t('planning') || 'Rejalashtirish', color: 'bg-purple-500' },
       [PROJECT_STATUS.APPROVED]: { label: t('approved') || 'Tasdiqlangan', color: 'bg-blue-500' },
       [PROJECT_STATUS.IN_PROGRESS]: { label: t('in_progress') || 'Jarayonda', color: 'bg-orange-500' },
       [PROJECT_STATUS.ON_HOLD]: { label: t('on_hold') || "To'xtatilgan", color: 'bg-yellow-500' },
       [PROJECT_STATUS.COMPLETED]: { label: t('completed') || 'Tugallangan', color: 'bg-green-500' },
       [PROJECT_STATUS.CANCELLED]: { label: t('cancelled') || 'Bekor qilingan', color: 'bg-red-500' }
     };
-    const statusConfig = config[status] || config[PROJECT_STATUS.DRAFT];
+    const statusConfig = config[status] || { label: status, color: 'bg-gray-500' };
     return <Badge className={`${statusConfig.color} text-white`}>{statusConfig.label}</Badge>;
   };
 
