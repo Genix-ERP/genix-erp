@@ -15,7 +15,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 export default function AgedPayables() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -157,42 +157,42 @@ export default function AgedPayables() {
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t('total') || 'Total'}</p>
-              <p className="text-lg font-bold text-slate-900 mt-1">{formatCurrency(totals.total)}</p>
+              <p className="text-lg font-bold text-slate-900 mt-1">{formatCurrencyCompact(totals.total)}</p>
               <p className="text-xs text-slate-400 mt-0.5">{filteredContacts.length} {t('vendors') || 'vendors'}</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-green-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-green-600 uppercase tracking-wide">{t('not_due') || 'Not Due'}</p>
-              <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(totals.current)}</p>
+              <p className="text-lg font-bold text-green-700 mt-1">{formatCurrencyCompact(totals.current)}</p>
               <p className="text-xs text-green-500 mt-0.5">{pct(totals.current)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-yellow-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-yellow-600 uppercase tracking-wide">1-30 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-yellow-700 mt-1">{formatCurrency(totals.days1to30)}</p>
+              <p className="text-lg font-bold text-yellow-700 mt-1">{formatCurrencyCompact(totals.days1to30)}</p>
               <p className="text-xs text-yellow-500 mt-0.5">{pct(totals.days1to30)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-orange-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">31-60 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-orange-700 mt-1">{formatCurrency(totals.days31to60)}</p>
+              <p className="text-lg font-bold text-orange-700 mt-1">{formatCurrencyCompact(totals.days31to60)}</p>
               <p className="text-xs text-orange-500 mt-0.5">{pct(totals.days31to60)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-600 uppercase tracking-wide">61-90 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-700 mt-1">{formatCurrency(totals.days61to90)}</p>
+              <p className="text-lg font-bold text-red-700 mt-1">{formatCurrencyCompact(totals.days61to90)}</p>
               <p className="text-xs text-red-500 mt-0.5">{pct(totals.days61to90)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-300/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-700 uppercase tracking-wide">90+ {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-800 mt-1">{formatCurrency(totals.over90)}</p>
+              <p className="text-lg font-bold text-red-800 mt-1">{formatCurrencyCompact(totals.over90)}</p>
               <p className="text-xs text-red-600 mt-0.5">{pct(totals.over90)}%</p>
             </CardContent>
           </Card>

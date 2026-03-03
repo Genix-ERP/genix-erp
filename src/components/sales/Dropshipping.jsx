@@ -59,7 +59,7 @@ const statusLabels = {
 export default function Dropshipping() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
@@ -365,7 +365,7 @@ export default function Dropshipping() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-muted-foreground">{t('total_margin') || 'Total Margin'}</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.total_margin)}</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrencyCompact(stats.total_margin)}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-green-500 opacity-50" />
               </div>

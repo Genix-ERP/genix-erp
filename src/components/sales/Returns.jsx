@@ -60,7 +60,7 @@ export default function Returns() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     returns,
     salesOrders,
@@ -111,7 +111,7 @@ export default function Returns() {
     const approved = returns.filter((r) => r.status === "approved").length;
     const totalAmount = returns.reduce((sum, r) => sum + (r.total_amount || 0), 0);
     const refundedAmount = returns
-      .filter((r) => r.refund_status === "processed")
+      .filter((r) => r.status === "approved" || r.refund_status === "processed")
       .reduce((sum, r) => sum + (r.total_amount || 0), 0);
     return { total, pending, approved, totalAmount, refundedAmount };
   }, [returns]);
@@ -324,7 +324,7 @@ export default function Returns() {
               <div>
                 <p className="text-xs text-blue-600 font-medium">{t('refunded_amount')}</p>
                 <p className="text-lg font-bold text-blue-900">
-                  {formatCurrency(stats.refundedAmount)}
+                  {formatCurrencyCompact(stats.refundedAmount)}
                 </p>
               </div>
             </div>

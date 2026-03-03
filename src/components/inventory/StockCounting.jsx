@@ -27,6 +27,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { hrService } from "@/api/services/hr";
 import { inventoryService } from "@/api/services/inventory";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -82,6 +83,7 @@ export default function StockCounting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { formatCurrencyCompact } = useCurrencyFormatter();
   const {
     stockCounts,
     products,
@@ -344,7 +346,7 @@ export default function StockCounting() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-purple-600 font-medium">{t('total_variance')}</p>
-                <p className="text-2xl font-bold text-purple-800">{summary.totalVariance}</p>
+                <p className="text-2xl font-bold text-purple-800">{formatCurrencyCompact(summary.totalVariance)}</p>
                 <p className="text-xs text-purple-500">{t('units')}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">

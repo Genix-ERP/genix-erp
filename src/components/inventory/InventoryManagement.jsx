@@ -53,7 +53,7 @@ export default function InventoryManagement() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     products,
     warehouses,
@@ -312,7 +312,7 @@ export default function InventoryManagement() {
               <div>
                 <p className="text-sm text-slate-500">{t('total_value')}</p>
                 <p className="text-2xl font-bold text-slate-900">
-                  {formatCurrency(summary.totalValue)}
+                  {formatCurrencyCompact(summary.totalValue)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -557,7 +557,7 @@ export default function InventoryManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-slate-500">{t('inbound_value')}</p>
-                        <p className="text-2xl font-bold text-green-600">{formatCurrency(analyticsStats.inboundValue)}</p>
+                        <p className="text-2xl font-bold text-green-600">{formatCurrencyCompact(analyticsStats.inboundValue)}</p>
                       </div>
                       <TrendingUp className="w-6 h-6 text-green-600" />
                     </div>
@@ -569,7 +569,7 @@ export default function InventoryManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-slate-500">{t('outbound_value')}</p>
-                        <p className="text-2xl font-bold text-red-600">{formatCurrency(analyticsStats.outboundValue)}</p>
+                        <p className="text-2xl font-bold text-red-600">{formatCurrencyCompact(analyticsStats.outboundValue)}</p>
                       </div>
                       <TrendingDown className="w-6 h-6 text-red-600" />
                     </div>
@@ -582,7 +582,7 @@ export default function InventoryManagement() {
                       <div>
                         <p className="text-sm text-slate-500">{t('net_movement')}</p>
                         <p className={`text-2xl font-bold ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(analyticsStats.netValue)}
+                          {formatCurrencyCompact(analyticsStats.netValue)}
                         </p>
                       </div>
                       <ArrowRightLeft className={`w-6 h-6 ${analyticsStats.netValue >= 0 ? 'text-green-600' : 'text-red-600'}`} />

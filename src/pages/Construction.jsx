@@ -641,6 +641,7 @@ const ProjectDetailView = ({
   formatCurrency,
   getStatusBadge
 }) => {
+  const { formatCurrencyCompact } = useCurrencyFormatter();
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
@@ -1427,7 +1428,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 ...project,
                 total_smeta: sections.reduce((sum, s) => sum + (parseFloat(s.total_cost) || 0), 0)
               }}
-              formatCurrency={formatCurrency}
+              formatCurrency={formatCurrencyCompact}
             />
 
             {/* Timeline Widget */}
@@ -1454,7 +1455,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('project_type') || 'Loyiha turi'}</p>
-                    <p className="font-medium">{project.project_type || '-'}</p>
+                    <p className="font-medium">{project.project_type ? (t(project.project_type) || project.project_type) : '-'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">{t('building_type') || 'Bino turi'}</p>
@@ -1463,6 +1464,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   <div>
                     <p className="text-sm text-slate-500">{t('total_area') || 'Umumiy maydon'}</p>
                     <p className="font-medium">{project.total_area ? `${project.total_area} m²` : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">{t('team') || 'Jamoa'}</p>
+                    <p className="font-medium">{team.length} {t('members') || "a'zo"}</p>
                   </div>
                 </div>
               </CardContent>
@@ -1478,11 +1483,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               vendors={vendors}
             />
 
-            {/* Team Widget */}
-            <TeamWidget team={team} />
-
-            {/* Vendors Widget */}
-            <VendorsWidget vendors={vendors} formatCurrency={formatCurrency} />
           </div>
         </TabsContent>
 
