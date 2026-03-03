@@ -24,6 +24,8 @@ import {
   Hammer,
   Settings as SettingsIcon,
   RefreshCw,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
@@ -40,7 +42,7 @@ const WORK_ORDER_STATUS = {
 
 export default function ShopFloorControl() {
   const { language } = useLanguage();
-  const { workOrders, workCenters, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
+  const { workOrders, workCenters, productionOrders, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
@@ -75,15 +77,15 @@ export default function ShopFloorControl() {
     }
   }, [timeLogs]);
 
-  // Timer effect
+  // Timer effect — tick every second while any work order is in progress
   useEffect(() => {
-    if (activeWorkOrder && activeWorkOrder.status === 'in_progress') {
-      const interval = setInterval(() => {
-        setCurrentTimer(Date.now());
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [activeWorkOrder]);
+    const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
+    if (!hasInProgress) return;
+    const interval = setInterval(() => {
+      setCurrentTimer(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [availableWorkOrders]);
 
   // Filter work orders
   const filteredWorkOrders = useMemo(() => {
@@ -99,6 +101,41 @@ export default function ShopFloorControl() {
       wo.status === 'pending' || wo.status === 'ready' || wo.status === 'in_progress' || wo.status === 'paused'
     );
   }, [filteredWorkOrders]);
+
+  // Collapsed groups state (IDs in the set are collapsed; default = all expanded)
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+
+  const toggleGroup = (poId) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(poId)) next.delete(poId);
+      else next.add(poId);
+      return next;
+    });
+  };
+
+  // Group available work orders by production order
+  const groupedWorkOrders = useMemo(() => {
+    const groups = {};
+    availableWorkOrders.forEach(wo => {
+      const key = wo.production_order_id || 'unknown';
+      if (!groups[key]) {
+        const po = productionOrders?.find(p => p.id === key);
+        groups[key] = {
+          production_order_id: key,
+          production_order_code: wo.production_order_code || po?.code || key.substring(0, 8),
+          product_name: po?.product_name || '',
+          workOrders: [],
+        };
+      }
+      groups[key].workOrders.push(wo);
+    });
+    // Sort work orders within each group by sequence
+    Object.values(groups).forEach(g => {
+      g.workOrders.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    });
+    return Object.values(groups);
+  }, [availableWorkOrders, productionOrders]);
 
   // Calculate time spent
   const calculateTimeSpent = (workOrder) => {
@@ -377,126 +414,173 @@ export default function ShopFloorControl() {
         </Card>
       </div>
 
-      {/* Active Work Orders */}
-      <Card className="bg-white/80 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="w-5 h-5" />
-            {labels.active_work_orders}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{labels.work_order}</TableHead>
-                <TableHead>{labels.operation}</TableHead>
-                <TableHead>{labels.work_center}</TableHead>
-                <TableHead>{labels.quantity}</TableHead>
-                <TableHead>{labels.progress}</TableHead>
-                <TableHead>{labels.time_spent}</TableHead>
-                <TableHead>{labels.status}</TableHead>
-                <TableHead className="text-right">{labels.actions}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {availableWorkOrders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                    {labels.no_active_work_orders}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                availableWorkOrders.map(wo => {
-                  const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
-                  const timeSpent = calculateTimeSpent(wo);
-                  const totalQty = wo.quantity_to_produce || wo.quantity_planned || 0;
-                  const progress = totalQty ? ((wo.quantity_produced || 0) / totalQty) * 100 : 0;
+      {/* Active Work Orders — grouped by Production Order */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 px-1">
+          <Activity className="w-5 h-5 text-slate-600" />
+          <h3 className="font-semibold text-slate-800">{labels.active_work_orders}</h3>
+          <span className="text-sm text-slate-400">({availableWorkOrders.length})</span>
+        </div>
 
-                  return (
-                    <TableRow key={wo.id}>
-                      <TableCell className="font-medium">{wo.work_order_number || wo.code || wo.id?.substring(0, 8)}</TableCell>
-                      <TableCell>{wo.operation_name || wo.name || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {wo.work_center_name || workCenters.find(wc => wc.id === wo.work_center_id)?.name || '-'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{wo.quantity_produced || 0}</span>
-                        <span className="text-slate-400"> / {wo.quantity_to_produce || wo.quantity_planned}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="w-24">
-                          <Progress value={progress} className="h-2" />
-                          <p className="text-xs text-slate-500 mt-1">{progress.toFixed(0)}%</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Timer className="w-4 h-4 text-slate-400" />
-                          <span className="text-sm">{timeSpent.formatted}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={WORK_ORDER_STATUS[wo.status]?.color}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {statusLabel(wo.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {(wo.status === 'ready' || wo.status === 'pending') && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleStartWorkOrder(wo)}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <Play className="w-4 h-4 mr-1" />
-                              {labels.start}
-                            </Button>
-                          )}
-                          {wo.status === 'in_progress' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handlePauseWorkOrder(wo)}
-                                className="border-orange-200 text-orange-600 hover:bg-orange-50"
-                              >
-                                <Pause className="w-4 h-4 mr-1" />
-                                {labels.pause}
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleCompleteWorkOrder(wo)}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                <CheckCircle className="w-4 h-4 mr-1" />
-                                {labels.complete}
-                              </Button>
-                            </>
-                          )}
-                          {wo.status === 'paused' && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleStartWorkOrder(wo)}
-                              className="bg-amber-600 hover:bg-amber-700"
-                            >
-                              <Play className="w-4 h-4 mr-1" />
-                              {labels.resume}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {groupedWorkOrders.length === 0 ? (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardContent className="py-12 text-center text-slate-500">
+              {labels.no_active_work_orders}
+            </CardContent>
+          </Card>
+        ) : (
+          groupedWorkOrders.map(group => {
+            const isCollapsed = collapsedGroups.has(group.production_order_id);
+            const groupInProgress = group.workOrders.some(wo => wo.status === 'in_progress');
+            const groupPaused = group.workOrders.some(wo => wo.status === 'paused');
+            const groupStatusColor = groupInProgress
+              ? 'bg-amber-100 text-amber-700 border-amber-200'
+              : groupPaused
+              ? 'bg-orange-100 text-orange-700 border-orange-200'
+              : 'bg-blue-100 text-blue-700 border-blue-200';
+
+            return (
+              <Card key={group.production_order_id} className="bg-white/80 backdrop-blur-sm overflow-hidden">
+                {/* Group header — click to expand/collapse */}
+                <button
+                  className="w-full text-left"
+                  onClick={() => toggleGroup(group.production_order_id)}
+                >
+                  <div className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      {isCollapsed
+                        ? <ChevronRight className="w-4 h-4 text-slate-400" />
+                        : <ChevronDown className="w-4 h-4 text-slate-400" />
+                      }
+                      <Package className="w-4 h-4 text-blue-500" />
+                      <span className="font-semibold text-slate-800">{group.production_order_code}</span>
+                      {group.product_name && (
+                        <span className="text-sm text-slate-500">— {group.product_name}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400">{group.workOrders.length} {labels.operation}{group.workOrders.length !== 1 ? 's' : ''}</span>
+                      <Badge variant="outline" className={groupStatusColor}>
+                        {groupInProgress ? labels.in_progress : groupPaused ? labels.paused : labels.pending}
+                      </Badge>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Work orders table — shown when expanded */}
+                {!isCollapsed && (
+                  <div className="border-t border-slate-100">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50/60">
+                          <TableHead className="pl-5">{labels.operation}</TableHead>
+                          <TableHead>{labels.work_center}</TableHead>
+                          <TableHead>{labels.quantity}</TableHead>
+                          <TableHead>{labels.progress}</TableHead>
+                          <TableHead>{labels.time_spent}</TableHead>
+                          <TableHead>{labels.status}</TableHead>
+                          <TableHead className="text-right pr-5">{labels.actions}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {group.workOrders.map(wo => {
+                          const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
+                          const timeSpent = calculateTimeSpent(wo);
+                          const totalQty = wo.quantity_to_produce || wo.quantity_planned || 0;
+                          const progress = totalQty ? ((wo.quantity_produced || 0) / totalQty) * 100 : 0;
+
+                          return (
+                            <TableRow key={wo.id}>
+                              <TableCell className="pl-5">
+                                <div>
+                                  <p className="font-medium">{wo.operation_name || wo.name || '-'}</p>
+                                  <p className="text-xs text-slate-400">{wo.work_order_number || wo.code || wo.id?.substring(0, 8)}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {wo.work_center_name || workCenters.find(wc => wc.id === wo.work_center_id)?.name || '-'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-medium">{wo.quantity_produced || 0}</span>
+                                <span className="text-slate-400"> / {totalQty}</span>
+                              </TableCell>
+                              <TableCell>
+                                <div className="w-24">
+                                  <Progress value={progress} className="h-2" />
+                                  <p className="text-xs text-slate-500 mt-1">{progress.toFixed(0)}%</p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  <Timer className="w-4 h-4 text-slate-400" />
+                                  <span className="text-sm">{timeSpent.formatted}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={WORK_ORDER_STATUS[wo.status]?.color}>
+                                  <StatusIcon className="w-3 h-3 mr-1" />
+                                  {statusLabel(wo.status)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right pr-5">
+                                <div className="flex justify-end gap-2">
+                                  {(wo.status === 'ready' || wo.status === 'pending') && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleStartWorkOrder(wo)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      <Play className="w-4 h-4 mr-1" />
+                                      {labels.start}
+                                    </Button>
+                                  )}
+                                  {wo.status === 'in_progress' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handlePauseWorkOrder(wo)}
+                                        className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                                      >
+                                        <Pause className="w-4 h-4 mr-1" />
+                                        {labels.pause}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleCompleteWorkOrder(wo)}
+                                        className="bg-green-600 hover:bg-green-700"
+                                      >
+                                        <CheckCircle className="w-4 h-4 mr-1" />
+                                        {labels.complete}
+                                      </Button>
+                                    </>
+                                  )}
+                                  {wo.status === 'paused' && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleStartWorkOrder(wo)}
+                                      className="bg-amber-600 hover:bg-amber-700"
+                                    >
+                                      <Play className="w-4 h-4 mr-1" />
+                                      {labels.resume}
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </Card>
+            );
+          })
+        )}
+      </div>
 
       {/* Pause Work Order Modal */}
       <Dialog open={showPauseModal} onOpenChange={setShowPauseModal}>
