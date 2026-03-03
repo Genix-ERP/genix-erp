@@ -17,6 +17,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { equipmentService } from '@/api/services/manufacturing';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
@@ -24,7 +25,7 @@ export default function WorkCenters() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
-  const { workCenters, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
+  const { workCenters, workOrders, loading, createWorkCenter, updateWorkCenter, deleteWorkCenter } = useManufacturing();
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -33,16 +34,10 @@ export default function WorkCenters() {
   const [selectedWorkCenter, setSelectedWorkCenter] = useState(null);
   const [equipment, setEquipment] = useState([]);
 
-  // Load equipment from localStorage
-  const orgId = activeCompany?.id || 'default';
-  const equipmentKey = `genix_equipment_${orgId}`;
-
+  // Load equipment from real API
   useEffect(() => {
-    const storedEquipment = localStorage.getItem(equipmentKey);
-    if (storedEquipment) {
-      setEquipment(JSON.parse(storedEquipment));
-    }
-  }, [equipmentKey]);
+    equipmentService.list().then(data => setEquipment(data)).catch(() => {});
+  }, []);
 
   // Get equipment for a specific work center
   const getEquipmentForWorkCenter = (workCenterId) => {
@@ -86,19 +81,20 @@ export default function WorkCenters() {
     return equipment.filter(eq => eq.work_center_id === workCenterId);
   };
 
-  // Save equipment assignments to localStorage
-  const saveEquipmentAssignments = (workCenterId, equipmentIds) => {
-    const updatedEquipment = equipment.map(eq => {
-      if (equipmentIds.includes(eq.id)) {
-        return { ...eq, work_center_id: workCenterId };
-      } else if (eq.work_center_id === workCenterId) {
-        // Remove assignment if it was previously assigned to this work center but not selected now
-        return { ...eq, work_center_id: null };
-      }
-      return eq;
-    });
-    setEquipment(updatedEquipment);
-    localStorage.setItem(equipmentKey, JSON.stringify(updatedEquipment));
+  // Save equipment assignments via API
+  const saveEquipmentAssignments = async (workCenterId, equipmentIds) => {
+    const promises = equipment
+      .filter(eq => equipmentIds.includes(eq.id) || eq.work_center_id === workCenterId)
+      .map(eq => {
+        const newWcId = equipmentIds.includes(eq.id) ? workCenterId : '';
+        const currentWcId = eq.work_center_id || '';
+        if (currentWcId === newWcId) return Promise.resolve();
+        return equipmentService.update(eq.id, { work_center_id: newWcId }).catch(() => {});
+      });
+    await Promise.all(promises);
+    // Refresh equipment list
+    const refreshed = await equipmentService.list().catch(() => equipment);
+    setEquipment(refreshed);
   };
 
   const handleCreateWorkCenter = async () => {
@@ -123,7 +119,7 @@ export default function WorkCenters() {
 
       // Save equipment assignments if any were selected
       if (selectedEquipmentIds.length > 0 && createdWC?.id) {
-        saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
+        await saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
       }
 
       setShowCreateModal(false);
@@ -202,7 +198,7 @@ export default function WorkCenters() {
       await updateWorkCenter(selectedWorkCenter.id, wcData);
 
       // Update equipment assignments
-      saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
+      await saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
 
       setShowEditModal(false);
       setSelectedWorkCenter(null);
@@ -243,10 +239,22 @@ export default function WorkCenters() {
     return <AlertTriangle className="w-4 h-4" />;
   };
 
-  const utilizationData = workCenters.map(wc => ({
-    name: wc.name,
-    value: wc.utilization_rate || 0
-  }));
+  // Compute utilization from real work order minutes per work center
+  const utilizationData = useMemo(() => {
+    const minutesByWC = {};
+    (workOrders || []).forEach(wo => {
+      if (wo.work_center_id) {
+        const mins = wo.actual_duration_minutes || wo.expected_duration_minutes || 0;
+        minutesByWC[wo.work_center_id] = (minutesByWC[wo.work_center_id] || 0) + mins;
+      }
+    });
+    return workCenters
+      .map(wc => ({
+        name: wc.name,
+        value: Math.round((minutesByWC[wc.id] || 0) / 60 * 10) / 10
+      }))
+      .filter(entry => entry.value > 0);
+  }, [workCenters, workOrders]);
 
   return (
     <div className="space-y-6">
@@ -380,12 +388,12 @@ export default function WorkCenters() {
           </div>
 
           {/* Utilization Chart */}
-          {utilizationData.length > 0 && (
-            <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-              <CardHeader>
-                <CardTitle>{t('work_center_utilization_overview')}</CardTitle>
-              </CardHeader>
-              <CardContent>
+          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+            <CardHeader>
+              <CardTitle>{t('work_center_utilization_overview')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {utilizationData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -393,7 +401,7 @@ export default function WorkCenters() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}%`}
+                      label={(entry) => `${entry.name}: ${entry.value}h`}
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
@@ -402,19 +410,25 @@ export default function WorkCenters() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value) => [`${value}h`, t('hours_worked') || 'Hours']} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+                  <Cog className="w-12 h-12 mb-3 opacity-20" />
+                  <p className="text-sm">{t('no_work_order_data') || 'No work order data yet'}</p>
+                  <p className="text-xs mt-1">{t('start_production_to_see_utilization') || 'Start production orders to see utilization'}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {/* Create Work Center Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('add_work_center')}</DialogTitle>
           </DialogHeader>
@@ -530,7 +544,7 @@ export default function WorkCenters() {
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium">{eq.name}</p>
-                        <p className="text-xs text-slate-500">{eq.code} • {t(eq.type) || eq.type}</p>
+                        <p className="text-xs text-slate-500">{eq.code} • {t(eq.equipment_type) || eq.equipment_type}</p>
                       </div>
                       <Badge variant="outline" className={eq.status === 'operational' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}>
                         {t(eq.status) || eq.status}
@@ -570,7 +584,7 @@ export default function WorkCenters() {
 
       {/* Edit Work Center Modal */}
       <Dialog open={showEditModal} onOpenChange={(open) => { setShowEditModal(open); if (!open) { setSelectedWorkCenter(null); resetForm(); } }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('edit_work_center')}</DialogTitle>
           </DialogHeader>
@@ -694,7 +708,7 @@ export default function WorkCenters() {
                             />
                             <div className="flex-1">
                               <p className="text-sm font-medium">{eq.name}</p>
-                              <p className="text-xs text-slate-500">{eq.code} • {t(eq.type) || eq.type}</p>
+                              <p className="text-xs text-slate-500">{eq.code} • {t(eq.equipment_type) || eq.equipment_type}</p>
                             </div>
                             <Badge variant="outline" className={eq.status === 'operational' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}>
                               {t(eq.status) || eq.status}
@@ -738,7 +752,7 @@ export default function WorkCenters() {
 
       {/* View Work Center Modal */}
       <Dialog open={showViewModal} onOpenChange={(open) => { setShowViewModal(open); if (!open) setSelectedWorkCenter(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('view_work_center')}</DialogTitle>
           </DialogHeader>
@@ -844,7 +858,7 @@ export default function WorkCenters() {
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className="text-xs">
-                                {t(eq.type) || eq.type}
+                                {t(eq.equipment_type) || eq.equipment_type}
                               </Badge>
                             </TableCell>
                             <TableCell>
