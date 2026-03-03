@@ -26,9 +26,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
-import { useTranslation } from '@/components/utils/translations';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
-import { workOrdersService } from '@/api/services/manufacturing';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
 const WORK_ORDER_STATUS = {
@@ -42,8 +40,7 @@ const WORK_ORDER_STATUS = {
 
 export default function ShopFloorControl() {
   const { language } = useLanguage();
-  const { t } = useTranslation(language);
-  const { workOrders, workCenters, startWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
+  const { workOrders, workCenters, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
@@ -149,7 +146,7 @@ export default function ShopFloorControl() {
     if (!activeWorkOrder) return;
 
     try {
-      await workOrdersService.pause(activeWorkOrder.id);
+      await pauseWorkOrder(activeWorkOrder.id);
 
       // End current time log
       setTimeLogs(prev => prev.map(log => {
@@ -158,8 +155,6 @@ export default function ShopFloorControl() {
         }
         return log;
       }));
-
-      await refreshData();
     } catch (error) {
       console.error('Failed to pause work order:', error);
     }
@@ -219,21 +214,102 @@ export default function ShopFloorControl() {
     return { inProgress, completed, pending, paused };
   }, [workOrders]);
 
+  // Local translations for Shop Floor Control
+  const labels = useMemo(() => {
+    const tr = {
+      uz: {
+        title: "Ishlab chiqarish nazorati",
+        subtitle: "Ish buyurtmalarini bajarish paneli",
+        all_work_centers: "Barcha ish markazlari",
+        in_progress: "Jarayonda",
+        pending: "Kutilmoqda",
+        completed: "Tugallandi",
+        paused: "To'xtatilgan",
+        active_work_orders: "Faol ish buyurtmalari",
+        work_order: "Ish buyurtmasi",
+        operation: "Operatsiya",
+        work_center: "Ish markazi",
+        quantity: "Miqdor",
+        progress: "Jarayon",
+        time_spent: "Sarflangan vaqt",
+        status: "Holat",
+        actions: "Amallar",
+        no_active_work_orders: "Faol ish buyurtmalari yo'q",
+        start: "Boshlash",
+        pause: "To'xtatish",
+        complete: "Tugatish",
+        resume: "Davom etish",
+      },
+      ru: {
+        title: "Управление цехом",
+        subtitle: "Панель выполнения нарядов",
+        all_work_centers: "Все рабочие центры",
+        in_progress: "В процессе",
+        pending: "Ожидание",
+        completed: "Завершено",
+        paused: "Приостановлено",
+        active_work_orders: "Активные наряды",
+        work_order: "Наряд",
+        operation: "Операция",
+        work_center: "Рабочий центр",
+        quantity: "Количество",
+        progress: "Прогресс",
+        time_spent: "Затраченное время",
+        status: "Статус",
+        actions: "Действия",
+        no_active_work_orders: "Нет активных нарядов",
+        start: "Начать",
+        pause: "Пауза",
+        complete: "Завершить",
+        resume: "Продолжить",
+      },
+      en: {
+        title: "Shop Floor Control",
+        subtitle: "Worker dashboard for executing work orders",
+        all_work_centers: "All Work Centers",
+        in_progress: "In Progress",
+        pending: "Pending",
+        completed: "Completed",
+        paused: "Paused",
+        active_work_orders: "Active Work Orders",
+        work_order: "Work Order",
+        operation: "Operation",
+        work_center: "Work Center",
+        quantity: "Quantity",
+        progress: "Progress",
+        time_spent: "Time Spent",
+        status: "Status",
+        actions: "Actions",
+        no_active_work_orders: "No active work orders",
+        start: "Start",
+        pause: "Pause",
+        complete: "Complete",
+        resume: "Resume",
+      }
+    };
+    return tr[language] || tr.en;
+  }, [language]);
+
+  const statusLabel = (status) => {
+    const map = { in_progress: labels.in_progress, pending: labels.pending, completed: labels.completed, paused: labels.paused };
+    return map[status] || status;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">{t('shop_floor_control') || "Ishlab chiqarish nazorati"}</h2>
-          <p className="text-slate-600 mt-1">{t('shop_floor_desc') || "Ish buyurtmalarini boshqaring va bajarish jarayonini kuzating"}</p>
+          <h2 className="text-2xl font-bold text-slate-800">{labels.title}</h2>
+          <p className="text-slate-600 mt-1">{labels.subtitle}</p>
         </div>
         <div className="flex gap-2">
           <Select value={selectedWorkCenter} onValueChange={setSelectedWorkCenter}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder={t('select_work_center') || "Ish markazini tanlang"} />
+              <SelectValue placeholder={labels.all_work_centers} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t('all_work_centers') || "Barcha markazlar"}</SelectItem>
+              <SelectItem value="all">{labels.all_work_centers}</SelectItem>
               {workCenters.filter(wc => wc.id).map(wc => (
                 <SelectItem key={wc.id} value={wc.id}>{wc.name}</SelectItem>
               ))}
@@ -252,7 +328,7 @@ export default function ShopFloorControl() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.inProgress}</p>
-                <p className="text-sm text-slate-500">{t('in_progress') || "Jarayonda"}</p>
+                <p className="text-sm text-slate-500">{labels.in_progress}</p>
               </div>
             </div>
           </CardContent>
@@ -266,7 +342,7 @@ export default function ShopFloorControl() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.pending}</p>
-                <p className="text-sm text-slate-500">{t('pending') || "Kutilmoqda"}</p>
+                <p className="text-sm text-slate-500">{labels.pending}</p>
               </div>
             </div>
           </CardContent>
@@ -280,7 +356,7 @@ export default function ShopFloorControl() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.completed}</p>
-                <p className="text-sm text-slate-500">{t('completed') || "Tugallandi"}</p>
+                <p className="text-sm text-slate-500">{labels.completed}</p>
               </div>
             </div>
           </CardContent>
@@ -294,7 +370,7 @@ export default function ShopFloorControl() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.paused}</p>
-                <p className="text-sm text-slate-500">{t('paused') || "To'xtatilgan"}</p>
+                <p className="text-sm text-slate-500">{labels.paused}</p>
               </div>
             </div>
           </CardContent>
@@ -306,28 +382,28 @@ export default function ShopFloorControl() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="w-5 h-5" />
-            {t('active_work_orders') || "Faol ish buyurtmalari"}
+            {labels.active_work_orders}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('work_order') || "Ish buyurtmasi"}</TableHead>
-                <TableHead>{t('operation') || "Operatsiya"}</TableHead>
-                <TableHead>{t('work_center') || "Ish markazi"}</TableHead>
-                <TableHead>{t('quantity') || "Miqdor"}</TableHead>
-                <TableHead>{t('progress') || "Progress"}</TableHead>
-                <TableHead>{t('time_spent') || "Sarflangan vaqt"}</TableHead>
-                <TableHead>{t('status') || "Holat"}</TableHead>
-                <TableHead className="text-right">{t('actions') || "Amallar"}</TableHead>
+                <TableHead>{labels.work_order}</TableHead>
+                <TableHead>{labels.operation}</TableHead>
+                <TableHead>{labels.work_center}</TableHead>
+                <TableHead>{labels.quantity}</TableHead>
+                <TableHead>{labels.progress}</TableHead>
+                <TableHead>{labels.time_spent}</TableHead>
+                <TableHead>{labels.status}</TableHead>
+                <TableHead className="text-right">{labels.actions}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {availableWorkOrders.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-slate-500">
-                    {t('no_active_work_orders') || "Faol ish buyurtmalari yo'q"}
+                    {labels.no_active_work_orders}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -365,7 +441,7 @@ export default function ShopFloorControl() {
                       <TableCell>
                         <Badge variant="outline" className={WORK_ORDER_STATUS[wo.status]?.color}>
                           <StatusIcon className="w-3 h-3 mr-1" />
-                          {t(wo.status) || wo.status}
+                          {statusLabel(wo.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -377,7 +453,7 @@ export default function ShopFloorControl() {
                               className="bg-green-600 hover:bg-green-700"
                             >
                               <Play className="w-4 h-4 mr-1" />
-                              {t('start') || "Boshlash"}
+                              {labels.start}
                             </Button>
                           )}
                           {wo.status === 'in_progress' && (
@@ -389,7 +465,7 @@ export default function ShopFloorControl() {
                                 className="border-orange-200 text-orange-600 hover:bg-orange-50"
                               >
                                 <Pause className="w-4 h-4 mr-1" />
-                                {t('pause') || "To'xtatish"}
+                                {labels.pause}
                               </Button>
                               <Button
                                 size="sm"
@@ -397,7 +473,7 @@ export default function ShopFloorControl() {
                                 className="bg-green-600 hover:bg-green-700"
                               >
                                 <CheckCircle className="w-4 h-4 mr-1" />
-                                {t('complete') || "Tugatish"}
+                                {labels.complete}
                               </Button>
                             </>
                           )}
@@ -408,7 +484,7 @@ export default function ShopFloorControl() {
                               className="bg-amber-600 hover:bg-amber-700"
                             >
                               <Play className="w-4 h-4 mr-1" />
-                              {t('resume') || "Davom etish"}
+                              {labels.resume}
                             </Button>
                           )}
                         </div>
@@ -426,41 +502,41 @@ export default function ShopFloorControl() {
       <Dialog open={showPauseModal} onOpenChange={setShowPauseModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{t('pause_work_order') || "Ish buyurtmasini to'xtatish"}</DialogTitle>
+            <DialogTitle>{language === 'uz' ? "Ish buyurtmasini to'xtatish" : language === 'ru' ? "Приостановить наряд" : "Pause Work Order"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>{t('pause_reason') || "To'xtatish sababi"} *</Label>
+              <Label>{language === 'uz' ? "To'xtatish sababi" : language === 'ru' ? "Причина приостановки" : "Pause Reason"} *</Label>
               <Select
                 value={pauseData.reason}
                 onValueChange={value => setPauseData({ ...pauseData, reason: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t('select_reason') || "Sababni tanlang"} />
+                  <SelectValue placeholder={language === 'uz' ? "Sababni tanlang" : language === 'ru' ? "Выберите причину" : "Select reason"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="break">{t('break') || "Tanaffus"}</SelectItem>
-                  <SelectItem value="material_shortage">{t('material_shortage') || "Material yetishmovchiligi"}</SelectItem>
-                  <SelectItem value="equipment_issue">{t('equipment_issue') || "Jihoz muammosi"}</SelectItem>
-                  <SelectItem value="quality_issue">{t('quality_issue') || "Sifat muammosi"}</SelectItem>
-                  <SelectItem value="other">{t('other') || "Boshqa"}</SelectItem>
+                  <SelectItem value="break">{language === 'uz' ? "Tanaffus" : language === 'ru' ? "Перерыв" : "Break"}</SelectItem>
+                  <SelectItem value="material_shortage">{language === 'uz' ? "Material yetishmovchiligi" : language === 'ru' ? "Нехватка материала" : "Material Shortage"}</SelectItem>
+                  <SelectItem value="equipment_issue">{language === 'uz' ? "Jihoz muammosi" : language === 'ru' ? "Проблема с оборудованием" : "Equipment Issue"}</SelectItem>
+                  <SelectItem value="quality_issue">{language === 'uz' ? "Sifat muammosi" : language === 'ru' ? "Проблема качества" : "Quality Issue"}</SelectItem>
+                  <SelectItem value="other">{language === 'uz' ? "Boshqa" : language === 'ru' ? "Другое" : "Other"}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>{t('notes') || "Izohlar"}</Label>
+              <Label>{language === 'uz' ? "Izohlar" : language === 'ru' ? "Примечания" : "Notes"}</Label>
               <Textarea
                 value={pauseData.notes}
                 onChange={e => setPauseData({ ...pauseData, notes: e.target.value })}
-                placeholder={t('enter_notes') || "Izoh kiriting..."}
+                placeholder={language === 'uz' ? "Izoh kiriting..." : language === 'ru' ? "Введите заметки..." : "Enter notes..."}
                 rows={3}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowPauseModal(false)}>
-                {t('cancel') || "Bekor qilish"}
+                {language === 'uz' ? "Bekor qilish" : language === 'ru' ? "Отмена" : "Cancel"}
               </Button>
               <Button
                 onClick={confirmPauseWorkOrder}
@@ -468,7 +544,7 @@ export default function ShopFloorControl() {
                 className="bg-orange-600 hover:bg-orange-700"
               >
                 <Pause className="w-4 h-4 mr-2" />
-                {t('pause') || "To'xtatish"}
+                {language === 'uz' ? "To'xtatish" : language === 'ru' ? "Приостановить" : "Pause"}
               </Button>
             </div>
           </div>
@@ -479,25 +555,25 @@ export default function ShopFloorControl() {
       <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{t('complete_work_order') || "Ish buyurtmasini tugatish"}</DialogTitle>
+            <DialogTitle>{language === 'uz' ? "Ish buyurtmasini tugatish" : language === 'ru' ? "Завершить наряд" : "Complete Work Order"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {activeWorkOrder && (
               <div className="p-4 bg-green-50 rounded-lg space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">{t('work_order') || "Ish buyurtmasi"}</span>
-                  <span className="font-medium">{activeWorkOrder.id}</span>
+                  <span className="text-sm text-slate-500">{language === 'uz' ? "Ish buyurtmasi" : language === 'ru' ? "Наряд" : "Work Order"}</span>
+                  <span className="font-medium">{activeWorkOrder.work_order_number || activeWorkOrder.code || activeWorkOrder.id?.substring(0, 8)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">{t('planned_quantity') || "Rejalashtirilgan"}</span>
-                  <span className="font-medium">{activeWorkOrder.quantity_planned}</span>
+                  <span className="text-sm text-slate-500">{language === 'uz' ? "Rejalashtirilgan" : language === 'ru' ? "Запланировано" : "Planned Quantity"}</span>
+                  <span className="font-medium">{activeWorkOrder.quantity_to_produce || activeWorkOrder.quantity_planned}</span>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t('quantity_produced') || "Ishlab chiqarildi"} *</Label>
+                <Label>{language === 'uz' ? "Ishlab chiqarildi" : language === 'ru' ? "Произведено" : "Quantity Produced"} *</Label>
                 <Input
                   type="number"
                   value={completionData.quantity_produced}
@@ -506,7 +582,7 @@ export default function ShopFloorControl() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('quantity_scrapped') || "Yaroqsiz"}</Label>
+                <Label>{language === 'uz' ? "Yaroqsiz" : language === 'ru' ? "Брак" : "Scrapped"}</Label>
                 <Input
                   type="number"
                   value={completionData.quantity_scrapped}
@@ -517,18 +593,18 @@ export default function ShopFloorControl() {
             </div>
 
             <div className="space-y-2">
-              <Label>{t('completion_notes') || "Izohlar"}</Label>
+              <Label>{language === 'uz' ? "Izohlar" : language === 'ru' ? "Примечания" : "Notes"}</Label>
               <Textarea
                 value={completionData.notes}
                 onChange={e => setCompletionData({ ...completionData, notes: e.target.value })}
-                placeholder={t('enter_completion_notes') || "Tugatish haqida izoh..."}
+                placeholder={language === 'uz' ? "Tugatish haqida izoh..." : language === 'ru' ? "Заметки о завершении..." : "Completion notes..."}
                 rows={3}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setShowCompleteModal(false)}>
-                {t('cancel') || "Bekor qilish"}
+                {language === 'uz' ? "Bekor qilish" : language === 'ru' ? "Отмена" : "Cancel"}
               </Button>
               <Button
                 onClick={confirmCompleteWorkOrder}
@@ -536,7 +612,7 @@ export default function ShopFloorControl() {
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
-                {t('complete_work') || "Ishni tugatish"}
+                {language === 'uz' ? "Ishni tugatish" : language === 'ru' ? "Завершить" : "Complete"}
               </Button>
             </div>
           </div>

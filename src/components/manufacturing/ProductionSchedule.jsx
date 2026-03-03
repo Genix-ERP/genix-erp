@@ -12,6 +12,7 @@ const STATUS_COLORS = {
   draft: { bg: 'bg-slate-200', text: 'text-slate-700', bar: 'bg-slate-400' },
   confirmed: { bg: 'bg-blue-100', text: 'text-blue-700', bar: 'bg-blue-500' },
   in_progress: { bg: 'bg-amber-100', text: 'text-amber-700', bar: 'bg-amber-500' },
+  paused: { bg: 'bg-orange-100', text: 'text-orange-700', bar: 'bg-orange-400' },
   done: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
   completed: { bg: 'bg-green-100', text: 'text-green-700', bar: 'bg-green-500' },
   cancelled: { bg: 'bg-red-100', text: 'text-red-700', bar: 'bg-red-400' }
@@ -63,14 +64,18 @@ export default function ProductionSchedule() {
   const scheduledOrders = useMemo(() => {
     return productionOrders
       .filter(order => {
-        if (!order.scheduled_start_date) return false;
-        const orderStart = new Date(order.scheduled_start_date);
-        const orderEnd = order.scheduled_end_date ? new Date(order.scheduled_end_date) : orderStart;
+        const startDate = order.scheduled_start || order.scheduled_start_date || order.actual_start;
+        if (!startDate) return false;
+        const orderStart = new Date(startDate);
+        const endDate = order.scheduled_end || order.scheduled_end_date || order.actual_end;
+        const orderEnd = endDate ? new Date(endDate) : orderStart;
         return orderStart <= dateRange.end && orderEnd >= dateRange.start;
       })
       .map(order => {
-        const orderStart = new Date(order.scheduled_start_date);
-        const orderEnd = order.scheduled_end_date ? new Date(order.scheduled_end_date) : orderStart;
+        const startDate = order.scheduled_start || order.scheduled_start_date || order.actual_start;
+        const endDate = order.scheduled_end || order.scheduled_end_date || order.actual_end;
+        const orderStart = new Date(startDate);
+        const orderEnd = endDate ? new Date(endDate) : orderStart;
 
         // Calculate position and width
         const rangeStart = dateRange.start.getTime();
@@ -85,7 +90,7 @@ export default function ProductionSchedule() {
           ...order,
           startOffset,
           duration,
-          isOverdue: orderEnd < new Date() && order.status !== 'done' && order.status !== 'cancelled'
+          isOverdue: orderEnd < new Date() && order.status !== 'done' && order.status !== 'completed' && order.status !== 'cancelled'
         };
       });
   }, [productionOrders, dateRange, dates]);
@@ -240,7 +245,7 @@ export default function ProductionSchedule() {
                               {order.product_name || 'Unnamed Product'}
                             </div>
                             <div className="text-xs text-slate-500 truncate">
-                              {order.order_number}
+                              {order.code}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge className={`text-xs ${statusColor.bg} ${statusColor.text}`}>
@@ -266,10 +271,10 @@ export default function ProductionSchedule() {
                             width: `${Math.max((order.duration / dates.length) * 100, 5)}%`,
                             minWidth: '60px'
                           }}
-                          title={`${order.product_name}\n${order.scheduled_start_date} - ${order.scheduled_end_date || order.scheduled_start_date}`}
+                          title={`${order.product_name}\n${order.scheduled_start || order.actual_start || ''} - ${order.scheduled_end || order.actual_end || ''}`}
                         >
                           <span className="text-xs text-white font-medium truncate">
-                            {order.quantity_to_produce} units
+                            {order.quantity_planned || order.quantity_to_produce} {order.uom || 'units'}
                           </span>
                         </div>
                       </div>
@@ -337,7 +342,7 @@ export default function ProductionSchedule() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">
-                  {scheduledOrders.filter(o => o.status === 'done').length}
+                  {scheduledOrders.filter(o => o.status === 'done' || o.status === 'completed').length}
                 </p>
                 <p className="text-sm text-slate-500">{t('completed') || 'Completed'}</p>
               </div>
