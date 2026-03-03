@@ -32,6 +32,7 @@ export default function ProductionOrders() {
     pauseProductionOrder,
     completeProductionOrder,
     cancelProductionOrder,
+    deleteProductionOrder,
     refreshData
   } = useManufacturing();
 
@@ -546,6 +547,18 @@ export default function ProductionOrders() {
                             {canUpdate(MODULES.MANUFACTURING) && !['completed', 'cancelled', 'closed'].includes(order.status) && (
                               <Button size="sm" variant="ghost" onClick={() => handleStatusChange(order.id, 'cancel')} title={t('cancel') || 'Cancel'}>
                                 <X className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
+                            {canDelete(MODULES.MANUFACTURING) && ['draft', 'cancelled', 'completed'].includes(order.status) && (
+                              <Button size="sm" variant="ghost"
+                                onClick={() => {
+                                  if (window.confirm(t('confirm_delete') || 'Delete this production order?')) {
+                                    deleteProductionOrder(order.id);
+                                  }
+                                }}
+                                title={t('delete') || 'Delete'}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
                               </Button>
                             )}
                           </div>
