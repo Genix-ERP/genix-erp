@@ -86,6 +86,10 @@ export const clearTokens = () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('tenantId');
+  localStorage.removeItem('genixerp_user');
+  // Remove all per-user company keys to prevent data leakage
+  const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('genix_active_company_user_'));
+  keysToRemove.forEach(k => localStorage.removeItem(k));
 };
 
 // Request interceptor - add auth token + concurrency control
@@ -104,11 +108,26 @@ apiClient.interceptors.request.use(
     if (tenantId) {
       config.headers['X-Tenant-ID'] = tenantId;
     }
-    // Add organization header if available
-    const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
-    const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
-    if (organizationId) {
-      config.headers['X-Organization-ID'] = organizationId;
+    // Add organization header if available - use current user's specific key
+    try {
+      const userData = localStorage.getItem('genixerp_user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        const userId = user.id || user.email;
+        if (userId) {
+          const orgId = localStorage.getItem(`genix_active_company_user_${userId}`);
+          if (orgId) {
+            config.headers['X-Organization-ID'] = orgId;
+          }
+        }
+      }
+    } catch (e) {
+      // fallback: scan for any matching key
+      const activeCompanyKey = Object.keys(localStorage).find(k => k.startsWith('genix_active_company_user_'));
+      const organizationId = activeCompanyKey ? localStorage.getItem(activeCompanyKey) : null;
+      if (organizationId) {
+        config.headers['X-Organization-ID'] = organizationId;
+      }
     }
     return config;
   },

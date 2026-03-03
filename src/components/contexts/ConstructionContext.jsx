@@ -31,6 +31,7 @@ export const ConstructionProvider = ({ children }) => {
   // Status constants
   const PROJECT_STATUS = {
     DRAFT: 'draft',
+    PLANNING: 'planning',
     APPROVED: 'approved',
     IN_PROGRESS: 'in_progress',
     ON_HOLD: 'on_hold',

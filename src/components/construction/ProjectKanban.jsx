@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -22,40 +22,42 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
-// Project status columns
+// Project status columns config (titles resolved via t() at render time)
 const PROJECT_COLUMNS = [
   {
     id: 'draft',
-    title: 'Qoralama',
+    titleKey: 'draft',
     color: 'bg-slate-100 border-slate-300',
     headerColor: 'bg-slate-200',
     badge: 'bg-slate-100 text-slate-700',
   },
   {
     id: 'planning',
-    title: 'Rejalashtirish',
+    titleKey: 'planning',
     color: 'bg-blue-50 border-blue-200',
     headerColor: 'bg-blue-100',
     badge: 'bg-blue-100 text-blue-700',
   },
   {
     id: 'in_progress',
-    title: 'Jarayonda',
+    titleKey: 'in_progress',
     color: 'bg-yellow-50 border-yellow-200',
     headerColor: 'bg-yellow-100',
     badge: 'bg-yellow-100 text-yellow-700',
   },
   {
     id: 'on_hold',
-    title: "To'xtatilgan",
+    titleKey: 'on_hold',
     color: 'bg-orange-50 border-orange-200',
     headerColor: 'bg-orange-100',
     badge: 'bg-orange-100 text-orange-700',
   },
   {
     id: 'completed',
-    title: 'Tugallangan',
+    titleKey: 'completed',
     color: 'bg-green-50 border-green-200',
     headerColor: 'bg-green-100',
     badge: 'bg-green-100 text-green-700',
@@ -63,7 +65,7 @@ const PROJECT_COLUMNS = [
 ];
 
 // Draggable Project Card
-function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency }) {
+function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency, t }) {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('projectId', project.id.toString());
     e.dataTransfer.setData('currentStatus', project.status);
@@ -94,11 +96,11 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency }) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onView(project)}>
                 <Eye className="w-4 h-4 mr-2" />
-                Ko'rish
+                {t('view') || "Ko'rish"}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(project)}>
                 <Edit className="w-4 h-4 mr-2" />
-                Tahrirlash
+                {t('edit') || 'Tahrirlash'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -127,7 +129,7 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency }) {
 
         <div className="mb-2">
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-slate-500">Progress</span>
+            <span className="text-slate-500">{t('progress') || 'Progress'}</span>
             <span className="font-medium">{project.progress_percent || 0}%</span>
           </div>
           <Progress value={project.progress_percent || 0} className="h-1.5" />
@@ -145,7 +147,7 @@ function ProjectCard({ project, onView, onEdit, onDragStart, formatCurrency }) {
 }
 
 // Kanban Column
-function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency }) {
+function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency, t }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e) => {
@@ -183,7 +185,7 @@ function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency
       {/* Column Header */}
       <div className={`p-3 rounded-t-lg ${column.headerColor}`}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800">{column.title}</h3>
+          <h3 className="font-semibold text-slate-800">{t(column.titleKey) || column.titleKey}</h3>
           <Badge className={column.badge}>{columnProjects.length}</Badge>
         </div>
       </div>
@@ -194,7 +196,7 @@ function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency
           {columnProjects.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-sm">
               <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>Loyihalar yo'q</p>
+              <p>{t('no_projects') || "Loyihalar yo'q"}</p>
             </div>
           ) : (
             columnProjects.map((project) => (
@@ -204,6 +206,7 @@ function KanbanColumn({ column, projects, onDrop, onView, onEdit, formatCurrency
                 onView={onView}
                 onEdit={onEdit}
                 formatCurrency={formatCurrency}
+                t={t}
               />
             ))
           )}
@@ -221,6 +224,9 @@ export function ProjectKanban({
   onEditProject,
   formatCurrency,
 }) {
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
+
   const handleDrop = useCallback(
     async (projectId, newStatus) => {
       try {
@@ -244,6 +250,7 @@ export function ProjectKanban({
             onView={onViewProject}
             onEdit={onEditProject}
             formatCurrency={formatCurrency}
+            t={t}
           />
         ))}
       </div>
