@@ -499,6 +499,25 @@ export const constructionService = {
     await apiClient.delete(`/construction/stages/${stageId}`);
   },
 
+  async listSubStages(stageId) {
+    const response = await apiClient.get(`/construction/stages/${stageId}/sub-stages`);
+    return response.data.data;
+  },
+
+  async createSubStage(stageId, data) {
+    const response = await apiClient.post(`/construction/stages/${stageId}/sub-stages`, data);
+    return response.data.data;
+  },
+
+  async updateSubStage(subStageId, data) {
+    const response = await apiClient.put(`/construction/sub-stages/${subStageId}`, data);
+    return response.data.data;
+  },
+
+  async deleteSubStage(subStageId) {
+    await apiClient.delete(`/construction/sub-stages/${subStageId}`);
+  },
+
   // =====================================================
   // COST CATEGORIES & ACCOUNT MAPPING
   // =====================================================

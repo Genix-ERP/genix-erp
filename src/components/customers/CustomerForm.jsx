@@ -124,34 +124,6 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
               </div>
             </div>
 
-            {/* Business Details */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">{t('business_details')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <LabelWithHelp htmlFor="annual_revenue" label={t('annual_revenue_field')} helpText={t('help_customer_annual_revenue')} />
-                  <Input
-                    id="annual_revenue"
-                    type="number"
-                    min="0"
-                    value={formData.annual_revenue}
-                    onChange={(e) => handleChange("annual_revenue", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <LabelWithHelp htmlFor="employee_count" label={t('employee_count')} helpText={t('help_customer_employee_count')} />
-                  <Input
-                    id="employee_count"
-                    type="number"
-                    min="0"
-                    value={formData.employee_count}
-                    onChange={(e) => handleChange("employee_count", e.target.value)}
-                  />
-                </div>
-              </div>
-
-            </div>
-
             {/* Address */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">{t('address')}</h3>

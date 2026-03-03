@@ -110,7 +110,8 @@ export default function JournalManagement() {
   }), [journals]);
 
   const generateCodeFromName = (name) => {
-    return name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 20);
+    const code = name.trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '').replace(/\s+/g, '_').slice(0, 20);
+    return code || 'JRN';
   };
 
   // ========== DETAIL VIEW LOGIC ==========

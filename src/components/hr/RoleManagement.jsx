@@ -14,7 +14,9 @@ import { useInstalledApps } from '@/components/contexts/InstalledAppsContext';
 import { AVAILABLE_MODULES } from '@/components/contexts/EmployeePermissionsContext';
 import { MODULES } from "@/config/permissions";
 import apiClient from '@/api/client';
-import { Shield, Plus, Pencil, Trash2, Search, Check, X as XIcon, Eye } from 'lucide-react';
+import { Shield, Plus, Pencil, Trash2, Search, Check, X as XIcon, Eye, Users } from 'lucide-react';
+import { hrService } from "@/api/services/hr";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function RoleManagement({ roles, onRefresh }) {
   const { language } = useLanguage();
@@ -27,6 +29,14 @@ export default function RoleManagement({ roles, onRefresh }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', permissions: {} });
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Employee assignment state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignRole, setAssignRole] = useState(null);
+  const [roleEmployees, setRoleEmployees] = useState([]);
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [selectedEmpToAdd, setSelectedEmpToAdd] = useState('');
+  const [isLoadingAssign, setIsLoadingAssign] = useState(false);
 
   const getAvailableModules = useCallback(() => {
     return AVAILABLE_MODULES.filter(mod => {
@@ -179,6 +189,56 @@ export default function RoleManagement({ roles, onRefresh }) {
     setForm(prev => ({ ...prev, permissions: {} }));
   };
 
+  // Open assign employees modal for a role
+  const handleOpenAssign = async (role) => {
+    setAssignRole(role);
+    setSelectedEmpToAdd('');
+    setIsLoadingAssign(true);
+    setShowAssignModal(true);
+    try {
+      const [empData, assignedData] = await Promise.all([
+        hrService.listEmployees({ sort_by: 'full_name', sort_order: 'ASC' }),
+        apiClient.get(`/roles/${role.id}/employees`).then(r => r.data?.data || r.data || []).catch(() => []),
+      ]);
+      setAllEmployees((empData || []).map(e => ({
+        id: e.id,
+        full_name: e.full_name || `${e.first_name || ''} ${e.last_name || ''}`.trim(),
+        job_title: e.job_title || '',
+        email: e.email || '',
+      })));
+      setRoleEmployees(assignedData);
+    } catch {
+      setAllEmployees([]);
+      setRoleEmployees([]);
+    } finally {
+      setIsLoadingAssign(false);
+    }
+  };
+
+  const handleAddEmployeeToRole = async () => {
+    if (!assignRole || !selectedEmpToAdd) return;
+    try {
+      await apiClient.post(`/roles/${assignRole.id}/assign`, { employee_id: selectedEmpToAdd });
+      const emp = allEmployees.find(e => e.id === selectedEmpToAdd);
+      if (emp) setRoleEmployees(prev => [...prev, emp]);
+      setSelectedEmpToAdd('');
+      toast({ title: t('success') || 'Success', description: t('role_assigned_successfully') || 'Role assigned' });
+    } catch (error) {
+      toast({ title: t('error') || 'Error', description: error.response?.data?.error?.message || t('failed_to_assign_role') || 'Failed', variant: 'destructive' });
+    }
+  };
+
+  const handleRemoveEmployeeFromRole = async (employeeId) => {
+    if (!assignRole) return;
+    try {
+      await apiClient.post(`/roles/${assignRole.id}/unassign`, { employee_id: employeeId });
+      setRoleEmployees(prev => prev.filter(e => e.id !== employeeId));
+      toast({ title: t('success') || 'Success', description: t('role_removed_successfully') || 'Removed' });
+    } catch (error) {
+      toast({ title: t('error') || 'Error', description: error.response?.data?.error?.message || t('failed_to_remove_role') || 'Failed', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Main Content */}
@@ -274,6 +334,14 @@ export default function RoleManagement({ roles, onRefresh }) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenAssign(role)}
+                            title={t('assign_employees') || 'Assign Employees'}
+                          >
+                            <Users className="w-4 h-4 text-blue-500" />
+                          </Button>
                           {canUpdate(MODULES.HR) && (
                             <Button variant="ghost" size="sm" onClick={() => openModal(role)}>
                               <Pencil className="w-4 h-4 text-slate-500" />
@@ -299,6 +367,102 @@ export default function RoleManagement({ roles, onRefresh }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Assign Employees Modal */}
+      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              {t('assign_employees') || 'Assign Employees'} — {assignRole?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Add employee */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">
+                {t('select_employee_to_add') || 'Select employee to add'}
+              </label>
+              <div className="flex gap-2">
+                <Select value={selectedEmpToAdd} onValueChange={setSelectedEmpToAdd}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder={t('search_employees') || 'Select employee...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allEmployees
+                      .filter(e => !roleEmployees.some(re => re.id === e.id))
+                      .map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          <div className="flex flex-col">
+                            <span>{emp.full_name}</span>
+                            {emp.job_title && <span className="text-xs text-slate-400">{emp.job_title}</span>}
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAddEmployeeToRole}
+                  disabled={!selectedEmpToAdd}
+                  className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {t('add') || 'Add'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Current employees in role */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700">
+                  {t('employees_in_role') || 'Employees in this role'}
+                </span>
+                {roleEmployees.length > 0 && (
+                  <Badge variant="outline" className="text-xs">{roleEmployees.length}</Badge>
+                )}
+              </div>
+              {isLoadingAssign ? (
+                <p className="text-sm text-slate-400 text-center py-4">...</p>
+              ) : roleEmployees.length === 0 ? (
+                <p className="text-sm text-slate-500 italic p-3 bg-slate-50 rounded-lg">
+                  {t('no_employees_in_role') || 'No employees assigned to this role'}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {roleEmployees.map(emp => (
+                    <div key={emp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                          {(emp.full_name || emp.name)?.charAt(0)?.toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{emp.full_name || emp.name}</p>
+                          {emp.job_title && <p className="text-xs text-slate-400">{emp.job_title}</p>}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleRemoveEmployeeFromRole(emp.id)}
+                      >
+                        <XIcon className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={() => setShowAssignModal(false)}>
+                {t('close') || 'Close'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>

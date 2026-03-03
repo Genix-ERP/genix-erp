@@ -36,6 +36,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  Layers,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -45,6 +46,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
 
+  const [stages, setStages] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -62,11 +64,13 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
   const [form, setForm] = useState({
     id: null,
     building_id: '',
+    stage_id: '',
     wbs_id: '',
     date: new Date().toISOString().split('T')[0],
     quantity_done: '',
     uom: '',
     workers_count: '',
+    expected_budget: '',
     weather: '',
     description: '',
     issues: '',
@@ -97,6 +101,13 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     loadLogs();
   }, [loadLogs]);
 
+  useEffect(() => {
+    if (!project?.id) return;
+    constructionService.listStages(project.id)
+      .then(data => setStages(data || []))
+      .catch(() => setStages([]));
+  }, [project?.id]);
+
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
@@ -108,11 +119,13 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     try {
       const data = {
         building_id: form.building_id ? parseInt(form.building_id) : 0,
+        stage_id: form.stage_id ? parseInt(form.stage_id) : 0,
         wbs_id: parseInt(form.wbs_id),
         date: form.date,
         quantity_done: parseFloat(form.quantity_done) || 0,
         uom: form.uom || 'шт',
         workers_count: parseInt(form.workers_count) || 0,
+        expected_budget: parseFloat(form.expected_budget) || 0,
         weather: form.weather,
         description: form.description,
         issues: form.issues,
@@ -151,8 +164,8 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
 
   const resetForm = () => {
     setForm({
-      id: null, building_id: '', wbs_id: '', date: new Date().toISOString().split('T')[0],
-      quantity_done: '', uom: '', workers_count: '', weather: '', description: '', issues: '',
+      id: null, building_id: '', stage_id: '', wbs_id: '', date: new Date().toISOString().split('T')[0],
+      quantity_done: '', uom: '', workers_count: '', expected_budget: '', weather: '', description: '', issues: '',
     });
   };
 
@@ -160,11 +173,13 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     setForm({
       id: log.id,
       building_id: log.building_id ? String(log.building_id) : '',
+      stage_id: log.stage_id ? String(log.stage_id) : '',
       wbs_id: String(log.wbs_id),
       date: log.date ? format(new Date(log.date), 'yyyy-MM-dd') : '',
       quantity_done: String(log.quantity_done || ''),
       uom: log.uom || '',
       workers_count: String(log.workers_count || ''),
+      expected_budget: String(log.expected_budget || ''),
       weather: log.weather || '',
       description: log.description || '',
       issues: log.issues || '',
@@ -272,8 +287,29 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                       <Badge variant="outline" className="font-mono text-xs">{log.wbs_code}</Badge>
                       <span className="text-sm text-slate-600">{log.wbs_name}</span>
                     </div>
-                    {log.building_name && (
-                      <p className="text-xs text-slate-400 mt-0.5">{log.building_name}</p>
+                    {(log.building_name || log.stage_name) && (
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {log.building_name && (
+                          <p className="text-xs text-slate-400">{log.building_name}</p>
+                        )}
+                        {log.stage_name && (
+                          <span className="flex items-center gap-1 text-xs text-purple-600 font-medium">
+                            <Layers className="w-3 h-3" />
+                            {log.stage_name}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {log.stage_name && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-purple-500 transition-all"
+                            style={{ width: `${log.stage_progress || 0}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500 w-10 text-right">{log.stage_progress || 0}%</span>
+                      </div>
                     )}
                     <div className="flex flex-wrap gap-4 mt-2 text-sm">
                       <span className="font-medium text-blue-600">
@@ -359,18 +395,18 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
 
       {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {form.id ? (t('edit_daily_log') || 'Yozuvni tahrirlash') : (t('new_daily_log') || 'Yangi kunlik yozuv')}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave}>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <Label>WBS *</Label>
+                <Label className="text-xs">WBS *</Label>
                 <Select value={form.wbs_id} onValueChange={(val) => setForm({ ...form, wbs_id: val })}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8">
                     <SelectValue placeholder={t('select_wbs') || "WBS tanlang"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -383,12 +419,12 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                 </Select>
               </div>
 
-              {buildings.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{t('building') || 'Bino'}</Label>
+                  <Label className="text-xs">{t('building') || 'Bino'}</Label>
                   <Select value={form.building_id || "none"} onValueChange={(val) => setForm({ ...form, building_id: val === "none" ? "" : val })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_building') || "Bino tanlang (ixtiyoriy)"} />
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="-" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">-</SelectItem>
@@ -398,41 +434,56 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>{t('date') || 'Sana'} *</Label>
+                  <Label className="text-xs">{t('stage') || 'Bosqich'}</Label>
+                  <Select value={form.stage_id || "none"} onValueChange={(val) => setForm({ ...form, stage_id: val === "none" ? "" : val })}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="-" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">-</SelectItem>
+                      {stages.map(s => (
+                        <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">{t('date') || 'Sana'} *</Label>
                   <Input
-                    type="date"
+                    type="date" className="h-8"
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <Label>{t('workers_count') || 'Ishchilar soni'}</Label>
+                  <Label className="text-xs">{t('workers_count') || 'Ishchilar soni'}</Label>
                   <Input
-                    type="number" min="0"
+                    type="number" min="0" className="h-8"
                     value={form.workers_count}
                     onChange={(e) => setForm({ ...form, workers_count: e.target.value })}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{t('quantity_done') || 'Bajarilgan hajm'} *</Label>
+                  <Label className="text-xs">{t('quantity_done') || 'Bajarilgan hajm'} *</Label>
                   <Input
-                    type="number" step="0.0001" min="0"
+                    type="number" step="0.0001" min="0" className="h-8"
                     value={form.quantity_done}
                     onChange={(e) => setForm({ ...form, quantity_done: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <Label>{t('unit') || "O'lchov birligi"}</Label>
+                  <Label className="text-xs">{t('unit') || "O'lchov birligi"}</Label>
                   <Input
+                    className="h-8"
                     value={form.uom}
                     onChange={(e) => setForm({ ...form, uom: e.target.value })}
                     placeholder="м³, шт, м²..."
@@ -440,27 +491,39 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                 </div>
               </div>
 
-              <div>
-                <Label>{t('weather') || "Ob-havo"}</Label>
-                <Input
-                  value={form.weather}
-                  onChange={(e) => setForm({ ...form, weather: e.target.value })}
-                  placeholder={t('weather_placeholder') || "Quyoshli, 25°C"}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">{t('expected_budget') || 'Kutilgan byudjet'}</Label>
+                  <Input
+                    type="number" min="0" step="0.01" className="h-8"
+                    value={form.expected_budget}
+                    onChange={(e) => setForm({ ...form, expected_budget: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">{t('weather') || "Ob-havo"}</Label>
+                  <Input
+                    className="h-8"
+                    value={form.weather}
+                    onChange={(e) => setForm({ ...form, weather: e.target.value })}
+                    placeholder={t('weather_placeholder') || "Quyoshli, 25°C"}
+                  />
+                </div>
               </div>
 
               <div>
-                <Label>{t('description') || 'Tavsif'}</Label>
+                <Label className="text-xs">{t('description') || 'Tavsif'}</Label>
                 <Textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder={t('work_description_placeholder') || "Bajarilgan ishlar tavsifi..."}
-                  rows={3}
+                  rows={2}
                 />
               </div>
 
               <div>
-                <Label>{t('issues') || "Muammolar"}</Label>
+                <Label className="text-xs">{t('issues') || "Muammolar"}</Label>
                 <Textarea
                   value={form.issues}
                   onChange={(e) => setForm({ ...form, issues: e.target.value })}
@@ -469,7 +532,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                 />
               </div>
             </div>
-            <DialogFooter className="mt-6">
+            <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
