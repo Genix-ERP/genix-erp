@@ -15,6 +15,8 @@ import {
   Settings,
   Trash2
 } from "lucide-react";
+import { useLanguage } from '@/components/contexts/LanguageContext';
+import { useTranslation } from '@/components/utils/translations';
 
 const statusColors = {
   active: "bg-green-100 text-green-800 border-green-200",
@@ -40,7 +42,21 @@ const categoryIcons = {
 
 export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelete }) {
   const { formatCurrency } = useCurrencyFormatter();
+  const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const CategoryIcon = categoryIcons[workflow.category] || Settings;
+
+  const statusLabel = {
+    active: t('active') || 'Active',
+    paused: t('paused') || 'Paused',
+    draft: t('draft') || 'Draft',
+  }[workflow.status] || workflow.status;
+
+  const automationLabel = {
+    manual: t('manual') || 'Manual',
+    semi_automated: t('semi_automated') || 'Semi Automated',
+    fully_automated: t('fully_automated') || 'Fully Automated',
+  }[workflow.automation_level] || workflow.automation_level?.replace('_', ' ');
 
   return (
     <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-all duration-300">
@@ -52,15 +68,17 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
             </div>
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base sm:text-lg leading-tight break-words">{workflow.name}</CardTitle>
-              <p className="text-xs sm:text-sm text-slate-500 capitalize truncate">{workflow.category.replace('_', ' ')}</p>
+              <p className="text-xs sm:text-sm text-slate-500 capitalize truncate">
+                {t(workflow.category) || workflow.category.replace('_', ' ')}
+              </p>
             </div>
           </div>
           <Badge className={`${statusColors[workflow.status]} flex-shrink-0 text-xs`}>
-            {workflow.status}
+            {statusLabel}
           </Badge>
         </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2 break-words">
           {workflow.description}
@@ -68,16 +86,16 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
 
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs sm:text-sm flex-wrap gap-2">
-            <span className="text-slate-500 truncate">Automation Level</span>
+            <span className="text-slate-500 truncate">{t('automation_level') || 'Automation Level'}</span>
             <Badge className={`${automationColors[workflow.automation_level]} text-xs flex-shrink-0`}>
-              {workflow.automation_level?.replace('_', ' ')}
+              {automationLabel}
             </Badge>
           </div>
 
           {workflow.success_rate && (
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs sm:text-sm">
-                <span className="text-slate-500">Success Rate</span>
+                <span className="text-slate-500">{t('success_rate') || 'Success Rate'}</span>
                 <span className="font-medium">{workflow.success_rate}%</span>
               </div>
               <Progress value={workflow.success_rate} className="h-2" />
@@ -89,18 +107,18 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
               <div className="flex items-center gap-2 min-w-0">
                 <Clock className="w-4 h-4 text-slate-400 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-500 truncate">Avg Time</p>
+                  <p className="text-xs text-slate-500 truncate">{t('avg_time') || 'Avg Time'}</p>
                   <p className="text-sm font-medium truncate">{workflow.avg_completion_time}h</p>
                 </div>
               </div>
             )}
-            
+
             {workflow.cost_savings && (
               <div className="flex items-center gap-2 min-w-0">
                 <DollarSign className="w-4 h-4 text-slate-400 flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-500 truncate">Savings</p>
-                  <p className="text-sm font-medium text-green-600 truncate">{formatCurrency(workflow.cost_savings)}/mo</p>
+                  <p className="text-xs text-slate-500 truncate">{t('savings') || 'Savings'}</p>
+                  <p className="text-sm font-medium text-green-600 truncate">{formatCurrency(workflow.cost_savings)}{t('per_month') || '/mo'}</p>
                 </div>
               </div>
             )}
@@ -117,12 +135,12 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
             {workflow.status === "active" ? (
               <>
                 <Pause className="w-3 h-3 mr-1" />
-                Pause
+                {t('pause') || 'Pause'}
               </>
             ) : (
               <>
                 <Play className="w-3 h-3 mr-1" />
-                Activate
+                {t('activate') || 'Activate'}
               </>
             )}
           </Button>
@@ -133,7 +151,7 @@ export default function WorkflowCard({ workflow, onEdit, onToggleStatus, onDelet
             className="flex-1 text-xs sm:text-sm"
           >
             <Edit className="w-3 h-3 mr-1" />
-            Edit
+            {t('edit') || 'Edit'}
           </Button>
           <Button
             variant="outline"

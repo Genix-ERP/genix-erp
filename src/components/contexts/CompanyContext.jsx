@@ -93,8 +93,8 @@ export function CompanyProvider({ children }) {
         companiesList = companiesList.filter(company => organizationIds.includes(company.id));
       }
 
-      // If no companies exist, create a default one
-      if (companiesList.length === 0) {
+      // Only auto-create a default org if the user is an admin and there are truly no orgs at all
+      if (companiesList.length === 0 && isAdmin) {
         try {
           const createResponse = await apiClient.post('/organizations', {
             code: 'MAIN',
