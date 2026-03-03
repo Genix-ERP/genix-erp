@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
+import { useLanguage } from '@/components/contexts/LanguageContext';
 import { createCurrencyFormatter, createCompactCurrencyFormatter } from '@/utils/formatCurrency';
 
 export function useCurrencyFormatter() {
   const { getSetting } = useAdminSettings();
+  const { language } = useLanguage();
 
   const currency = getSetting('general.localization.currency', 'UZS');
   const currency_symbol = getSetting('general.localization.currency_symbol', "so'm");
@@ -28,9 +30,9 @@ export function useCurrencyFormatter() {
       currency,
       currency_symbol,
       currency_position,
-      locale: 'uz',
+      locale: language === 'en' ? 'en' : 'uz',
     }),
-    [currency, currency_symbol, currency_position]
+    [currency, currency_symbol, currency_position, language]
   );
 
   return { formatCurrency, formatCurrencyCompact };

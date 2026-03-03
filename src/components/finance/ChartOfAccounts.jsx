@@ -69,7 +69,7 @@ const getCurrencies = () => [
 export default function ChartOfAccounts() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { accounts, accountTypes: backendAccountTypes, createAccount, updateAccount, deleteAccount, isLoading } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
@@ -418,7 +418,7 @@ export default function ChartOfAccounts() {
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-wide">{type.label}</p>
                     <p className="text-lg font-bold text-slate-900 tabular-nums">
-                      {formatCurrency(totals[type.value])}
+                      {formatCurrencyCompact(totals[type.value])}
                     </p>
                   </div>
                 </div>

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
@@ -18,7 +17,6 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +40,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { format } from 'date-fns';
 
-const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
+const DailyJournalTab = ({ project, buildings = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
 
@@ -54,7 +52,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
   const limit = 20;
 
   // Filters
-  const [filterWBS, setFilterWBS] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
@@ -65,10 +62,8 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     id: null,
     building_id: '',
     stage_id: '',
-    wbs_id: '',
     date: new Date().toISOString().split('T')[0],
-    quantity_done: '',
-    uom: '',
+    end_date: '',
     workers_count: '',
     expected_budget: '',
     weather: '',
@@ -82,7 +77,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     setLoading(true);
     try {
       const params = { page, limit };
-      if (filterWBS) params.wbs_id = filterWBS;
       if (filterDateFrom) params.date_from = filterDateFrom;
       if (filterDateTo) params.date_to = filterDateTo;
 
@@ -95,7 +89,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, page, filterWBS, filterDateFrom, filterDateTo]);
+  }, [project?.id, page, filterDateFrom, filterDateTo]);
 
   useEffect(() => {
     loadLogs();
@@ -111,7 +105,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [filterWBS, filterDateFrom, filterDateTo]);
+  }, [filterDateFrom, filterDateTo]);
 
   // Create/update log
   const handleSave = async (e) => {
@@ -120,10 +114,8 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
       const data = {
         building_id: form.building_id ? parseInt(form.building_id) : 0,
         stage_id: form.stage_id ? parseInt(form.stage_id) : 0,
-        wbs_id: parseInt(form.wbs_id),
         date: form.date,
-        quantity_done: parseFloat(form.quantity_done) || 0,
-        uom: form.uom || 'шт',
+        end_date: form.end_date || null,
         workers_count: parseInt(form.workers_count) || 0,
         expected_budget: parseFloat(form.expected_budget) || 0,
         weather: form.weather,
@@ -164,8 +156,8 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
 
   const resetForm = () => {
     setForm({
-      id: null, building_id: '', stage_id: '', wbs_id: '', date: new Date().toISOString().split('T')[0],
-      quantity_done: '', uom: '', workers_count: '', expected_budget: '', weather: '', description: '', issues: '',
+      id: null, building_id: '', stage_id: '', date: new Date().toISOString().split('T')[0],
+      end_date: '', workers_count: '', expected_budget: '', weather: '', description: '', issues: '',
     });
   };
 
@@ -174,10 +166,8 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
       id: log.id,
       building_id: log.building_id ? String(log.building_id) : '',
       stage_id: log.stage_id ? String(log.stage_id) : '',
-      wbs_id: String(log.wbs_id),
       date: log.date ? format(new Date(log.date), 'yyyy-MM-dd') : '',
-      quantity_done: String(log.quantity_done || ''),
-      uom: log.uom || '',
+      end_date: log.end_date ? format(new Date(log.end_date), 'yyyy-MM-dd') : '',
       workers_count: String(log.workers_count || ''),
       expected_budget: String(log.expected_budget || ''),
       weather: log.weather || '',
@@ -187,23 +177,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
     setShowModal(true);
   };
 
-  // Flatten WBS items for dropdown
-  const flatWBS = [];
-  const flattenWBS = (items, level = 0) => {
-    (items || []).forEach(item => {
-      flatWBS.push({ ...item, level });
-      if (item.children) flattenWBS(item.children, level + 1);
-    });
-  };
-  flattenWBS(wbsItems);
-
   const totalPages = Math.ceil(total / limit);
-
-  const getProgressColor = (progress) => {
-    if (progress >= 70) return 'text-green-600';
-    if (progress >= 40) return 'text-yellow-600';
-    return 'text-red-600';
-  };
 
   return (
     <div className="space-y-4">
@@ -222,22 +196,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
       <Card>
         <CardContent className="py-3">
           <div className="flex flex-wrap gap-4 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <Label className="text-xs text-slate-500">WBS</Label>
-              <Select value={filterWBS || "all"} onValueChange={(val) => setFilterWBS(val === "all" ? "" : val)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={t('all') || 'Barchasi'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all') || 'Barchasi'}</SelectItem>
-                  {flatWBS.map(wbs => (
-                    <SelectItem key={wbs.id} value={String(wbs.id)}>
-                      {'  '.repeat(wbs.level)}{wbs.code} - {wbs.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div>
               <Label className="text-xs text-slate-500">{t('from') || 'Dan'}</Label>
               <Input
@@ -284,8 +242,9 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <p className="font-medium">{format(new Date(log.date), 'dd.MM.yyyy')}</p>
-                      <Badge variant="outline" className="font-mono text-xs">{log.wbs_code}</Badge>
-                      <span className="text-sm text-slate-600">{log.wbs_name}</span>
+                      {log.end_date && (
+                        <span className="text-sm text-slate-500">→ {format(new Date(log.end_date), 'dd.MM.yyyy')}</span>
+                      )}
                     </div>
                     {(log.building_name || log.stage_name) && (
                       <div className="flex items-center gap-3 mt-0.5">
@@ -312,12 +271,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                       </div>
                     )}
                     <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                      <span className="font-medium text-blue-600">
-                        +{log.quantity_done} {log.uom}
-                      </span>
-                      <span className="text-slate-500">
-                        {t('cumulative') || 'Jami'}: {log.cumulative_qty} {log.uom}
-                      </span>
                       {log.workers_count > 0 && (
                         <span className="text-slate-500">
                           <Users className="w-3.5 h-3.5 inline mr-1" />
@@ -403,22 +356,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
           </DialogHeader>
           <form onSubmit={handleSave}>
             <div className="space-y-3">
-              <div>
-                <Label className="text-xs">WBS *</Label>
-                <Select value={form.wbs_id} onValueChange={(val) => setForm({ ...form, wbs_id: val })}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder={t('select_wbs') || "WBS tanlang"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {flatWBS.map(wbs => (
-                      <SelectItem key={wbs.id} value={String(wbs.id)}>
-                        {'  '.repeat(wbs.level)}{wbs.code} - {wbs.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">{t('building') || 'Bino'}</Label>
@@ -461,6 +398,17 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                   />
                 </div>
                 <div>
+                  <Label className="text-xs">{t('end_date') || 'Tugash sanasi'}</Label>
+                  <Input
+                    type="date" className="h-8"
+                    value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <Label className="text-xs">{t('workers_count') || 'Ishchilar soni'}</Label>
                   <Input
                     type="number" min="0" className="h-8"
@@ -468,30 +416,6 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                     onChange={(e) => setForm({ ...form, workers_count: e.target.value })}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">{t('quantity_done') || 'Bajarilgan hajm'} *</Label>
-                  <Input
-                    type="number" step="0.0001" min="0" className="h-8"
-                    value={form.quantity_done}
-                    onChange={(e) => setForm({ ...form, quantity_done: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">{t('unit') || "O'lchov birligi"}</Label>
-                  <Input
-                    className="h-8"
-                    value={form.uom}
-                    onChange={(e) => setForm({ ...form, uom: e.target.value })}
-                    placeholder="м³, шт, м²..."
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">{t('expected_budget') || 'Kutilgan byudjet'}</Label>
                   <Input
@@ -501,15 +425,16 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
                     placeholder="0"
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">{t('weather') || "Ob-havo"}</Label>
-                  <Input
-                    className="h-8"
-                    value={form.weather}
-                    onChange={(e) => setForm({ ...form, weather: e.target.value })}
-                    placeholder={t('weather_placeholder') || "Quyoshli, 25°C"}
-                  />
-                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs">{t('weather') || "Ob-havo"}</Label>
+                <Input
+                  className="h-8"
+                  value={form.weather}
+                  onChange={(e) => setForm({ ...form, weather: e.target.value })}
+                  placeholder={t('weather_placeholder') || "Quyoshli, 25°C"}
+                />
               </div>
 
               <div>
@@ -536,7 +461,7 @@ const DailyJournalTab = ({ project, wbsItems = [], buildings = [] }) => {
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit" disabled={!form.wbs_id || !form.quantity_done}>
+              <Button type="submit" disabled={!form.date}>
                 {form.id ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}
               </Button>
             </DialogFooter>

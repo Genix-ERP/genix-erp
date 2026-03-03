@@ -59,7 +59,7 @@ export default function AccountsPayable() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = useEmployeePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [filteredBills, setFilteredBills] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -492,7 +492,7 @@ export default function AccountsPayable() {
                 <DollarSign className="w-6 h-6 text-red-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalPayable)}</p>
+            <p className="text-3xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalPayable)}</p>
             <p className="text-sm text-slate-600">{t('total_payable')}</p>
           </CardContent>
         </Card>

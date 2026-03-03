@@ -28,7 +28,7 @@ import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 export default function StockReport() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { stockMovements, products, warehouses, inventory, stockCounts } = useInventory();
 
   const [activeTab, setActiveTab] = useState("movements");
@@ -384,14 +384,14 @@ export default function StockReport() {
               <CardContent className="p-4">
                 <div className="text-xs text-green-600 font-medium">{language === "uz" ? "Jami kirim" : "Total In"}</div>
                 <div className="text-xl font-bold text-green-700">{movementStats.totalIn.toLocaleString()}</div>
-                <div className="text-xs text-green-500">{formatCurrency(movementStats.totalInValue)}</div>
+                <div className="text-xs text-green-500">{formatCurrencyCompact(movementStats.totalInValue)}</div>
               </CardContent>
             </Card>
             <Card className="bg-red-50 border-red-200">
               <CardContent className="p-4">
                 <div className="text-xs text-red-600 font-medium">{language === "uz" ? "Jami chiqim" : "Total Out"}</div>
                 <div className="text-xl font-bold text-red-700">{movementStats.totalOut.toLocaleString()}</div>
-                <div className="text-xs text-red-500">{formatCurrency(movementStats.totalOutValue)}</div>
+                <div className="text-xs text-red-500">{formatCurrencyCompact(movementStats.totalOutValue)}</div>
               </CardContent>
             </Card>
             <Card className="bg-blue-50 border-blue-200">
@@ -401,7 +401,7 @@ export default function StockReport() {
                   {(movementStats.totalIn - movementStats.totalOut).toLocaleString()}
                 </div>
                 <div className="text-xs text-blue-500">
-                  {formatCurrency(movementStats.totalInValue - movementStats.totalOutValue)}
+                  {formatCurrencyCompact(movementStats.totalInValue - movementStats.totalOutValue)}
                 </div>
               </CardContent>
             </Card>
@@ -550,7 +550,7 @@ export default function StockReport() {
                   <TrendingUp className="w-3.5 h-3.5" />
                   {language === "uz" ? "Foyda (ortiqcha)" : "Profit (surplus)"}
                 </div>
-                <div className="text-xl font-bold text-green-700">{formatCurrency(adjustmentPnL.totalProfit)}</div>
+                <div className="text-xl font-bold text-green-700">{formatCurrencyCompact(adjustmentPnL.totalProfit)}</div>
               </CardContent>
             </Card>
             <Card className="bg-red-50 border-red-200">
@@ -559,7 +559,7 @@ export default function StockReport() {
                   <TrendingDown className="w-3.5 h-3.5" />
                   {language === "uz" ? "Zarar (kamomad)" : "Loss (shortage)"}
                 </div>
-                <div className="text-xl font-bold text-red-700">{formatCurrency(adjustmentPnL.totalLoss)}</div>
+                <div className="text-xl font-bold text-red-700">{formatCurrencyCompact(adjustmentPnL.totalLoss)}</div>
               </CardContent>
             </Card>
             <Card className={adjustmentPnL.netResult >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}>
@@ -569,7 +569,7 @@ export default function StockReport() {
                 </div>
                 <div className="text-xl font-bold" style={{ color: adjustmentPnL.netResult >= 0 ? "#15803d" : "#b91c1c" }}>
                   {adjustmentPnL.netResult >= 0 ? "+" : ""}
-                  {formatCurrency(adjustmentPnL.netResult)}
+                  {formatCurrencyCompact(adjustmentPnL.netResult)}
                 </div>
               </CardContent>
             </Card>
