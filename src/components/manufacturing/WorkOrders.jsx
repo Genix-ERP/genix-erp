@@ -43,7 +43,6 @@ export default function WorkOrders() {
     quantity_produced: 0,
     scrap_quantity: 0,
     scrap_reason: '',
-    quality_check_passed: true
   });
 
   // Load data
@@ -175,7 +174,6 @@ export default function WorkOrders() {
         quantity_produced: 0,
         scrap_quantity: 0,
         scrap_reason: '',
-        quality_check_passed: true
       });
       loadData();
     } catch (error) {
@@ -202,7 +200,6 @@ export default function WorkOrders() {
       quantity_produced: wo.quantity_to_produce - wo.quantity_produced,
       scrap_quantity: 0,
       scrap_reason: '',
-      quality_check_passed: true
     });
     setShowDetailModal(true);
   };
@@ -703,19 +700,6 @@ export default function WorkOrders() {
                         />
                       </div>
                     )}
-                    <div className="col-span-2">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={completeForm.quality_check_passed}
-                          onChange={(e) => setCompleteForm({...completeForm, quality_check_passed: e.target.checked})}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm font-medium">
-                          {t('quality_check_passed') || 'Quality Check Passed'}
-                        </span>
-                      </label>
-                    </div>
                   </div>
                   <div className="mt-4 flex justify-end">
                     <Button

@@ -188,41 +188,6 @@ export const manufacturingTransfersService = {
 };
 
 // =====================================================
-// QUALITY CHECKS SERVICE
-// =====================================================
-export const qualityChecksService = {
-  async list(companyId, params = {}) {
-    const response = await apiClient.get('/quality-checks', { params });
-    return response.data.data || [];
-  },
-
-  async get(id) {
-    const response = await apiClient.get(`/quality-checks/${id}`);
-    return response.data.data;
-  },
-
-  async create(data) {
-    const response = await apiClient.post('/quality-checks', data);
-    return response.data.data;
-  },
-
-  async getStats(companyId) {
-    const response = await apiClient.get('/quality-checks/stats');
-    return response.data.data;
-  },
-
-  async listDefects(params = {}) {
-    const response = await apiClient.get('/quality-checks/defects', { params });
-    return response.data.data || [];
-  },
-
-  async createDefect(data) {
-    const response = await apiClient.post('/quality-checks/defects', data);
-    return response.data.data;
-  }
-};
-
-// =====================================================
 // BOMS SERVICE
 // =====================================================
 export const bomsService = {
@@ -251,6 +216,17 @@ export const bomsService = {
     return true;
   },
 
+  // BOM Lines (components)
+  async createLine(bomId, data) {
+    const response = await apiClient.post(`/boms/${bomId}/lines`, data);
+    return response.data.data;
+  },
+
+  async deleteLine(bomId, lineId) {
+    await apiClient.delete(`/boms/${bomId}/lines/${lineId}`);
+    return true;
+  },
+
   // BOM Operations (routing)
   async listOperations(bomId) {
     const response = await apiClient.get(`/boms/${bomId}/operations`);
@@ -270,5 +246,50 @@ export const bomsService = {
   async deleteOperation(bomId, operationId) {
     await apiClient.delete(`/boms/${bomId}/operations/${operationId}`);
     return true;
+  }
+};
+
+// =====================================================
+// EQUIPMENT SERVICE
+// =====================================================
+export const equipmentService = {
+  async list(params = {}) {
+    const response = await apiClient.get('/equipment', { params });
+    return response.data.data || [];
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/equipment', data);
+    return response.data.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/equipment/${id}`, data);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/equipment/${id}`);
+    return true;
+  },
+
+  async listMaintenance(equipmentId) {
+    const response = await apiClient.get(`/equipment/${equipmentId}/maintenance`);
+    return response.data.data || [];
+  },
+
+  async createMaintenance(equipmentId, data) {
+    const response = await apiClient.post(`/equipment/${equipmentId}/maintenance`, data);
+    return response.data.data;
+  },
+
+  async completeMaintenance(equipmentId, taskId, data) {
+    const response = await apiClient.put(`/equipment/${equipmentId}/maintenance/${taskId}`, data);
+    return response.data.data;
+  },
+
+  async updateMaintenance(equipmentId, taskId, data) {
+    const response = await apiClient.patch(`/equipment/${equipmentId}/maintenance/${taskId}`, data);
+    return response.data.data;
   }
 };

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useCompany } from '@/components/contexts/CompanyContext';
+import React, { useState, useEffect, useMemo } from 'react';
+import { equipmentService } from '@/api/services';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,17 +70,12 @@ export default function EquipmentMaintenance() {
   const { t } = useTranslation(language);
   const { workCenters } = useManufacturing();
   const { canCreate, canUpdate, canDelete } = usePermissions();
-  const { activeCompany } = useCompany();
-
-  const orgId = activeCompany?.id || 'default';
-  const equipmentKey = `genix_equipment_${orgId}`;
-  const tasksKey = `genix_maintenance_tasks_${orgId}`;
 
   // Get date-fns locale based on language
   const getDateLocale = () => {
     switch (language) {
       case 'ru': return ru;
-      case 'uz': return enUS; // Uzbek uses similar format to English
+      case 'uz': return enUS;
       default: return enUS;
     }
   };
@@ -149,95 +144,39 @@ export default function EquipmentMaintenance() {
     }
   }, [selectedItem, showCompleteModal, equipment]);
 
-  // Load data from localStorage
-  useEffect(() => {
-    const storedEquipment = localStorage.getItem(equipmentKey);
-    const storedTasks = localStorage.getItem(tasksKey);
+  // Normalize API response to match expected field names in JSX
+  const normalizeEquipment = (eq) => ({
+    ...eq,
+    type: eq.equipment_type,
+    last_maintenance: eq.last_maintenance_date,
+    warranty_expiry: eq.warranty_expiry,
+  });
 
-    if (storedEquipment) {
-      setEquipment(JSON.parse(storedEquipment));
-    } else {
-      const sample = generateSampleEquipment();
-      setEquipment(sample);
-      localStorage.setItem(equipmentKey, JSON.stringify(sample));
+  const normalizeTask = (task) => ({
+    ...task,
+    type: task.maintenance_type,
+    estimated_duration: Math.round((task.duration_hours || 0) * 60),
+  });
+
+  // Load equipment and their maintenance tasks from API
+  const reloadData = async () => {
+    try {
+      const equipList = (await equipmentService.list()).map(normalizeEquipment);
+      setEquipment(equipList);
+      if (equipList.length > 0) {
+        const taskArrays = await Promise.all(
+          equipList.map(eq => equipmentService.listMaintenance(eq.id).then(t => t.map(normalizeTask)).catch(() => []))
+        );
+        setMaintenanceTasks(taskArrays.flat());
+      } else {
+        setMaintenanceTasks([]);
+      }
+    } catch (error) {
+      console.error('Failed to load equipment data:', error);
     }
-
-    if (storedTasks) {
-      setMaintenanceTasks(JSON.parse(storedTasks));
-    } else {
-      const sample = generateSampleTasks();
-      setMaintenanceTasks(sample);
-      localStorage.setItem(tasksKey, JSON.stringify(sample));
-    }
-  }, [equipmentKey, tasksKey]);
-
-  // Save to localStorage
-  useEffect(() => {
-    if (equipment.length > 0) {
-      localStorage.setItem(equipmentKey, JSON.stringify(equipment));
-    }
-  }, [equipment, equipmentKey]);
-
-  useEffect(() => {
-    if (maintenanceTasks.length > 0) {
-      localStorage.setItem(tasksKey, JSON.stringify(maintenanceTasks));
-    }
-  }, [maintenanceTasks, tasksKey]);
-
-  // Generate sample data
-  const generateSampleEquipment = () => {
-    return [
-      {
-        id: `EQ-${Date.now()}-1`,
-        name: 'CNC Mill #1',
-        code: 'CNC-001',
-        type: 'machine',
-        work_center_id: workCenters[0]?.id || 'wc_1',
-        manufacturer: 'Haas Automation',
-        model: 'VF-2',
-        serial_number: 'SN-12345',
-        purchase_date: '2022-01-15',
-        warranty_expiry: '2025-01-15',
-        maintenance_interval_days: 30,
-        last_maintenance: '2024-12-15',
-        status: 'operational',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: `EQ-${Date.now()}-2`,
-        name: 'Assembly Robot #2',
-        code: 'ROB-002',
-        type: 'robot',
-        work_center_id: workCenters[1]?.id || 'wc_2',
-        manufacturer: 'FANUC',
-        model: 'M-20iA',
-        serial_number: 'SN-67890',
-        purchase_date: '2023-06-01',
-        warranty_expiry: '2026-06-01',
-        maintenance_interval_days: 60,
-        last_maintenance: '2024-11-20',
-        status: 'operational',
-        created_at: new Date().toISOString(),
-      },
-    ];
   };
 
-  const generateSampleTasks = () => {
-    return [
-      {
-        id: `MT-${Date.now()}-1`,
-        equipment_id: `EQ-${Date.now()}-1`,
-        type: 'preventive',
-        description: t('sample_task_description') || 'Monthly preventive maintenance - lubrication and inspection',
-        scheduled_date: addDays(new Date(), 5).toISOString().split('T')[0],
-        estimated_duration: 120,
-        assigned_to: t('maintenance_team') || 'Maintenance Team',
-        priority: 'high',
-        status: 'scheduled',
-        created_at: new Date().toISOString(),
-      },
-    ];
-  };
+  useEffect(() => { reloadData(); }, []);
 
   // Calculate task status based on date
   const getTaskStatus = (task) => {
@@ -277,124 +216,128 @@ export default function EquipmentMaintenance() {
   }, [equipment, maintenanceTasks]);
 
   // Handle create equipment
-  const handleCreateEquipment = () => {
+  const handleCreateEquipment = async () => {
     setIsSubmitting(true);
-
-    const eq = {
-      id: `EQ-${Date.now()}`,
-      ...newEquipment,
-      code: `EQ-${Date.now()}`, // Auto-generate code
-      created_at: new Date().toISOString(),
-    };
-
-    setEquipment(prev => [eq, ...prev]);
-    setShowCreateEquipmentModal(false);
-    resetEquipmentForm();
-    setIsSubmitting(false);
+    try {
+      await equipmentService.create({
+        name: newEquipment.name,
+        equipment_type: newEquipment.type,
+        work_center_id: newEquipment.work_center_id || undefined,
+        manufacturer: newEquipment.manufacturer || undefined,
+        model: newEquipment.model || undefined,
+        serial_number: newEquipment.serial_number || undefined,
+        purchase_date: newEquipment.purchase_date || undefined,
+        warranty_expiry: newEquipment.warranty_expiry || undefined,
+        maintenance_interval_days: newEquipment.maintenance_interval_days,
+        status: newEquipment.status,
+      });
+      await reloadData();
+      setShowCreateEquipmentModal(false);
+      resetEquipmentForm();
+    } catch (error) {
+      console.error('Failed to create equipment:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle create task
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     setIsSubmitting(true);
-
-    const task = {
-      id: `MT-${Date.now()}`,
-      ...newTask,
-      status: 'scheduled',
-      created_at: new Date().toISOString(),
-    };
-
-    setMaintenanceTasks(prev => [task, ...prev]);
-    setShowCreateTaskModal(false);
-    resetTaskForm();
-    setIsSubmitting(false);
+    try {
+      await equipmentService.createMaintenance(newTask.equipment_id, {
+        maintenance_type: newTask.type,
+        scheduled_date: newTask.scheduled_date,
+        duration_hours: (newTask.estimated_duration || 60) / 60,
+        description: newTask.description || undefined,
+      });
+      await reloadData();
+      setShowCreateTaskModal(false);
+      resetTaskForm();
+    } catch (error) {
+      console.error('Failed to create maintenance task:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle edit task
-  const handleEditTask = () => {
+  const handleEditTask = async () => {
     if (!selectedItem) return;
     setIsSubmitting(true);
-
-    setMaintenanceTasks(prev => prev.map(t =>
-      t.id === selectedItem.id
-        ? { ...t, ...newTask }
-        : t
-    ));
-
-    setShowEditTaskModal(false);
-    setSelectedItem(null);
-    resetTaskForm();
-    setIsSubmitting(false);
+    try {
+      await equipmentService.updateMaintenance(selectedItem.equipment_id, selectedItem.id, {
+        maintenance_type: newTask.type,
+        scheduled_date: newTask.scheduled_date,
+        duration_hours: (newTask.estimated_duration || 60) / 60,
+        description: newTask.description || undefined,
+      });
+      await reloadData();
+      setShowEditTaskModal(false);
+      setSelectedItem(null);
+      resetTaskForm();
+    } catch (error) {
+      console.error('Failed to update maintenance task:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle complete task
-  const handleCompleteTask = () => {
+  const handleCompleteTask = async () => {
     if (!selectedItem) return;
-
     setIsSubmitting(true);
-
-    setMaintenanceTasks(prev => prev.map(t =>
-      t.id === selectedItem.id
-        ? {
-            ...t,
-            status: 'completed',
-            completed_date: completionData.actual_date,
-            actual_duration: completionData.actual_duration,
-            cost: completionData.cost,
-            completion_notes: completionData.notes,
-          }
-        : t
-    ));
-
-    // Update equipment last maintenance
-    const task = selectedItem;
-    setEquipment(prev => prev.map(e =>
-      e.id === task.equipment_id
-        ? { ...e, last_maintenance: completionData.actual_date }
-        : e
-    ));
-
-    // Create next scheduled maintenance if preventive
-    if (task.type === 'preventive' && completionData.next_maintenance_date) {
-      const nextTask = {
-        id: `MT-${Date.now()}`,
-        equipment_id: task.equipment_id,
-        type: 'preventive',
-        description: task.description,
-        scheduled_date: completionData.next_maintenance_date,
-        estimated_duration: task.estimated_duration,
-        assigned_to: task.assigned_to,
-        priority: task.priority,
-        status: 'scheduled',
-        created_at: new Date().toISOString(),
-      };
-      setMaintenanceTasks(prev => [...prev, nextTask]);
+    try {
+      await equipmentService.completeMaintenance(
+        selectedItem.equipment_id,
+        selectedItem.id,
+        {
+          work_performed: completionData.notes || undefined,
+          duration_hours: (completionData.actual_duration || 0) / 60,
+          labor_cost: completionData.cost || 0,
+          parts_cost: 0,
+        }
+      );
+      // Create next scheduled task if preventive
+      if (selectedItem.type === 'preventive' && completionData.next_maintenance_date) {
+        await equipmentService.createMaintenance(selectedItem.equipment_id, {
+          maintenance_type: 'preventive',
+          scheduled_date: completionData.next_maintenance_date,
+          duration_hours: (selectedItem.estimated_duration || 60) / 60,
+          description: selectedItem.description || undefined,
+        });
+      }
+      await reloadData();
+      setShowCompleteModal(false);
+      setCompletionData({
+        actual_date: new Date().toISOString().split('T')[0],
+        actual_duration: 0,
+        cost: 0,
+        notes: '',
+        next_maintenance_date: '',
+      });
+      setSelectedItem(null);
+    } catch (error) {
+      console.error('Failed to complete maintenance task:', error);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setShowCompleteModal(false);
-    setCompletionData({
-      actual_date: new Date().toISOString().split('T')[0],
-      actual_duration: 0,
-      cost: 0,
-      notes: '',
-      next_maintenance_date: '',
-    });
-    setSelectedItem(null);
-    setIsSubmitting(false);
   };
 
   // Handle delete
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedItem) return;
-
-    if (activeTab === 'equipment') {
-      setEquipment(prev => prev.filter(e => e.id !== selectedItem.id));
-    } else {
-      setMaintenanceTasks(prev => prev.filter(t => t.id !== selectedItem.id));
+    try {
+      if (activeTab === 'equipment') {
+        await equipmentService.delete(selectedItem.id);
+      }
+      await reloadData();
+    } catch (error) {
+      console.error('Failed to delete:', error);
+    } finally {
+      setShowDeleteDialog(false);
+      setSelectedItem(null);
     }
-
-    setShowDeleteDialog(false);
-    setSelectedItem(null);
   };
 
   const resetEquipmentForm = () => {

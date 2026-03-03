@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
   Factory,
-  PackageCheck,
   ClipboardList,
   Cog,
   TrendingUp,
@@ -24,7 +23,6 @@ import ProductionOrders from '@/components/manufacturing/ProductionOrders';
 import ProductionSchedule from '@/components/manufacturing/ProductionSchedule';
 import BOMManagement from '@/components/manufacturing/BOMManagement';
 import WorkCenters from '@/components/manufacturing/WorkCenters';
-import QualityControl from '@/components/manufacturing/QualityControl';
 import MRPPlanning from '@/components/manufacturing/MRPPlanning';
 import ShopFloorControl from '@/components/manufacturing/ShopFloorControl';
 import RoutingManagement from '@/components/manufacturing/RoutingManagement';
@@ -66,10 +64,6 @@ export default function Manufacturing() {
             <TabsTrigger value="resources" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Settings2 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('resources') || 'Resources'}</span>
-            </TabsTrigger>
-            <TabsTrigger value="quality" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
-              <PackageCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('quality') || 'Quality'}</span>
             </TabsTrigger>
             <TabsTrigger value="mrp" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Zap className="w-4 h-4" />
@@ -145,10 +139,6 @@ export default function Manufacturing() {
                 <EquipmentMaintenance />
               </TabsContent>
             </Tabs>
-          </TabsContent>
-
-          <TabsContent value="quality" className="mt-6">
-            <QualityControl />
           </TabsContent>
 
           <TabsContent value="mrp" className="mt-6">
