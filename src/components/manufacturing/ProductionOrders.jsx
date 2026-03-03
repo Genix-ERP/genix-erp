@@ -108,7 +108,6 @@ export default function ProductionOrders() {
     scheduled_start: new Date().toISOString().split('T')[0],
     scheduled_end: '',
     // Manufacturing-specific fields
-    mold_count: 0,
     shift: ''
   });
 
@@ -168,8 +167,7 @@ export default function ProductionOrders() {
     try {
       const orderData = {
         ...newOrder,
-        quantity_planned: parseFloat(newOrder.quantity_planned),
-        mold_count: parseInt(newOrder.mold_count) || 0
+        quantity_planned: parseFloat(newOrder.quantity_planned)
       };
       // Only include bom_id if selected
       if (!orderData.bom_id) {
@@ -194,7 +192,6 @@ export default function ProductionOrders() {
         scheduled_start: new Date().toISOString().split('T')[0],
         scheduled_end: '',
         // Manufacturing-specific fields
-        mold_count: 0,
         shift: ''
       });
       setProductBoms([]);
@@ -444,7 +441,6 @@ export default function ProductionOrders() {
                     <TableHead className="font-semibold">{t('order_code') || 'Order Code'}</TableHead>
                     <TableHead className="font-semibold">{t('product') || 'Product'}</TableHead>
                     <TableHead className="font-semibold">{t('quantity') || 'Quantity'}</TableHead>
-                    <TableHead className="font-semibold">{t('molds') || 'Molds'}</TableHead>
                     <TableHead className="font-semibold">{t('stage') || 'Stage'}</TableHead>
                     <TableHead className="font-semibold">{t('output') || 'Output'}</TableHead>
                     <TableHead className="font-semibold">{t('priority') || 'Priority'}</TableHead>
@@ -471,15 +467,6 @@ export default function ProductionOrders() {
                             <span className="font-semibold">{order.quantity_produced || 0}</span>
                             <span className="text-slate-500"> / {order.quantity_planned}</span>
                             <span className="text-xs text-slate-400 ml-1">{getUnitLabel(order.uom)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {order.mold_count > 0 ? (
-                              <span className="font-semibold">{order.mold_count}</span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -643,7 +630,7 @@ export default function ProductionOrders() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('quantity') || 'Quantity'} *</label>
                 <Input
@@ -656,29 +643,9 @@ export default function ProductionOrders() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('unit') || 'Unit'}</label>
-                <Select value={newOrder.uom} onValueChange={(value) => setNewOrder({...newOrder, uom: value})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="units">{t('units') || 'Units'}</SelectItem>
-                    <SelectItem value="pcs">{t('pieces') || 'Pieces'}</SelectItem>
-                    <SelectItem value="kg">{t('kg') || 'Kilograms'}</SelectItem>
-                    <SelectItem value="liters">{t('liters') || 'Liters'}</SelectItem>
-                    <SelectItem value="boxes">{t('boxes') || 'Boxes'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">{t('mold_count') || 'Mold Count'}</label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={newOrder.mold_count}
-                  onChange={(e) => setNewOrder({...newOrder, mold_count: parseInt(e.target.value) || 0})}
-                  min="0"
-                />
-                <p className="text-xs text-slate-500 mt-1">{t('mold_count_hint') || '1 mold = 12 blocks'}</p>
+                <div className="h-10 px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm text-slate-700 flex items-center">
+                  {newOrder.uom || t('select_product_first') || 'Select product first'}
+                </div>
               </div>
             </div>
 
