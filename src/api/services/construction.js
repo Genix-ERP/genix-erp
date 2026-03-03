@@ -236,6 +236,11 @@ export const constructionService = {
     await apiClient.delete(`/construction/material-requests/${id}`);
   },
 
+  async listProjectMaterials(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/project-materials`);
+    return response.data.data;
+  },
+
   // =====================================================
   // PROJECT VENDORS (Future)
   // =====================================================

@@ -51,6 +51,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [linesLoading, setLinesLoading] = useState(false);
+  const [products, setProducts] = useState([]);
 
   // Modals
   const [showEstimateModal, setShowEstimateModal] = useState(false);
@@ -61,7 +62,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     name: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12'
   });
   const [lineForm, setLineForm] = useState({
-    id: null, wbs_id: '', name: '', uom: '', quantity: '',
+    id: null, product_id: '', name: '', uom: '', quantity: '',
     material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0'
   });
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', description: '', onConfirm: null, variant: 'default' });
@@ -72,7 +73,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   const [exportData, setExportData] = useState([]);
 
   const exportColumns = [
-    { key: 'wbs_code', label: 'WBS' },
     { key: 'name', label: t('name') || 'Nomi' },
     { key: 'uom', label: t('unit') || "O'lchov birligi" },
     { key: 'quantity', label: t('quantity') || 'Miqdor' },
@@ -156,6 +156,13 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   useEffect(() => {
     loadEstimates();
   }, [loadEstimates]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    constructionService.listProjectMaterials(project.id)
+      .then(data => setProducts(data || []))
+      .catch(() => setProducts([]));
+  }, [project?.id]);
 
   // Load lines when estimate is selected
   useEffect(() => {
@@ -254,7 +261,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     if (!selectedEstimate?.id) return;
     try {
       const data = {
-        wbs_id: lineForm.wbs_id ? parseInt(lineForm.wbs_id) : 0,
         name: lineForm.name,
         uom: lineForm.uom || 'шт',
         quantity: parseFloat(lineForm.quantity) || 0,
@@ -275,7 +281,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
       setLines(estData?.lines || []);
       await loadEstimates();
       setShowLineModal(false);
-      setLineForm({ id: null, wbs_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
+      setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
     } catch (error) {
       console.error('Error saving line:', error);
     }
@@ -316,16 +322,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
       default: return t('draft') || 'Qoralama';
     }
   };
-
-  // Flatten WBS items for dropdown
-  const flatWBS = [];
-  const flattenWBS = (items, level = 0) => {
-    (items || []).forEach(item => {
-      flatWBS.push({ ...item, level });
-      if (item.children) flattenWBS(item.children, level + 1);
-    });
-  };
-  flattenWBS(wbsItems);
 
   return (
     <div className="space-y-4">
@@ -452,7 +448,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
               <p className="text-slate-500">{t('no_lines') || "Qatorlar yo'q"}</p>
               {selectedEstimate.state === 'draft' && (
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => {
-                  setLineForm({ id: null, wbs_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
+                  setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
                   setShowLineModal(true);
                 }}>
                   <Plus className="w-4 h-4 mr-1" />
@@ -466,7 +462,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-3 px-2">WBS</th>
                       <th className="text-left py-3 px-2">{t('name') || 'Nomi'}</th>
                       <th className="text-right py-3 px-2">{t('unit') || "O'lchov"}</th>
                       <th className="text-right py-3 px-2">{t('quantity') || 'Miqdor'}</th>
@@ -481,7 +476,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                   <tbody>
                     {lines.map((line) => (
                       <tr key={line.id} className="border-b hover:bg-slate-50 group">
-                        <td className="py-3 px-2 font-mono text-xs text-slate-500">{line.wbs_code || '-'}</td>
                         <td className="py-3 px-2">{line.name}</td>
                         <td className="py-3 px-2 text-right text-slate-600">{line.uom}</td>
                         <td className="py-3 px-2 text-right">{line.quantity}</td>
@@ -499,7 +493,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                                 onClick={() => {
                                   setLineForm({
                                     id: line.id,
-                                    wbs_id: line.wbs_id ? String(line.wbs_id) : '',
+                                    product_id: line.product_id ? String(line.product_id) : '',
                                     name: line.name,
                                     uom: line.uom,
                                     quantity: String(line.quantity),
@@ -528,7 +522,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                   </tbody>
                   <tfoot>
                     <tr className="font-semibold bg-slate-50">
-                      <td colSpan={8} className="py-3 px-2 text-right">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                      <td colSpan={7} className="py-3 px-2 text-right">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
                       <td className="py-3 px-2 text-right">{formatCurrency(selectedEstimate.amount_direct || 0)}</td>
                       {selectedEstimate.state === 'draft' && <td></td>}
                     </tr>
@@ -636,18 +630,40 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           <form onSubmit={handleSaveLine}>
             <div className="space-y-4">
               <div>
-                <Label>WBS</Label>
-                <Select value={lineForm.wbs_id || "none"} onValueChange={(val) => setLineForm({ ...lineForm, wbs_id: val === "none" ? "" : val })}>
+                <Label>{t('product') || 'Mahsulot'}</Label>
+                <Select
+                  value={lineForm.product_id || "none"}
+                  onValueChange={(val) => {
+                    if (val === "none") {
+                      setLineForm({ ...lineForm, product_id: '' });
+                      return;
+                    }
+                    const mat = products.find(p => String(p.product_id) === val);
+                    setLineForm({
+                      ...lineForm,
+                      product_id: val,
+                      name: mat?.product_name || lineForm.name,
+                      uom: mat?.uom || lineForm.uom,
+                      material_rate: mat?.unit_cost ? formatPriceInput(String(mat.unit_cost)) : lineForm.material_rate,
+                    });
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder={t('select_wbs') || "WBS tanlang (ixtiyoriy)"} />
+                    <SelectValue placeholder={t('select_product') || "Mahsulot tanlang (ixtiyoriy)"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-</SelectItem>
-                    {flatWBS.map(wbs => (
-                      <SelectItem key={wbs.id} value={String(wbs.id)}>
-                        {'  '.repeat(wbs.level)}{wbs.code} - {wbs.name}
+                    {products.length === 0 ? (
+                      <SelectItem value="_empty" disabled>
+                        {t('no_project_materials') || 'Tasdiqlangan materiallar yo\'q'}
                       </SelectItem>
-                    ))}
+                    ) : (
+                      products.map(p => (
+                        <SelectItem key={p.product_id} value={String(p.product_id)}>
+                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
