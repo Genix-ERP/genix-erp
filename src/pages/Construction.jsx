@@ -652,6 +652,7 @@ const ProjectDetailView = ({
   const [dailyLogs, setDailyLogs] = useState([]);
   const [photoReports, setPhotoReports] = useState([]);
   const [materialRequests, setMaterialRequests] = useState([]);
+  const [projectMaterials, setProjectMaterials] = useState([]);
   const [wbsTree, setWbsTree] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -822,14 +823,16 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'materials':
             try {
-              const [materialsData, productsData, warehousesData] = await Promise.all([
+              const [materialsData, productsData, warehousesData, projMatsData] = await Promise.all([
                 constructionService.listMaterialRequests(project.id),
                 inventoryService.listProducts({ limit: 500, is_stockable: true }),
-                inventoryService.listWarehouses({ limit: 100 })
+                inventoryService.listWarehouses({ limit: 100 }),
+                constructionService.listProjectMaterials(project.id)
               ]);
               setMaterialRequests(materialsData || []);
               setInventoryProducts(productsData?.items || productsData || []);
               setInventoryWarehouses(warehousesData?.items || warehousesData || []);
+              setProjectMaterials(projMatsData || []);
             } catch (e) { setMaterialRequests([]); }
             break;
           case 'estimates':
@@ -1011,8 +1014,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     setConfirmApprove({ open: false, requestId: null });
     try {
       await constructionService.approveMaterialRequest(requestId, {});
-      const materialsData = await constructionService.listMaterialRequests(project.id);
+      const [materialsData, projMatsData] = await Promise.all([
+        constructionService.listMaterialRequests(project.id),
+        constructionService.listProjectMaterials(project.id)
+      ]);
       setMaterialRequests(materialsData || []);
+      setProjectMaterials(projMatsData || []);
     } catch (error) {
       console.error('Error approving material request:', error);
     }
@@ -1729,6 +1736,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Materials Tab */}
         <TabsContent value="materials" className="mt-6">
+          <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -1876,6 +1884,57 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Project Materials List */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                {t('project_materials') || 'Loyiha materiallari'}
+              </CardTitle>
+              <p className="text-sm text-slate-500">{t('project_materials_desc') || 'Tasdiqlangan materiallar umumiy ro\'yxati'}</p>
+            </CardHeader>
+            <CardContent>
+              {projectMaterials.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">{t('no_project_materials') || 'Hali hech qanday material tasdiqlanmagan'}</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50">
+                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('product') || 'Mahsulot'}</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('uom') || 'O\'lchov'}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('approved_quantity') || 'Tasdiqlangan miqdor'}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('unit_cost') || 'Birlik narxi'}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('total') || 'Jami'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectMaterials.map((mat) => (
+                        <tr key={mat.id} className="border-b hover:bg-slate-50 transition-colors">
+                          <td className="py-2 px-3 font-medium">{mat.product_name}</td>
+                          <td className="py-2 px-3 text-slate-500">{mat.uom}</td>
+                          <td className="py-2 px-3 text-right">{Number(mat.approved_quantity).toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right">{formatCurrency(mat.unit_cost)}</td>
+                          <td className="py-2 px-3 text-right font-medium">{formatCurrency(mat.approved_quantity * mat.unit_cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-semibold">
+                        <td colSpan={4} className="py-2 px-3 text-right">{t('total') || 'Jami'}:</td>
+                        <td className="py-2 px-3 text-right">{formatCurrency(projectMaterials.reduce((s, m) => s + m.approved_quantity * m.unit_cost, 0))}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
           </div>
         </TabsContent>
 
