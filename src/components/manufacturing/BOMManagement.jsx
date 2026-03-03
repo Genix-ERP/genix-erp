@@ -82,19 +82,6 @@ export default function BOMManagement() {
     loadData();
   }, []);
 
-  // Load products for selection (legacy - keep for compatibility)
-  useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const productsData = await inventoryService.listProducts();
-        setProducts(productsData || []);
-      } catch (error) {
-        console.error('Failed to load products:', error);
-      }
-    };
-    loadProducts();
-  }, []);
-
   // Helper function to get product name from product_id
   const getProductName = (bom) => {
     if (bom.product_name) return bom.product_name;

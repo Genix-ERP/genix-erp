@@ -8,7 +8,7 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 
-const COLORS = { pass: '#10b981', fail: '#ef4444', conditional_pass: '#f59e0b' };
+const COLORS = { passed: '#10b981', failed: '#ef4444', pending: '#f59e0b', conditional_pass: '#f59e0b' };
 
 export default function QualityControl() {
   const { language } = useLanguage();
@@ -24,30 +24,31 @@ export default function QualityControl() {
 
   const getResultColor = (result) => {
     const colors = {
-      pass: 'bg-green-100 text-green-800 border-green-200',
-      fail: 'bg-red-100 text-red-800 border-red-200',
+      passed: 'bg-green-100 text-green-800 border-green-200',
+      failed: 'bg-red-100 text-red-800 border-red-200',
+      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
       conditional_pass: 'bg-yellow-100 text-yellow-800 border-yellow-200'
     };
-    return colors[result] || colors.pass;
+    return colors[result] || 'bg-slate-100 text-slate-800 border-slate-200';
   };
 
   const getResultIcon = (result) => {
-    if (result === 'pass') return <CheckCircle className="w-4 h-4" />;
-    if (result === 'fail') return <XCircle className="w-4 h-4" />;
+    if (result === 'passed') return <CheckCircle className="w-4 h-4" />;
+    if (result === 'failed') return <XCircle className="w-4 h-4" />;
     return <AlertTriangle className="w-4 h-4" />;
   };
 
   const qualityStats = {
     total: checksArray.length,
-    passed: checksArray.filter(q => q.result === 'pass').length,
-    failed: checksArray.filter(q => q.result === 'fail').length,
-    conditional: checksArray.filter(q => q.result === 'conditional_pass').length
+    passed: checksArray.filter(q => q.result === 'passed').length,
+    failed: checksArray.filter(q => q.result === 'failed').length,
+    pending: checksArray.filter(q => q.result === 'pending').length
   };
 
   const chartData = [
-    { name: 'Passed', value: qualityStats.passed },
-    { name: 'Failed', value: qualityStats.failed },
-    { name: 'Conditional', value: qualityStats.conditional }
+    { name: 'passed', value: qualityStats.passed },
+    { name: 'failed', value: qualityStats.failed },
+    { name: 'pending', value: qualityStats.pending }
   ].filter(d => d.value > 0);
 
   return (
@@ -128,7 +129,7 @@ export default function QualityControl() {
                     dataKey="value"
                   >
                     {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[entry.name.toLowerCase()] || '#64748b'} />
+                      <Cell key={`cell-${index}`} fill={COLORS[entry.name] || '#64748b'} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -173,19 +174,19 @@ export default function QualityControl() {
                   <TableBody>
                     {checksArray.slice(0, 10).map((check) => (
                       <TableRow key={check.id} className="hover:bg-slate-50">
-                        <TableCell className="font-mono text-sm">{check.check_number}</TableCell>
+                        <TableCell className="font-mono text-sm">{check.code}</TableCell>
                         <TableCell className="font-medium">{check.product_name}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{check.check_type}</Badge>
+                          <Badge variant="outline">{check.defect_category || check.defect_type || '-'}</Badge>
                         </TableCell>
-                        <TableCell>{check.sample_size || '-'}</TableCell>
+                        <TableCell>{check.quantity_inspected || '-'}</TableCell>
                         <TableCell>
                           <Badge className={getResultColor(check.result)}>
                             {getResultIcon(check.result)}
                             <span className="ml-1">{check.result}</span>
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-semibold">{check.quality_score || '-'}/100</TableCell>
+                        <TableCell className="font-semibold">{check.pass_rate != null ? `${check.pass_rate}%` : '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

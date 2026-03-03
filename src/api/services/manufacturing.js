@@ -56,7 +56,6 @@ export const productionOrdersService = {
 
   async create(data) {
     try {
-      console.log('Creating production order with data:', data);
       const response = await apiClient.post('/production-orders', data);
       return response.data.data;
     } catch (error) {

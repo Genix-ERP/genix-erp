@@ -525,6 +525,17 @@ export function ManufacturingProvider({ children }) {
     }
   }, [activeCompany]);
 
+  const pauseWorkOrder = useCallback(async (id) => {
+    try {
+      const updated = await workOrdersService.pause(id);
+      setWorkOrders(prev => prev.map(wo => wo.id === id ? { ...wo, status: 'paused', ...updated } : wo));
+      return updated;
+    } catch (error) {
+      console.error('Failed to pause work order:', error);
+      throw error;
+    }
+  }, []);
+
   const completeWorkOrder = useCallback(async (id, data = {}) => {
     const companyId = activeCompany?.id;
     try {
@@ -678,6 +689,7 @@ export function ManufacturingProvider({ children }) {
       // Work Order Operations
       createWorkOrder,
       startWorkOrder,
+      pauseWorkOrder,
       completeWorkOrder,
       recordWorkOrderTime,
 

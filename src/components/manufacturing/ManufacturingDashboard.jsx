@@ -42,8 +42,8 @@ export default function ManufacturingDashboard() {
       // Production trend data
       const productionByDay = {};
       productionOrders.forEach(order => {
-        if (order.actual_end_date) {
-          const day = new Date(order.actual_end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (order.actual_end) {
+          const day = new Date(order.actual_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           productionByDay[day] = (productionByDay[day] || 0) + (order.quantity_produced || 0);
         }
       });
@@ -52,8 +52,8 @@ export default function ManufacturingDashboard() {
       // Work center utilization
       const utilization = workCenters.map(wc => ({
         name: wc.name,
-        utilization: wc.utilization_rate || 0,
-        oee: wc.oee_score || 0
+        utilization: wc.current_utilization || 0,
+        oee: wc.oee_target || 0
       }));
       setWorkCenterUtilization(utilization);
     }
