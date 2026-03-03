@@ -369,10 +369,10 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
-    if (!newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone) {
+    if (!newEmployee.full_name || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
-        description: t('required_fields_error') || "Ism, lavozim va email to'ldirilishi shart",
+        description: t('required_fields_error') || "Ism va telefon to'ldirilishi shart",
         variant: 'destructive',
       });
       return;
@@ -383,18 +383,20 @@ Only return the JSON, no other text.`;
       // Auto-generate 8-character alphanumeric password
       const password = generatePassword();
 
-      // First create user account (validates email uniqueness per tenant)
+      // Create user account only if email is provided
       const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
       const firstName = nameParts[0] || 'User';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
 
-      await apiClient.post('/users', {
-        email: newEmployee.email,
-        password: password,
-        first_name: firstName,
-        last_name: lastName,
-        phone: newEmployee.phone || '',
-      });
+      if (newEmployee.email) {
+        await apiClient.post('/users', {
+          email: newEmployee.email,
+          password: password,
+          first_name: firstName,
+          last_name: lastName,
+          phone: newEmployee.phone || '',
+        });
+      }
 
       // User created successfully, now create employee record
       const employeeData = {
@@ -1108,7 +1110,7 @@ Only return the JSON, no other text.`;
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">{t('email')} *</Label>
+                  <Label className="text-xs">{t('email')}</Label>
                   <Input
                     type="email"
                     value={newEmployee.email}
@@ -1134,20 +1136,6 @@ Only return the JSON, no other text.`;
                     <SelectContent>
                       {jobPositions.map(jp => (
                         <SelectItem key={jp.id} value={jp.id}>{jp.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">{t('employee_role') || 'Role'} *</Label>
-                  <Select
-                    value={newEmployee.job_title}
-                    onValueChange={value => setNewEmployee({...newEmployee, job_title: value})}
-                  >
-                    <SelectTrigger><SelectValue placeholder={t('select_role') || 'Select role'} /></SelectTrigger>
-                    <SelectContent>
-                      {roles.map(role => (
-                        <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1242,7 +1230,7 @@ Only return the JSON, no other text.`;
               </Button>
               <Button
                 onClick={handleAddEmployee}
-                disabled={isSubmitting || !newEmployee.full_name || !newEmployee.job_title || !newEmployee.email || !newEmployee.phone}
+                disabled={isSubmitting || !newEmployee.full_name || !newEmployee.phone}
                 className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
               >
                 {isSubmitting ? t('saving') : t('add_employee')}
@@ -1372,20 +1360,6 @@ Only return the JSON, no other text.`;
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('employee_role') || t('role') || 'Role'} *</Label>
-                    <Select
-                      value={selectedEmployee.job_title}
-                      onValueChange={value => setSelectedEmployee({...selectedEmployee, job_title: value})}
-                    >
-                      <SelectTrigger><SelectValue placeholder={t('select_role') || "Rolni tanlang"} /></SelectTrigger>
-                      <SelectContent>
-                        {roles.map(role => (
-                          <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>{t('department')}</Label>
                     <Select
                       value={selectedEmployee.department}
@@ -1479,7 +1453,7 @@ Only return the JSON, no other text.`;
                   </Button>
                   <Button
                     onClick={handleUpdateEmployee}
-                    disabled={isSubmitting || !selectedEmployee.full_name || !selectedEmployee.job_title}
+                    disabled={isSubmitting || !selectedEmployee.full_name}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
                   >
                     {isSubmitting ? t('saving') : (t('save_changes') || 'Save Changes')}

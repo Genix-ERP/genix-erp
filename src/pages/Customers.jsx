@@ -46,7 +46,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
 import { useToast } from "@/components/ui/use-toast";
-import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 
 export default function Customers() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -55,7 +54,6 @@ export default function Customers() {
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { toast } = useToast();
-  const { formatCurrency } = useCurrencyFormatter();
   const {
     customers,
     leads,
@@ -356,7 +354,6 @@ export default function Customers() {
                         <TableHead>{t('company_name')}</TableHead>
                         <TableHead>{t('contact')}</TableHead>
                         <TableHead>{t('industry')}</TableHead>
-                        <TableHead>{t('annual_revenue')}</TableHead>
                         <TableHead>{t('actions')}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -392,15 +389,6 @@ export default function Customers() {
                             <Badge variant="outline" className="capitalize">
                               {t(customer.industry) || t('other')}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {customer.annual_revenue ? (
-                              <p className="font-medium text-slate-900">
-                                {formatCurrency(customer.annual_revenue)}
-                              </p>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
