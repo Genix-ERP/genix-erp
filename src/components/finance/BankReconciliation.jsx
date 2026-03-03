@@ -42,7 +42,7 @@ export default function BankReconciliation() {
     isLoading
   } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [selectedBankAccount, setSelectedBankAccount] = useState(null);
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
@@ -274,7 +274,7 @@ export default function BankReconciliation() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600 font-medium">{t('uzs_balance') || 'UZS Balance'}</p>
-                <p className="text-2xl font-bold text-green-800">{formatCurrency(accountSummary.totalBalanceUZS, 'UZS')}</p>
+                <p className="text-2xl font-bold text-green-800">{formatCurrencyCompact(accountSummary.totalBalanceUZS)}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
                 <Wallet className="w-6 h-6 text-green-600" />
@@ -288,7 +288,7 @@ export default function BankReconciliation() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-purple-600 font-medium">{t('usd_balance') || 'USD Balance'}</p>
-                <p className="text-2xl font-bold text-purple-800">{formatCurrency(accountSummary.totalBalanceUSD, 'USD')}</p>
+                <p className="text-2xl font-bold text-purple-800">{formatCurrencyCompact(accountSummary.totalBalanceUSD)}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
                 <CreditCard className="w-6 h-6 text-purple-600" />

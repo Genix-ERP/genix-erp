@@ -53,7 +53,7 @@ export default function CashRegister() {
     isLoading
   } = useFinancials();
   const { canCreate } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredTransactions, setFilteredTransactions] = useState([]);
@@ -248,7 +248,7 @@ export default function CashRegister() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-emerald-600 font-medium">{t('cash_balance') || 'Cash Balance'}</p>
-                <p className="text-3xl font-bold text-emerald-800">{formatCurrency(summaryStats.currentBalance)}</p>
+                <p className="text-3xl font-bold text-emerald-800">{formatCurrencyCompact(summaryStats.currentBalance)}</p>
                 <p className="text-xs text-emerald-500 mt-1">{t('current_state') || 'Current state'}</p>
               </div>
               <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center">
@@ -263,7 +263,7 @@ export default function CashRegister() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600 font-medium">{t('pko_short') || 'PKO'} ({t('today') || 'Today'})</p>
-                <p className="text-2xl font-bold text-green-800">{formatCurrency(summaryStats.todayIncome)}</p>
+                <p className="text-2xl font-bold text-green-800">{formatCurrencyCompact(summaryStats.todayIncome)}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-green-600" />
@@ -277,7 +277,7 @@ export default function CashRegister() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-red-600 font-medium">{t('rko_short') || 'RKO'} ({t('today') || 'Today'})</p>
-                <p className="text-2xl font-bold text-red-800">{formatCurrency(summaryStats.todayExpense)}</p>
+                <p className="text-2xl font-bold text-red-800">{formatCurrencyCompact(summaryStats.todayExpense)}</p>
               </div>
               <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
                 <TrendingDown className="w-6 h-6 text-red-600" />

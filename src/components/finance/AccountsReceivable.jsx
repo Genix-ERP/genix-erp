@@ -46,7 +46,7 @@ export default function AccountsReceivable() {
   const { invoices: salesInvoices } = useSales();
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, MODULES } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { modal, showAlert, showError, showSuccess, close } = useAlertModal();
 
   const { customers: crmCustomers, isLoading: loadingCustomers } = useCustomers();
@@ -291,7 +291,7 @@ export default function AccountsReceivable() {
                 <DollarSign className="w-6 h-6 text-green-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-slate-900">{formatCurrency(metrics.totalReceivable)}</p>
+            <p className="text-3xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalReceivable)}</p>
             <p className="text-sm text-slate-600">{t('total_receivable')}</p>
           </CardContent>
         </Card>
@@ -303,7 +303,7 @@ export default function AccountsReceivable() {
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
             </div>
-            <p className="text-3xl font-bold text-red-900">{formatCurrency(metrics.overdueAmount)}</p>
+            <p className="text-3xl font-bold text-red-900">{formatCurrencyCompact(metrics.overdueAmount)}</p>
             <p className="text-sm text-slate-600">{t('overdue_amount')}</p>
           </CardContent>
         </Card>
@@ -349,7 +349,6 @@ export default function AccountsReceivable() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.name}: ${formatCurrency(entry.value)}`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -358,7 +357,7 @@ export default function AccountsReceivable() {
                       <Cell key={`cell-${index}`} fill={AGING_COLORS[index % AGING_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrencyCompact(value)} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

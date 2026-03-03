@@ -20,7 +20,7 @@ import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 export default function InventoryValuation() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     products = [],
     inventory = [],
@@ -170,7 +170,7 @@ export default function InventoryValuation() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-blue-600">{t('total_inventory_value') || 'Total Inventory Value'}</p>
-                <p className="text-2xl font-bold text-blue-800">{formatCurrency(summary.totalValue)}</p>
+                <p className="text-2xl font-bold text-blue-800">{formatCurrencyCompact(summary.totalValue)}</p>
                 <p className="text-xs text-blue-600">{summary.itemCount} {t('products') || 'products'}</p>
               </div>
               <DollarSign className="w-10 h-10 text-blue-500" />
@@ -183,7 +183,7 @@ export default function InventoryValuation() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600">{t('potential_revenue') || 'Potential Revenue'}</p>
-                <p className="text-2xl font-bold text-green-800">{formatCurrency(summary.totalPotentialRevenue)}</p>
+                <p className="text-2xl font-bold text-green-800">{formatCurrencyCompact(summary.totalPotentialRevenue)}</p>
                 <p className="text-xs text-green-600 flex items-center gap-1">
                   <ArrowUpRight className="w-3 h-3" />
                   {summary.avgMargin.toFixed(1)}% {t('avg_margin') || 'avg margin'}
@@ -199,7 +199,7 @@ export default function InventoryValuation() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-purple-600">{t('potential_profit') || 'Potential Profit'}</p>
-                <p className="text-2xl font-bold text-purple-800">{formatCurrency(summary.totalPotentialProfit)}</p>
+                <p className="text-2xl font-bold text-purple-800">{formatCurrencyCompact(summary.totalPotentialProfit)}</p>
                 <p className="text-xs text-purple-600">{summary.totalQty.toLocaleString()} {t('units_in_stock') || 'units'}</p>
               </div>
               <BarChart3 className="w-10 h-10 text-purple-500" />
