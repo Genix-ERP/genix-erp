@@ -137,18 +137,20 @@ export default function ShopFloorControl() {
     return Object.values(groups);
   }, [availableWorkOrders, productionOrders]);
 
-  // Calculate time spent
+  // Calculate time spent using backend actual_start / actual_duration_minutes
   const calculateTimeSpent = (workOrder) => {
-    const logs = timeLogs.filter(log => log.work_order_id === workOrder.id);
-    const totalMinutes = logs.reduce((sum, log) => {
-      if (log.end_time) {
-        return sum + differenceInMinutes(parseISO(log.end_time), parseISO(log.start_time));
-      } else if (workOrder.status === 'in_progress') {
-        // Currently running
-        return sum + differenceInMinutes(new Date(), parseISO(log.start_time));
-      }
-      return sum;
-    }, 0);
+    let totalMinutes = 0;
+
+    if (workOrder.status === 'in_progress' && workOrder.actual_start) {
+      // Live: count from actual_start to now
+      totalMinutes = differenceInMinutes(new Date(), parseISO(workOrder.actual_start));
+    } else if (workOrder.actual_duration_minutes) {
+      // Completed or paused: use stored duration
+      totalMinutes = workOrder.actual_duration_minutes;
+    }
+
+    // currentTimer referenced so this re-runs every second while in progress
+    void currentTimer;
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
