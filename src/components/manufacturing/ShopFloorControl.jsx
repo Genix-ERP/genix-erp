@@ -77,16 +77,6 @@ export default function ShopFloorControl() {
     }
   }, [timeLogs]);
 
-  // Timer effect — tick every second while any work order is in progress
-  useEffect(() => {
-    const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
-    if (!hasInProgress) return;
-    const interval = setInterval(() => {
-      setCurrentTimer(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [availableWorkOrders]);
-
   // Filter work orders
   const filteredWorkOrders = useMemo(() => {
     return workOrders.filter(wo => {
@@ -101,6 +91,16 @@ export default function ShopFloorControl() {
       wo.status === 'pending' || wo.status === 'ready' || wo.status === 'in_progress' || wo.status === 'paused'
     );
   }, [filteredWorkOrders]);
+
+  // Timer effect — tick every second while any work order is in progress
+  useEffect(() => {
+    const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
+    if (!hasInProgress) return;
+    const interval = setInterval(() => {
+      setCurrentTimer(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [availableWorkOrders]);
 
   // Collapsed groups state (IDs in the set are collapsed; default = all expanded)
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
