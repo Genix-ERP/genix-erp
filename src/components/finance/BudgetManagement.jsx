@@ -125,7 +125,7 @@ export default function BudgetManagement() {
     createBudgetLine, updateBudgetLine,
   } = useFinancials();
   const { canCreate, canUpdate, canDelete } = usePermissions();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   const [view, setView] = useState('list');
   const [selectedBudget, setSelectedBudget] = useState(null);
@@ -371,13 +371,13 @@ export default function BudgetManagement() {
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center shrink-0"><BarChart3 className="w-5 h-5 text-blue-600" /></div>
-            <div><p className="text-xs text-blue-600 font-medium">{t('total_planned') || 'Total Planned'}</p><p className="text-base font-bold text-blue-800 truncate">{formatCurrency(totalPlanned)}</p></div>
+            <div><p className="text-xs text-blue-600 font-medium">{t('total_planned') || 'Total Planned'}</p><p className="text-base font-bold text-blue-800 truncate">{formatCurrencyCompact(totalPlanned)}</p></div>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-200 rounded-lg flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5 text-amber-600" /></div>
-            <div><p className="text-xs text-amber-600 font-medium">{t('total_actual') || 'Total Actual'}</p><p className="text-base font-bold text-amber-800 truncate">{formatCurrency(totalActual)}</p></div>
+            <div><p className="text-xs text-amber-600 font-medium">{t('total_actual') || 'Total Actual'}</p><p className="text-base font-bold text-amber-800 truncate">{formatCurrencyCompact(totalActual)}</p></div>
           </CardContent>
         </Card>
         <Card className={`bg-gradient-to-br ${variance >= 0 ? 'from-green-50 to-green-100 border-green-200' : 'from-red-50 to-red-100 border-red-200'}`}>
@@ -387,7 +387,7 @@ export default function BudgetManagement() {
             </div>
             <div>
               <p className={`text-xs font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t('variance') || 'Variance'}</p>
-              <p className={`text-base font-bold truncate ${variance >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatCurrency(variance)}</p>
+              <p className={`text-base font-bold truncate ${variance >= 0 ? 'text-green-800' : 'text-red-800'}`}>{formatCurrencyCompact(variance)}</p>
             </div>
           </CardContent>
         </Card>
