@@ -25,6 +25,7 @@ export default function ProductionOrders() {
   const {
     productionOrders,
     isLoading,
+    workOrders,
     createProductionOrder,
     updateProductionOrder,
     confirmProductionOrder,
@@ -290,8 +291,16 @@ export default function ProductionOrders() {
     };
     if (labels[stage]) return labels[stage];
 
-    // For op_X stages, resolve from BOM operations
+    // For op_X stages, resolve operation name from work orders
     if (stage && stage.startsWith('op_') && order) {
+      const seq = parseInt(stage.replace('op_', ''), 10);
+      if (!isNaN(seq)) {
+        const wo = (workOrders || []).find(
+          w => w.production_order_id === order.id && (w.sequence === seq || w.sequence === seq)
+        );
+        if (wo?.name || wo?.operation_name) return wo.name || wo.operation_name;
+      }
+      // Fallback: try BOM operations
       const stages = getOrderStages(order);
       const found = stages.find(s => s.key === stage);
       if (found) return found.label;
@@ -714,7 +723,7 @@ export default function ProductionOrders() {
           {selectedOrder && (
             <div className="space-y-6 py-4">
               {/* Order Summary */}
-              <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
                 <div>
                   <p className="text-xs text-slate-500">{t('product') || 'Product'}</p>
                   <p className="font-semibold">{selectedOrder.product_name}</p>
@@ -722,10 +731,6 @@ export default function ProductionOrders() {
                 <div>
                   <p className="text-xs text-slate-500">{t('quantity') || 'Quantity'}</p>
                   <p className="font-semibold">{selectedOrder.quantity_planned} {getUnitLabel(selectedOrder.uom)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">{t('molds') || 'Molds'}</p>
-                  <p className="font-semibold">{selectedOrder.mold_count || 0}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">{t('shift') || 'Shift'}</p>
@@ -822,7 +827,7 @@ export default function ProductionOrders() {
                     <Package className="w-5 h-5" />
                     {t('production_output') || 'Production Output'}
                   </h4>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium mb-1 block text-green-700">
                         {t('good_quantity') || 'Good Quantity'}
@@ -847,19 +852,6 @@ export default function ProductionOrders() {
                         min="0"
                       />
                     </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block text-cyan-700">
-                        {t('package_count') || 'Package Count'}
-                      </label>
-                      <Input
-                        type="number"
-                        value={selectedOrder.package_count || 0}
-                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, package_count: e.target.value }))}
-                        className="border-cyan-300 focus:border-cyan-500"
-                        min="0"
-                      />
-                      <p className="text-xs text-slate-500 mt-1">{t('package_hint') || '40-46 blocks per package'}</p>
-                    </div>
                   </div>
                   <div className="mt-4 flex justify-end">
                     <Button
@@ -881,14 +873,7 @@ export default function ProductionOrders() {
               {/* Output Summary */}
               <div className="border-t pt-4">
                 <h4 className="font-semibold mb-3">{t('output_summary') || 'Output Summary'}</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-xs text-blue-600">{t('expected_output') || 'Expected Output'}</p>
-                    <p className="text-lg font-bold text-blue-700">
-                      {(selectedOrder.mold_count || 0) * 12} {t('blocks') || 'blocks'}
-                    </p>
-                    <p className="text-xs text-blue-500">{selectedOrder.mold_count || 0} {t('molds') || 'molds'} × 12</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 bg-green-50 rounded-lg">
                     <p className="text-xs text-green-600">{t('good_quantity') || 'Good'}</p>
                     <p className="text-lg font-bold text-green-700">{selectedOrder.good_quantity || 0}</p>
@@ -896,10 +881,6 @@ export default function ProductionOrders() {
                   <div className="p-3 bg-red-50 rounded-lg">
                     <p className="text-xs text-red-600">{t('reject_quantity') || 'Reject/Brak'}</p>
                     <p className="text-lg font-bold text-red-700">{selectedOrder.reject_quantity || 0}</p>
-                  </div>
-                  <div className="p-3 bg-cyan-50 rounded-lg">
-                    <p className="text-xs text-cyan-600">{t('packages') || 'Packages'}</p>
-                    <p className="text-lg font-bold text-cyan-700">{selectedOrder.package_count || 0}</p>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,7 @@ export default function ShopFloorControl() {
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [timeLogs, setTimeLogs] = useState([]);
   const [currentTimer, setCurrentTimer] = useState(null);
+  const autoCompletedRef = useRef(new Set()); // guard against firing multiple times
 
   const [completionData, setCompletionData] = useState({
     quantity_produced: 0,
@@ -92,15 +93,33 @@ export default function ShopFloorControl() {
     );
   }, [filteredWorkOrders]);
 
-  // Timer effect — tick every second while any work order is in progress
+  // Timer effect — tick every second and auto-complete when planned duration is reached
   useEffect(() => {
     const hasInProgress = availableWorkOrders.some(wo => wo.status === 'in_progress');
     if (!hasInProgress) return;
     const interval = setInterval(() => {
       setCurrentTimer(Date.now());
+
+      // Auto-complete any in_progress work order whose planned duration has elapsed
+      availableWorkOrders.forEach(wo => {
+        if (wo.status !== 'in_progress' || !wo.actual_start || !wo.expected_duration_minutes) return;
+        if (autoCompletedRef.current.has(wo.id)) return;
+        const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
+        if (elapsed >= wo.expected_duration_minutes) {
+          autoCompletedRef.current.add(wo.id);
+          completeWorkOrder(wo.id, {
+            quantity_produced: wo.quantity_to_produce || 0,
+            quantity_scrapped: 0,
+            actual_duration: elapsed,
+            notes: '',
+          }).then(() => refreshData()).catch(() => {
+            autoCompletedRef.current.delete(wo.id); // retry next tick if failed
+          });
+        }
+      });
     }, 1000);
     return () => clearInterval(interval);
-  }, [availableWorkOrders]);
+  }, [availableWorkOrders, completeWorkOrder, refreshData]);
 
   // Collapsed groups state (IDs in the set are collapsed; default = all expanded)
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
@@ -161,15 +180,7 @@ export default function ShopFloorControl() {
   const handleStartWorkOrder = async (workOrder) => {
     try {
       await startWorkOrder(workOrder.id);
-
-      // Create time log
-      const newLog = {
-        id: `TL-${Date.now()}`,
-        work_order_id: workOrder.id,
-        start_time: new Date().toISOString(),
-        end_time: null,
-      };
-      setTimeLogs(prev => [...prev, newLog]);
+      refreshData(); // sync with backend (backend may auto-start next WO)
     } catch (error) {
       console.error('Failed to start work order:', error);
     }
@@ -186,14 +197,7 @@ export default function ShopFloorControl() {
 
     try {
       await pauseWorkOrder(activeWorkOrder.id);
-
-      // End current time log
-      setTimeLogs(prev => prev.map(log => {
-        if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
-          return { ...log, end_time: new Date().toISOString() };
-        }
-        return log;
-      }));
+      refreshData();
     } catch (error) {
       console.error('Failed to pause work order:', error);
     }
@@ -207,7 +211,7 @@ export default function ShopFloorControl() {
   const handleCompleteWorkOrder = (workOrder) => {
     setActiveWorkOrder(workOrder);
     setCompletionData({
-      quantity_produced: workOrder.quantity_planned || 0,
+      quantity_produced: workOrder.quantity_to_produce || 0,
       quantity_scrapped: 0,
       notes: '',
     });
@@ -227,13 +231,7 @@ export default function ShopFloorControl() {
         notes: completionData.notes,
       });
 
-      // End current time log
-      setTimeLogs(prev => prev.map(log => {
-        if (log.work_order_id === activeWorkOrder.id && !log.end_time) {
-          return { ...log, end_time: new Date().toISOString() };
-        }
-        return log;
-      }));
+      refreshData(); // sync backend state (next WO may have been auto-started)
     } catch (error) {
       console.error('Failed to complete work order:', error);
     }
@@ -488,8 +486,20 @@ export default function ShopFloorControl() {
                         {group.workOrders.map(wo => {
                           const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
                           const timeSpent = calculateTimeSpent(wo);
-                          const totalQty = wo.quantity_to_produce || wo.quantity_planned || 0;
-                          const progress = totalQty ? ((wo.quantity_produced || 0) / totalQty) * 100 : 0;
+                          const totalQty = wo.quantity_to_produce || 0;
+
+                          // Progress: quantity-based if any qty recorded, else time-based for in_progress
+                          const progress = (() => {
+                            if ((wo.quantity_produced || 0) > 0 && totalQty > 0) {
+                              return Math.min(100, (wo.quantity_produced / totalQty) * 100);
+                            }
+                            if (wo.status === 'in_progress' && wo.actual_start && (wo.expected_duration_minutes || 0) > 0) {
+                              void currentTimer; // re-evaluated every second
+                              const elapsed = differenceInMinutes(new Date(), parseISO(wo.actual_start));
+                              return Math.min(99, (elapsed / wo.expected_duration_minutes) * 100);
+                            }
+                            return 0;
+                          })();
 
                           return (
                             <TableRow key={wo.id}>
@@ -511,7 +521,11 @@ export default function ShopFloorControl() {
                               <TableCell>
                                 <div className="w-24">
                                   <Progress value={progress} className="h-2" />
-                                  <p className="text-xs text-slate-500 mt-1">{progress.toFixed(0)}%</p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    {wo.status === 'in_progress' && (wo.quantity_produced || 0) === 0 && (wo.expected_duration_minutes || 0) > 0
+                                      ? `~${progress.toFixed(0)}%`
+                                      : `${progress.toFixed(0)}%`}
+                                  </p>
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -651,7 +665,11 @@ export default function ShopFloorControl() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-500">{language === 'uz' ? "Rejalashtirilgan" : language === 'ru' ? "Запланировано" : "Planned Quantity"}</span>
-                  <span className="font-medium">{activeWorkOrder.quantity_to_produce || activeWorkOrder.quantity_planned}</span>
+                  <span className="font-medium">{activeWorkOrder.quantity_to_produce || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">{language === 'uz' ? "Allaqachon ishlab chiqarilgan" : language === 'ru' ? "Уже произведено" : "Already Produced"}</span>
+                  <span className="font-medium text-green-700">{activeWorkOrder.quantity_produced || 0}</span>
                 </div>
               </div>
             )}
