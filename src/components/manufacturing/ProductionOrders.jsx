@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useInventory } from '@/components/contexts/InventoryContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ export default function ProductionOrders() {
     deleteProductionOrder,
     refreshData
   } = useManufacturing();
+  const { refreshData: refreshInventory } = useInventory();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -213,12 +215,14 @@ export default function ProductionOrders() {
           break;
         case 'start':
           await startProductionOrder(orderId);
+          refreshInventory();
           break;
         case 'pause':
           await pauseProductionOrder(orderId);
           break;
         case 'complete':
           await completeProductionOrder(orderId);
+          refreshInventory();
           break;
         case 'cancel':
           await cancelProductionOrder(orderId);
@@ -367,6 +371,7 @@ export default function ProductionOrders() {
       setShowViewModal(false);
       setSelectedOrder(null);
       refreshData();
+      refreshInventory();
     } catch (error) {
       console.error('Error recording output:', error);
       alert(t('error_recording_output') || 'Failed to record output: ' + (error.response?.data?.error?.message || error.message));

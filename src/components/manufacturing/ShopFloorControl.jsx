@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
+import { useInventory } from '@/components/contexts/InventoryContext';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
 const WORK_ORDER_STATUS = {
@@ -43,6 +44,7 @@ const WORK_ORDER_STATUS = {
 export default function ShopFloorControl() {
   const { language } = useLanguage();
   const { workOrders, workCenters, productionOrders, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
+  const { refreshData: refreshInventory } = useInventory();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
@@ -112,7 +114,7 @@ export default function ShopFloorControl() {
             quantity_scrapped: 0,
             actual_duration: elapsed,
             notes: '',
-          }).then(() => refreshData()).catch(() => {
+          }).then(() => { refreshData(); refreshInventory(); }).catch(() => {
             autoCompletedRef.current.delete(wo.id); // retry next tick if failed
           });
         }
@@ -232,6 +234,7 @@ export default function ShopFloorControl() {
       });
 
       refreshData(); // sync backend state (next WO may have been auto-started)
+      refreshInventory(); // sync inventory (finished goods may have been added)
     } catch (error) {
       console.error('Failed to complete work order:', error);
     }
