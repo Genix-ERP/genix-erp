@@ -1074,7 +1074,7 @@ export default function StockOperations() {
                                   min="0"
                                   step="0.01"
                                   className="w-20 text-right text-sm"
-                                  defaultValue={line.done_qty}
+                                  defaultValue={line.done_qty || line.expected_qty}
                                   key={`${line.id}-${line.done_qty}`}
                                   onBlur={e => saveDoneQty(line.id, e.target.value, line.done_qty)}
                                   onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
