@@ -764,7 +764,21 @@ export function ProcurementProvider({ children }) {
   const receivePurchaseOrder = useCallback(async (id, data) => {
     if (backendAvailable) {
       try {
-        await procurementService.receiveOrder(id, data);
+        let receiveData = data;
+        // If no lines provided, fetch the full PO and receive all remaining quantities
+        if (!receiveData?.lines || receiveData.lines.length === 0) {
+          const fullPO = await procurementService.getOrder(id);
+          if (fullPO?.lines?.length > 0) {
+            receiveData = {
+              lines: fullPO.lines.map(line => ({
+                line_id: line.id,
+                quantity_received: line.quantity - (line.quantity_received || 0),
+              })).filter(line => line.quantity_received > 0),
+              ...receiveData,
+            };
+          }
+        }
+        await procurementService.receiveOrder(id, receiveData);
         setPurchaseOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'received' } : po));
         return { id, status: 'received' };
       } catch (error) {
