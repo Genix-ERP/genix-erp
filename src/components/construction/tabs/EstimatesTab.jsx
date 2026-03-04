@@ -34,6 +34,7 @@ import {
   Edit,
   Archive,
   Layers,
+  X,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -65,6 +66,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     id: null, product_id: '', name: '', uom: '', quantity: '',
     material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0'
   });
+  const [addLines, setAddLines] = useState([{ product_id: '', quantity: '' }]);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', description: '', onConfirm: null, variant: 'default' });
 
   // Import/Export
@@ -260,28 +262,49 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     e.preventDefault();
     if (!selectedEstimate?.id) return;
     try {
-      const data = {
-        name: lineForm.name,
-        uom: lineForm.uom || 'шт',
-        quantity: parseFloat(lineForm.quantity) || 0,
-        material_rate: parseFloat(parsePriceInput(lineForm.material_rate)) || 0,
-        labor_rate: parseFloat(parsePriceInput(lineForm.labor_rate)) || 0,
-        equipment_rate: parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0,
-        sort_order: parseInt(lineForm.sort_order) || 0,
-      };
-
       if (lineForm.id) {
+        // Edit mode — single line update
+        const data = {
+          name: lineForm.name,
+          uom: lineForm.uom || 'шт',
+          quantity: parseFloat(lineForm.quantity) || 0,
+          material_rate: parseFloat(parsePriceInput(lineForm.material_rate)) || 0,
+          labor_rate: parseFloat(parsePriceInput(lineForm.labor_rate)) || 0,
+          equipment_rate: parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0,
+          sort_order: parseInt(lineForm.sort_order) || 0,
+        };
         await constructionService.updateEstimateLine(selectedEstimate.id, lineForm.id, data);
       } else {
-        await constructionService.createEstimateLine(selectedEstimate.id, data);
+        // Create mode — batch create all lines
+        const baseLaborRate = parseFloat(parsePriceInput(lineForm.labor_rate)) || 0;
+        const baseEquipmentRate = parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0;
+        const baseSortOrder = lines.length;
+
+        for (let i = 0; i < addLines.length; i++) {
+          const row = addLines[i];
+          if (!row.product_id) continue;
+          const mat = products.find(p => String(p.product_id) === row.product_id);
+          if (!mat) continue;
+          const qty = parseFloat(row.quantity) || 0;
+          if (qty <= 0) continue;
+          await constructionService.createEstimateLine(selectedEstimate.id, {
+            name: mat.product_name,
+            uom: mat.uom || 'шт',
+            quantity: qty,
+            material_rate: mat.unit_cost || 0,
+            labor_rate: baseLaborRate,
+            equipment_rate: baseEquipmentRate,
+            sort_order: baseSortOrder + i,
+          });
+        }
       }
 
-      // Reload lines and estimates (totals changed)
       const estData = await constructionService.getEstimate(selectedEstimate.id);
       setLines(estData?.lines || []);
       await loadEstimates();
       setShowLineModal(false);
       setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
+      setAddLines([{ product_id: '', quantity: '' }]);
     } catch (error) {
       console.error('Error saving line:', error);
     }
@@ -426,7 +449,8 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           </CardTitle>
           {selectedEstimate && selectedEstimate.state === 'draft' && (
             <Button size="sm" onClick={() => {
-              setLineForm({ id: null, wbs_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(lines.length) });
+              setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(lines.length) });
+              setAddLines([{ product_id: '', quantity: '' }]);
               setShowLineModal(true);
             }}>
               <Plus className="w-4 h-4 mr-1" />
@@ -449,6 +473,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
               {selectedEstimate.state === 'draft' && (
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => {
                   setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
+                  setAddLines([{ product_id: '', quantity: '' }]);
                   setShowLineModal(true);
                 }}>
                   <Plus className="w-4 h-4 mr-1" />
@@ -623,108 +648,176 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
 
       {/* Create/Edit Line Modal */}
       <Dialog open={showLineModal} onOpenChange={setShowLineModal}>
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="max-w-2xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{lineForm.id ? (t('edit_line') || "Qatorni tahrirlash") : (t('add_line') || "Qator qo'shish")}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveLine}>
-            <div className="space-y-4">
-              <div>
-                <Label>{t('product') || 'Mahsulot'}</Label>
-                <Select
-                  value={lineForm.product_id || "none"}
-                  onValueChange={(val) => {
-                    if (val === "none") {
-                      setLineForm({ ...lineForm, product_id: '' });
-                      return;
-                    }
-                    const mat = products.find(p => String(p.product_id) === val);
-                    setLineForm({
-                      ...lineForm,
-                      product_id: val,
-                      name: mat?.product_name || lineForm.name,
-                      uom: mat?.uom || lineForm.uom,
-                      material_rate: mat?.unit_cost ? formatPriceInput(String(mat.unit_cost)) : lineForm.material_rate,
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_product') || "Mahsulot tanlang (ixtiyoriy)"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-</SelectItem>
-                    {products.length === 0 ? (
-                      <SelectItem value="_empty" disabled>
-                        {t('no_project_materials') || 'Tasdiqlangan materiallar yo\'q'}
-                      </SelectItem>
-                    ) : (
-                      products.map(p => (
-                        <SelectItem key={p.product_id} value={String(p.product_id)}>
-                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t('name') || 'Nomi'} *</Label>
-                <Input
-                  value={lineForm.name}
-                  onChange={(e) => setLineForm({ ...lineForm, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            {lineForm.id ? (
+              /* ── Edit mode: single line ── */
+              <div className="space-y-4">
                 <div>
-                  <Label>{t('unit') || "O'lchov birligi"}</Label>
-                  <Input
-                    value={lineForm.uom}
-                    onChange={(e) => setLineForm({ ...lineForm, uom: e.target.value })}
-                    placeholder="шт"
-                  />
+                  <Label>{t('product') || 'Mahsulot'}</Label>
+                  <p className="mt-1 text-sm font-medium">{lineForm.name}</p>
                 </div>
-                <div>
-                  <Label>{t('quantity') || 'Miqdor'}</Label>
-                  <Input
-                    type="number" step="0.0001" min="0"
-                    value={lineForm.quantity}
-                    onChange={(e) => setLineForm({ ...lineForm, quantity: e.target.value })}
-                  />
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label>{t('quantity') || 'Miqdor'}</Label>
+                    <Input
+                      type="number" step="0.0001" min="0"
+                      value={lineForm.quantity}
+                      onChange={(e) => setLineForm({ ...lineForm, quantity: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('unit') || "O'lchov birligi"}</Label>
+                    <p className="mt-2 text-sm text-slate-600">{lineForm.uom || '—'}</p>
+                  </div>
+                  <div>
+                    <Label>{t('material_rate') || 'Material'}</Label>
+                    <Input
+                      value={lineForm.material_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, material_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('labor_rate') || 'Ish haqi'}</Label>
+                    <Input
+                      value={lineForm.labor_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
+                    <Input
+                      value={lineForm.equipment_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+            ) : (
+              /* ── Create mode: multiple lines like PO ── */
+              <div className="space-y-4">
+                {/* Product lines */}
                 <div>
-                  <Label>{t('material_rate') || 'Material'}</Label>
-                  <Input
-                    value={lineForm.material_rate}
-                    onChange={(e) => setLineForm({ ...lineForm, material_rate: formatPriceInput(e.target.value) })}
-                    placeholder="0"
-                  />
+                  <div className="flex justify-between items-center mb-2">
+                    <Label className="text-sm font-semibold">{t('products') || 'Mahsulotlar'}</Label>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setAddLines(prev => [...prev, { product_id: '', quantity: '' }])}>
+                      <Plus className="w-3 h-3 mr-1" /> {t('add_line') || "Qo'shish"}
+                    </Button>
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {addLines.map((row, idx) => {
+                      const mat = row.product_id ? products.find(p => String(p.product_id) === row.product_id) : null;
+                      return (
+                        <div key={idx} className="flex gap-3 items-end bg-slate-50 p-2 rounded">
+                          <div className="flex-[2] min-w-0">
+                            {idx === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product') || 'Mahsulot'}</label>}
+                            <Select
+                              value={row.product_id || "none"}
+                              onValueChange={(val) => {
+                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, product_id: val === "none" ? '' : val } : r));
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('select_product') || "Tanlang"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">-</SelectItem>
+                                {products.map(p => (
+                                  <SelectItem key={p.product_id} value={String(p.product_id)}>
+                                    {p.product_name}{p.uom ? ` (${p.uom})` : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-24 flex-shrink-0">
+                            {idx === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('qty') || 'Miqdor'}</label>}
+                            <Input
+                              type="number" step="0.0001" min="0"
+                              placeholder="0"
+                              value={row.quantity}
+                              onChange={(e) => {
+                                setAddLines(prev => prev.map((r, i) => i === idx ? { ...r, quantity: e.target.value } : r));
+                              }}
+                            />
+                          </div>
+                          <div className="w-32 flex-shrink-0 text-right">
+                            {idx === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('price') || 'Narxi'}</label>}
+                            <p className="text-sm py-2 text-slate-600 whitespace-nowrap">{mat?.unit_cost ? formatCurrency(mat.unit_cost) : '—'}</p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            {idx === 0 && <label className="text-xs text-transparent mb-1 block">.</label>}
+                            <Button
+                              type="button" size="sm" variant="ghost"
+                              onClick={() => setAddLines(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)}
+                              disabled={addLines.length === 1}
+                              className="text-red-500 h-9 w-9 p-0"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div>
-                  <Label>{t('labor_rate') || 'Ish haqi'}</Label>
-                  <Input
-                    value={lineForm.labor_rate}
-                    onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
-                    placeholder="0"
-                  />
+
+                {/* Shared labor + equipment rates */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('labor_rate') || 'Ish haqi'}</Label>
+                    <Input
+                      value={lineForm.labor_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
+                    <Input
+                      value={lineForm.equipment_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
-                  <Input
-                    value={lineForm.equipment_rate}
-                    onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
-                    placeholder="0"
-                  />
-                </div>
+
+                {/* Total summary */}
+                {(() => {
+                  const laborRate = parseFloat(parsePriceInput(lineForm.labor_rate)) || 0;
+                  const equipRate = parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0;
+                  let grandTotal = 0;
+                  for (const row of addLines) {
+                    if (!row.product_id) continue;
+                    const mat = products.find(p => String(p.product_id) === row.product_id);
+                    const qty = parseFloat(row.quantity) || 0;
+                    const unitRate = (mat?.unit_cost || 0) + laborRate + equipRate;
+                    grandTotal += qty * unitRate;
+                  }
+                  return grandTotal > 0 ? (
+                    <div className="flex justify-between items-center pt-3 border-t">
+                      <span className="text-sm text-slate-500">{t('total') || 'Jami'}</span>
+                      <span className="text-base font-semibold">{formatCurrency(grandTotal)}</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
-            </div>
+            )}
             <DialogFooter className="mt-6">
               <Button type="button" variant="outline" onClick={() => setShowLineModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
               </Button>
-              <Button type="submit">{lineForm.id ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}</Button>
+              <Button type="submit" disabled={!lineForm.id && !addLines.some(r => r.product_id && parseFloat(r.quantity) > 0)}>
+                {lineForm.id ? (t('save') || 'Saqlash') : (t('add') || "Qo'shish")}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
