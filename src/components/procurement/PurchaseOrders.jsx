@@ -41,6 +41,7 @@ import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { useInventory } from '@/components/contexts/InventoryContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
@@ -86,6 +87,7 @@ export default function PurchaseOrders() {
     getSupplierById,
     isLoading,
   } = useProcurement();
+  const { refreshData: refreshInventory } = useInventory();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -734,7 +736,7 @@ export default function PurchaseOrders() {
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'confirmed' && (
-                                <Button size="sm" variant="ghost" onClick={() => receivePurchaseOrder(po.id, {})}>
+                                <Button size="sm" variant="ghost" onClick={() => receivePurchaseOrder(po.id, {}).then(() => refreshInventory())}>
                                   <Truck className="w-4 h-4" />
                                 </Button>
                               )}

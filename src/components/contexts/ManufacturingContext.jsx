@@ -3,7 +3,8 @@ import {
   workCentersService,
   productionOrdersService,
   workOrdersService,
-  bomsService
+  bomsService,
+  manufacturingCategoriesService
 } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
@@ -219,6 +220,7 @@ export function ManufacturingProvider({ children }) {
   const [workOrders, setWorkOrders] = useState([]);
   const [boms, setBoms] = useState([]);
   const [manufacturingStats, setManufacturingStats] = useState(null);
+  const [manufacturingCategories, setManufacturingCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(false);
   const [error, setError] = useState(null);
@@ -262,7 +264,7 @@ export function ManufacturingProvider({ children }) {
 
       if (isBackendAvailable) {
         // Load all manufacturing data from API
-        const [wcData, poData, woData, bomData, statsData] = await Promise.all([
+        const [wcData, poData, woData, bomData, statsData, catData] = await Promise.all([
           workCentersService.list(companyId).catch(err => {
             console.error('Failed to load work centers:', err);
             return [];
@@ -282,6 +284,10 @@ export function ManufacturingProvider({ children }) {
           productionOrdersService.getStats(companyId).catch(err => {
             console.error('Failed to load stats:', err);
             return null;
+          }),
+          manufacturingCategoriesService.list().catch(err => {
+            console.error('Failed to load manufacturing categories:', err);
+            return [];
           })
         ]);
 
@@ -290,6 +296,7 @@ export function ManufacturingProvider({ children }) {
         setWorkOrders(woData || []);
         setBoms(bomData || []);
         setManufacturingStats(statsData);
+        setManufacturingCategories(catData || []);
       } else {
         loadDemoData(demoMode);
       }
@@ -561,6 +568,40 @@ export function ManufacturingProvider({ children }) {
     ['confirmed', 'in_progress'].includes(po.status)
   );
 
+  // =====================================================
+  // MANUFACTURING CATEGORY OPERATIONS
+  // =====================================================
+  const createManufacturingCategory = useCallback(async (data) => {
+    try {
+      const newCat = await manufacturingCategoriesService.create(data);
+      setManufacturingCategories(prev => [...prev, newCat]);
+      return newCat;
+    } catch (error) {
+      console.error('Failed to create manufacturing category:', error);
+      throw error;
+    }
+  }, []);
+
+  const updateManufacturingCategory = useCallback(async (id, data) => {
+    try {
+      await manufacturingCategoriesService.update(id, data);
+      setManufacturingCategories(prev => prev.map(cat => cat.id === id ? { ...cat, ...data } : cat));
+    } catch (error) {
+      console.error('Failed to update manufacturing category:', error);
+      throw error;
+    }
+  }, []);
+
+  const deleteManufacturingCategory = useCallback(async (id) => {
+    try {
+      await manufacturingCategoriesService.delete(id);
+      setManufacturingCategories(prev => prev.filter(cat => cat.id !== id));
+    } catch (error) {
+      console.error('Failed to delete manufacturing category:', error);
+      throw error;
+    }
+  }, []);
+
   const completedToday = productionOrders.filter(po => {
     if (po.status !== 'completed' || !po.completed_at) return false;
     const completedDate = new Date(po.completed_at).toDateString();
@@ -622,6 +663,12 @@ export function ManufacturingProvider({ children }) {
       createBOM,
       updateBOM,
       deleteBOM,
+
+      // Manufacturing Categories
+      manufacturingCategories: Array.isArray(manufacturingCategories) ? manufacturingCategories : [],
+      createManufacturingCategory,
+      updateManufacturingCategory,
+      deleteManufacturingCategory,
 
       // Refresh
       refreshData: loadData,

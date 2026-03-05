@@ -293,3 +293,28 @@ export const equipmentService = {
     return response.data.data;
   }
 };
+
+// =====================================================
+// MANUFACTURING CATEGORIES SERVICE
+// =====================================================
+export const manufacturingCategoriesService = {
+  async list() {
+    const response = await apiClient.get('/manufacturing-categories');
+    return response.data.data || [];
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/manufacturing-categories', data);
+    return response.data.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/manufacturing-categories/${id}`, data);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/manufacturing-categories/${id}`);
+    return true;
+  }
+};
