@@ -26,6 +26,9 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronRight,
+  Plus,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
@@ -43,10 +46,15 @@ const WORK_ORDER_STATUS = {
 
 export default function ShopFloorControl() {
   const { language } = useLanguage();
-  const { workOrders, workCenters, productionOrders, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
+  const { workOrders, workCenters, productionOrders, manufacturingCategories, createManufacturingCategory, updateManufacturingCategory, deleteManufacturingCategory, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
   const { refreshData: refreshInventory } = useInventory();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryColor, setNewCategoryColor] = useState('#6366f1');
+  const [editingCategory, setEditingCategory] = useState(null);
   const [activeWorkOrder, setActiveWorkOrder] = useState(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -80,13 +88,25 @@ export default function ShopFloorControl() {
     }
   }, [timeLogs]);
 
+  // Build a map of production_order_id -> manufacturing_category_id for category filtering
+  const poCategoryMap = useMemo(() => {
+    const map = {};
+    (productionOrders || []).forEach(po => {
+      if (po.manufacturing_category_id) {
+        map[po.id] = po.manufacturing_category_id;
+      }
+    });
+    return map;
+  }, [productionOrders]);
+
   // Filter work orders
   const filteredWorkOrders = useMemo(() => {
     return workOrders.filter(wo => {
       const matchesWorkCenter = selectedWorkCenter === 'all' || wo.work_center_id === selectedWorkCenter;
-      return matchesWorkCenter;
+      const matchesCategory = selectedCategory === 'all' || poCategoryMap[wo.production_order_id] === selectedCategory;
+      return matchesWorkCenter && matchesCategory;
     });
-  }, [workOrders, selectedWorkCenter]);
+  }, [workOrders, selectedWorkCenter, selectedCategory, poCategoryMap]);
 
   // Get available work orders (pending, ready, in_progress, or paused)
   const availableWorkOrders = useMemo(() => {
@@ -356,6 +376,34 @@ export default function ShopFloorControl() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* Category Tabs */}
+      <div className="flex gap-2 flex-wrap items-center">
+        <Button
+          size="sm"
+          variant={selectedCategory === 'all' ? 'default' : 'outline'}
+          onClick={() => setSelectedCategory('all')}
+          className={selectedCategory === 'all' ? 'bg-slate-800 text-white' : ''}
+        >
+          {labels.all || 'All'}
+        </Button>
+        {(manufacturingCategories || []).filter(c => c.is_active).map(cat => (
+          <Button
+            key={cat.id}
+            size="sm"
+            variant={selectedCategory === cat.id ? 'default' : 'outline'}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={selectedCategory === cat.id ? 'text-white' : ''}
+            style={selectedCategory === cat.id && cat.color ? { backgroundColor: cat.color, borderColor: cat.color } : {}}
+          >
+            {cat.color && <span className="w-2.5 h-2.5 rounded-full mr-1.5 inline-block" style={{ backgroundColor: selectedCategory === cat.id ? '#fff' : cat.color }} />}
+            {cat.name}
+          </Button>
+        ))}
+        <Button size="sm" variant="ghost" onClick={() => setShowCategoryManager(true)} className="text-slate-500 hover:text-slate-700">
+          <SettingsIcon className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -720,6 +768,110 @@ export default function ShopFloorControl() {
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {language === 'uz' ? "Ishni tugatish" : language === 'ru' ? "Завершить" : "Complete"}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Management Dialog */}
+      <Dialog open={showCategoryManager} onOpenChange={setShowCategoryManager}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{language === 'uz' ? 'Kategoriyalarni boshqarish' : language === 'ru' ? 'Управление категориями' : 'Manage Categories'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Add new category */}
+            <div className="flex gap-2">
+              <Input
+                placeholder={language === 'uz' ? 'Kategoriya nomi' : language === 'ru' ? 'Название категории' : 'Category name'}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                className="flex-1"
+              />
+              <input
+                type="color"
+                value={newCategoryColor}
+                onChange={(e) => setNewCategoryColor(e.target.value)}
+                className="w-10 h-10 rounded border cursor-pointer"
+              />
+              <Button
+                size="sm"
+                onClick={async () => {
+                  if (!newCategoryName.trim()) return;
+                  try {
+                    await createManufacturingCategory({ name: newCategoryName.trim(), color: newCategoryColor });
+                    setNewCategoryName('');
+                    setNewCategoryColor('#6366f1');
+                  } catch (err) {
+                    alert(err.response?.data?.error || 'Failed to create category');
+                  }
+                }}
+                disabled={!newCategoryName.trim()}
+                className="bg-slate-800"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* List existing categories */}
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {(manufacturingCategories || []).map(cat => (
+                <div key={cat.id} className="flex items-center gap-2 p-2 rounded border">
+                  {editingCategory === cat.id ? (
+                    <>
+                      <input
+                        type="color"
+                        defaultValue={cat.color || '#6366f1'}
+                        onChange={(e) => { cat._editColor = e.target.value; }}
+                        className="w-8 h-8 rounded border cursor-pointer"
+                      />
+                      <Input
+                        defaultValue={cat.name}
+                        onChange={(e) => { cat._editName = e.target.value; }}
+                        className="flex-1 h-8 text-sm"
+                      />
+                      <Button size="sm" variant="ghost" onClick={async () => {
+                        try {
+                          await updateManufacturingCategory(cat.id, {
+                            name: cat._editName || cat.name,
+                            color: cat._editColor || cat.color
+                          });
+                          setEditingCategory(null);
+                        } catch (err) {
+                          alert(err.response?.data?.error || 'Failed to update');
+                        }
+                      }}>
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color || '#ccc' }} />
+                      <span className="flex-1 text-sm">{cat.name}</span>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingCategory(cat.id)}>
+                        <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={async () => {
+                        if (confirm(language === 'uz' ? 'Kategoriyani o\'chirish?' : 'Delete this category?')) {
+                          try {
+                            await deleteManufacturingCategory(cat.id);
+                            if (selectedCategory === cat.id) setSelectedCategory('all');
+                          } catch (err) {
+                            alert(err.response?.data?.error || 'Failed to delete');
+                          }
+                        }
+                      }}>
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {(!manufacturingCategories || manufacturingCategories.length === 0) && (
+                <p className="text-sm text-slate-500 text-center py-4">
+                  {language === 'uz' ? 'Hali kategoriya qo\'shilmagan' : language === 'ru' ? 'Категории пока не добавлены' : 'No categories yet'}
+                </p>
+              )}
             </div>
           </div>
         </DialogContent>

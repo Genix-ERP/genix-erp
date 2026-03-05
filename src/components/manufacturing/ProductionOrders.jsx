@@ -35,7 +35,8 @@ export default function ProductionOrders() {
     completeProductionOrder,
     cancelProductionOrder,
     deleteProductionOrder,
-    refreshData
+    refreshData,
+    manufacturingCategories
   } = useManufacturing();
   const { refreshData: refreshInventory } = useInventory();
 
@@ -111,7 +112,8 @@ export default function ProductionOrders() {
     scheduled_start: new Date().toISOString().split('T')[0],
     scheduled_end: '',
     // Manufacturing-specific fields
-    shift: ''
+    shift: '',
+    manufacturing_category_id: ''
   });
 
   // Load products and BOMs
@@ -180,6 +182,10 @@ export default function ProductionOrders() {
       if (!orderData.shift) {
         delete orderData.shift;
       }
+      // Only include manufacturing_category_id if selected
+      if (!orderData.manufacturing_category_id) {
+        delete orderData.manufacturing_category_id;
+      }
       await createProductionOrder(orderData);
       setShowCreateModal(false);
 
@@ -195,7 +201,8 @@ export default function ProductionOrders() {
         scheduled_start: new Date().toISOString().split('T')[0],
         scheduled_end: '',
         // Manufacturing-specific fields
-        shift: ''
+        shift: '',
+        manufacturing_category_id: ''
       });
       setProductBoms([]);
     } catch (error) {
@@ -674,6 +681,25 @@ export default function ProductionOrders() {
                     <SelectItem value="none">{t('no_shift') || 'Not specified'}</SelectItem>
                     <SelectItem value="day">{t('day_shift') || 'Day Shift'}</SelectItem>
                     <SelectItem value="night">{t('night_shift') || 'Night Shift'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('category') || 'Category'}</label>
+                <Select value={newOrder.manufacturing_category_id || 'none'} onValueChange={(value) => setNewOrder({...newOrder, manufacturing_category_id: value === 'none' ? '' : value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_category') || 'Select category'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('no_category') || 'No category'}</SelectItem>
+                    {(manufacturingCategories || []).filter(c => c.is_active).map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        <span className="flex items-center gap-2">
+                          {cat.color && <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: cat.color }} />}
+                          {cat.name}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
