@@ -1980,7 +1980,7 @@ export default function Products() {
             {formData.type === 'product' && (
               <div>
                 <h4 className="font-semibold text-slate-900 mb-3">{t('weight_dimensions') || 'Weight & Dimensions'}</h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight') || 'Weight'}</label>
                     <Input
@@ -1992,10 +1992,10 @@ export default function Products() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('weight_unit') || 'Weight Unit'}</label>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">{t('unit_of_measure') || 'Unit of Measure'}</label>
                     <Select
-                      value={formData.weight_unit}
-                      onValueChange={(value) => setFormData({...formData, weight_unit: value})}
+                      value={formData.inventory_uom}
+                      onValueChange={(value) => setFormData({...formData, inventory_uom: value, sales_uom: value, purchase_uom: value, weight_unit: value})}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -2005,14 +2005,13 @@ export default function Products() {
                           <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
                         ))}
                         {uomList.length === 0 && (
-                          <>
-                            <SelectItem value="kg">kg</SelectItem>
-                            <SelectItem value="g">g</SelectItem>
-                          </>
+                          <SelectItem value="unit">Unit</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-4">
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-1 block">{t('length') || 'Length'}</label>
                     <Input
@@ -2733,79 +2732,6 @@ export default function Products() {
                   </div>
                 </div>
 
-                {/* Units of Measure */}
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-3">{t('units_of_measure') || 'Units of Measure'}</h4>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('inventory_uom') || 'Inventory UoM'}</label>
-                      <Select
-                        value={formData.inventory_uom}
-                        onValueChange={(value) => setFormData({...formData, inventory_uom: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uomList.map(u => (
-                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
-                          ))}
-                          {uomList.length === 0 && (
-                            <SelectItem value="unit">Unit</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('sales_uom') || 'Sales UoM'}</label>
-                      <Select
-                        value={formData.sales_uom}
-                        onValueChange={(value) => setFormData({...formData, sales_uom: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uomList.map(u => (
-                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
-                          ))}
-                          {uomList.length === 0 && (
-                            <SelectItem value="unit">Unit</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('purchase_uom') || 'Purchase UoM'}</label>
-                      <Select
-                        value={formData.purchase_uom}
-                        onValueChange={(value) => setFormData({...formData, purchase_uom: value})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uomList.map(u => (
-                            <SelectItem key={u.code} value={u.code}>{u.name} ({u.code})</SelectItem>
-                          ))}
-                          {uomList.length === 0 && (
-                            <SelectItem value="unit">Unit</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 mb-1 block">{t('uom_conversion') || 'Conversion Factor'}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="1"
-                        value={formData.uom_conversion_factor}
-                        onChange={(e) => setFormData({...formData, uom_conversion_factor: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
 
                 {/* Customer Lead Time */}
                 <div>
