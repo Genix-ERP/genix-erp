@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import { financeService } from '@/api/services/finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, XCircle, Receipt, Tag } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -47,12 +48,22 @@ const ExpensesTab = ({ project }) => {
     cancelled: t('cancelled') || 'Cancelled',
   };
 
+  const [subTab, setSubTab] = useState('expenses');
+
   const [data, setData] = useState({ items: [], total_approved: 0, total_draft: 0, total: 0 });
   const [stages, setStages] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingLine, setEditingLine] = useState(null);
+
+  // Categories sub-tab state
+  const [catLoading, setCatLoading] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [editingCat, setEditingCat] = useState(null);
+  const [catForm, setCatForm] = useState({ name: '', default_debit_account_id: '' });
+  const [expenseAccounts, setExpenseAccounts] = useState([]);
+  const [catSaving, setCatSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -116,6 +127,7 @@ const ExpensesTab = ({ project }) => {
   const handleSave = async () => {
     if (!form.description.trim()) { setError(t('validation_description_required')); return; }
     if (!form.expense_date) { setError(t('validation_date_required')); return; }
+    if (!form.cost_category_id) { setError(t('validation_category_required') || 'Kategoriyani tanlang'); return; }
     const amount = parseFloat(parsePriceInput(form.amount));
     if (!amount || amount <= 0) { setError(t('validation_amount_positive')); return; }
     setSaving(true);
@@ -181,8 +193,152 @@ const ExpensesTab = ({ project }) => {
     }
   };
 
+  // Category CRUD
+  const loadCategories = useCallback(async () => {
+    setCatLoading(true);
+    try {
+      const catData = await constructionService.listCostCategories();
+      setCategories(catData || []);
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+    } finally {
+      setCatLoading(false);
+    }
+  }, []);
+
+  const loadExpenseAccounts = useCallback(async () => {
+    try {
+      const res = await financeService.listAccounts({ category: 'expense', limit: 500 });
+      setExpenseAccounts(res?.items || res || []);
+    } catch (e) {
+      console.error('Failed to load expense accounts:', e);
+    }
+  }, []);
+
+  const openCreateCat = () => {
+    setEditingCat(null);
+    setCatForm({ name: '', default_debit_account_id: '' });
+    loadExpenseAccounts();
+    setShowCatModal(true);
+  };
+
+  const openEditCat = (cat) => {
+    setEditingCat(cat);
+    setCatForm({ name: cat.name || '', default_debit_account_id: cat.default_debit_account_id || '' });
+    loadExpenseAccounts();
+    setShowCatModal(true);
+  };
+
+  const handleSaveCat = async () => {
+    if (!catForm.name.trim()) return;
+    setCatSaving(true);
+    try {
+      const payload = {
+        name: catForm.name,
+        default_debit_account_id: catForm.default_debit_account_id || '',
+      };
+      if (editingCat) {
+        await constructionService.updateCostCategory(editingCat.id, payload);
+      } else {
+        await constructionService.createCostCategory(payload);
+      }
+      setShowCatModal(false);
+      loadCategories();
+    } catch (e) {
+      console.error('Failed to save category:', e);
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const handleToggleCat = async (cat) => {
+    try {
+      await constructionService.updateCostCategory(cat.id, { is_active: !cat.is_active });
+      loadCategories();
+    } catch (e) {
+      console.error('Failed to toggle category:', e);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2 border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${subTab === 'expenses' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          onClick={() => setSubTab('expenses')}
+        >
+          <Receipt className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+          {t('expenses') || 'Xarajatlar'}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${subTab === 'categories' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          onClick={() => setSubTab('categories')}
+        >
+          <Tag className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+          {t('categories') || 'Kategoriyalar'}
+        </button>
+      </div>
+
+      {subTab === 'categories' ? (
+        /* ── Categories sub-tab ── */
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Tag className="w-5 h-5" />
+              {t('expense_categories') || 'Xarajat kategoriyalari'}
+            </CardTitle>
+            <Button onClick={openCreateCat}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t('add_category') || "Kategoriya qo'shish"}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {catLoading ? (
+              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            ) : categories.length === 0 ? (
+              <div className="text-center py-12">
+                <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">{t('no_categories') || "Kategoriyalar yo'q"}</p>
+                <Button variant="outline" className="mt-3" onClick={openCreateCat}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  {t('add_category') || "Kategoriya qo'shish"}
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-slate-500">
+                      <th className="text-left py-2 px-3">{t('code') || 'Kod'}</th>
+                      <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
+                      <th className="text-left py-2 px-3">{t('expense_account') || 'Xarajat hisobi'}</th>
+                      <th className="text-right py-2 px-3">{t('actions') || 'Amallar'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map(cat => (
+                      <tr key={cat.id} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 font-mono text-sm">{cat.code}</td>
+                        <td className="py-2 px-3">{cat.name}</td>
+                        <td className="py-2 px-3 text-slate-600">{cat.debit_account_name || '—'}</td>
+                        <td className="py-2 px-3 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEditCat(cat)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         <Card><CardContent className="p-4">
@@ -345,11 +501,10 @@ const ExpensesTab = ({ project }) => {
                 </Select>
               </div>
               <div>
-                <Label>{t('expense_category')}</Label>
-                <Select value={form.cost_category_id || 'none'} onValueChange={v => setForm(f => ({...f, cost_category_id: v === 'none' ? '' : v}))}>
+                <Label>{t('expense_category')} *</Label>
+                <Select value={form.cost_category_id || ''} onValueChange={v => setForm(f => ({...f, cost_category_id: v}))}>
                   <SelectTrigger><SelectValue placeholder={t('expense_category')} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">{t('no_category')}</SelectItem>
                     {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -416,6 +571,50 @@ const ExpensesTab = ({ project }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </>
+      )}
+
+      {/* Category Create/Edit Modal */}
+      <Dialog open={showCatModal} onOpenChange={setShowCatModal}>
+        <DialogContent className="max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{editingCat ? (t('edit_category') || 'Kategoriyani tahrirlash') : (t('add_category') || "Kategoriya qo'shish")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{t('name') || 'Nomi'} *</Label>
+              <Input
+                value={catForm.name}
+                onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))}
+                placeholder={t('category_name') || 'Kategoriya nomi'}
+              />
+            </div>
+            <div>
+              <Label>{t('expense_account') || 'Xarajat hisobi'}</Label>
+              <Select
+                value={catForm.default_debit_account_id || 'none'}
+                onValueChange={v => setCatForm(f => ({ ...f, default_debit_account_id: v === 'none' ? '' : v }))}
+              >
+                <SelectTrigger><SelectValue placeholder={t('select_account') || 'Hisob tanlang'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tanlanmagan</SelectItem>
+                  {expenseAccounts.map(acc => (
+                    <SelectItem key={acc.id} value={String(acc.id)}>
+                      {acc.code} — {acc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCatModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleSaveCat} disabled={catSaving || !catForm.name.trim()}>
+              {catSaving ? (t('saving') || 'Saqlanmoqda...') : (t('save') || 'Saqlash')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
