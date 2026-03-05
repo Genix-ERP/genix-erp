@@ -386,10 +386,8 @@ export default function ShopFloorControl() {
             size="sm"
             variant={selectedCategory === cat.id ? 'default' : 'outline'}
             onClick={() => setSelectedCategory(cat.id)}
-            className={selectedCategory === cat.id ? 'text-white' : ''}
-            style={selectedCategory === cat.id && cat.color ? { backgroundColor: cat.color, borderColor: cat.color } : {}}
+            className={selectedCategory === cat.id ? 'bg-slate-800 text-white' : ''}
           >
-            {cat.color && <span className="w-2.5 h-2.5 rounded-full mr-1.5 inline-block" style={{ backgroundColor: selectedCategory === cat.id ? '#fff' : cat.color }} />}
             {cat.name}
           </Button>
         ))}
