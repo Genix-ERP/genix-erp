@@ -693,12 +693,7 @@ export default function ProductionOrders() {
                   <SelectContent>
                     <SelectItem value="none">{t('no_category') || 'No category'}</SelectItem>
                     {(manufacturingCategories || []).filter(c => c.is_active).map(cat => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        <span className="flex items-center gap-2">
-                          {cat.color && <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: cat.color }} />}
-                          {cat.name}
-                        </span>
-                      </SelectItem>
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

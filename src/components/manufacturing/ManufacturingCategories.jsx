@@ -1,24 +1,15 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
-import { useTranslation } from '@/components/utils/translations';
-
-const PRESET_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
-  '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
-  '#64748b', '#78716c'
-];
 
 export default function ManufacturingCategories() {
   const { language } = useLanguage();
-  const { t } = useTranslation(language);
   const {
     manufacturingCategories,
     createManufacturingCategory,
@@ -28,85 +19,33 @@ export default function ManufacturingCategories() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [formData, setFormData] = useState({ name: '', description: '', color: '#6366f1' });
+  const [categoryName, setCategoryName] = useState('');
 
-  const labels = {
-    en: {
-      title: 'Manufacturing Categories',
-      subtitle: 'Manage categories for production orders and shop floor filtering',
-      add: 'Add Category',
-      name: 'Name',
-      description: 'Description',
-      color: 'Color',
-      status: 'Status',
-      actions: 'Actions',
-      active: 'Active',
-      create: 'Create Category',
-      update: 'Update Category',
-      cancel: 'Cancel',
-      no_categories: 'No categories yet. Add your first category to organize production orders.',
-      delete_confirm: 'Are you sure you want to delete this category?',
-      name_placeholder: 'e.g. Block Production',
-      desc_placeholder: 'Optional description',
-    },
-    uz: {
-      title: 'Ishlab chiqarish kategoriyalari',
-      subtitle: 'Ishlab chiqarish buyurtmalari va sex boshqaruvi uchun kategoriyalarni boshqaring',
-      add: 'Kategoriya qo\'shish',
-      name: 'Nomi',
-      description: 'Tavsif',
-      color: 'Rang',
-      status: 'Holat',
-      actions: 'Amallar',
-      active: 'Faol',
-      create: 'Kategoriya yaratish',
-      update: 'Kategoriyani yangilash',
-      cancel: 'Bekor qilish',
-      no_categories: 'Hali kategoriya yo\'q. Birinchi kategoriyani qo\'shing.',
-      delete_confirm: 'Bu kategoriyani o\'chirishni xohlaysizmi?',
-      name_placeholder: 'masalan, Blok ishlab chiqarish',
-      desc_placeholder: 'Ixtiyoriy tavsif',
-    },
-    ru: {
-      title: 'Категории производства',
-      subtitle: 'Управление категориями для производственных заказов',
-      add: 'Добавить категорию',
-      name: 'Название',
-      description: 'Описание',
-      color: 'Цвет',
-      status: 'Статус',
-      actions: 'Действия',
-      active: 'Активная',
-      create: 'Создать категорию',
-      update: 'Обновить категорию',
-      cancel: 'Отмена',
-      no_categories: 'Категорий пока нет. Добавьте первую категорию.',
-      delete_confirm: 'Вы уверены, что хотите удалить эту категорию?',
-      name_placeholder: 'напр. Производство блоков',
-      desc_placeholder: 'Необязательное описание',
-    }
-  };
-  const l = labels[language] || labels.en;
+  const l = {
+    en: { title: 'Manufacturing Categories', subtitle: 'Manage categories for production orders and shop floor filtering', add: 'Add Category', name: 'Name', actions: 'Actions', create: 'Create Category', update: 'Update Category', cancel: 'Cancel', no_categories: 'No categories yet. Add your first category to organize production orders.', delete_confirm: 'Are you sure you want to delete this category?', placeholder: 'e.g. Block Production' },
+    uz: { title: 'Ishlab chiqarish kategoriyalari', subtitle: 'Ishlab chiqarish buyurtmalari va sex boshqaruvi uchun kategoriyalarni boshqaring', add: 'Kategoriya qo\'shish', name: 'Nomi', actions: 'Amallar', create: 'Kategoriya yaratish', update: 'Kategoriyani yangilash', cancel: 'Bekor qilish', no_categories: 'Hali kategoriya yo\'q. Birinchi kategoriyani qo\'shing.', delete_confirm: 'Bu kategoriyani o\'chirishni xohlaysizmi?', placeholder: 'masalan, Blok ishlab chiqarish' },
+    ru: { title: 'Категории производства', subtitle: 'Управление категориями для производственных заказов', add: 'Добавить категорию', name: 'Название', actions: 'Действия', create: 'Создать категорию', update: 'Обновить категорию', cancel: 'Отмена', no_categories: 'Категорий пока нет. Добавьте первую категорию.', delete_confirm: 'Вы уверены, что хотите удалить эту категорию?', placeholder: 'напр. Производство блоков' },
+  }[language] || { title: 'Manufacturing Categories', subtitle: 'Manage categories for production orders and shop floor filtering', add: 'Add Category', name: 'Name', actions: 'Actions', create: 'Create Category', update: 'Update Category', cancel: 'Cancel', no_categories: 'No categories yet. Add your first category to organize production orders.', delete_confirm: 'Are you sure you want to delete this category?', placeholder: 'e.g. Block Production' };
 
   const openCreate = () => {
     setEditingCategory(null);
-    setFormData({ name: '', description: '', color: '#6366f1' });
+    setCategoryName('');
     setShowModal(true);
   };
 
   const openEdit = (cat) => {
     setEditingCategory(cat);
-    setFormData({ name: cat.name, description: cat.description || '', color: cat.color || '#6366f1' });
+    setCategoryName(cat.name);
     setShowModal(true);
   };
 
   const handleSubmit = async () => {
-    if (!formData.name.trim()) return;
+    if (!categoryName.trim()) return;
     try {
       if (editingCategory) {
-        await updateManufacturingCategory(editingCategory.id, formData);
+        await updateManufacturingCategory(editingCategory.id, { name: categoryName.trim() });
       } else {
-        await createManufacturingCategory(formData);
+        await createManufacturingCategory({ name: categoryName.trim() });
       }
       setShowModal(false);
     } catch (err) {
@@ -153,29 +92,14 @@ export default function ManufacturingCategories() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/50">
-                  <TableHead className="w-12">{l.color}</TableHead>
                   <TableHead>{l.name}</TableHead>
-                  <TableHead>{l.description}</TableHead>
-                  <TableHead>{l.status}</TableHead>
-                  <TableHead className="text-right">{l.actions}</TableHead>
+                  <TableHead className="text-right w-32">{l.actions}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {manufacturingCategories.map(cat => (
                   <TableRow key={cat.id} className="hover:bg-slate-50/50">
-                    <TableCell>
-                      <span
-                        className="w-6 h-6 rounded-full inline-block border border-slate-200"
-                        style={{ backgroundColor: cat.color || '#ccc' }}
-                      />
-                    </TableCell>
                     <TableCell className="font-medium">{cat.name}</TableCell>
-                    <TableCell className="text-slate-500">{cat.description || '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={cat.is_active ? 'default' : 'secondary'} className={cat.is_active ? 'bg-green-100 text-green-700 border-green-200' : ''}>
-                        {cat.is_active ? l.active : 'Inactive'}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(cat)}>
@@ -194,9 +118,8 @@ export default function ManufacturingCategories() {
         </CardContent>
       </Card>
 
-      {/* Create / Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{editingCategory ? l.update : l.create}</DialogTitle>
           </DialogHeader>
@@ -204,46 +127,19 @@ export default function ManufacturingCategories() {
             <div>
               <label className="text-sm font-medium mb-1 block">{l.name} *</label>
               <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={l.name_placeholder}
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                placeholder={l.placeholder}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">{l.description}</label>
-              <Input
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder={l.desc_placeholder}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">{l.color}</label>
-              <div className="flex gap-2 flex-wrap">
-                {PRESET_COLORS.map(color => (
-                  <button
-                    key={color}
-                    onClick={() => setFormData({ ...formData, color })}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${formData.color === color ? 'border-slate-800 scale-110 shadow-md' : 'border-transparent hover:border-slate-300'}`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-                <input
-                  type="color"
-                  value={formData.color}
-                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                  className="w-8 h-8 rounded-full border cursor-pointer"
-                  title="Custom color"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3">
               <Button variant="outline" onClick={() => setShowModal(false)} className="flex-1">
                 {l.cancel}
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.name.trim()}
+                disabled={!categoryName.trim()}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
               >
                 {editingCategory ? l.update : l.create}
