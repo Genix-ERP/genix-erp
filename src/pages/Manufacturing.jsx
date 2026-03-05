@@ -15,7 +15,8 @@ import {
   Monitor,
   Route,
   Wrench,
-  Settings2
+  Settings2,
+  Tag
 } from 'lucide-react';
 
 import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
@@ -27,6 +28,7 @@ import MRPPlanning from '@/components/manufacturing/MRPPlanning';
 import ShopFloorControl from '@/components/manufacturing/ShopFloorControl';
 import RoutingManagement from '@/components/manufacturing/RoutingManagement';
 import EquipmentMaintenance from '@/components/manufacturing/EquipmentMaintenance';
+import ManufacturingCategories from '@/components/manufacturing/ManufacturingCategories';
 
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -72,6 +74,10 @@ export default function Manufacturing() {
             <TabsTrigger value="shopfloor" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Monitor className="w-4 h-4" />
               <span className="hidden sm:inline">{t('shop_floor_control') || 'Shop Floor'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Tag className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('categories') || 'Categories'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -147,6 +153,10 @@ export default function Manufacturing() {
 
           <TabsContent value="shopfloor" className="mt-6">
             <ShopFloorControl />
+          </TabsContent>
+
+          <TabsContent value="categories" className="mt-6">
+            <ManufacturingCategories />
           </TabsContent>
 
         </Tabs>
