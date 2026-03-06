@@ -42,6 +42,12 @@ export default function Manufacturing() {
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
+  const tabLabels = {
+    en: { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' },
+    uz: { categories: 'Kategoriyalar', report: 'Hisobot', shop_floor: 'Sex boshqaruvi' },
+    ru: { categories: 'Категории', report: 'Отчёт', shop_floor: 'Управление цехом' },
+  }[language] || { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' };
+
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -75,15 +81,15 @@ export default function Manufacturing() {
             </TabsTrigger>
             <TabsTrigger value="shopfloor" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Monitor className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('shop_floor_control') || 'Shop Floor'}</span>
+              <span className="hidden sm:inline">{tabLabels.shop_floor}</span>
             </TabsTrigger>
             <TabsTrigger value="categories" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Tag className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('categories') || 'Categories'}</span>
+              <span className="hidden sm:inline">{tabLabels.categories}</span>
             </TabsTrigger>
             <TabsTrigger value="report" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('report') || 'Report'}</span>
+              <span className="hidden sm:inline">{tabLabels.report}</span>
             </TabsTrigger>
           </TabsList>
 
