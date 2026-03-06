@@ -16,7 +16,8 @@ import {
   Route,
   Wrench,
   Settings2,
-  Tag
+  Tag,
+  BarChart3
 } from 'lucide-react';
 
 import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
@@ -29,6 +30,7 @@ import ShopFloorControl from '@/components/manufacturing/ShopFloorControl';
 import RoutingManagement from '@/components/manufacturing/RoutingManagement';
 import EquipmentMaintenance from '@/components/manufacturing/EquipmentMaintenance';
 import ManufacturingCategories from '@/components/manufacturing/ManufacturingCategories';
+import ManufacturingReport from '@/components/manufacturing/ManufacturingReport';
 
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -78,6 +80,10 @@ export default function Manufacturing() {
             <TabsTrigger value="categories" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">{t('categories') || 'Categories'}</span>
+            </TabsTrigger>
+            <TabsTrigger value="report" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('report') || 'Report'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -157,6 +163,10 @@ export default function Manufacturing() {
 
           <TabsContent value="categories" className="mt-6">
             <ManufacturingCategories />
+          </TabsContent>
+
+          <TabsContent value="report" className="mt-6">
+            <ManufacturingReport />
           </TabsContent>
 
         </Tabs>
