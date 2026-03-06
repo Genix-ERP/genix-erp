@@ -682,24 +682,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>{t('labor_rate') || 'Ish haqi'}</Label>
-                    <Input
-                      value={lineForm.labor_rate}
-                      onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
-                    <Input
-                      value={lineForm.equipment_rate}
-                      onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
               </div>
             ) : (
               /* ── Create mode: multiple lines like PO ── */
@@ -770,36 +752,14 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                   </div>
                 </div>
 
-                {/* Shared labor + equipment rates */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>{t('labor_rate') || 'Ish haqi'}</Label>
-                    <Input
-                      value={lineForm.labor_rate}
-                      onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
-                    <Input
-                      value={lineForm.equipment_rate}
-                      onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-
                 {/* Total summary */}
                 {(() => {
-                  const laborRate = parseFloat(parsePriceInput(lineForm.labor_rate)) || 0;
-                  const equipRate = parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0;
                   let grandTotal = 0;
                   for (const row of addLines) {
                     if (!row.product_id) continue;
                     const mat = products.find(p => String(p.product_id) === row.product_id);
                     const qty = parseFloat(row.quantity) || 0;
-                    const unitRate = (mat?.unit_cost || 0) + laborRate + equipRate;
+                    const unitRate = mat?.unit_cost || 0;
                     grandTotal += qty * unitRate;
                   }
                   return grandTotal > 0 ? (

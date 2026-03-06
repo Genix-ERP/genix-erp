@@ -711,7 +711,7 @@ export default function PurchaseOrders() {
                           <TableCell className="text-sm">
                             {(po.expected_delivery_date || po.expected_date) ? format(new Date(po.expected_delivery_date || po.expected_date), 'dd.MM.yyyy') : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">{(po.total_amount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(po.total_amount || 0)}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(po.status)}>{t(po.status) || po.status}</Badge>
                           </TableCell>
@@ -1052,6 +1052,16 @@ export default function PurchaseOrders() {
                         onChange={(e) => setNewPO({...newPO, tax_percent: e.target.value})}
                         className="rounded-r-none border-r-0"
                       />
+                      {parseFloat(newPO.tax_percent) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="rounded-none border-x-0 shrink-0 px-1 text-slate-400 hover:text-red-500"
+                          onClick={() => setNewPO({...newPO, tax_percent: 0, tax_rate_id: ''})}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <PopoverTrigger asChild>
                         <Button variant="outline" size="icon" className="rounded-l-none border-l-0 shrink-0 px-2">
                           <ChevronDown className="h-4 w-4" />
@@ -1256,7 +1266,7 @@ export default function PurchaseOrders() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500">{t('total_amount') || 'Total Amount'}</p>
-                  <p className="font-bold text-lg">{(detailPO.total_amount || 0).toLocaleString()}</p>
+                  <p className="font-bold text-lg">{formatCurrency(detailPO.total_amount || 0)}</p>
                 </div>
               </div>
 

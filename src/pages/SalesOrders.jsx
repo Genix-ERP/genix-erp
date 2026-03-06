@@ -1556,6 +1556,16 @@ export default function SalesOrders() {
                           onChange={(e) => setNewOrder({...newOrder, tax_percent: e.target.value})}
                           className="rounded-r-none border-r-0"
                         />
+                        {parseFloat(newOrder.tax_percent) > 0 && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="rounded-none border-x-0 shrink-0 px-1 text-slate-400 hover:text-red-500"
+                            onClick={() => setNewOrder({...newOrder, tax_percent: 0, tax_rate_id: ''})}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <PopoverTrigger asChild>
                           <Button variant="outline" size="icon" className="rounded-l-none border-l-0 shrink-0 px-2">
                             <ChevronDown className="h-4 w-4" />
