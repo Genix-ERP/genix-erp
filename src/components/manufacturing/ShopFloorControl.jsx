@@ -240,7 +240,7 @@ export default function ShopFloorControl() {
 
       await completeWorkOrder(activeWorkOrder.id, {
         quantity_produced: parseFloat(completionData.quantity_produced) || 0,
-        quantity_scrapped: parseFloat(completionData.quantity_scrapped) || 0,
+        scrap_quantity: parseFloat(completionData.quantity_scrapped) || 0,
         actual_duration: timeSpent.totalMinutes,
         notes: completionData.notes,
       });

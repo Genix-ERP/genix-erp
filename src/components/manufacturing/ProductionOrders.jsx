@@ -846,56 +846,6 @@ export default function ProductionOrders() {
                 )}
               </div>
 
-              {/* Output Recording - Visible when production is active */}
-              {(selectedOrder.status === 'in_progress' || selectedOrder.current_stage === 'done' || (selectedOrder.current_stage && selectedOrder.current_stage.startsWith('op_'))) && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-4 flex items-center gap-2">
-                    <Package className="w-5 h-5" />
-                    {t('production_output') || 'Production Output'}
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-1 block text-green-700">
-                        {t('good_quantity') || 'Good Quantity'}
-                      </label>
-                      <Input
-                        type="number"
-                        value={selectedOrder.good_quantity || 0}
-                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, good_quantity: e.target.value }))}
-                        className="border-green-300 focus:border-green-500"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium mb-1 block text-red-700">
-                        {t('reject_quantity') || 'Reject/Brak Quantity'}
-                      </label>
-                      <Input
-                        type="number"
-                        value={selectedOrder.reject_quantity || 0}
-                        onChange={(e) => setSelectedOrder(prev => ({ ...prev, reject_quantity: e.target.value }))}
-                        className="border-red-300 focus:border-red-500"
-                        min="0"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      onClick={() => handleRecordOutput(
-                        selectedOrder.id,
-                        selectedOrder.good_quantity,
-                        selectedOrder.reject_quantity,
-                        selectedOrder.package_count
-                      )}
-                      className="bg-gradient-to-r from-green-600 to-green-700"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      {t('save_output') || 'Save Output'}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* Output Summary */}
               <div className="border-t pt-4">
                 <h4 className="font-semibold mb-3">{t('output_summary') || 'Output Summary'}</h4>
