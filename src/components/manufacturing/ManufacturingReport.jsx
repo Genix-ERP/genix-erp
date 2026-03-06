@@ -60,6 +60,12 @@ export default function ManufacturingReport() {
     paused: 'bg-orange-100 text-orange-700',
   };
 
+  const statusLabels = {
+    en: { draft: 'Draft', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', paused: 'Paused', cancelled: 'Cancelled' },
+    uz: { draft: 'Qoralama', confirmed: 'Tasdiqlangan', in_progress: 'Jarayonda', completed: 'Tugallangan', paused: 'To\'xtatilgan', cancelled: 'Bekor qilingan' },
+    ru: { draft: 'Черновик', confirmed: 'Подтверждён', in_progress: 'В процессе', completed: 'Завершён', paused: 'Приостановлен', cancelled: 'Отменён' },
+  }[language] || { draft: 'Draft', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', paused: 'Paused', cancelled: 'Cancelled' };
+
   const activeCategories = (manufacturingCategories || []).filter(c => c.is_active);
 
   return (
@@ -191,7 +197,7 @@ export default function ManufacturingReport() {
                       <TableCell className="text-right text-amber-700 font-medium">{loss > 0 ? formatCurrency(loss) : '—'}</TableCell>
                       <TableCell>
                         <Badge className={statusColors[po.status] || 'bg-gray-100 text-gray-700'}>
-                          {po.status}
+                          {statusLabels[po.status] || po.status}
                         </Badge>
                       </TableCell>
                     </TableRow>
