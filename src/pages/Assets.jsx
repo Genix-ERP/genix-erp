@@ -65,7 +65,7 @@ export default function Assets() {
     asset_code: '',
     asset_category: 'equipment',
     purchase_date: new Date().toISOString().split('T')[0],
-    purchase_cost: 0,
+    purchase_cost: '',
     useful_life_years: 5,
     depreciation_method: 'straight_line'
   });
@@ -119,7 +119,7 @@ export default function Assets() {
         asset_code: '',
         asset_category: 'equipment',
         purchase_date: new Date().toISOString().split('T')[0],
-        purchase_cost: 0,
+        purchase_cost: '',
         useful_life_years: 5,
         depreciation_method: 'straight_line'
       });
