@@ -169,8 +169,11 @@ export default function Warehouses() {
   };
 
   const generateCode = (prefix, existingItems) => {
-    const num = (existingItems?.length || 0) + 1;
-    return `${prefix}-${String(num).padStart(3, '0')}`;
+    const maxNum = (existingItems || []).reduce((max, item) => {
+      const match = item.code?.match(new RegExp(`^${prefix}-(\\d+)$`));
+      return match ? Math.max(max, parseInt(match[1], 10)) : max;
+    }, 0);
+    return `${prefix}-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
   const resetForm = () => {
