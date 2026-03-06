@@ -1464,6 +1464,18 @@ export const translations = {
     "help_email": "Contact email address",
     "help_manager": "Person responsible for this warehouse",
 
+    // Warehouse Type
+    "warehouse_type": "Warehouse Type",
+    "regular": "Regular",
+    "help_warehouse_type": "Warehouse type: regular warehouse or scrap warehouse for defective products",
+
+    // Manufacturing Steps
+    "manufacturing_steps": "Manufacturing",
+    "help_manufacturing_steps": "Manufacturing steps: 1-step = simple, 2-step = pick components + produce, 3-step = pick + produce + store",
+    "mfg_1_step": "1-step: Simple (no transfers)",
+    "mfg_2_step": "2-step: Pick → Produce",
+    "mfg_3_step": "3-step: Pick → Produce → Store",
+
     // Warehouse Operations (Odoo-style)
     "warehouse_operations": "Warehouse Operations",
     "warehouse_operations_desc": "Configure how goods are received and delivered in this warehouse",
@@ -7459,6 +7471,18 @@ export const translations = {
     "help_email": "Elektron pochta manzili",
     "help_manager": "Ushbu ombor uchun mas'ul shaxs",
 
+    // Warehouse Type
+    "warehouse_type": "Ombor turi",
+    "regular": "Oddiy",
+    "help_warehouse_type": "Ombor turi: oddiy ombor yoki yaroqsiz mahsulotlar uchun ombor",
+
+    // Manufacturing Steps
+    "manufacturing_steps": "Ishlab chiqarish",
+    "help_manufacturing_steps": "Ishlab chiqarish bosqichlari: 1-bosqich = oddiy, 2-bosqich = komponentlarni yig'ish + ishlab chiqarish, 3-bosqich = yig'ish + ishlab chiqarish + saqlash",
+    "mfg_1_step": "1-bosqich: Oddiy (o'tkazmasiz)",
+    "mfg_2_step": "2-bosqich: Yig'ish → Ishlab chiqarish",
+    "mfg_3_step": "3-bosqich: Yig'ish → Ishlab chiqarish → Saqlash",
+
     // Warehouse Operations (Odoo-style)
     "warehouse_operations": "Ombor operatsiyalari",
     "warehouse_operations_desc": "Ushbu omborga tovarlarni qabul qilish va yetkazib berish tartibini sozlash",
@@ -13137,6 +13161,18 @@ export const translations = {
     "help_phone": "Контактный телефон",
     "help_email": "Электронная почта",
     "help_manager": "Ответственный за этот склад",
+
+    // Warehouse Type
+    "warehouse_type": "Тип склада",
+    "regular": "Обычный",
+    "help_warehouse_type": "Тип склада: обычный склад или склад для бракованной продукции",
+
+    // Manufacturing Steps
+    "manufacturing_steps": "Производство",
+    "help_manufacturing_steps": "Этапы производства: 1 этап = простой, 2 этапа = комплектация + производство, 3 этапа = комплектация + производство + хранение",
+    "mfg_1_step": "1 этап: Простой (без перемещений)",
+    "mfg_2_step": "2 этапа: Комплектация → Производство",
+    "mfg_3_step": "3 этапа: Комплектация → Производство → Хранение",
 
     // Warehouse Operations (Odoo-style)
     "warehouse_operations": "Операции склада",
