@@ -110,6 +110,7 @@ export default function Warehouses() {
     manager_name: '',
     is_active: true,
     is_default: false,
+    warehouse_type: 'regular',
     reception_steps: 1,  // 1=Direct, 2=Input+Stock, 3=Input+QC+Stock
     delivery_steps: 1,   // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
     manufacturing_steps: 1  // 1=Simple, 2=Pick+Produce, 3=Pick+Produce+Store
@@ -186,6 +187,7 @@ export default function Warehouses() {
       manager_name: '',
       is_active: true,
       is_default: false,
+      warehouse_type: 'regular',
       reception_steps: 1,
       delivery_steps: 1,
       manufacturing_steps: 1
@@ -241,6 +243,7 @@ export default function Warehouses() {
       manager_name: warehouse.manager_name || '',
       is_active: warehouse.is_active !== false,
       is_default: warehouse.is_default || false,
+      warehouse_type: warehouse.warehouse_type || 'regular',
       reception_steps: warehouse.reception_steps || 1,
       delivery_steps: warehouse.delivery_steps || 1,
       manufacturing_steps: warehouse.manufacturing_steps || 1
@@ -869,6 +872,26 @@ export default function Warehouses() {
                   <FieldHelp text={t('help_default_warehouse') || "Standart ombor yangi operatsiyalarda avtomatik tanlanadi. Faqat bitta standart ombor bo'lishi mumkin."} />
                 </span>
               </div>
+            </div>
+
+            {/* Warehouse Type */}
+            <div className="pt-2">
+              <LabelWithHelp
+                label={t('warehouse_type') || 'Warehouse Type'}
+                helpText={t('help_warehouse_type') || "Ombor turi: oddiy ombor yoki yaroqsiz mahsulotlar uchun ombor"}
+              />
+              <Select
+                value={formData.warehouse_type}
+                onValueChange={(value) => setFormData({...formData, warehouse_type: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="regular">{t('regular') || 'Regular'}</SelectItem>
+                  <SelectItem value="scrap">{t('scrap') || 'Scrap'}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Odoo-style Warehouse Operations */}
