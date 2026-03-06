@@ -40,7 +40,6 @@ export default function Expenses() {
   const [claimToDelete, setClaimToDelete] = useState(null);
 
   const [newClaim, setNewClaim] = useState({
-    claim_number: '',
     employee_name: '',
     expense_date: new Date().toISOString().split('T')[0],
     category: 'travel',
@@ -67,7 +66,6 @@ export default function Expenses() {
     try {
       const claimData = {
         ...newClaim,
-        claim_number: newClaim.claim_number || `EXP-${Date.now()}`,
         amount: parseFloat(newClaim.amount),
         status: 'draft',
         claim_date: new Date().toISOString().split('T')[0]
@@ -77,7 +75,6 @@ export default function Expenses() {
       setShowCreateModal(false);
 
       setNewClaim({
-        claim_number: '',
         employee_name: '',
         expense_date: new Date().toISOString().split('T')[0],
         category: 'travel',
@@ -105,7 +102,6 @@ export default function Expenses() {
     setIsSubmitting(true);
     try {
       updateExpense(editClaim.id, {
-        claim_number: editClaim.claim_number,
         employee_name: editClaim.employee_name,
         expense_date: editClaim.expense_date,
         category: editClaim.category,
@@ -228,6 +224,7 @@ export default function Expenses() {
   const getStatusColor = (status) => {
     const colors = {
       draft: 'bg-gray-100 text-gray-800',
+      pending: 'bg-yellow-100 text-yellow-800',
       submitted: 'bg-blue-100 text-blue-800',
       approved: 'bg-green-100 text-green-800',
       rejected: 'bg-red-100 text-red-800',
@@ -501,12 +498,12 @@ export default function Expenses() {
                                   {t('submit')}
                                 </Button>
                               )}
-                              {canUpdate(MODULES.FINANCIALS) && claim.status === 'submitted' && (
+                              {canUpdate(MODULES.FINANCIALS) && (claim.status === 'submitted' || claim.status === 'pending') && (
                                 <>
-                                  <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'approved')}>
+                                  <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updateClaimStatus(claim.id, 'approved')} title={t('approve')}>
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
-                                  <Button size="sm" variant="ghost" onClick={() => updateClaimStatus(claim.id, 'rejected')}>
+                                  <Button size="sm" variant="ghost" className="text-red-600" onClick={() => updateClaimStatus(claim.id, 'rejected')} title={t('reject')}>
                                     <XCircle className="w-4 h-4" />
                                   </Button>
                                 </>
@@ -544,14 +541,6 @@ export default function Expenses() {
             <div className="space-y-4 py-4">
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('claim_number_label')}</label>
-                  <Input
-                    placeholder={t('auto_generated_if_empty')}
-                    value={newClaim.claim_number}
-                    onChange={(e) => setNewClaim({...newClaim, claim_number: e.target.value})}
-                  />
-                </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
                   <Select value={newClaim.employee_name} onValueChange={(value) => setNewClaim({...newClaim, employee_name: value})}>
@@ -664,13 +653,6 @@ export default function Expenses() {
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">{t('claim_number_label')}</label>
-                    <Input
-                      value={editClaim.claim_number}
-                      onChange={(e) => setEditClaim({...editClaim, claim_number: e.target.value})}
-                    />
-                  </div>
-                  <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee_name')} *</label>
                     <Select value={editClaim.employee_name} onValueChange={(value) => setEditClaim({...editClaim, employee_name: value})}>
                       <SelectTrigger>
@@ -725,13 +707,12 @@ export default function Expenses() {
 
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('status')}</label>
-                  <Select value={editClaim.status || 'draft'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
+                  <Select value={editClaim.status || 'pending'} onValueChange={(value) => setEditClaim({...editClaim, status: value})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">{t('draft')}</SelectItem>
-                      <SelectItem value="submitted">{t('submitted')}</SelectItem>
+                      <SelectItem value="pending">{t('pending')}</SelectItem>
                       <SelectItem value="approved">{t('approved')}</SelectItem>
                       <SelectItem value="rejected">{t('rejected')}</SelectItem>
                       <SelectItem value="paid">{t('paid')}</SelectItem>

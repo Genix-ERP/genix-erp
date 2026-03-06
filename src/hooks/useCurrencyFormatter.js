@@ -35,5 +35,5 @@ export function useCurrencyFormatter() {
     [currency, currency_symbol, currency_position, language]
   );
 
-  return { formatCurrency, formatCurrencyCompact };
+  return { formatCurrency, formatCurrencyCompact, currency_symbol };
 }
