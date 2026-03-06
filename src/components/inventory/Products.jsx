@@ -1928,15 +1928,15 @@ export default function Products() {
                     helpText={t('help_cost_price')}
                   />
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                     <Input
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      className="pl-9"
+                      className="pr-14"
                       value={formatPriceDisplay(formData.cost_price)}
                       onChange={(e) => handlePriceChange('cost_price', e.target.value)}
                     />
+                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
                 <div>
@@ -1946,16 +1946,16 @@ export default function Products() {
                     helpText={t('help_list_price')}
                   />
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                     <Input
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      className="pl-9"
+                      className="pr-14"
                       value={formatPriceDisplay(formData.list_price)}
                       onChange={(e) => handlePriceChange('list_price', e.target.value)}
                       required
                     />
+                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
               </div>
@@ -2772,15 +2772,15 @@ export default function Products() {
                     <div>
                       <label className="text-sm font-medium text-slate-700 mb-1 block">{t('wholesale_price') || 'Wholesale Price'}</label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                         <Input
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
-                          className="pl-9"
+                          className="pr-14"
                           value={formatPriceDisplay(formData.wholesale_price)}
                           onChange={(e) => handlePriceChange('wholesale_price', e.target.value)}
                         />
+                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                       </div>
                     </div>
                   </div>
