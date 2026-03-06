@@ -690,12 +690,6 @@ export default function Invoices() {
                                   {t('make_payment')}
                                 </DropdownMenuItem>
                               )}
-                              {(invoice.invoice_type || "invoice") === "invoice" && invoice.status !== "draft" && invoice.status !== "cancelled" && (
-                                <DropdownMenuItem onClick={() => handleCreateCreditNote(invoice)}>
-                                  <RotateCcw className="w-4 h-4 mr-2 text-red-500" />
-                                  {t('create_credit_note')}
-                                </DropdownMenuItem>
-                              )}
                               {invoice.invoice_type === "credit_note" && invoice.status === "draft" && (
                                 <DropdownMenuItem onClick={() => handleConfirmCreditNote(invoice.id)}>
                                   <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
@@ -1024,32 +1018,6 @@ export default function Invoices() {
                 />
               </div>
 
-              {parseFloat(paymentData.amount) > 0 && parseFloat(paymentData.amount) < (selectedInvoice?.balance || 0) && (
-                <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="write-off-check"
-                    checked={paymentData.write_off}
-                    onChange={(e) =>
-                      setPaymentData({
-                        ...paymentData,
-                        write_off: e.target.checked,
-                        write_off_amount: e.target.checked
-                          ? (selectedInvoice?.balance || 0) - parseFloat(paymentData.amount) || 0
-                          : 0,
-                      })
-                    }
-                    className="rounded border-yellow-400"
-                  />
-                  <label htmlFor="write-off-check" className="text-sm text-yellow-800 cursor-pointer">
-                    {t('write_off_difference') || 'Write off'}{' '}
-                    <span className="font-semibold">
-                      {formatCurrency((selectedInvoice?.balance || 0) - parseFloat(paymentData.amount) || 0)}
-                    </span>{' '}
-                    {t('payment_difference') || 'difference'}
-                  </label>
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label>{t('journal') || 'Journal'} *</Label>

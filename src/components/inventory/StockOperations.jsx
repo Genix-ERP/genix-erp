@@ -225,10 +225,25 @@ export default function StockOperations() {
     const op = selectedOp;
     const isLastStep = op.current_step >= op.total_steps;
 
-    // If completing and there are partial lines, show backorder dialog
-    if (isLastStep && op.lines?.some(l => l.done_qty < l.expected_qty && l.expected_qty > 0)) {
-      setShowBackorderDialog(true);
-      return;
+    if (isLastStep) {
+      // Auto-save done_qty = expected_qty for lines where done_qty is 0 (e.g. created from SO)
+      const zeroLines = op.lines?.filter(l => l.done_qty === 0 && l.expected_qty > 0) || [];
+      if (zeroLines.length > 0) {
+        try {
+          await inventoryService.updateStockOperationLines(op.id,
+            zeroLines.map(l => ({ id: l.id, done_qty: l.expected_qty }))
+          );
+        } catch (e) {
+          console.error('Failed to auto-set done_qty', e);
+        }
+      }
+
+      // Check for genuinely partial lines (user explicitly set done_qty < expected_qty)
+      const partialLines = op.lines?.some(l => l.done_qty > 0 && l.done_qty < l.expected_qty && l.expected_qty > 0);
+      if (partialLines) {
+        setShowBackorderDialog(true);
+        return;
+      }
     }
 
     setIsActionLoading(true);

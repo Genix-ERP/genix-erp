@@ -444,7 +444,7 @@ export function SalesProvider({ children }) {
   // Refresh data from backend
   const refreshData = useCallback(async () => {
     await loadData();
-  }, []);
+  }, [activeCompany]);
 
   const value = {
     // State
