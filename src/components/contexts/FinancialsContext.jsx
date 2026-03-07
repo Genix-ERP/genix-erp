@@ -913,13 +913,32 @@ export function FinancialsProvider({ children }) {
   const updateJournalEntry = useCallback(async (id, entryData) => {
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(JOURNAL_ENTRIES_KEY, companyId);
-    if (backendAvailable) { try { await financeService.postJournalEntry(id); } catch (err) { console.error('API error:', err); } }
+    if (backendAvailable) {
+      try {
+        await financeService.updateJournalEntry(id, entryData);
+        // Reload to get latest
+        const fresh = await financeService.getJournalEntry(id);
+        setJournalEntries(prev => prev.map(e => e.id === id ? fresh : e));
+        return fresh;
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
+    }
     const updated = journalEntries.map(entry => entry.id === id ? { ...entry, ...entryData } : entry);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setJournalEntries(updated);
   }, [backendAvailable, journalEntries, activeCompany]);
 
-  const deleteJournalEntry = useCallback((id) => {
+  const deleteJournalEntry = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await financeService.deleteJournalEntry(id);
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
+    }
     const companyId = activeCompany?.id;
     const updated = journalEntries.filter(entry => entry.id !== id);
     localStorage.setItem(getStorageKey(JOURNAL_ENTRIES_KEY, companyId), JSON.stringify(updated));
@@ -927,15 +946,32 @@ export function FinancialsProvider({ children }) {
     const updatedLines = journalLines.filter(line => line.journal_entry_id !== id);
     localStorage.setItem(getStorageKey(JOURNAL_LINES_KEY, companyId), JSON.stringify(updatedLines));
     setJournalLines(updatedLines);
-  }, [journalEntries, journalLines, activeCompany]);
+  }, [backendAvailable, journalEntries, journalLines, activeCompany]);
+
+  const cancelJournalEntry = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await financeService.cancelJournalEntry(id);
+        setJournalEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'cancelled' } : e));
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
+    }
+  }, [backendAvailable]);
 
   const postJournalEntry = useCallback(async (id) => {
     if (backendAvailable) {
       try {
-        const posted = await financeService.postJournalEntry(id);
-        setJournalEntries(prev => prev.map(e => e.id === id ? posted : e));
-        return posted;
-      } catch (err) { console.error('API error:', err); }
+        await financeService.postJournalEntry(id);
+        // Reload to get posted_at etc.
+        const fresh = await financeService.getJournalEntry(id);
+        setJournalEntries(prev => prev.map(e => e.id === id ? fresh : e));
+        return fresh;
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
     }
     const updated = journalEntries.map(e => e.id === id ? { ...e, status: 'posted' } : e);
     const companyId = activeCompany?.id;
@@ -943,13 +979,18 @@ export function FinancialsProvider({ children }) {
     setJournalEntries(updated);
   }, [backendAvailable, journalEntries, activeCompany]);
 
-  const reverseJournalEntry = useCallback(async (id) => {
+  const reverseJournalEntry = useCallback(async (id, data = {}) => {
     if (backendAvailable) {
       try {
-        const reversed = await financeService.reverseJournalEntry(id);
-        setJournalEntries(prev => [reversed, ...prev.map(e => e.id === id ? { ...e, status: 'reversed' } : e)]);
-        return reversed;
-      } catch (err) { console.error('API error:', err); }
+        const result = await financeService.reverseJournalEntry(id, data);
+        // Reload entries list
+        const entries = await financeService.listJournalEntries();
+        setJournalEntries(entries || []);
+        return result;
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
     }
   }, [backendAvailable]);
 
@@ -1622,7 +1663,7 @@ export function FinancialsProvider({ children }) {
 
   return (
     <FinancialsContext.Provider value={{
-      journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
+      journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
       accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
       payments, createPayment, confirmPayment,
       taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
