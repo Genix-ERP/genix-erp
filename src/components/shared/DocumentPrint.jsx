@@ -141,7 +141,7 @@ export const generateDocumentPDF = (config) => {
   const doc = new jsPDF({
     orientation: templateConfig.orientation,
     unit: "mm",
-    format: "a4",
+    format: [210, 148.5], // Half A4
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
