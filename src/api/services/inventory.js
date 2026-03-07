@@ -422,6 +422,18 @@ export const inventoryService = {
     await apiClient.delete(`/stock-counts/${id}`);
   },
 
+  // Stock Count Line — shortage assignment
+  async assignResponsible(lineId, data) {
+    const response = await apiClient.post(`/stock-count-lines/${lineId}/assign`, data);
+    return response.data.data;
+  },
+
+  // Employee Deductions
+  async listAllDeductions(params = {}) {
+    const response = await apiClient.get('/employee-deductions', { params });
+    return response.data.data;
+  },
+
   // Scrap Orders
   async listScrapOrders(params) {
     const response = await apiClient.get('/scrap/orders', { params });

@@ -21,11 +21,12 @@ import JournalManagement from "./JournalManagement";
 import FixedAssets from "./FixedAssets";
 
 const getAccountTypes = (t) => [
-  { value: 'asset', label: t('asset') || 'Asset', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
-  { value: 'liability', label: t('liability') || 'Liability', icon: TrendingDown, color: 'bg-red-100 text-red-800' },
-  { value: 'equity', label: t('equity') || 'Equity', icon: Scale, color: 'bg-purple-100 text-purple-800' },
-  { value: 'revenue', label: t('revenue') || 'Revenue', icon: TrendingUp, color: 'bg-green-100 text-green-800' },
-  { value: 'expense', label: t('expense') || 'Expense', icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
+  { value: 'asset', label: t('asset') || 'Aktiv', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
+  { value: 'contra_asset', label: t('contra_asset') || 'Contra-Asset (Zararlovchi aktiv)', icon: TrendingDown, color: 'bg-slate-100 text-slate-800' },
+  { value: 'liability', label: t('liability') || 'Majburiyat', icon: TrendingDown, color: 'bg-red-100 text-red-800' },
+  { value: 'equity', label: t('equity') || 'Kapital', icon: Scale, color: 'bg-purple-100 text-purple-800' },
+  { value: 'revenue', label: t('revenue') || 'Daromad', icon: TrendingUp, color: 'bg-green-100 text-green-800' },
+  { value: 'expense', label: t('expense') || 'Xarajat', icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
 ];
 
 // Contra-asset accounts are displayed under "asset" category but with credit normal balance
@@ -56,6 +57,10 @@ const getInternalTypes = (t) => ({
   revenue: [
     { value: 'income', label: t('income') || 'Income', icon: TrendingUp },
     { value: 'income_other', label: t('other_income') || 'Other Income', icon: Coins },
+  ],
+  contra_asset: [
+    { value: 'contra_asset_depreciation', label: t('accumulated_depreciation') || 'Eskirish (amortizatsiya)', icon: TrendingDown },
+    { value: 'contra_asset_allowance', label: t('allowance') || 'Zaxira (shubhali qarzlar)', icon: AlertTriangle },
   ],
   expense: [
     { value: 'expense', label: t('expenses') || 'Expenses', icon: TrendingDown },

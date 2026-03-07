@@ -102,6 +102,9 @@ export default function HR() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
+  const [employeeDeductions, setEmployeeDeductions] = useState([]);
+  const [salaryCalc, setSalaryCalc] = useState(null);
+  const [loadingDeductions, setLoadingDeductions] = useState(false);
   const { addAuditLog } = useAuditTrail('employees');
   const { toast } = useToast();
 
@@ -477,9 +480,39 @@ Only return the JSON, no other text.`;
     }
   };
 
-  const handleViewEmployee = (employee) => {
+  const handleViewEmployee = async (employee) => {
     setSelectedEmployee(employee);
     setShowViewModal(true);
+    // Load deductions and salary calculation
+    setLoadingDeductions(true);
+    try {
+      const [deductions, salary] = await Promise.all([
+        hrService.listEmployeeDeductions(employee.id).catch(() => []),
+        hrService.calculateSalary(employee.id).catch(() => null),
+      ]);
+      setEmployeeDeductions(deductions || []);
+      setSalaryCalc(salary);
+    } catch (err) {
+      console.error('Error loading deductions:', err);
+    } finally {
+      setLoadingDeductions(false);
+    }
+  };
+
+  const handleCancelDeduction = async (employeeId, deductionId) => {
+    const reason = prompt("Bekor qilish sababi:");
+    if (!reason) return;
+    try {
+      await hrService.cancelDeduction(employeeId, deductionId, { reason });
+      // Refresh
+      const deductions = await hrService.listEmployeeDeductions(employeeId).catch(() => []);
+      setEmployeeDeductions(deductions || []);
+      const salary = await hrService.calculateSalary(employeeId).catch(() => null);
+      setSalaryCalc(salary);
+      toast({ title: "Kamomad bekor qilindi" });
+    } catch (err) {
+      toast({ title: "Xatolik", description: err.response?.data?.message || 'Xatolik yuz berdi', variant: 'destructive' });
+    }
   };
 
   const handleEditEmployee = async (employee) => {
@@ -1241,7 +1274,7 @@ Only return the JSON, no other text.`;
 
         {/* View Employee Modal */}
         <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
               <DialogTitle>{t('employee_details') || 'Employee Details'}</DialogTitle>
             </DialogHeader>
@@ -1298,6 +1331,66 @@ Only return the JSON, no other text.`;
                     <Badge>{t(selectedEmployee.status)}</Badge>
                   </div>
                 </div>
+
+                {/* Deductions Section */}
+                {!loadingDeductions && employeeDeductions.length > 0 && (
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-semibold text-sm text-orange-700 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      Kamomadlar ({employeeDeductions.filter(d => d.status === 'pending').length} kutilmoqda)
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {employeeDeductions.map(d => (
+                        <div key={d.id} className={`flex items-center justify-between p-2 rounded text-sm ${
+                          d.status === 'pending' ? 'bg-orange-50 border border-orange-200' :
+                          d.status === 'deducted' ? 'bg-green-50 border border-green-200' :
+                          d.status === 'cancelled' ? 'bg-gray-50 border border-gray-200 opacity-60' :
+                          'bg-slate-50'
+                        }`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate font-medium">{d.reason}</p>
+                            <p className="text-xs text-slate-500">
+                              {d.status === 'pending' ? 'Kutilmoqda' :
+                               d.status === 'deducted' ? 'Ushlab olingan' :
+                               d.status === 'cancelled' ? 'Bekor qilingan' : d.status}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <span className="font-semibold text-red-600 whitespace-nowrap">
+                              -{formatCurrency(d.amount)}
+                            </span>
+                            {d.status === 'pending' && canUpdate(MODULES.HR) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                onClick={() => handleCancelDeduction(selectedEmployee.id, d.id)}
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {salaryCalc && (
+                      <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Asosiy maosh:</span>
+                          <span className="font-medium">{formatCurrency(salaryCalc.base_salary)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-red-600">
+                          <span>Kamomadlar:</span>
+                          <span className="font-medium">-{formatCurrency(salaryCalc.total_deduction)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-bold border-t pt-1">
+                          <span>To'lanadigan:</span>
+                          <span className="text-green-700">{formatCurrency(salaryCalc.net_salary)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
                   <Button variant="outline" onClick={() => setShowViewModal(false)}>
