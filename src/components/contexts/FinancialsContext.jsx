@@ -1650,7 +1650,11 @@ export function FinancialsProvider({ children }) {
   // ========== Exchange Diffs (Kurs farqi) ==========
   const syncExchangeRates = useCallback(async (data) => {
     if (backendAvailable) {
-      return await financeService.syncExchangeRates(data);
+      const result = await financeService.syncExchangeRates(data);
+      // Reload exchange rates after sync
+      const allRates = await financeService.listExchangeRates().catch(() => []);
+      setExchangeRates(allRates || []);
+      return result;
     }
     return { message: 'Backend not available' };
   }, [backendAvailable]);
