@@ -54,7 +54,7 @@ export default function Assets() {
   const [transferData, setTransferData] = useState({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] });
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [assetForMaintenance, setAssetForMaintenance] = useState(null);
-  const [maintenanceData, setMaintenanceData] = useState({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 });
+  const [maintenanceData, setMaintenanceData] = useState({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
   const [maintenanceHistory, setMaintenanceHistory] = useState({});
   const [auditLog, setAuditLog] = useState([]);
 
@@ -209,7 +209,7 @@ export default function Assets() {
       addAuditLog('maintenance', assetForMaintenance.id, `${assetForMaintenance.asset_code} - ${maintenanceData.type}`);
       setShowMaintenanceModal(false);
       setAssetForMaintenance(null);
-      setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 });
+      setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
     }
   };
 
@@ -935,10 +935,10 @@ export default function Assets() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="routine">{t('routine')}</SelectItem>
-                      <SelectItem value="repair">{t('repair')}</SelectItem>
-                      <SelectItem value="inspection">{t('inspection')}</SelectItem>
-                      <SelectItem value="upgrade">{t('upgrade')}</SelectItem>
+                      <SelectItem value="regular_to">Oddiy TO</SelectItem>
+                      <SelectItem value="capital_repair">Kapital ta'mirlash</SelectItem>
+                      <SelectItem value="modernization">Modernizatsiya</SelectItem>
+                      <SelectItem value="minor_repair">Joriy ta'mirlash</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -962,7 +962,7 @@ export default function Assets() {
                 />
               </div>
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'routine', description: '', cost: 0 }); }} className="flex-1">
+                <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 }); }} className="flex-1">
                   {t('cancel')}
                 </Button>
                 <Button
