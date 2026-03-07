@@ -710,14 +710,6 @@ export default function FixedAssets() {
             {/* Basic Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'} *</label>
-                <Input
-                  value={formData.code}
-                  disabled
-                  className="bg-slate-50"
-                />
-              </div>
-              <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('category') || 'Category'} *</label>
                 <Select
                   value={formData.category}
@@ -947,7 +939,7 @@ export default function FixedAssets() {
             <Button
               onClick={showEditModal ? handleUpdateAsset : handleCreateAsset}
               className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !formData.code || !formData.name || !formData.acquisition_cost}
+              disabled={isSaving || !formData.name || !formData.acquisition_cost}
             >
               {isSaving ? (t('saving') || 'Saving...') : showEditModal ? (t('save') || 'Save') : (t('create') || 'Create')}
             </Button>

@@ -22,7 +22,7 @@ import FixedAssets from "./FixedAssets";
 
 const getAccountTypes = (t) => [
   { value: 'asset', label: t('asset') || 'Aktiv', icon: DollarSign, color: 'bg-blue-100 text-blue-800' },
-  { value: 'contra_asset', label: t('contra_asset') || 'Contra-Asset (Zararlovchi aktiv)', icon: TrendingDown, color: 'bg-slate-100 text-slate-800' },
+  { value: 'contra_asset', label: t('contra_asset') || 'Eskirish', icon: TrendingDown, color: 'bg-slate-100 text-slate-800' },
   { value: 'liability', label: t('liability') || 'Majburiyat', icon: TrendingDown, color: 'bg-red-100 text-red-800' },
   { value: 'equity', label: t('equity') || 'Kapital', icon: Scale, color: 'bg-purple-100 text-purple-800' },
   { value: 'revenue', label: t('revenue') || 'Daromad', icon: TrendingUp, color: 'bg-green-100 text-green-800' },
@@ -365,7 +365,7 @@ export default function ChartOfAccounts() {
               </Badge>
             )}
           </TableCell>
-          <TableCell className="text-right font-semibold tabular-nums">
+          <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
             {formatCurrency(account.current_balance || 0)}
           </TableCell>
           <TableCell>
@@ -538,8 +538,8 @@ export default function ChartOfAccounts() {
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 w-32">{t('code') || 'Code'}</TableHead>
                     <TableHead className="font-semibold text-slate-700">{t('name') || 'Name'}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 w-32">{t('type') || 'Type'}</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right w-32">{t('balance') || 'Balance'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 w-40">{t('type') || 'Type'}</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right w-44">{t('balance') || 'Balance'}</TableHead>
                     <TableHead className="font-semibold text-slate-700 w-24">{t('status') || 'Status'}</TableHead>
                     <TableHead className="font-semibold text-slate-700 w-24">{t('actions') || 'Actions'}</TableHead>
                   </TableRow>

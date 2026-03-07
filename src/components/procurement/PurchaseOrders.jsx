@@ -975,7 +975,7 @@ export default function PurchaseOrders() {
                           )}
                         </div>
                       </div>
-                      <div className="flex-[2] min-w-0">
+                      <div className="flex-[1.5] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('price')}</label>}
                         <Input
                           type="text"
@@ -984,6 +984,12 @@ export default function PurchaseOrders() {
                           value={formatPriceInput(line.unit_price)}
                           onChange={(e) => handleLineChange(index, 'unit_price', parsePriceInput(e.target.value))}
                         />
+                      </div>
+                      <div className="flex-[1.5] min-w-0">
+                        {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('total')}</label>}
+                        <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
+                          {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                        </div>
                       </div>
                       <div className="flex-shrink-0">
                         <Button
