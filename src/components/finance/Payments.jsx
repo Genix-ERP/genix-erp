@@ -31,6 +31,7 @@ export default function Payments() {
     accounts,
     journals,
     vendorBills,
+    currencies,
     createPayment,
     confirmPayment,
     isLoading
@@ -77,10 +78,12 @@ export default function Payments() {
 
   const bankCashJournals = (journals || []).filter(j => j.type === 'bank' || j.type === 'cash');
 
-  // Auto-select first bank/cash journal when journals load and modal is open with no journal selected
+  // Auto-select matching journal when journals load and modal is open with no journal selected
   useEffect(() => {
     if (showCreateModal && !newPayment.journal_id && bankCashJournals.length > 0) {
-      setNewPayment(prev => ({ ...prev, journal_id: bankCashJournals[0].id }));
+      const targetType = newPayment.payment_method === 'cash' ? 'cash' : 'bank';
+      const match = bankCashJournals.find(j => j.type === targetType) || bankCashJournals[0];
+      setNewPayment(prev => ({ ...prev, journal_id: match.id }));
     }
   }, [showCreateModal, bankCashJournals.length, newPayment.journal_id]);
 
@@ -149,7 +152,7 @@ export default function Payments() {
       reference: '',
       description: '',
       contact_id: '',
-      journal_id: bankCashJournals.length > 0 ? bankCashJournals[0].id : '',
+      journal_id: bankCashJournals.length > 0 ? (bankCashJournals.find(j => j.type === 'bank') || bankCashJournals[0]).id : '',
       bill_id: '',
       invoice_id: '',
       invoice_party_name: '',
@@ -236,7 +239,7 @@ export default function Payments() {
       reference: `${t('payment_for') || 'Payment for'} ${invoice.invoice_number}`,
       description: '',
       contact_id: contactId,
-      journal_id: bankCashJournals.length > 0 ? bankCashJournals[0].id : '',
+      journal_id: bankCashJournals.length > 0 ? (bankCashJournals.find(j => j.type === 'bank') || bankCashJournals[0]).id : '',
       bill_id: !isCustomer ? invoice.id : '',
       invoice_id: isCustomer ? invoice.id : '',
       invoice_party_name: partyName,
@@ -372,7 +375,16 @@ export default function Payments() {
                 </label>
                 <Select
                   value={newPayment.payment_method}
-                  onValueChange={(value) => setNewPayment({...newPayment, payment_method: value})}
+                  onValueChange={(value) => {
+                    const updated = {...newPayment, payment_method: value};
+                    // Auto-select matching journal based on payment method
+                    const targetType = value === 'cash' ? 'cash' : value === 'bank_transfer' || value === 'wire' ? 'bank' : null;
+                    if (targetType) {
+                      const matchingJournal = bankCashJournals.find(j => j.type === targetType);
+                      if (matchingJournal) updated.journal_id = matchingJournal.id;
+                    }
+                    setNewPayment(updated);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -540,7 +552,7 @@ export default function Payments() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
                   {t('journal')} *
@@ -582,6 +594,24 @@ export default function Payments() {
                   onChange={(e) => setNewPayment({...newPayment, amount: parsePriceInput(e.target.value)})}
                   required
                 />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  {t('currency') || 'Valyuta'}
+                </label>
+                <Select
+                  value={newPayment.currency || 'UZS'}
+                  onValueChange={(value) => setNewPayment({...newPayment, currency: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(currencies && currencies.length > 0 ? currencies : [{code: 'UZS'}, {code: 'USD'}, {code: 'RUB'}]).map(c => (
+                      <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -457,9 +457,13 @@ export function FinancialsProvider({ children }) {
   // ==================== ACCOUNTS CRUD ====================
   // Helper to map frontend type to backend account_type_id
   const getAccountTypeId = useCallback((type) => {
-    // Account types from backend have a 'category' field: asset, liability, equity, revenue, expense
-    // Find the first matching account type for this category
-    const matchingType = accountTypes.find(at => at.category === type);
+    // Account types from backend have a 'category' field: asset, liability, equity, revenue, expense, contra_asset
+    // For contra_asset, also try matching by code 'CONTRA_ASSET'
+    let matchingType = accountTypes.find(at => at.category === type);
+
+    if (!matchingType && type === 'contra_asset') {
+      matchingType = accountTypes.find(at => at.code === 'CONTRA_ASSET');
+    }
 
     if (!matchingType) {
       console.warn('No matching account type found for category:', type, 'Available types:', accountTypes);
