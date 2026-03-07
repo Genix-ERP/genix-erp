@@ -205,7 +205,11 @@ export default function ScrapManagement() {
       return;
     }
 
-    await createScrapOrder(formData);
+    const result = await createScrapOrder(formData);
+    // Auto-confirm to immediately reduce inventory
+    if (result?.id) {
+      await confirmScrapOrder(result.id);
+    }
     setShowForm(false);
     resetForm();
   };
@@ -628,7 +632,7 @@ export default function ScrapManagement() {
                   type="number"
                   min="1"
                   value={formData.quantity}
-                  onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
                 />
               </div>
               <div className="space-y-2">

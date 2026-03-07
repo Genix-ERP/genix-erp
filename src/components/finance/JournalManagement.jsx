@@ -1242,6 +1242,7 @@ export default function JournalManagement() {
                   : createForm.type === 'purchase' ? t('default_expense_account')
                   : createForm.type === 'bank' || createForm.type === 'cash' ? t('default_account')
                   : t('default_account')}
+                {(createForm.type === 'cash' || createForm.type === 'bank') && <span className="text-red-500"> *</span>}
               </label>
               <Select
                 value={createForm.default_debit_account_id}
@@ -1251,7 +1252,11 @@ export default function JournalManagement() {
                   <SelectValue placeholder={t('select_account')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(accounts || []).map(acc => (
+                  {(accounts || []).filter(acc => {
+                    if (createForm.type === 'cash') return acc.code?.startsWith('1000');
+                    if (createForm.type === 'bank') return acc.code?.startsWith('1010');
+                    return true;
+                  }).map(acc => (
                     <SelectItem key={acc.id} value={acc.id}>
                       {acc.code} - {acc.name}
                     </SelectItem>
@@ -1267,7 +1272,7 @@ export default function JournalManagement() {
             <Button
               onClick={handleCreate}
               className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-              disabled={isSaving || !createForm.name}
+              disabled={isSaving || !createForm.name || ((createForm.type === 'cash' || createForm.type === 'bank') && !createForm.default_debit_account_id)}
             >
               {isSaving ? t('saving') : t('create_journal')}
             </Button>

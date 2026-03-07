@@ -106,7 +106,6 @@ export default function Assets() {
     try {
       await createAsset({
         ...newAsset,
-        asset_code: newAsset.asset_code || generateAssetCode(),
         purchase_cost: parseFloat(newAsset.purchase_cost),
         useful_life_years: parseInt(newAsset.useful_life_years),
         current_value: parseFloat(newAsset.purchase_cost),
@@ -587,24 +586,14 @@ export default function Assets() {
               <DialogTitle>{t('add_fixed_asset')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('asset_name')} *</label>
-                  <Input
-                    placeholder={t('asset_name')}
-                    value={newAsset.asset_name}
-                    onChange={(e) => setNewAsset({...newAsset, asset_name: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('asset_code')}</label>
-                  <Input
-                    value={newAsset.asset_code || generateAssetCode()}
-                    disabled
-                    className="bg-slate-50"
-                  />
-                </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('asset_name')} *</label>
+                <Input
+                  placeholder={t('asset_name')}
+                  value={newAsset.asset_name}
+                  onChange={(e) => setNewAsset({...newAsset, asset_name: e.target.value})}
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

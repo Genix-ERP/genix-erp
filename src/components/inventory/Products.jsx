@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw, Scale, ChevronDown
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown
 } from "lucide-react";
 import {
   Tooltip,
@@ -35,7 +35,6 @@ import PriceLabelPrinting from "./PriceLabelPrinting";
 import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
-import COGSCalculator from "./COGSCalculator";
 import UnitsOfMeasure from "./UnitsOfMeasure";
 import apiClient from '@/api/client';
 
@@ -986,7 +985,7 @@ export default function Products() {
   const getStockStatus = (product) => {
     if (!product.is_stockable) return null;
     const stock = getProductStock(product.id);
-    if (stock === 0) return { label: t('out_of_stock'), color: 'bg-red-100 text-red-800 border-red-200' };
+    if (stock <= 0) return { label: t('out_of_stock'), color: 'bg-red-100 text-red-800 border-red-200' };
     if (stock <= product.min_stock_level) return { label: t('low_stock'), color: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
     return { label: t('in_stock'), color: 'bg-green-100 text-green-800 border-green-200' };
   };
@@ -1017,13 +1016,6 @@ export default function Products() {
             {t('categories')}
           </TabsTrigger>
           <TabsTrigger
-            value="lots"
-            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
-          >
-            <Layers className="w-4 h-4" />
-            {t('lots')}
-          </TabsTrigger>
-          <TabsTrigger
             value="labels"
             className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
           >
@@ -1050,13 +1042,6 @@ export default function Products() {
           >
             <Box className="w-4 h-4" />
             {t('package_types') || 'Package Types'}
-          </TabsTrigger>
-          <TabsTrigger
-            value="cogs"
-            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
-          >
-            <Calculator className="w-4 h-4" />
-            {t('cogs') || 'COGS'}
           </TabsTrigger>
           <TabsTrigger
             value="units"
@@ -1538,10 +1523,6 @@ export default function Products() {
           <PackageTypes />
         </TabsContent>
 
-        {/* COGS Tab */}
-        <TabsContent value="cogs" className="mt-0">
-          <COGSCalculator />
-        </TabsContent>
 
         {/* Units of Measure Tab */}
         <TabsContent value="units" className="mt-0">
