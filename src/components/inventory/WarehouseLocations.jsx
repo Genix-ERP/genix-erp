@@ -111,9 +111,13 @@ export default function WarehouseLocations() {
   });
 
   const resetForm = () => {
+    const defaultWh = warehouses[0];
+    const whCode = defaultWh?.code || '';
+    const whLocations = defaultWh ? locations.filter(l => l.warehouse_id === defaultWh.id) : [];
+    const nextNum = whLocations.length + 1;
     setFormData({
-      warehouse_id: warehouses[0]?.id || '',
-      code: '',
+      warehouse_id: defaultWh?.id || '',
+      code: defaultWh ? `${whCode}/LOC-${String(nextNum).padStart(3, '0')}` : '',
       name: '',
       type: 'internal',
       aisle: '',
@@ -455,7 +459,14 @@ export default function WarehouseLocations() {
               <label className="text-sm font-medium text-slate-700 mb-1 block">
                 {t('warehouse') || 'Ombor'} *
               </label>
-              <Select value={formData.warehouse_id} onValueChange={(v) => setFormData({ ...formData, warehouse_id: v })}>
+              <Select value={formData.warehouse_id} onValueChange={(v) => {
+                const wh = warehouses.find(w => w.id === v);
+                const whCode = wh?.code || '';
+                // Count existing locations for this warehouse to generate next code
+                const whLocations = locations.filter(l => l.warehouse_id === v);
+                const nextNum = whLocations.length + 1;
+                setFormData({ ...formData, warehouse_id: v, code: `${whCode}/LOC-${String(nextNum).padStart(3, '0')}` });
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_warehouse') || "Omborni tanlang"} />
                 </SelectTrigger>
@@ -473,7 +484,7 @@ export default function WarehouseLocations() {
                   {t('code') || 'Kod'} *
                 </label>
                 <Input
-                  placeholder="WH/Stock"
+                  placeholder="WH-001/LOC-001"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                 />
@@ -534,7 +545,7 @@ export default function WarehouseLocations() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">{t('bin') || 'Quti'}</label>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">{t('bin') || 'Yacheyka'}</label>
                 <Input
                   placeholder="A"
                   value={formData.bin}
@@ -545,11 +556,11 @@ export default function WarehouseLocations() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('capacity') || 'Sig\'imi'}
+                {t('capacity') || 'Sig\'imi'} (m³)
               </label>
               <Input
                 type="number"
-                placeholder="100"
+                placeholder="10"
                 value={formData.capacity}
                 onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
               />
@@ -633,7 +644,7 @@ export default function WarehouseLocations() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">{t('bin') || 'Quti'}</label>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">{t('bin') || 'Yacheyka'}</label>
                 <Input
                   value={formData.bin}
                   onChange={(e) => setFormData({ ...formData, bin: e.target.value })}
@@ -643,7 +654,7 @@ export default function WarehouseLocations() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('capacity') || 'Sig\'imi'}
+                {t('capacity') || 'Sig\'imi'} (m³)
               </label>
               <Input
                 type="number"

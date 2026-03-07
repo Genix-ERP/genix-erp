@@ -104,13 +104,6 @@ export default function Warehouses() {
     city: '',
     state: '',
     country: '',
-    postal_code: '',
-    phone: '',
-    email: '',
-    manager_name: '',
-    is_active: true,
-    is_default: false,
-    warehouse_type: 'regular',
     reception_steps: 1,  // 1=Direct, 2=Input+Stock, 3=Input+QC+Stock
     delivery_steps: 1,   // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
     manufacturing_steps: 1  // 1=Simple, 2=Pick+Produce, 3=Pick+Produce+Store
@@ -184,13 +177,6 @@ export default function Warehouses() {
       city: '',
       state: '',
       country: '',
-      postal_code: '',
-      phone: '',
-      email: '',
-      manager_name: '',
-      is_active: true,
-      is_default: false,
-      warehouse_type: 'regular',
       reception_steps: 1,
       delivery_steps: 1,
       manufacturing_steps: 1
@@ -240,13 +226,6 @@ export default function Warehouses() {
       city: warehouse.city || '',
       state: warehouse.state || '',
       country: warehouse.country || '',
-      postal_code: warehouse.postal_code || '',
-      phone: warehouse.phone || '',
-      email: warehouse.email || '',
-      manager_name: warehouse.manager_name || '',
-      is_active: warehouse.is_active !== false,
-      is_default: warehouse.is_default || false,
-      warehouse_type: warehouse.warehouse_type || 'regular',
       reception_steps: warehouse.reception_steps || 1,
       delivery_steps: warehouse.delivery_steps || 1,
       manufacturing_steps: warehouse.manufacturing_steps || 1
@@ -804,97 +783,6 @@ export default function Warehouses() {
                   onChange={(e) => setFormData({...formData, country: e.target.value})}
                 />
               </div>
-              <div>
-                <LabelWithHelp
-                  label={t('postal_code')}
-                  helpText={t('help_postal_code') || "Pochta indeksi. Yetkazib berish xizmatlari bilan integratsiya uchun ishlatiladi."}
-                />
-                <Input
-                  placeholder={t('zip')}
-                  value={formData.postal_code}
-                  onChange={(e) => setFormData({...formData, postal_code: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <LabelWithHelp
-                  label={t('phone')}
-                  helpText={t('help_warehouse_phone') || "Ombor bilan bog'lanish uchun telefon raqami. Yetkazib beruvchilar va kurierlar uchun."}
-                />
-                <Input
-                  placeholder={t('phone_number')}
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                />
-              </div>
-              <div>
-                <LabelWithHelp
-                  label={t('email')}
-                  helpText={t('help_warehouse_email') || "Ombor elektron pochtasi. Avtomatik bildirishnomalar va xabarlar uchun ishlatiladi."}
-                />
-                <Input
-                  type="email"
-                  placeholder={t('email')}
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                />
-              </div>
-              <div>
-                <LabelWithHelp
-                  label={t('manager')}
-                  helpText={t('help_warehouse_manager') || "Ombor mas'uli. Bu shaxs ombor operatsiyalari uchun javobgar bo'ladi."}
-                />
-                <Input
-                  placeholder={t('manager_name')}
-                  value={formData.manager_name}
-                  onChange={(e) => setFormData({...formData, manager_name: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-6 pt-2">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
-                />
-                <span className="text-sm text-slate-700 flex items-center">
-                  {t('active')}
-                  <FieldHelp text={t('help_warehouse_active') || "Faol omborlar inventar operatsiyalarida ishlatiladi. Nofaol omborlar yashirinadi."} />
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.is_default}
-                  onCheckedChange={(checked) => setFormData({...formData, is_default: checked})}
-                />
-                <span className="text-sm text-slate-700 flex items-center">
-                  {t('default_warehouse')}
-                  <FieldHelp text={t('help_default_warehouse') || "Standart ombor yangi operatsiyalarda avtomatik tanlanadi. Faqat bitta standart ombor bo'lishi mumkin."} />
-                </span>
-              </div>
-            </div>
-
-            {/* Warehouse Type */}
-            <div className="pt-2">
-              <LabelWithHelp
-                label={t('warehouse_type') || 'Warehouse Type'}
-                helpText={t('help_warehouse_type') || "Ombor turi: oddiy ombor yoki yaroqsiz mahsulotlar uchun ombor"}
-              />
-              <Select
-                value={formData.warehouse_type}
-                onValueChange={(value) => setFormData({...formData, warehouse_type: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="regular">{t('regular') || 'Regular'}</SelectItem>
-                  <SelectItem value="scrap">{t('scrap') || 'Scrap'}</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Odoo-style Warehouse Operations */}

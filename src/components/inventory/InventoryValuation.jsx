@@ -395,45 +395,44 @@ export default function InventoryValuation() {
                 {t('valuation_by_category') || 'Valuation by Category'}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {Object.entries(summary.categoryBreakdown)
-                  .sort(([,a], [,b]) => b.value - a.value)
-                  .map(([category, data], index) => {
-                    const percentage = summary.totalValue > 0
-                      ? (data.value / summary.totalValue * 100)
-                      : 0;
-                    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500'];
-
-                    return (
-                      <div key={category} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded ${colors[index % colors.length]}`} />
-                            <span className="font-medium">{category}</span>
-                            <Badge variant="outline" className="text-xs">{data.items} {t('items') || 'items'}</Badge>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-bold">{formatCurrency(data.value)}</span>
-                            <span className="text-slate-500 text-sm ml-2">({percentage.toFixed(1)}%)</span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${colors[index % colors.length]}`}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                {Object.keys(summary.categoryBreakdown).length === 0 && (
-                  <div className="text-center py-8 text-slate-500">
-                    {t('no_category_data') || 'No category data available'}
-                  </div>
-                )}
-              </div>
+            <CardContent className="p-0">
+              {Object.keys(summary.categoryBreakdown).length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  {t('no_category_data') || 'No category data available'}
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="w-8">#</TableHead>
+                      <TableHead>{t('category') || 'Kategoriya'}</TableHead>
+                      <TableHead className="text-center">{t('items') || 'Elementlar'}</TableHead>
+                      <TableHead className="text-right">{t('quantity') || 'Miqdori'}</TableHead>
+                      <TableHead className="text-right">{t('total_value') || 'Qiymati'}</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(summary.categoryBreakdown)
+                      .sort(([,a], [,b]) => b.value - a.value)
+                      .map(([category, data], index) => {
+                        const percentage = summary.totalValue > 0
+                          ? (data.value / summary.totalValue * 100)
+                          : 0;
+                        return (
+                          <TableRow key={category}>
+                            <TableCell className="text-slate-500">{index + 1}</TableCell>
+                            <TableCell className="font-medium">{category}</TableCell>
+                            <TableCell className="text-center">{data.items}</TableCell>
+                            <TableCell className="text-right tabular-nums">{data.qty.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(data.value)}</TableCell>
+                            <TableCell className="text-right text-slate-500 tabular-nums">{percentage.toFixed(1)}%</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
