@@ -463,7 +463,7 @@ export function PrintPreviewModal({
           ) : pdfUrl ? (
             <iframe
               ref={iframeRef}
-              src={pdfUrl}
+              src={`${pdfUrl}#page=1&view=FitH&toolbar=1`}
               className="w-full h-full border-0"
               title="PDF Preview"
             />
