@@ -225,10 +225,25 @@ export default function StockOperations() {
     const op = selectedOp;
     const isLastStep = op.current_step >= op.total_steps;
 
-    // If completing and there are partial lines, show backorder dialog
-    if (isLastStep && op.lines?.some(l => l.done_qty < l.expected_qty && l.expected_qty > 0)) {
-      setShowBackorderDialog(true);
-      return;
+    if (isLastStep) {
+      // Auto-save done_qty = expected_qty for lines where done_qty is 0 (e.g. created from SO)
+      const zeroLines = op.lines?.filter(l => l.done_qty === 0 && l.expected_qty > 0) || [];
+      if (zeroLines.length > 0) {
+        try {
+          await inventoryService.updateStockOperationLines(op.id,
+            zeroLines.map(l => ({ id: l.id, done_qty: l.expected_qty }))
+          );
+        } catch (e) {
+          console.error('Failed to auto-set done_qty', e);
+        }
+      }
+
+      // Check for genuinely partial lines (user explicitly set done_qty < expected_qty)
+      const partialLines = op.lines?.some(l => l.done_qty > 0 && l.done_qty < l.expected_qty && l.expected_qty > 0);
+      if (partialLines) {
+        setShowBackorderDialog(true);
+        return;
+      }
     }
 
     setIsActionLoading(true);
@@ -821,22 +836,6 @@ export default function StockOperations() {
           </div>
           <div className="flex items-center gap-2">
             {canAct && isDraft && !editingHeader && (
-              <Button variant="outline" size="sm" onClick={startEditingHeader}>
-                <Pencil className="w-4 h-4 mr-1" />{t('edit') || 'Edit'}
-              </Button>
-            )}
-            {editingHeader && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setEditingHeader(false)}>
-                  {t('cancel') || 'Cancel'}
-                </Button>
-                <Button size="sm" onClick={saveHeaderEdits} disabled={isActionLoading}>
-                  {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
-                  {t('save') || 'Save'}
-                </Button>
-              </>
-            )}
-            {canAct && isDraft && !editingHeader && (
               <Button onClick={handleValidate} disabled={isActionLoading} variant="outline">
                 {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
                 {t('validate') || 'Validate'}
@@ -1007,43 +1006,12 @@ export default function StockOperations() {
                     {t('product_lines') || 'Product Lines'}
                     <Badge variant="outline">{op.lines?.length || 0}</Badge>
                   </CardTitle>
-                  {canAct && (
-                    <div className="flex items-center gap-2">
-                      {!editingLines ? (
-                        <>
-                          <Button variant="outline" size="sm" onClick={() => setShowAddLineDialog(true)}>
-                            <Plus className="w-3 h-3 mr-1" />{t('add_line') || 'Add'}
-                          </Button>
-                          {op.lines?.length > 0 && (
-                            <Button variant="outline" size="sm" onClick={startEditingLines}>
-                              <Pencil className="w-3 h-3 mr-1" />{t('edit_quantities') || 'Edit Qty'}
-                            </Button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="outline" size="sm" onClick={() => setEditingLines(false)}>
-                            {t('cancel') || 'Cancel'}
-                          </Button>
-                          <Button size="sm" onClick={saveLineEdits} disabled={linesSaving}>
-                            {linesSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
-                            {t('save') || 'Save'}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 {!op.lines || op.lines.length === 0 ? (
                   <div className="text-center py-6">
                     <p className="text-sm text-slate-400">{t('no_lines') || 'No product lines'}</p>
-                    {canAct && (
-                      <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowAddLineDialog(true)}>
-                        <Plus className="w-3 h-3 mr-1" />{t('add_line') || 'Add Line'}
-                      </Button>
-                    )}
                   </div>
                 ) : (
                   <Table>
@@ -1055,7 +1023,6 @@ export default function StockOperations() {
                         <TableHead>{t('lot') || 'Lot'}</TableHead>
                         <TableHead>{t('quality') || 'Quality'}</TableHead>
                         {editingLines && <TableHead className="text-right">{t('unit_price') || 'Price'}</TableHead>}
-                        {canAct && <TableHead></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1142,15 +1109,6 @@ export default function StockOperations() {
                                 }))}
                                 placeholder={t('price') || 'Price'}
                               />
-                            </TableCell>
-                          )}
-                          {canAct && (
-                            <TableCell>
-                              {!editingLines && (
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteLine(line.id)} className="text-red-400 hover:text-red-600">
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              )}
                             </TableCell>
                           )}
                         </TableRow>

@@ -91,71 +91,77 @@ import {
 
 // Progress Tracking Tab Component
 const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }) => {
+  const [estimates, setEstimates] = useState([]);
   const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedProgressSection, setSelectedProgressSection] = useState(null);
-  const [sectionItems, setSectionItems] = useState([]);
+  const [selectedEstimate, setSelectedEstimate] = useState(null);
+  const [estimateLines, setEstimateLines] = useState([]);
   const [editingItem, setEditingItem] = useState(null);
   const [completedQty, setCompletedQty] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Load all items from all sections
+  // Load estimates and their lines
   useEffect(() => {
-    const loadAllItems = async () => {
-      if (!sections || sections.length === 0) {
-        setAllItems([]);
+    const loadData = async () => {
+      if (!project?.id) {
         setLoading(false);
         return;
       }
-
       setLoading(true);
       try {
-        const itemsPromises = sections.map(section =>
-          constructionService.listItems(section.id).then(items =>
-            (items || []).map(item => ({ ...item, section_name: section.name, section_code: section.code }))
-          )
-        );
-        const results = await Promise.all(itemsPromises);
-        const flatItems = results.flat();
-        setAllItems(flatItems);
+        const estimatesData = await constructionService.listEstimates(project.id);
+        const ests = estimatesData || [];
+        setEstimates(ests);
+
+        if (ests.length > 0) {
+          const linesPromises = ests.map(est =>
+            constructionService.listEstimateLines(est.id).then(lines =>
+              (lines || []).map(line => ({ ...line, estimate_name: est.name, estimate_code: est.code }))
+            )
+          );
+          const results = await Promise.all(linesPromises);
+          setAllItems(results.flat());
+        } else {
+          setAllItems([]);
+        }
       } catch (error) {
-        console.error('Error loading items for progress:', error);
+        console.error('Error loading estimates for progress:', error);
       } finally {
         setLoading(false);
       }
     };
-    loadAllItems();
-  }, [sections]);
+    loadData();
+  }, [project?.id]);
 
-  // Load items for selected section
+  // Load lines for selected estimate
   useEffect(() => {
-    const loadSectionItems = async () => {
-      if (!selectedProgressSection) {
-        setSectionItems([]);
+    const loadLines = async () => {
+      if (!selectedEstimate) {
+        setEstimateLines([]);
         return;
       }
       try {
-        const items = await constructionService.listItems(selectedProgressSection.id);
-        setSectionItems(items || []);
+        const lines = await constructionService.listEstimateLines(selectedEstimate.id);
+        setEstimateLines(lines || []);
       } catch (error) {
-        console.error('Error loading section items:', error);
+        console.error('Error loading estimate lines:', error);
       }
     };
-    loadSectionItems();
-  }, [selectedProgressSection]);
+    loadLines();
+  }, [selectedEstimate]);
 
   // Calculate overall progress
   const calculateProgress = (items) => {
     if (!items || items.length === 0) return { percent: 0, completed: 0, total: 0, byValue: 0 };
 
     const totalQty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-    const completedQty = items.reduce((sum, item) => sum + (item.completed_quantity || 0), 0);
-    const totalValue = items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
-    const completedValue = items.reduce((sum, item) => sum + ((item.completed_quantity || 0) * (item.unit_price || 0)), 0);
+    const doneQty = items.reduce((sum, item) => sum + (item.actual_amount > 0 ? item.quantity : 0), 0);
+    const totalValue = items.reduce((sum, item) => sum + (item.total_amount || 0), 0);
+    const completedValue = items.reduce((sum, item) => sum + (item.actual_amount || 0), 0);
 
     return {
-      percent: totalQty > 0 ? Math.round((completedQty / totalQty) * 100) : 0,
-      completed: completedQty,
+      percent: totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0,
+      completed: doneQty,
       total: totalQty,
       byValue: totalValue > 0 ? Math.round((completedValue / totalValue) * 100) : 0,
       completedValue,
@@ -163,40 +169,33 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     };
   };
 
-  // Calculate section progress
-  const getSectionProgress = (sectionId) => {
-    const sectionItems = allItems.filter(item => item.section_id === sectionId);
-    return calculateProgress(sectionItems);
+  // Calculate estimate progress
+  const getEstimateProgress = (estimateId) => {
+    const items = allItems.filter(item => item.estimate_id === estimateId);
+    return calculateProgress(items);
   };
 
   const overallProgress = calculateProgress(allItems);
 
-  // Update item progress
+  // Update line progress
   const handleUpdateProgress = async () => {
-    if (!editingItem) return;
+    if (!editingItem || !selectedEstimate) return;
     setSaving(true);
     try {
-      const newCompletedQty = parseFloat(completedQty) || 0;
-      const progressPercent = editingItem.quantity > 0
-        ? Math.min(100, Math.round((newCompletedQty / editingItem.quantity) * 100))
-        : 0;
+      const newActualAmount = parseFloat(completedQty) || 0;
 
-      await constructionService.updateItem(editingItem.id, {
-        completed_quantity: newCompletedQty,
-        progress_percent: progressPercent,
-        status: progressPercent >= 100 ? 'completed' : (progressPercent > 0 ? 'in_progress' : 'pending')
+      await constructionService.updateEstimateLine(selectedEstimate.id, editingItem.id, {
+        actual_amount: newActualAmount
       });
 
-      // Refresh data
-      if (selectedProgressSection) {
-        const items = await constructionService.listItems(selectedProgressSection.id);
-        setSectionItems(items || []);
-      }
+      // Refresh lines
+      const lines = await constructionService.listEstimateLines(selectedEstimate.id);
+      setEstimateLines(lines || []);
 
       // Update allItems
       setAllItems(prev => prev.map(item =>
         item.id === editingItem.id
-          ? { ...item, completed_quantity: newCompletedQty, progress_percent: progressPercent }
+          ? { ...item, actual_amount: newActualAmount }
           : item
       ));
 
@@ -239,7 +238,7 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
     );
   }
 
-  if (sections.length === 0) {
+  if (estimates.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -308,26 +307,26 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
         </Card>
       </div>
 
-      {/* Progress by Section */}
+      {/* Progress by Estimate */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t('progress_by_section') || "Bo'limlar bo'yicha progress"}</CardTitle>
+          <CardTitle className="text-base">{t('progress_by_section') || "Smetalar bo'yicha progress"}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {sections.map((section) => {
-              const progress = getSectionProgress(section.id);
-              const isSelected = selectedProgressSection?.id === section.id;
+            {estimates.map((est) => {
+              const progress = getEstimateProgress(est.id);
+              const isSelected = selectedEstimate?.id === est.id;
               return (
                 <div
-                  key={section.id}
+                  key={est.id}
                   className={`p-4 rounded-lg border cursor-pointer transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
-                  onClick={() => setSelectedProgressSection(isSelected ? null : section)}
+                  onClick={() => setSelectedEstimate(isSelected ? null : est)}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-500">{section.code}</span>
-                      <span className="font-medium text-slate-800">{section.name}</span>
+                      <span className="text-xs font-mono text-slate-500">{est.code}</span>
+                      <span className="font-medium text-slate-800">{est.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-slate-700">{progress.percent}%</span>
@@ -351,27 +350,27 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
         </CardContent>
       </Card>
 
-      {/* Section Items Detail */}
-      {selectedProgressSection && (
+      {/* Estimate Lines Detail */}
+      {selectedEstimate && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
-              {selectedProgressSection.name} - {t('items') || 'Ishlar'}
+              {selectedEstimate.name} - {t('items') || 'Ishlar'}
             </CardTitle>
             <Badge variant="outline">
-              {sectionItems.length} {t('items') || 'ta'}
+              {estimateLines.length} {t('items') || 'ta'}
             </Badge>
           </CardHeader>
           <CardContent>
-            {sectionItems.length === 0 ? (
+            {estimateLines.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
-                {t('no_items_in_section') || "Bu bo'limda ishlar yo'q"}
+                {t('no_items_in_section') || "Bu smetada qatorlar yo'q"}
               </div>
             ) : (
               <div className="space-y-3">
-                {sectionItems.map((item) => {
-                  const itemProgress = item.quantity > 0
-                    ? Math.round((item.completed_quantity / item.quantity) * 100)
+                {estimateLines.map((item) => {
+                  const itemProgress = item.total_amount > 0
+                    ? Math.round(((item.actual_amount || 0) / item.total_amount) * 100)
                     : 0;
                   const isEditing = editingItem?.id === item.id;
 
@@ -383,25 +382,25 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            {item.code && (
-                              <span className="text-xs font-mono text-slate-500">{item.code}</span>
+                            {item.wbs_code && (
+                              <span className="text-xs font-mono text-slate-500">{item.wbs_code}</span>
                             )}
-                            <Badge className={`text-xs ${getStatusColor(item.status)}`}>
-                              {item.status === 'completed' ? (t('completed') || 'Bajarilgan')
-                                : item.status === 'in_progress' ? (t('in_progress') || 'Jarayonda')
+                            <Badge className={`text-xs ${getStatusColor(itemProgress >= 100 ? 'completed' : itemProgress > 0 ? 'in_progress' : 'pending')}`}>
+                              {itemProgress >= 100 ? (t('completed') || 'Bajarilgan')
+                                : itemProgress > 0 ? (t('in_progress') || 'Jarayonda')
                                 : (t('pending') || 'Kutilmoqda')}
                             </Badge>
                           </div>
                           <p className="font-medium text-slate-800 truncate">{item.name}</p>
                           <p className="text-sm text-slate-500 mt-1">
-                            {item.quantity} {item.unit} × {formatCurrency(item.unit_price || 0)} = {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                            {item.quantity} {item.uom} × {formatCurrency(item.unit_rate || 0)} = {formatCurrency(item.total_amount || 0)}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <div className="text-right">
                             <p className="text-lg font-bold text-slate-800">{itemProgress}%</p>
                             <p className="text-xs text-slate-500">
-                              {item.completed_quantity || 0} / {item.quantity} {item.unit}
+                              {formatCurrency(item.actual_amount || 0)} / {formatCurrency(item.total_amount || 0)}
                             </p>
                           </div>
                           {!isEditing ? (
@@ -410,7 +409,7 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
                               variant="outline"
                               onClick={() => {
                                 setEditingItem(item);
-                                setCompletedQty(item.completed_quantity?.toString() || '0');
+                                setCompletedQty(item.actual_amount?.toString() || '0');
                               }}
                             >
                               <Edit className="w-3 h-3 mr-1" />
@@ -424,7 +423,7 @@ const ProgressTrackingTab = ({ project, sections, t, formatCurrency, onRefresh }
                                 onChange={(e) => setCompletedQty(e.target.value)}
                                 className="w-24 h-8 text-sm"
                                 min="0"
-                                max={item.quantity}
+                                max={item.total_amount}
                                 step="0.01"
                               />
                               <Button
@@ -846,6 +845,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               setWbsTree(estWbs || []);
             } catch (e) { setWbsTree([]); }
             break;
+          case 'progress':
+            try {
+              const progressSections = await constructionService.listSections(project.id);
+              setSections(progressSections || []);
+            } catch (e) { setSections([]); }
+            break;
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -967,7 +972,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         const product = inventoryProducts.find(p => p.id === value);
         if (product) {
           items[index].product_name = product.name;
-          items[index].unit_name = product.unit_name || '';
+          items[index].unit_name = product.unit_name || product.uom_name || '';
           items[index].unit_cost = product.cost_price || 0;
           items[index].variant_id = ''; // reset variant when product changes
           // Load variants if needed
@@ -1987,11 +1992,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <p className="font-medium">{log.report_date ? format(new Date(log.report_date), 'dd.MM.yyyy') : '—'}</p>
-                              <Badge className={
-                                log.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
-                                log.verification_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                'bg-yellow-100 text-yellow-700'
-                              }>{t(log.verification_status) || log.verification_status}</Badge>
                             </div>
                             {(log.weather_morning || log.weather_afternoon) && (
                               <p className="text-sm text-slate-500 mt-1">
@@ -2401,55 +2401,33 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                     const product = inventoryProducts.find(p => p.id === item.product_id);
                     const productVariants = product?.has_variants ? (variantsByProduct[item.product_id] || []) : [];
                     return (
-                      <div key={index} className="space-y-2 pb-3 border-b last:border-b-0 last:pb-0">
-                        {/* Row 1: Warehouse + Delete */}
+                      <div key={index} className="rounded-lg border bg-slate-50 p-3 space-y-3 pb-3">
+                        {/* Row 1: Product + Variant + Delete */}
                         <div className="flex gap-2 items-center">
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <Select
-                              value={item.warehouse_id}
-                              onValueChange={(val) => updateMaterialRequestItem(index, 'warehouse_id', val)}
+                              value={item.product_id}
+                              onValueChange={(val) => updateMaterialRequestItem(index, 'product_id', val)}
                             >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder={t('warehouse') || 'Ombor'} />
+                              <SelectTrigger className="h-9 text-sm">
+                                <SelectValue placeholder={t('select_product') || 'Mahsulot'} />
                               </SelectTrigger>
                               <SelectContent>
-                                {inventoryWarehouses.map(w => (
-                                  <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                                {inventoryProducts.map(p => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name} {p.code ? `(${p.code})` : ''}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
-                          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 shrink-0" onClick={() => removeMaterialRequestItem(index)}>
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-
-                        {/* Row 2: Product */}
-                        <Select
-                          value={item.product_id}
-                          onValueChange={(val) => updateMaterialRequestItem(index, 'product_id', val)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {inventoryProducts.map(p => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.name} {p.code ? `(${p.code})` : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        {/* Row 3: Variant | Qty + UOM | Price */}
-                        <div className="flex gap-2 items-center">
                           {product?.has_variants && (
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <Select
                                 value={item.variant_id}
                                 onValueChange={(val) => updateMaterialRequestItem(index, 'variant_id', val)}
                               >
-                                <SelectTrigger className="h-8 text-xs">
+                                <SelectTrigger className="h-9 text-sm">
                                   <SelectValue placeholder={t('select_variant') || 'Variant'} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -2462,25 +2440,43 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                               </Select>
                             </div>
                           )}
-                          <div className="flex items-center gap-1 shrink-0">
+                          <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0 text-red-500 shrink-0" onClick={() => removeMaterialRequestItem(index)}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+
+                        {/* Row 2: Warehouse | Qty + UOM | Price */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <Select
+                            value={item.warehouse_id}
+                            onValueChange={(val) => updateMaterialRequestItem(index, 'warehouse_id', val)}
+                          >
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue placeholder={t('warehouse') || 'Ombor'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {inventoryWarehouses.map(w => (
+                                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <div className="flex items-center gap-1">
                             <Input
                               type="number"
                               min="0"
                               step="any"
-                              className="h-8 text-xs w-16"
-                              placeholder={t('qty') || 'Miqdor'}
+                              className="h-9 text-sm flex-1"
+                              placeholder={t('qty') || 'Son'}
                               value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => updateMaterialRequestItem(index, 'quantity', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                             />
-                            {item.unit_name && (
-                              <span className="text-xs text-slate-400 whitespace-nowrap">{item.unit_name}</span>
-                            )}
+                            <span className="text-xs text-slate-500 whitespace-nowrap min-w-[30px]">{item.unit_name || product?.unit_name || t('pcs') || 'dona'}</span>
                           </div>
                           <Input
                             type="number"
                             min="0"
                             step="any"
-                            className="h-8 text-xs w-28 shrink-0"
+                            className="h-9 text-sm"
                             placeholder={t('unit_price') || 'Narx'}
                             value={item.unit_cost === 0 ? '' : item.unit_cost}
                             onChange={(e) => updateMaterialRequestItem(index, 'unit_cost', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
