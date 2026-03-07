@@ -11,10 +11,7 @@ import {
   Bell,
   RefreshCw,
   FileText,
-  Wallet,
-  Globe,
   FileCheck,
-  Target,
   Percent,
   BookOpen,
   Clock,
@@ -31,9 +28,6 @@ import Payments from "@/components/finance/Payments";
 import BankReconciliation from "@/components/finance/BankReconciliation";
 import RecurringJournalEntries from "@/components/finance/RecurringJournalEntries";
 import FinancialReports from "@/components/finance/FinancialReports";
-import CashRegister from "@/components/finance/CashRegister";
-import CurrencyManagement from "@/components/finance/CurrencyManagement";
-import BudgetManagement from "@/components/finance/BudgetManagement";
 import ActSverka from "@/components/finance/ActSverka";
 import TaxReports from "@/components/finance/TaxReports";
 import GeneralLedger from "@/components/finance/GeneralLedger";
@@ -83,12 +77,6 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('journal_entries') || 'Jurnal yozuvlari'}</span>
             </TabsTrigger>
 
-            {/* 4. Kassa */}
-            <TabsTrigger value="cash" className={tabTriggerClass}>
-              <Wallet className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('cash_register') || 'Kassa'}</span>
-            </TabsTrigger>
-
             {/* 4. To'lovlar */}
             <TabsTrigger value="payments" className={tabTriggerClass}>
               <CreditCard className="w-4 h-4" />
@@ -107,25 +95,13 @@ export default function Financials() {
               <span className="hidden sm:inline">{t('reconciliation_act') || 'Akt sverka'}</span>
             </TabsTrigger>
 
-            {/* 7. Valyuta operatsiyalari (YANGI) */}
-            <TabsTrigger value="currency" className={tabTriggerClass}>
-              <Globe className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('currency_operations') || 'Valyuta'}</span>
-            </TabsTrigger>
-
-            {/* 8. Bank */}
+            {/* 7. Bank */}
             <TabsTrigger value="bank" className={tabTriggerClass}>
               <Landmark className="w-4 h-4" />
               <span className="hidden sm:inline">{t('bank')}</span>
             </TabsTrigger>
 
-            {/* 11. Byudjetlashtirish (YANGI) */}
-            <TabsTrigger value="budget" className={tabTriggerClass}>
-              <Target className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('budgeting') || 'Byudjet'}</span>
-            </TabsTrigger>
-
-            {/* 12. Qaytariladigan */}
+            {/* 8. Qaytariladigan */}
             <TabsTrigger value="recurring" className={tabTriggerClass}>
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">{t('recurring') || 'Qaytariladigan'}</span>
@@ -153,9 +129,6 @@ export default function Financials() {
           <TabsContent value="journal-entries" className="mt-6">
             <GeneralLedger />
           </TabsContent>
-          <TabsContent value="cash" className="mt-6">
-            <CashRegister />
-          </TabsContent>
           <TabsContent value="payments" className="mt-6">
             <Payments />
           </TabsContent>
@@ -165,14 +138,8 @@ export default function Financials() {
           <TabsContent value="reconciliation" className="mt-6">
             <ActSverka />
           </TabsContent>
-          <TabsContent value="currency" className="mt-6">
-            <CurrencyManagement />
-          </TabsContent>
           <TabsContent value="bank" className="mt-6">
             <BankReconciliation />
-          </TabsContent>
-          <TabsContent value="budget" className="mt-6">
-            <BudgetManagement />
           </TabsContent>
           <TabsContent value="recurring" className="mt-6">
             <RecurringJournalEntries />

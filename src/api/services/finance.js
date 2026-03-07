@@ -445,6 +445,36 @@ export const financeService = {
     return response.data;
   },
 
+  async recordMaintenance(assetId, data) {
+    const response = await apiClient.post(`/fixed-assets/${assetId}/maintenance`, data);
+    return response.data.data;
+  },
+
+  async listMaintenance(assetId) {
+    const response = await apiClient.get(`/fixed-assets/${assetId}/maintenance`);
+    return response.data.data;
+  },
+
+  async recordAssetPayment(assetId, data) {
+    const response = await apiClient.post(`/fixed-assets/${assetId}/payments`, data);
+    return response.data.data;
+  },
+
+  async listAssetPayments(assetId) {
+    const response = await apiClient.get(`/fixed-assets/${assetId}/payments`);
+    return response.data.data;
+  },
+
+  async createAssetCategory(data) {
+    const response = await apiClient.post('/asset-categories', data);
+    return response.data.data;
+  },
+
+  async getAssetDashboard() {
+    const response = await apiClient.get('/fixed-assets/dashboard');
+    return response.data.data;
+  },
+
   // Purchase Invoices (Vendor Bills)
   async listPurchaseInvoices(params = {}) {
     const response = await apiClient.get('/purchase-invoices', { params });
@@ -475,8 +505,8 @@ export const financeService = {
     return response.data.data;
   },
 
-  async payPurchaseInvoice(id, amount = 0) {
-    const response = await apiClient.post(`/purchase-invoices/${id}/pay`, { amount });
+  async payPurchaseInvoice(id, amount = 0, paymentMethod = 'bank') {
+    const response = await apiClient.post(`/purchase-invoices/${id}/pay`, { amount, payment_method: paymentMethod });
     return response.data.data;
   },
 

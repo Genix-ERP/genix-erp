@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Building2, Car, Monitor, Cpu, Wrench, Package,
   TrendingDown, Calendar, DollarSign, Edit2, Trash2,
-  Calculator, FileText, AlertTriangle, CheckCircle2
+  Calculator, FileText, AlertTriangle, CheckCircle2, Settings, ArrowRight
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -22,6 +22,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { MODULES } from "@/config/permissions";
 import { format, differenceInMonths, addMonths } from "date-fns";
+import { financeService } from "@/api/services";
 
 // Asset categories with icons
 const assetCategories = [
@@ -65,11 +66,28 @@ export default function FixedAssets() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDepreciationModal, setShowDepreciationModal] = useState(false);
   const [showDisposeModal, setShowDisposeModal] = useState(false);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [showMaintenanceResult, setShowMaintenanceResult] = useState(null);
+  const [maintenanceHistory, setMaintenanceHistory] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("assets");
   const [isSaving, setIsSaving] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    maintenance_type: 'regular_to',
+    service_date: format(new Date(), 'yyyy-MM-dd'),
+    cost: '',
+    extension_months: '',
+    description: '',
+    performed_by: '',
+    document_number: '',
+    payment_account_code: '1000',
+  });
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'cash', paid_at: format(new Date(), 'yyyy-MM-dd'), note: '' });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -87,12 +105,16 @@ export default function FixedAssets() {
     location: '',
     serial_number: '',
     status: 'active',
+    supplier_name: '',
+    document_number: '',
+    document_date: '',
+    payment_method: 'cash',
   });
 
   const [disposeFormData, setDisposeFormData] = useState({
     disposal_date: '',
     disposal_amount: '',
-    disposal_reason: '',
+    reason: 'sold',
   });
 
   // Calculate summary stats
@@ -259,17 +281,62 @@ export default function FixedAssets() {
       await disposeFixedAsset(selectedAsset.id, {
         disposal_date: disposeFormData.disposal_date,
         disposal_amount: disposalAmount,
-        disposal_reason: disposeFormData.disposal_reason,
+        reason: disposeFormData.reason,
       });
 
       setShowDisposeModal(false);
       setSelectedAsset(null);
-      setDisposeFormData({ disposal_date: '', disposal_amount: '', disposal_reason: '' });
+      setDisposeFormData({ disposal_date: '', disposal_amount: '', reason: 'sold' });
     } catch (error) {
       console.error('Error disposing asset:', error);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openMaintenanceModal = async (asset) => {
+    setSelectedAsset(asset);
+    setMaintenanceForm({
+      maintenance_type: 'regular_to',
+      service_date: format(new Date(), 'yyyy-MM-dd'),
+      cost: '',
+      extension_months: '',
+      description: '',
+      performed_by: '',
+      document_number: '',
+      payment_account_code: '1000',
+    });
+    try {
+      const history = await financeService.listMaintenance(asset.id);
+      setMaintenanceHistory(history || []);
+    } catch { setMaintenanceHistory([]); }
+    setShowMaintenanceModal(true);
+  };
+
+  const handleRecordMaintenance = async () => {
+    if (!selectedAsset) return;
+    setIsSaving(true);
+    try {
+      const result = await financeService.recordMaintenance(selectedAsset.id, {
+        ...maintenanceForm,
+        cost: parseFloat(maintenanceForm.cost) || 0,
+        extension_months: parseInt(maintenanceForm.extension_months) || 0,
+      });
+      setShowMaintenanceModal(false);
+      setShowMaintenanceResult(result);
+      if (refreshData) refreshData();
+    } catch (error) {
+      console.error('Error recording maintenance:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const maintenanceTypeLabels = {
+    regular_to: { uz: 'Oddiy TO', en: 'Regular Maintenance' },
+    capital_repair: { uz: 'Kapital ta\'mirlash', en: 'Capital Repair' },
+    modernization: { uz: 'Modernizatsiya', en: 'Modernization' },
+    minor_repair: { uz: 'Joriy ta\'mirlash', en: 'Minor Repair' },
   };
 
   const openEditModal = (asset) => {
@@ -299,9 +366,36 @@ export default function FixedAssets() {
     setDisposeFormData({
       disposal_date: format(new Date(), 'yyyy-MM-dd'),
       disposal_amount: '',
-      disposal_reason: '',
+      reason: 'sold',
     });
     setShowDisposeModal(true);
+  };
+
+  const openPaymentModal = async (asset) => {
+    setSelectedAsset(asset);
+    setPaymentForm({ amount: '', method: 'cash', paid_at: format(new Date(), 'yyyy-MM-dd'), note: '' });
+    try {
+      const history = await financeService.listAssetPayments(asset.id);
+      setPaymentHistory(history || []);
+    } catch { setPaymentHistory([]); }
+    setShowPaymentModal(true);
+  };
+
+  const handleRecordPayment = async () => {
+    if (!selectedAsset) return;
+    setIsSaving(true);
+    try {
+      await financeService.recordAssetPayment(selectedAsset.id, {
+        ...paymentForm,
+        amount: parseFloat(paymentForm.amount) || 0,
+      });
+      setShowPaymentModal(false);
+      if (refreshData) refreshData();
+    } catch (error) {
+      console.error('Error recording payment:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetForm = () => {
@@ -323,6 +417,10 @@ export default function FixedAssets() {
       location: '',
       serial_number: '',
       status: 'active',
+      supplier_name: '',
+      document_number: '',
+      document_date: '',
+      payment_method: 'cash',
     });
   };
 
@@ -501,7 +599,9 @@ export default function FixedAssets() {
                   <TableHead>{t('asset_name') || 'Asset Name'}</TableHead>
                   <TableHead>{t('category') || 'Category'}</TableHead>
                   <TableHead className="text-right">{t('original_cost') || 'Cost'}</TableHead>
-                  <TableHead className="text-right">{t('net_book_value') || 'NBV'}</TableHead>
+                  <TableHead className="text-right">{'Joriy qiymat'}</TableHead>
+                  <TableHead className="text-right">{'Oylik amor.'}</TableHead>
+                  <TableHead>{'Qolgan oy'}</TableHead>
                   <TableHead>{t('depreciation') || 'Depreciation'}</TableHead>
                   <TableHead>{t('status') || 'Status'}</TableHead>
                   <TableHead>{t('actions') || 'Actions'}</TableHead>
@@ -537,7 +637,13 @@ export default function FixedAssets() {
                         {formatCurrency(asset.acquisition_cost || 0)}
                       </TableCell>
                       <TableCell className="text-right font-medium text-purple-600">
-                        {formatCurrency(bookValue)}
+                        {formatCurrency(asset.current_value || bookValue)}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {formatCurrency(asset.monthly_depr || 0)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {asset.remaining_months != null ? `${asset.remaining_months} oy` : '-'}
                       </TableCell>
                       <TableCell>
                         <div className="w-24">
@@ -553,6 +659,16 @@ export default function FixedAssets() {
                       <TableCell>{getStatusBadge(asset.status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
+                          {asset.status === 'active' && canUpdate(MODULES.ASSETS) && (
+                            <Button variant="ghost" size="sm" onClick={() => openMaintenanceModal(asset)} title="Texnik xizmat">
+                              <Settings className="w-4 h-4 text-blue-500" />
+                            </Button>
+                          )}
+                          {asset.status === 'active' && asset.payment_method === 'credit' && asset.remaining_debt > 0 && canCreate(MODULES.ASSETS) && (
+                            <Button variant="ghost" size="sm" onClick={() => openPaymentModal(asset)} title="To'lov">
+                              <DollarSign className="w-4 h-4 text-green-500" />
+                            </Button>
+                          )}
                           {canUpdate(MODULES.ASSETS) && (
                             <Button variant="ghost" size="sm" onClick={() => openEditModal(asset)} title={t('edit') || 'Edit'}>
                               <Edit2 className="w-4 h-4 text-slate-500" />
@@ -763,6 +879,57 @@ export default function FixedAssets() {
               </div>
             </div>
 
+            {/* Supplier / Purchase Info */}
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-medium text-slate-900 mb-3">Xarid ma'lumotlari</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Yetkazib beruvchi</label>
+                  <Input
+                    placeholder="Yetkazib beruvchi nomi"
+                    value={formData.supplier_name}
+                    onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">To'lov usuli</label>
+                  <Select value={formData.payment_method} onValueChange={(v) => setFormData({ ...formData, payment_method: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Naqd pul</SelectItem>
+                      <SelectItem value="bank">Bank o'tkazmasi</SelectItem>
+                      <SelectItem value="credit">Nasiya (kredit)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Hujjat raqami</label>
+                  <Input
+                    placeholder="Shartnoma/faktura raqami"
+                    value={formData.document_number}
+                    onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">Hujjat sanasi</label>
+                  <Input
+                    type="date"
+                    value={formData.document_date}
+                    onChange={(e) => setFormData({ ...formData, document_date: e.target.value })}
+                  />
+                </div>
+              </div>
+              {formData.payment_method === 'credit' && (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                  Nasiya xaridi: aktiv yaratilganda Dt 1500 / Kt 2000 (Kreditorlik qarzi). To'lovlar alohida kiritiladi.
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">{t('description') || 'Description'}</label>
               <Textarea
@@ -868,14 +1035,25 @@ export default function FixedAssets() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('disposal_reason') || 'Reason'}</label>
-              <Textarea
-                placeholder={t('disposal_reason_placeholder') || 'Reason for disposal...'}
-                value={disposeFormData.disposal_reason}
-                onChange={(e) => setDisposeFormData({ ...disposeFormData, disposal_reason: e.target.value })}
-                rows={2}
-              />
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Sababi *</label>
+              <Select value={disposeFormData.reason} onValueChange={(v) => setDisposeFormData({ ...disposeFormData, reason: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sold">Sotilgan</SelectItem>
+                  <SelectItem value="destroyed">Yaroqsiz bo'lgan</SelectItem>
+                  <SelectItem value="expired">Muddati tugagan</SelectItem>
+                  <SelectItem value="stolen">O'g'irlangan</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {disposeFormData.reason === 'sold' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                Sotilganda: tushum kassaga kirim qilinadi, foyda/zarar hisoblanadi.
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDisposeModal(false)} disabled={isSaving}>
@@ -884,9 +1062,316 @@ export default function FixedAssets() {
             <Button
               onClick={handleDisposeAsset}
               variant="destructive"
-              disabled={isSaving || !disposeFormData.disposal_date}
+              disabled={isSaving || !disposeFormData.disposal_date || !disposeFormData.reason}
             >
               {isSaving ? (t('processing') || 'Processing...') : (t('dispose') || 'Dispose')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Maintenance Modal */}
+      <Dialog open={showMaintenanceModal} onOpenChange={(open) => {
+        if (!open) { setShowMaintenanceModal(false); setSelectedAsset(null); }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-blue-600" />
+              Texnik xizmat ko'rsatish
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAsset?.name} ({selectedAsset?.code})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Current asset info */}
+            <div className="bg-blue-50 p-3 rounded-lg grid grid-cols-3 gap-3 text-sm">
+              <div>
+                <span className="text-blue-600 font-medium">Joriy qiymat</span>
+                <p className="font-bold">{formatCurrency(selectedAsset?.current_value || selectedAsset?.book_value || 0)}</p>
+              </div>
+              <div>
+                <span className="text-blue-600 font-medium">Qolgan muddat</span>
+                <p className="font-bold">{selectedAsset?.remaining_months || selectedAsset?.useful_life_months || 0} oy</p>
+              </div>
+              <div>
+                <span className="text-blue-600 font-medium">Oylik amortizatsiya</span>
+                <p className="font-bold">{formatCurrency(selectedAsset?.monthly_depr || 0)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Xizmat turi *</label>
+                <Select
+                  value={maintenanceForm.maintenance_type}
+                  onValueChange={(v) => setMaintenanceForm({...maintenanceForm, maintenance_type: v})}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="regular_to">Oddiy TO (muddat uzayadi)</SelectItem>
+                    <SelectItem value="capital_repair">Kapital ta'mirlash (qiymat ortadi)</SelectItem>
+                    <SelectItem value="modernization">Modernizatsiya (ikkalasi)</SelectItem>
+                    <SelectItem value="minor_repair">Joriy ta'mirlash (faqat xarajat)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Xizmat sanasi *</label>
+                <Input
+                  type="date"
+                  value={maintenanceForm.service_date}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, service_date: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Xarajat summasi</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={formatPriceInput(maintenanceForm.cost)}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, cost: parsePriceInput(e.target.value)})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">To'lov hisob</label>
+                <Select
+                  value={maintenanceForm.payment_account_code}
+                  onValueChange={(v) => setMaintenanceForm({...maintenanceForm, payment_account_code: v})}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1000">1000 - Kassa</SelectItem>
+                    <SelectItem value="1010">1010 - Bank</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {(maintenanceForm.maintenance_type === 'regular_to' || maintenanceForm.maintenance_type === 'modernization') && (
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Muddat uzayishi (oy)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="12"
+                  value={maintenanceForm.extension_months}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, extension_months: e.target.value})}
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Bajaruvchi</label>
+                <Input
+                  placeholder="Tashqi kompaniya nomi"
+                  value={maintenanceForm.performed_by}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, performed_by: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Hujjat raqami</label>
+                <Input
+                  placeholder="Ixtiyoriy"
+                  value={maintenanceForm.document_number}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, document_number: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Izoh</label>
+              <Textarea
+                placeholder="Texnik xizmat haqida izoh..."
+                value={maintenanceForm.description}
+                onChange={(e) => setMaintenanceForm({...maintenanceForm, description: e.target.value})}
+                rows={2}
+              />
+            </div>
+
+            {/* Maintenance History */}
+            {maintenanceHistory.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">Texnik xizmat tarixi</h4>
+                <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
+                  {maintenanceHistory.map(m => (
+                    <div key={m.id} className="p-2 text-xs flex justify-between items-center">
+                      <div>
+                        <span className="font-medium">{maintenanceTypeLabels[m.maintenance_type]?.uz || m.maintenance_type}</span>
+                        <span className="text-slate-500 ml-2">{m.service_date}</span>
+                      </div>
+                      <div className="text-right">
+                        {m.cost > 0 && <span className="text-red-600">{formatCurrency(m.cost)}</span>}
+                        {m.life_extension_months > 0 && <span className="text-green-600 ml-2">+{m.life_extension_months} oy</span>}
+                        {m.value_increase > 0 && <span className="text-blue-600 ml-2">+{formatCurrency(m.value_increase)}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMaintenanceModal(false)} disabled={isSaving}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button onClick={handleRecordMaintenance} disabled={isSaving || !maintenanceForm.service_date}>
+              {isSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Maintenance Result Modal */}
+      <Dialog open={!!showMaintenanceResult} onOpenChange={(open) => { if (!open) setShowMaintenanceResult(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="w-5 h-5" />
+              Texnik xizmat muvaffaqiyatli qayd etildi
+            </DialogTitle>
+          </DialogHeader>
+          {showMaintenanceResult && (
+            <div className="space-y-3 py-4">
+              <p className="text-sm font-medium text-slate-600">
+                {maintenanceTypeLabels[showMaintenanceResult.maintenance_type]?.uz || showMaintenanceResult.maintenance_type}
+              </p>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="text-left p-2 font-medium"></th>
+                      <th className="text-right p-2 font-medium">Oldin</th>
+                      <th className="text-center p-2 w-8"></th>
+                      <th className="text-right p-2 font-medium">Keyin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t">
+                      <td className="p-2 text-slate-600">Muddat (oy)</td>
+                      <td className="p-2 text-right">{showMaintenanceResult.useful_life_before}</td>
+                      <td className="p-2 text-center"><ArrowRight className="w-3 h-3 text-slate-400 mx-auto" /></td>
+                      <td className="p-2 text-right font-medium">
+                        {showMaintenanceResult.useful_life_after}
+                        {showMaintenanceResult.life_extension_months > 0 && (
+                          <span className="text-green-600 text-xs ml-1">(+{showMaintenanceResult.life_extension_months})</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="border-t">
+                      <td className="p-2 text-slate-600">Oylik amor.</td>
+                      <td className="p-2 text-right">{formatCurrency(showMaintenanceResult.monthly_depr_before)}</td>
+                      <td className="p-2 text-center"><ArrowRight className="w-3 h-3 text-slate-400 mx-auto" /></td>
+                      <td className="p-2 text-right font-medium">{formatCurrency(showMaintenanceResult.monthly_depr_after)}</td>
+                    </tr>
+                    <tr className="border-t">
+                      <td className="p-2 text-slate-600">Qiymat</td>
+                      <td className="p-2 text-right">{formatCurrency(showMaintenanceResult.value_before)}</td>
+                      <td className="p-2 text-center"><ArrowRight className="w-3 h-3 text-slate-400 mx-auto" /></td>
+                      <td className="p-2 text-right font-medium">
+                        {formatCurrency(showMaintenanceResult.value_after)}
+                        {showMaintenanceResult.value_increase > 0 && (
+                          <span className="text-blue-600 text-xs ml-1">(+{formatCurrency(showMaintenanceResult.value_increase)})</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowMaintenanceResult(null)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Payment Modal */}
+      <Dialog open={showPaymentModal} onOpenChange={(open) => {
+        if (!open) { setShowPaymentModal(false); setSelectedAsset(null); }
+      }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              Nasiya to'lovi
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAsset?.name} — Qolgan qarz: {formatCurrency((selectedAsset?.acquisition_cost || 0) - (selectedAsset?.total_paid || 0))}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Summa *</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={formatPriceInput(paymentForm.amount)}
+                  onChange={(e) => setPaymentForm({...paymentForm, amount: parsePriceInput(e.target.value)})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">To'lov usuli *</label>
+                <Select value={paymentForm.method} onValueChange={(v) => setPaymentForm({...paymentForm, method: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Naqd pul</SelectItem>
+                    <SelectItem value="bank">Bank o'tkazmasi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Sana *</label>
+                <Input
+                  type="date"
+                  value={paymentForm.paid_at}
+                  onChange={(e) => setPaymentForm({...paymentForm, paid_at: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">Izoh</label>
+                <Input
+                  placeholder="Ixtiyoriy izoh"
+                  value={paymentForm.note}
+                  onChange={(e) => setPaymentForm({...paymentForm, note: e.target.value})}
+                />
+              </div>
+            </div>
+
+            {/* Payment History */}
+            {paymentHistory.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">To'lovlar tarixi</h4>
+                <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
+                  {paymentHistory.map(p => (
+                    <div key={p.id} className="p-2 text-xs flex justify-between items-center">
+                      <div>
+                        <span className="text-slate-500">{p.paid_at}</span>
+                        <span className="ml-2">{p.method === 'cash' ? 'Naqd' : 'Bank'}</span>
+                      </div>
+                      <span className="font-medium text-green-600">{formatCurrency(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPaymentModal(false)} disabled={isSaving}>
+              Bekor qilish
+            </Button>
+            <Button onClick={handleRecordPayment} disabled={isSaving || !paymentForm.amount || !paymentForm.paid_at}>
+              {isSaving ? 'Saqlanmoqda...' : 'To\'lash'}
             </Button>
           </DialogFooter>
         </DialogContent>
