@@ -215,8 +215,33 @@ export const financeService = {
     return response.data.data;
   },
 
-  async reverseJournalEntry(id) {
-    const response = await apiClient.post(`/journal-entries/${id}/reverse`);
+  async updateJournalEntry(id, data) {
+    const response = await apiClient.put(`/journal-entries/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteJournalEntry(id) {
+    const response = await apiClient.delete(`/journal-entries/${id}`);
+    return response.data.data;
+  },
+
+  async cancelJournalEntry(id) {
+    const response = await apiClient.post(`/journal-entries/${id}/cancel`);
+    return response.data.data;
+  },
+
+  async reverseJournalEntry(id, data = {}) {
+    const response = await apiClient.post(`/journal-entries/${id}/reverse`, data);
+    return response.data.data;
+  },
+
+  async lockFiscalPeriod(id) {
+    const response = await apiClient.post(`/fiscal-periods/${id}/lock`);
+    return response.data.data;
+  },
+
+  async unlockFiscalPeriod(id) {
+    const response = await apiClient.post(`/fiscal-periods/${id}/unlock`);
     return response.data.data;
   },
 
