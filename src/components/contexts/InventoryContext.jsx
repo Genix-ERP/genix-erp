@@ -1962,7 +1962,7 @@ export function InventoryProvider({ children }) {
     return {
       ...p,
       current_stock: totalStock,
-      status: totalStock === 0 ? 'out_of_stock' : totalStock <= (p.min_stock_level || 0) ? 'low_stock' : 'active'
+      status: totalStock <= 0 ? 'out_of_stock' : totalStock <= (p.min_stock_level || 0) ? 'low_stock' : 'active'
     };
   });
 

@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -30,38 +29,23 @@ import {
   Printer,
   Search,
   Package,
-  Plus,
-  Minus,
-  Trash2,
-  Eye,
-  QrCode,
-  Barcode,
-  Tag,
   Settings,
-  Download,
-  RefreshCw,
+  Barcode,
+  QrCode,
 } from "lucide-react";
 
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 
-// Label template configurations - keys for translation
-// Standard thermal printer label sizes
+// Label template configurations
 const LABEL_TEMPLATE_KEYS = {
-  // Small labels - jewelry, electronics
   small_30x20: { nameKey: "label_30x20", width: 30, height: 20, fontSize: 7, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  // Common small retail label
   small_40x30: { nameKey: "label_40x30", width: 40, height: 30, fontSize: 8, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  // Standard thermal label - most common
   medium_58x40: { nameKey: "label_58x40", width: 58, height: 40, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  // 60x40 - popular in Uzbekistan
   medium_60x40: { nameKey: "label_60x40", width: 60, height: 40, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
-  // Large POS label
   large_80x50: { nameKey: "label_80x50", width: 80, height: 50, fontSize: 12, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
-  // Large shelf label
   shelf_100x70: { nameKey: "label_100x70", width: 100, height: 70, fontSize: 14, showBarcode: true, showQR: true, showPrice: true, showName: true, showSKU: true },
-  // Custom size - will use settings
   custom: { nameKey: "label_custom", width: 0, height: 0, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
 };
 
@@ -71,7 +55,6 @@ const generateBarcodeSVG = (code, width = 100, height = 30) => {
   let x = 0;
   const barWidth = width / (code.length * 7 + 10);
 
-  // Simple Code39-like pattern
   for (let i = 0; i < code.length; i++) {
     const charCode = code.charCodeAt(i);
     const pattern = (charCode % 2 === 0) ? "101101011" : "110100101";
@@ -82,7 +65,7 @@ const generateBarcodeSVG = (code, width = 100, height = 30) => {
       }
       x += barWidth;
     }
-    x += barWidth; // gap between chars
+    x += barWidth;
   }
 
   return `<svg width="${width}" height="${height + 12}" xmlns="http://www.w3.org/2000/svg">
@@ -91,21 +74,16 @@ const generateBarcodeSVG = (code, width = 100, height = 30) => {
   </svg>`;
 };
 
-// QR Code generator (simplified pattern)
 const generateQRSVG = (data, size = 50) => {
-  const modules = 21; // QR code modules
+  const modules = 21;
   const moduleSize = size / modules;
   const rects = [];
 
-  // Generate pseudo-random pattern based on data
   for (let row = 0; row < modules; row++) {
     for (let col = 0; col < modules; col++) {
-      // Corner patterns (position detection)
       const isCorner = (row < 7 && col < 7) ||
                        (row < 7 && col >= modules - 7) ||
                        (row >= modules - 7 && col < 7);
-
-      // Data modules (pseudo-random based on input)
       const hash = (data.charCodeAt(row % data.length) + col * row) % 3;
       const isData = !isCorner && hash === 0;
 
@@ -125,23 +103,20 @@ export default function PriceLabelPrinting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { products, items, categories } = useInventory();
-  const printRef = useRef(null);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("medium_58x40");
-  const [labelQueue, setLabelQueue] = useState([]);
-  const [showPreview, setShowPreview] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [printDialog, setPrintDialog] = useState(null); // { product } or null
+  const [printTemplate, setPrintTemplate] = useState("medium_58x40");
+  const [printQuantity, setPrintQuantity] = useState(1);
 
-  // Cleanup on unmount to prevent blocking navigation
   useEffect(() => {
     return () => {
-      setShowPreview(false);
       setShowSettings(false);
+      setPrintDialog(null);
     };
   }, []);
 
-  // Load label settings from localStorage
   const getInitialSettings = () => {
     const defaultSettings = {
       showBarcode: true,
@@ -153,7 +128,6 @@ export default function PriceLabelPrinting() {
       showStock: false,
       currency: "UZS",
       priceFormat: "full",
-      // Custom label size
       customWidth: 50,
       customHeight: 30,
       customFontSize: 10,
@@ -171,10 +145,8 @@ export default function PriceLabelPrinting() {
 
   const [customSettings, setCustomSettings] = useState(getInitialSettings);
 
-  // Build LABEL_TEMPLATES with translated names (after customSettings is defined)
   const LABEL_TEMPLATES = Object.fromEntries(
     Object.entries(LABEL_TEMPLATE_KEYS).map(([key, config]) => {
-      // For custom template, use settings values
       if (key === 'custom') {
         return [key, {
           ...config,
@@ -188,7 +160,6 @@ export default function PriceLabelPrinting() {
     })
   );
 
-  // Save settings to localStorage when they change
   useEffect(() => {
     try {
       localStorage.setItem('genix_label_settings', JSON.stringify(customSettings));
@@ -197,10 +168,8 @@ export default function PriceLabelPrinting() {
     }
   }, [customSettings]);
 
-  // Get all products with inventory info
   const allProducts = products.map(product => {
     const inventory = items.find(item => item.product_id === product.id);
-    // Get category name from categories list (product.category might be an object or category_id)
     const categoryName = typeof product.category === 'string'
       ? product.category
       : (product.category?.name || categories.find(c => c.id === product.category_id)?.name || '');
@@ -208,62 +177,16 @@ export default function PriceLabelPrinting() {
       ...product,
       category: categoryName,
       current_stock: inventory?.current_stock || 0,
-      // Use list_price (selling price) or fall back to other price fields
       sale_price: product.list_price || product.sale_price || product.unit_price || product.cost_price || 0,
     };
   });
 
-  // Filter products by search
   const filteredProducts = allProducts.filter(product =>
     product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     product.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     product.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Add product to label queue
-  const addToQueue = (product, quantity = 1) => {
-    setLabelQueue(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        return prev.map(item =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-      return [...prev, { product, quantity }];
-    });
-  };
-
-  // Remove from queue
-  const removeFromQueue = (productId) => {
-    setLabelQueue(prev => prev.filter(item => item.product.id !== productId));
-  };
-
-  // Update quantity in queue
-  const updateQuantity = (productId, quantity) => {
-    if (quantity <= 0) {
-      removeFromQueue(productId);
-      return;
-    }
-    setLabelQueue(prev =>
-      prev.map(item =>
-        item.product.id === productId
-          ? { ...item, quantity }
-          : item
-      )
-    );
-  };
-
-  // Clear queue
-  const clearQueue = () => {
-    setLabelQueue([]);
-  };
-
-  // Calculate total labels
-  const totalLabels = labelQueue.reduce((sum, item) => sum + item.quantity, 0);
-
-  // Format price
   const formatPrice = (price) => {
     if (customSettings.priceFormat === "rounded") {
       return Math.round(price).toLocaleString();
@@ -271,41 +194,43 @@ export default function PriceLabelPrinting() {
     return price.toLocaleString();
   };
 
-  // Print labels
+  const openPrintDialog = (product) => {
+    setPrintDialog({ product });
+    setPrintQuantity(1);
+  };
+
   const handlePrint = () => {
+    if (!printDialog) return;
+    const { product } = printDialog;
+    const template = LABEL_TEMPLATES[printTemplate];
     const printWindow = window.open("", "_blank");
-    const template = LABEL_TEMPLATES[selectedTemplate];
+    const barcode = product.barcode || product.sku || `P${product.id}`;
 
     let labelsHTML = "";
-
-    labelQueue.forEach(({ product, quantity }) => {
-      for (let i = 0; i < quantity; i++) {
-        const barcode = product.barcode || product.sku || `P${product.id}`;
-
-        labelsHTML += `
-          <div class="label" style="
-            width: ${template.width}mm;
-            height: ${template.height}mm;
-            border: 1px dashed #ccc;
-            padding: 2mm;
-            margin: 1mm;
-            display: inline-block;
-            vertical-align: top;
-            box-sizing: border-box;
-            font-family: Arial, sans-serif;
-            font-size: ${template.fontSize}px;
-            overflow: hidden;
-          ">
-            ${customSettings.showName ? `<div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${product.name}</div>` : ""}
-            ${customSettings.showSKU ? `<div style="font-size: ${template.fontSize - 2}px; color: #666;">${barcode}</div>` : ""}
-            ${customSettings.showCategory && product.category ? `<div style="font-size: ${template.fontSize - 2}px; color: #888;">${product.category}</div>` : ""}
-            ${customSettings.showPrice ? `<div style="font-size: ${template.fontSize + 4}px; font-weight: bold; color: #000; margin-top: 2mm;">${formatPrice(product.sale_price)} ${customSettings.currency}</div>` : ""}
-            ${customSettings.showBarcode ? `<div style="margin-top: 2mm;">${generateBarcodeSVG(barcode, template.width * 2.5, 20)}</div>` : ""}
-            ${customSettings.showQR && template.showQR ? `<div style="position: absolute; right: 2mm; top: 2mm;">${generateQRSVG(barcode, 15)}</div>` : ""}
-          </div>
-        `;
-      }
-    });
+    for (let i = 0; i < printQuantity; i++) {
+      labelsHTML += `
+        <div class="label" style="
+          width: ${template.width}mm;
+          height: ${template.height}mm;
+          border: 1px dashed #ccc;
+          padding: 2mm;
+          margin: 1mm;
+          display: inline-block;
+          vertical-align: top;
+          box-sizing: border-box;
+          font-family: Arial, sans-serif;
+          font-size: ${template.fontSize}px;
+          overflow: hidden;
+        ">
+          ${customSettings.showName ? `<div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${product.name}</div>` : ""}
+          ${customSettings.showSKU ? `<div style="font-size: ${template.fontSize - 2}px; color: #666;">${barcode}</div>` : ""}
+          ${customSettings.showCategory && product.category ? `<div style="font-size: ${template.fontSize - 2}px; color: #888;">${product.category}</div>` : ""}
+          ${customSettings.showPrice ? `<div style="font-size: ${template.fontSize + 4}px; font-weight: bold; color: #000; margin-top: 2mm;">${formatPrice(product.sale_price)} ${customSettings.currency}</div>` : ""}
+          ${customSettings.showBarcode ? `<div style="margin-top: 2mm;">${generateBarcodeSVG(barcode, template.width * 2.5, 20)}</div>` : ""}
+          ${customSettings.showQR && template.showQR ? `<div style="position: absolute; right: 2mm; top: 2mm;">${generateQRSVG(barcode, 15)}</div>` : ""}
+        </div>
+      `;
+    }
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -313,21 +238,10 @@ export default function PriceLabelPrinting() {
       <head>
         <title>${t('price_labels')} - Genix ERP</title>
         <style>
-          @page {
-            size: A4;
-            margin: 5mm;
-          }
-          @media print {
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
-          body {
-            font-family: Arial, sans-serif;
-            padding: 5mm;
-          }
-          .label {
-            page-break-inside: avoid;
-          }
+          @page { size: A4; margin: 5mm; }
+          @media print { body { margin: 0; } .no-print { display: none; } }
+          body { font-family: Arial, sans-serif; padding: 5mm; }
+          .label { page-break-inside: avoid; }
         </style>
       </head>
       <body>
@@ -345,46 +259,7 @@ export default function PriceLabelPrinting() {
     `);
 
     printWindow.document.close();
-  };
-
-  // Label Preview Component
-  const LabelPreview = ({ product, template }) => {
-    const barcode = product.barcode || product.sku || `P${product.id}`;
-
-    return (
-      <div
-        className="border-2 border-dashed border-slate-300 rounded p-2 bg-white"
-        style={{
-          width: `${template.width * 2}px`,
-          minHeight: `${template.height * 2}px`,
-        }}
-      >
-        {customSettings.showName && (
-          <div className="font-bold text-xs truncate">{product.name}</div>
-        )}
-        {customSettings.showSKU && (
-          <div className="text-[10px] text-slate-500">{barcode}</div>
-        )}
-        {customSettings.showCategory && product.category && (
-          <div className="text-[10px] text-slate-400">{product.category}</div>
-        )}
-        {customSettings.showPrice && (
-          <div className="font-bold text-sm mt-1">
-            {formatPrice(product.sale_price)} {customSettings.currency}
-          </div>
-        )}
-        {customSettings.showBarcode && (
-          <div className="mt-1 flex justify-center">
-            <Barcode className="w-16 h-6 text-slate-700" />
-          </div>
-        )}
-        {customSettings.showQR && template.showQR && (
-          <div className="absolute top-1 right-1">
-            <QrCode className="w-4 h-4 text-slate-700" />
-          </div>
-        )}
-      </div>
-    );
+    setPrintDialog(null);
   };
 
   return (
@@ -399,286 +274,183 @@ export default function PriceLabelPrinting() {
             {t('select_products_print_labels')}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setShowSettings(true)}
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            {t('settings')}
-          </Button>
-          {labelQueue.length > 0 && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setShowPreview(true)}
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                {t('preview')}
-              </Button>
-              <Button onClick={handlePrint}>
-                <Printer className="w-4 h-4 mr-2" />
-                {t('print')} ({totalLabels})
-              </Button>
-            </>
-          )}
-        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowSettings(true)}
+        >
+          <Settings className="w-4 h-4 mr-2" />
+          {t('settings')}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Products List */}
-        <div className="lg:col-span-2">
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <CardTitle className="text-lg">{t('products')}</CardTitle>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input
-                      placeholder={t('search')}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                    <SelectTrigger className="w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
-                        <SelectItem key={key} value={key}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>{t('product')}</TableHead>
-                      <TableHead>SKU/Barcode</TableHead>
-                      <TableHead className="text-right">{t('price')}</TableHead>
-                      <TableHead className="w-32 text-center">{t('action')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-slate-500">
-                          {t('no_products_found')}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredProducts.slice(0, 20).map((product) => {
-                        const inQueue = labelQueue.find(item => item.product.id === product.id);
-                        return (
-                          <TableRow key={product.id} className={inQueue ? "bg-blue-50" : ""}>
-                            <TableCell>
-                              <Package className="w-8 h-8 text-slate-400" />
-                            </TableCell>
-                            <TableCell>
-                              <div className="font-medium">{product.name}</div>
-                              {product.category && (
-                                <div className="text-xs text-slate-500">{product.category}</div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                                {product.barcode || product.sku || `P${product.id}`}
-                              </code>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatPrice(product.sale_price)} {customSettings.currency}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center justify-center gap-2">
-                                {inQueue ? (
-                                  <>
-                                    <Button
-                                      size="icon"
-                                      variant="outline"
-                                      className="h-8 w-8"
-                                      onClick={() => updateQuantity(product.id, inQueue.quantity - 1)}
-                                    >
-                                      <Minus className="w-3 h-3" />
-                                    </Button>
-                                    <span className="w-8 text-center font-medium">{inQueue.quantity}</span>
-                                    <Button
-                                      size="icon"
-                                      variant="outline"
-                                      className="h-8 w-8"
-                                      onClick={() => updateQuantity(product.id, inQueue.quantity + 1)}
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => addToQueue(product)}
-                                  >
-                                    <Plus className="w-4 h-4 mr-1" />
-                                    {t('add')}
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {filteredProducts.length > 20 && (
-                <p className="text-center text-sm text-slate-500 mt-3">
-                  {t('showing')}: 20 / {filteredProducts.length}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Label Queue */}
-        <div>
-          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg sticky top-4">
-            <CardHeader className="pb-4">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Tag className="w-5 h-5" />
-                  {t('print_queue')}
-                </CardTitle>
-                {labelQueue.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={clearQueue}
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    {t('clear')}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {labelQueue.length === 0 ? (
-                <div className="text-center py-8">
-                  <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">{t('queue_empty')}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {t('add_products')}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {labelQueue.map(({ product, quantity }) => (
-                    <div
-                      key={product.id}
-                      className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{product.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {formatPrice(product.sale_price)} {customSettings.currency}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <Badge variant="secondary">{quantity}x</Badge>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-red-600 hover:text-red-700"
-                          onClick={() => removeFromQueue(product.id)}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="border-t pt-3 mt-4">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-600">{t('total_labels')}:</span>
-                      <span className="font-bold text-lg">{totalLabels}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-slate-500 mt-1">
-                      <span>{t('template')}:</span>
-                      <span>{LABEL_TEMPLATES[selectedTemplate].name}</span>
-                    </div>
-                  </div>
-
-                  <Button className="w-full mt-4" onClick={handlePrint}>
-                    <Printer className="w-4 h-4 mr-2" />
-                    {t('print')}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Preview Modal */}
-      <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('preview_labels')}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-slate-500">
-                {t('total')}: {totalLabels} {t('labels_count')}
-              </p>
-              <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
-                    <SelectItem key={key} value={key}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-wrap gap-3 p-4 bg-slate-100 rounded-lg">
-              {labelQueue.map(({ product, quantity }) => (
-                Array(Math.min(quantity, 3)).fill(null).map((_, idx) => (
-                  <LabelPreview
-                    key={`${product.id}-${idx}`}
-                    product={product}
-                    template={LABEL_TEMPLATES[selectedTemplate]}
-                  />
-                ))
-              ))}
-              {totalLabels > labelQueue.length * 3 && (
-                <div className="flex items-center justify-center p-4 text-slate-500">
-                  ... {t('and_more')} {totalLabels - labelQueue.length * 3}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowPreview(false)}>
-                {t('close')}
-              </Button>
-              <Button onClick={() => { handlePrint(); setShowPreview(false); }}>
-                <Printer className="w-4 h-4 mr-2" />
-                {t('print')}
-              </Button>
+      {/* Products List */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <CardTitle className="text-lg">{t('products')}</CardTitle>
+            <div className="relative flex-1 sm:w-64 sm:flex-initial">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder={t('search')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </div>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="w-12"></TableHead>
+                  <TableHead>{t('product')}</TableHead>
+                  <TableHead>SKU/Barcode</TableHead>
+                  <TableHead className="text-right">{t('price')}</TableHead>
+                  <TableHead className="w-32 text-center">{t('action')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                      {t('no_products_found')}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredProducts.slice(0, 20).map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell>
+                        <Package className="w-8 h-8 text-slate-400" />
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{product.name}</div>
+                        {product.category && (
+                          <div className="text-xs text-slate-500">{product.category}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-slate-100 px-2 py-1 rounded">
+                          {product.barcode || product.sku || `P${product.id}`}
+                        </code>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatPrice(product.sale_price)} {customSettings.currency}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center">
+                          <Button
+                            size="sm"
+                            onClick={() => openPrintDialog(product)}
+                          >
+                            <Printer className="w-4 h-4 mr-1" />
+                            {t('print')}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          {filteredProducts.length > 20 && (
+            <p className="text-center text-sm text-slate-500 mt-3">
+              {t('showing')}: 20 / {filteredProducts.length}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Print Dialog */}
+      <Dialog open={!!printDialog} onOpenChange={(open) => !open && setPrintDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('print_price_labels')}</DialogTitle>
+          </DialogHeader>
+          {printDialog && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <div className="font-medium">{printDialog.product.name}</div>
+                <div className="text-sm text-slate-500">
+                  {formatPrice(printDialog.product.sale_price)} {customSettings.currency}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{t('template')}</Label>
+                <Select value={printTemplate} onValueChange={setPrintTemplate}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
+                      <SelectItem key={key} value={key}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{t('quantity')}</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={printQuantity}
+                  onChange={(e) => setPrintQuantity(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                />
+              </div>
+
+              {/* Preview */}
+              <div className="flex justify-center p-3 bg-slate-100 rounded-lg">
+                <div
+                  className="border-2 border-dashed border-slate-300 rounded p-2 bg-white"
+                  style={{
+                    width: `${LABEL_TEMPLATES[printTemplate].width * 2}px`,
+                    minHeight: `${LABEL_TEMPLATES[printTemplate].height * 2}px`,
+                  }}
+                >
+                  {customSettings.showName && (
+                    <div className="font-bold text-xs truncate">{printDialog.product.name}</div>
+                  )}
+                  {customSettings.showSKU && (
+                    <div className="text-[10px] text-slate-500">
+                      {printDialog.product.barcode || printDialog.product.sku || `P${printDialog.product.id}`}
+                    </div>
+                  )}
+                  {customSettings.showPrice && (
+                    <div className="font-bold text-sm mt-1">
+                      {formatPrice(printDialog.product.sale_price)} {customSettings.currency}
+                    </div>
+                  )}
+                  {customSettings.showBarcode && (
+                    <div className="mt-1 flex justify-center">
+                      <Barcode className="w-16 h-6 text-slate-700" />
+                    </div>
+                  )}
+                  {customSettings.showQR && LABEL_TEMPLATES[printTemplate].showQR && (
+                    <div className="absolute top-1 right-1">
+                      <QrCode className="w-4 h-4 text-slate-700" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setPrintDialog(null)}>
+                  {t('close')}
+                </Button>
+                <Button onClick={handlePrint}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  {t('print')} ({printQuantity})
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

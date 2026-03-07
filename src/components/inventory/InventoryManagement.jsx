@@ -487,8 +487,8 @@ export default function InventoryManagement() {
                         const quantity = item.quantity_on_hand ?? item.quantity ?? 0;
                         const reserved = item.quantity_reserved ?? item.reserved_quantity ?? 0;
                         const available = item.quantity_available ?? item.available_quantity ?? quantity;
-                        const isLowStock = product?.min_stock_level && quantity <= product.min_stock_level;
-                        const isOutOfStock = quantity === 0;
+                        const isOutOfStock = quantity <= 0;
+                        const isLowStock = !isOutOfStock && product?.min_stock_level && quantity <= product.min_stock_level;
 
                         return (
                           <TableRow key={item.id} className="hover:bg-blue-50/50">
