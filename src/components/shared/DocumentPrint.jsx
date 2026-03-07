@@ -435,8 +435,8 @@ export function PrintPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Eye className="w-5 h-5" />
@@ -455,7 +455,7 @@ export function PrintPreviewModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden">
+        <div className="flex-1 min-h-0 bg-slate-100 rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
