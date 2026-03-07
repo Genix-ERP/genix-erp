@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
-  Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2
+  Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
+  Send, Mail, MessageCircle, ChevronDown, Link2, Check
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -45,6 +46,15 @@ export default function ActSverka() {
   const [selectedAct, setSelectedAct] = useState(null);
   const [actDetail, setActDetail] = useState(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Send state
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendMethod, setSendMethod] = useState('email'); // 'email' or 'whatsapp'
+  const [sendEmail, setSendEmail] = useState('');
+  const [sendPhone, setSendPhone] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+  const [showSendDropdown, setShowSendDropdown] = useState(false);
 
   // Contacts for partner selector
   const [contacts, setContacts] = useState([]);
@@ -109,6 +119,25 @@ export default function ActSverka() {
     const q = contactSearch.toLowerCase();
     return contacts.filter(c => (c.name || '').toLowerCase().includes(q)).slice(0, 20);
   }, [contacts, contactSearch]);
+
+  const getResponseBadge = (responseStatus) => {
+    if (!responseStatus) return null;
+    const styles = {
+      confirmed: 'bg-emerald-100 text-emerald-800',
+      disputed: 'bg-red-100 text-red-800',
+      no_response: 'bg-slate-100 text-slate-600'
+    };
+    const labels = {
+      confirmed: 'Kontragent tasdiqladi',
+      disputed: 'Kontragent norozilik bildirdi',
+      no_response: 'Javob kutilmoqda'
+    };
+    return (
+      <Badge className={styles[responseStatus] || 'bg-slate-100 text-slate-600'}>
+        {labels[responseStatus] || responseStatus}
+      </Badge>
+    );
+  };
 
   const getStatusBadge = (status) => {
     const styles = {
@@ -330,6 +359,50 @@ export default function ActSverka() {
     }
   };
 
+  const openSendModal = (method) => {
+    setSendMethod(method);
+    setSendResult(null);
+    setShowSendDropdown(false);
+    // Pre-fill email from contact if available
+    if (method === 'email' && actDetail) {
+      const contact = contacts.find(c => c.id === (actDetail.partner_id || selectedAct?.partner_id));
+      setSendEmail(contact?.email || '');
+    }
+    if (method === 'whatsapp' && actDetail) {
+      const contact = contacts.find(c => c.id === (actDetail.partner_id || selectedAct?.partner_id));
+      setSendPhone(contact?.phone || '');
+    }
+    setShowSendModal(true);
+  };
+
+  const handleSend = async () => {
+    if (!selectedAct) return;
+    if (sendMethod === 'email' && !sendEmail) return;
+    setIsSending(true);
+    setSendResult(null);
+    try {
+      const result = await financeService.sendReconciliationAct(selectedAct.id, {
+        via: sendMethod,
+        email: sendMethod === 'email' ? sendEmail : '',
+        phone: sendMethod === 'whatsapp' ? sendPhone : '',
+      });
+      setSendResult(result);
+      // Update local status
+      setSelectedAct(prev => ({ ...prev, status: 'sent' }));
+      if (actDetail) setActDetail(prev => ({ ...prev, status: 'sent' }));
+
+      if (sendMethod === 'whatsapp' && result.whatsapp_message) {
+        const waURL = `https://wa.me/${sendPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(result.whatsapp_message)}`;
+        window.open(waURL, '_blank');
+      }
+    } catch (err) {
+      console.error('Send failed:', err);
+      setSendResult({ error: err?.response?.data?.error || "Yuborishda xatolik yuz berdi" });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -365,6 +438,7 @@ export default function ActSverka() {
           </div>
           <div className="flex items-center gap-2">
             {getStatusBadge(act.status || 'draft')}
+            {act.response_status && getResponseBadge(act.response_status)}
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoadingDetail}>
               <RefreshCw className={`w-4 h-4 mr-1 ${isLoadingDetail ? 'animate-spin' : ''}`} />
               {t('refresh') || 'Yangilash'}
@@ -373,6 +447,40 @@ export default function ActSverka() {
               <Printer className="w-4 h-4 mr-1" />
               {t('print') || 'Chop etish'}
             </Button>
+            {/* Send dropdown */}
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={() => setShowSendDropdown(!showSendDropdown)}
+              >
+                <Send className="w-4 h-4 mr-1" />
+                {t('send') || 'Yuborish'}
+                <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+              {showSendDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSendDropdown(false)} />
+                  <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50 rounded-t-lg"
+                      onClick={() => openSendModal('email')}
+                    >
+                      <Mail className="w-4 h-4 text-blue-600" />
+                      Email orqali
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-green-50 rounded-b-lg"
+                      onClick={() => openSendModal('whatsapp')}
+                    >
+                      <MessageCircle className="w-4 h-4 text-green-600" />
+                      WhatsApp orqali
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             {act.status === 'draft' && (
               <Button
                 size="sm"
@@ -514,6 +622,59 @@ export default function ActSverka() {
                 </TableBody>
               </Table>
             </Card>
+
+            {/* Sent & Response Info */}
+            {(act.sent_at || act.response_status) && (
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+                <CardContent className="p-4 space-y-3">
+                  {act.sent_at && (
+                    <div className="flex items-center gap-4 text-sm">
+                      <Send className="w-4 h-4 text-blue-500" />
+                      <span className="text-slate-600">
+                        <strong>{act.sent_via === 'email' ? 'Email' : 'WhatsApp'}</strong> orqali yuborilgan:
+                        {' '}{act.sent_to}
+                        {' '}— {new Date(act.sent_at).toLocaleDateString('uz-UZ')}
+                      </span>
+                    </div>
+                  )}
+                  {act.response_status && (
+                    <div className={`flex items-center gap-4 text-sm p-2 rounded-lg ${
+                      act.response_status === 'confirmed' ? 'bg-emerald-50' :
+                      act.response_status === 'disputed' ? 'bg-red-50' : 'bg-slate-50'
+                    }`}>
+                      {act.response_status === 'confirmed' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      ) : act.response_status === 'disputed' ? (
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                      ) : (
+                        <Loader2 className="w-4 h-4 text-slate-400" />
+                      )}
+                      <div>
+                        <span className={`font-medium ${
+                          act.response_status === 'confirmed' ? 'text-emerald-700' :
+                          act.response_status === 'disputed' ? 'text-red-700' : 'text-slate-600'
+                        }`}>
+                          {act.response_status === 'confirmed' ? 'Kontragent tasdiqladi' :
+                           act.response_status === 'disputed' ? 'Kontragent norozilik bildirdi' :
+                           'Javob kutilmoqda'}
+                        </span>
+                        {act.respondent_name && (
+                          <span className="text-slate-500 ml-2">({act.respondent_name})</span>
+                        )}
+                        {act.responded_at && (
+                          <span className="text-slate-400 ml-2 text-xs">
+                            {new Date(act.responded_at).toLocaleDateString('uz-UZ')}
+                          </span>
+                        )}
+                        {act.dispute_note && (
+                          <p className="text-red-600 text-xs mt-1">Izoh: {act.dispute_note}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes */}
             {act.notes && (
@@ -657,6 +818,7 @@ export default function ActSverka() {
                   <TableHead className="text-right">{t('credit') || 'Kredit'}</TableHead>
                   <TableHead className="text-right">{t('closing') || 'Tugash'}</TableHead>
                   <TableHead className="text-center">{t('status') || 'Holat'}</TableHead>
+                  <TableHead className="text-center">Javob</TableHead>
                   <TableHead className="text-center">{t('actions') || 'Amallar'}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -686,6 +848,11 @@ export default function ActSverka() {
                         {formatCurrency(closingBalance)}
                       </TableCell>
                       <TableCell className="text-center">{getStatusBadge(act.status)}</TableCell>
+                      <TableCell className="text-center">
+                        {act.response_status ? getResponseBadge(act.response_status) : (
+                          act.status === 'sent' ? <Badge className="bg-slate-100 text-slate-500">Kutilmoqda</Badge> : <span className="text-slate-300">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" onClick={() => openActDetail(act)}>
@@ -909,6 +1076,101 @@ export default function ActSverka() {
               {t('delete') || "O'chirish"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Modal */}
+      <Dialog open={showSendModal} onOpenChange={(open) => { setShowSendModal(open); if (!open) setSendResult(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {sendMethod === 'email' ? (
+                <><Mail className="w-5 h-5 text-blue-600" /> Email orqali yuborish</>
+              ) : (
+                <><MessageCircle className="w-5 h-5 text-green-600" /> WhatsApp orqali yuborish</>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAct && `${selectedAct.partner_name} — ${selectedAct.period_start} — ${selectedAct.period_end}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {sendMethod === 'email' ? (
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  Email manzil *
+                </label>
+                <Input
+                  type="email"
+                  placeholder="kontragent@example.com"
+                  value={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.value)}
+                  className="bg-slate-50 border-slate-200"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
+                  Telefon raqam
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="+998901234567"
+                  value={sendPhone}
+                  onChange={(e) => setSendPhone(e.target.value)}
+                  className="bg-slate-50 border-slate-200"
+                />
+              </div>
+            )}
+
+            {/* Result message */}
+            {sendResult && !sendResult.error && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+                  <Check className="w-4 h-4" />
+                  {sendResult.message}
+                </div>
+                {sendResult.share_url && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Link2 className="w-3 h-3 text-slate-400" />
+                    <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                      {sendResult.share_url}
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+            {sendResult?.error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm">{sendResult.error}</p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowSendModal(false)}>
+                {sendResult && !sendResult.error ? 'Yopish' : 'Bekor qilish'}
+              </Button>
+              {(!sendResult || sendResult.error) && (
+                <Button
+                  onClick={handleSend}
+                  disabled={isSending || (sendMethod === 'email' && !sendEmail)}
+                  className={sendMethod === 'email'
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-green-600 hover:bg-green-700 text-white"
+                  }
+                >
+                  {isSending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : sendMethod === 'email' ? (
+                    <Mail className="w-4 h-4 mr-2" />
+                  ) : (
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                  )}
+                  Yuborish
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

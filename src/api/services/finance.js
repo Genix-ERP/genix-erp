@@ -775,6 +775,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async sendReconciliationAct(id, data) {
+    const response = await apiClient.post(`/reconciliation/${id}/send`, data);
+    return response.data.data;
+  },
+
   // ========== Budget Consolidated ==========
   async getBudgetConsolidated(params = {}) {
     const response = await apiClient.get('/budget/consolidated', { params });
