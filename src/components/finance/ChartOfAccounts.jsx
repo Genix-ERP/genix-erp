@@ -28,6 +28,11 @@ const getAccountTypes = (t) => [
   { value: 'expense', label: t('expense') || 'Expense', icon: TrendingDown, color: 'bg-orange-100 text-orange-800' },
 ];
 
+// Contra-asset accounts are displayed under "asset" category but with credit normal balance
+const isContraAsset = (account) => {
+  return account.category === 'asset' && account.normal_balance === 'credit';
+};
+
 // Odoo-like internal types for more detailed classification
 const getInternalTypes = (t) => ({
   asset: [
@@ -151,12 +156,17 @@ export default function ChartOfAccounts() {
   }, [accounts, searchQuery, typeFilter]);
 
   // Calculate totals by type (category from backend)
+  // Contra-asset accounts (normal_balance=credit) reduce the asset total
   const totals = useMemo(() => {
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
     accounts.forEach(acc => {
       const category = acc.category || acc.type;
       if (result[category] !== undefined) {
-        result[category] += acc.current_balance || 0;
+        if (isContraAsset(acc)) {
+          result[category] -= Math.abs(acc.current_balance || 0);
+        } else {
+          result[category] += acc.current_balance || 0;
+        }
       }
     });
     return result;
@@ -305,8 +315,10 @@ export default function ChartOfAccounts() {
   const renderAccountRow = (account, level = 0) => {
     const hasChildren = account.children && account.children.length > 0;
     const isExpanded = expandedAccounts.has(account.id);
+    const contraAsset = isContraAsset(account);
     const typeInfo = getTypeInfo(account.category || account.type);
     const TypeIcon = typeInfo.icon;
+    const displayName = language === 'uz' && account.name_uz ? account.name_uz : account.name;
 
     return (
       <React.Fragment key={account.id}>
@@ -332,14 +344,21 @@ export default function ChartOfAccounts() {
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900">{account.name}</span>
+              <span className="font-medium text-slate-900">{displayName}</span>
             </div>
           </TableCell>
           <TableCell>
-            <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
-              <TypeIcon className="w-3 h-3" />
-              {typeInfo.label}
-            </Badge>
+            {contraAsset ? (
+              <Badge className="bg-amber-100 text-amber-800 flex items-center gap-1 w-fit">
+                <AlertTriangle className="w-3 h-3" />
+                {t('contra_asset') || 'Contra-Asset'}
+              </Badge>
+            ) : (
+              <Badge className={`${typeInfo.color} flex items-center gap-1 w-fit`}>
+                <TypeIcon className="w-3 h-3" />
+                {typeInfo.label}
+              </Badge>
+            )}
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums">
             {formatCurrency(account.current_balance || 0)}

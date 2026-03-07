@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +27,11 @@ export default function GeneralLedger() {
   const {
     journalEntries,
     createJournalEntry,
+    updateJournalEntry,
+    deleteJournalEntry,
+    cancelJournalEntry,
+    postJournalEntry,
+    reverseJournalEntry,
     getJournalLines,
     accounts,
     journals,
@@ -43,20 +48,30 @@ export default function GeneralLedger() {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [selectedJournalLines, setSelectedJournalLines] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showReverseModal, setShowReverseModal] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+
+  // Reverse modal state
+  const [reverseDate, setReverseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reverseReason, setReverseReason] = useState('');
 
   const defaultJournalId = journals.find(j => j.code === 'MISC')?.id || journals.find(j => j.code === 'GEN')?.id || journals[0]?.id || '';
 
-  const [newEntry, setNewEntry] = useState({
+  const emptyEntry = {
     journal_id: '',
     entry_date: new Date().toISOString().split('T')[0],
     description: '',
     reference: '',
+    tags: [],
     lines: [
       { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
       { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
     ]
-  });
+  };
+
+  const [newEntry, setNewEntry] = useState(emptyEntry);
 
   useEffect(() => {
     setFilteredEntries(journalEntries);
@@ -86,8 +101,9 @@ export default function GeneralLedger() {
     setIsLoadingLines(true);
     try {
       const fullEntry = await financeService.getJournalEntry(entry.id);
-      if (fullEntry?.lines) {
-        setSelectedJournalLines(fullEntry.lines);
+      if (fullEntry) {
+        setSelectedEntry(fullEntry);
+        setSelectedJournalLines(fullEntry.lines || []);
       } else {
         const lines = getJournalLines(entry.id);
         setSelectedJournalLines(lines);
@@ -101,61 +117,47 @@ export default function GeneralLedger() {
     }
   };
 
+  const processLines = (lines) => {
+    const validLines = lines.filter(line =>
+      line.account_id && (parseFloat(line.debit_amount) > 0 || parseFloat(line.credit_amount) > 0)
+    );
+
+    if (validLines.length < 2) return null;
+
+    const processedLines = [];
+    for (const line of validLines) {
+      const debit = parseFloat(line.debit_amount) || 0;
+      const credit = parseFloat(line.credit_amount) || 0;
+      if (debit > 0 && credit > 0) {
+        processedLines.push({ account_id: line.account_id, description: line.description || '', debit_amount: debit, credit_amount: 0 });
+        processedLines.push({ account_id: line.account_id, description: line.description || '', debit_amount: 0, credit_amount: credit });
+      } else if (debit > 0 || credit > 0) {
+        processedLines.push({ account_id: line.account_id, description: line.description || '', debit_amount: debit, credit_amount: credit });
+      }
+    }
+    return processedLines.length >= 2 ? processedLines : null;
+  };
+
   const handleCreateEntry = async () => {
     setIsSaving(true);
     try {
-      // Filter out empty lines and validate
-      const validLines = newEntry.lines.filter(line =>
-        line.account_id && (parseFloat(line.debit_amount) > 0 || parseFloat(line.credit_amount) > 0)
-      );
+      if (!newEntry.description?.trim()) {
+        showError(t('description_required') || 'Description is required');
+        setIsSaving(false);
+        return;
+      }
 
-      if (validLines.length < 2) {
+      const processedLines = processLines(newEntry.lines);
+      if (!processedLines) {
         showError(t('minimum_two_lines_required'));
         setIsSaving(false);
         return;
       }
 
-      // Check if balanced
-      const totalDebit = validLines.reduce((sum, line) => sum + parseFloat(line.debit_amount || 0), 0);
-      const totalCredit = validLines.reduce((sum, line) => sum + parseFloat(line.credit_amount || 0), 0);
-
-      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      const totalDebitCheck = processedLines.reduce((sum, l) => sum + l.debit_amount, 0);
+      const totalCreditCheck = processedLines.reduce((sum, l) => sum + l.credit_amount, 0);
+      if (Math.abs(totalDebitCheck - totalCreditCheck) > 0.01) {
         showError(t('debits_must_equal_credits'));
-        setIsSaving(false);
-        return;
-      }
-
-      // Split lines that have both debit and credit into two separate backend lines
-      const processedLines = [];
-      for (const line of validLines) {
-        const debit = parseFloat(line.debit_amount) || 0;
-        const credit = parseFloat(line.credit_amount) || 0;
-        if (debit > 0 && credit > 0) {
-          // Split into two lines with the same account
-          processedLines.push({
-            account_id: line.account_id,
-            description: line.description || '',
-            debit_amount: debit,
-            credit_amount: 0
-          });
-          processedLines.push({
-            account_id: line.account_id,
-            description: line.description || '',
-            debit_amount: 0,
-            credit_amount: credit
-          });
-        } else if (debit > 0 || credit > 0) {
-          processedLines.push({
-            account_id: line.account_id,
-            description: line.description || '',
-            debit_amount: debit,
-            credit_amount: credit
-          });
-        }
-      }
-
-      if (processedLines.length < 2) {
-        showError(t('minimum_two_lines_required'));
         setIsSaving(false);
         return;
       }
@@ -165,31 +167,30 @@ export default function GeneralLedger() {
         entry_date: newEntry.entry_date,
         description: newEntry.description,
         reference: newEntry.reference,
+        tags: newEntry.tags?.length ? newEntry.tags : undefined,
         lines: processedLines
       };
 
-      await createJournalEntry(entryData);
+      if (editingEntryId) {
+        await updateJournalEntry(editingEntryId, entryData);
+      } else {
+        await createJournalEntry(entryData);
+      }
 
-      // Reset form and close modal
-      setNewEntry({
-        journal_id: defaultJournalId,
-        entry_date: new Date().toISOString().split('T')[0],
-        description: '',
-        reference: '',
-        lines: [
-          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 },
-          { account_id: '', description: '', debit_amount: 0, credit_amount: 0 }
-        ]
-      });
-
+      resetForm();
       setShowCreateModal(false);
     } catch (error) {
-      console.error('Error creating journal entry:', error);
-      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to create journal entry';
+      console.error('Error saving journal entry:', error);
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to save journal entry';
       showError(msg);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const resetForm = () => {
+    setNewEntry({ ...emptyEntry, journal_id: defaultJournalId });
+    setEditingEntryId(null);
   };
 
   const addLine = () => {
@@ -200,7 +201,7 @@ export default function GeneralLedger() {
   };
 
   const removeLine = (index) => {
-    if (newEntry.lines.length <= 2) return; // Keep minimum 2 lines
+    if (newEntry.lines.length <= 2) return;
     setNewEntry(prev => ({
       ...prev,
       lines: prev.lines.filter((_, i) => i !== index)
@@ -213,7 +214,6 @@ export default function GeneralLedger() {
       lines: prev.lines.map((line, i) => {
         if (i !== index) return line;
         const updated = { ...line, [field]: value };
-        // Debit va credit bir vaqtda bo'lmasligi kerak
         if (field === 'debit_amount' && parseFloat(value) > 0) {
           updated.credit_amount = 0;
         } else if (field === 'credit_amount' && parseFloat(value) > 0) {
@@ -226,15 +226,17 @@ export default function GeneralLedger() {
 
   const handleEditEntry = () => {
     if (!selectedEntry) return;
-    if (selectedEntry.status === 'posted') {
-      showError(t('cannot_edit_posted_entry') || 'Posted entries cannot be edited. Reverse the entry first.');
+    if (selectedEntry.status !== 'draft') {
+      showError(t('cannot_edit_posted_entry') || 'Only draft entries can be edited.');
       return;
     }
+    setEditingEntryId(selectedEntry.id);
     setNewEntry({
       journal_id: selectedEntry.journal_id || '',
       entry_date: selectedEntry.entry_date ? new Date(selectedEntry.entry_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       description: selectedEntry.description || '',
       reference: selectedEntry.reference || '',
+      tags: selectedEntry.tags || [],
       lines: selectedJournalLines.length > 0
         ? selectedJournalLines.map(line => ({
             account_id: line.account_id || '',
@@ -248,6 +250,79 @@ export default function GeneralLedger() {
           ]
     });
     setShowCreateModal(true);
+  };
+
+  const handlePostEntry = async () => {
+    if (!selectedEntry || selectedEntry.status !== 'draft') return;
+    setIsActionLoading(true);
+    try {
+      await postJournalEntry(selectedEntry.id);
+      setSelectedEntry(prev => prev ? { ...prev, status: 'posted' } : prev);
+      showSuccess(t('entry_posted_successfully') || 'Journal entry posted successfully');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to post entry';
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCancelEntry = async () => {
+    if (!selectedEntry || selectedEntry.status !== 'draft') return;
+    setIsActionLoading(true);
+    try {
+      await cancelJournalEntry(selectedEntry.id);
+      setSelectedEntry(prev => prev ? { ...prev, status: 'cancelled' } : prev);
+      showSuccess(t('entry_cancelled_successfully') || 'Journal entry cancelled');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to cancel entry';
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!selectedEntry || selectedEntry.status !== 'draft') return;
+    setIsActionLoading(true);
+    try {
+      await deleteJournalEntry(selectedEntry.id);
+      setSelectedEntry(null);
+      setSelectedJournalLines([]);
+      showSuccess(t('entry_deleted_successfully') || 'Journal entry deleted');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to delete entry';
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const openReverseModal = () => {
+    if (!selectedEntry || selectedEntry.status !== 'posted') return;
+    setReverseDate(new Date().toISOString().split('T')[0]);
+    setReverseReason('');
+    setShowReverseModal(true);
+  };
+
+  const handleReverseEntry = async () => {
+    if (!selectedEntry) return;
+    setIsActionLoading(true);
+    try {
+      await reverseJournalEntry(selectedEntry.id, {
+        date: reverseDate,
+        reason: reverseReason
+      });
+      setShowReverseModal(false);
+      setSelectedEntry(null);
+      setSelectedJournalLines([]);
+      showSuccess(t('reversal_created_successfully') || 'Reversal entry created as draft');
+    } catch (error) {
+      const msg = error?.response?.data?.error?.message || error?.message || 'Failed to reverse entry';
+      showError(msg);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   const handleViewPDF = () => {
@@ -303,6 +378,7 @@ export default function GeneralLedger() {
       posted: "bg-green-100 text-green-800 border-green-200",
       draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
       reversed: "bg-red-100 text-red-800 border-red-200",
+      cancelled: "bg-gray-100 text-gray-600 border-gray-200",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
   };
@@ -311,7 +387,8 @@ export default function GeneralLedger() {
     const icons = {
       posted: CheckCircle,
       draft: Clock,
-      reversed: AlertCircle
+      reversed: ArrowLeftRight,
+      cancelled: XCircle,
     };
     const Icon = icons[status] || Clock;
     return <Icon className="w-3 h-3" />;
@@ -346,9 +423,9 @@ export default function GeneralLedger() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
+                  <Input
                     placeholder={t('search') + " " + t('journal_entries').toLowerCase() + "..."}
-                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10" 
+                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -356,6 +433,7 @@ export default function GeneralLedger() {
                 {canCreate(MODULES.FINANCIALS) && (
                   <Button
                     onClick={() => {
+                      resetForm();
                       setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
                       setShowCreateModal(true);
                     }}
@@ -384,13 +462,14 @@ export default function GeneralLedger() {
                   {searchQuery ? t('no_results_found') : t('no_journal_entries')}
                 </h3>
                 <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                  {searchQuery 
-                    ? 'Try adjusting your search terms' 
+                  {searchQuery
+                    ? 'Try adjusting your search terms'
                     : 'Start by creating your first journal entry to track financial transactions'}
                 </p>
                 {!searchQuery && canCreate(MODULES.FINANCIALS) && (
                   <Button
                     onClick={() => {
+                      resetForm();
                       setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
                       setShowCreateModal(true);
                     }}
@@ -413,7 +492,7 @@ export default function GeneralLedger() {
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-slate-700">{t('number')}</TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('reference')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700">{t('description')}</TableHead>
                       <TableHead className="font-semibold text-slate-700">{t('journal')}</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -434,7 +513,7 @@ export default function GeneralLedger() {
                         }`}
                       >
                         <TableCell className="font-medium text-slate-700 whitespace-nowrap">
-                          {entry.created_at ? format(new Date(entry.created_at), 'MM/dd/yyyy HH:mm') : entry.entry_date ? format(new Date(entry.entry_date), 'MM/dd/yyyy') : '-'}
+                          {entry.entry_date ? format(new Date(entry.entry_date), 'dd.MM.yyyy') : '-'}
                         </TableCell>
                         <TableCell className="font-mono text-sm text-slate-600 whitespace-nowrap">{entry.entry_number}</TableCell>
                         <TableCell className="text-slate-700 max-w-[250px] truncate">
@@ -447,10 +526,17 @@ export default function GeneralLedger() {
                           {formatCurrency(entry.total_debit || 0)}
                         </TableCell>
                         <TableCell>
-                          <Badge className={`${getStatusColor(entry.status)} flex items-center gap-1 w-fit`}>
-                            {getStatusIcon(entry.status)}
-                            {entry.status}
-                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Badge className={`${getStatusColor(entry.reversed_entry_id ? 'reversed' : entry.status)} flex items-center gap-1 w-fit`}>
+                              {getStatusIcon(entry.reversed_entry_id ? 'reversed' : entry.status)}
+                              {entry.reversed_entry_id ? (t('reversed') || 'reversed') : entry.status}
+                            </Badge>
+                            {entry.is_reversal && (
+                              <Badge variant="outline" className="text-xs">
+                                REV
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -515,15 +601,28 @@ export default function GeneralLedger() {
                       <h3 className="font-semibold text-lg text-slate-900 truncate">{selectedEntry.description}</h3>
                       <p className="text-sm text-slate-500 font-mono mt-1">#{selectedEntry.entry_number}</p>
                     </div>
-                    <Badge className={getStatusColor(selectedEntry.status)}>
-                      {selectedEntry.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge className={getStatusColor(selectedEntry.reversed_entry_id ? 'reversed' : selectedEntry.status)}>
+                        {selectedEntry.reversed_entry_id ? (t('reversed') || 'reversed') : selectedEntry.status}
+                      </Badge>
+                      {selectedEntry.is_reversal && (
+                        <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          {t('reversal_entry') || 'Teskari yozuv'}
+                        </Badge>
+                      )}
+                      {selectedEntry.reversed_entry_id && !selectedEntry.is_reversal && (
+                        <Badge variant="outline" className="text-xs text-red-600 border-red-300">
+                          {t('has_reversal') || 'Teskarilangan'}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 mt-4">
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-xs text-slate-500 mb-1">{t('date')}</p>
                       <p className="text-sm font-semibold text-slate-900">
-                        {selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'MMM dd, yyyy') : '-'}
+                        {selectedEntry.entry_date ? format(new Date(selectedEntry.entry_date), 'dd.MM.yyyy') : '-'}
                       </p>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-lg">
@@ -532,6 +631,14 @@ export default function GeneralLedger() {
                         {selectedEntry.journal?.name || '-'}
                       </p>
                     </div>
+                    {selectedEntry.reference && (
+                      <div className="p-3 bg-slate-50 rounded-lg">
+                        <p className="text-xs text-slate-500 mb-1">{t('reference')}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {selectedEntry.reference}
+                        </p>
+                      </div>
+                    )}
                     {selectedEntry.source_type && (
                       <div className="p-3 bg-slate-50 rounded-lg">
                         <p className="text-xs text-slate-500 mb-1">{t('source')}</p>
@@ -540,13 +647,21 @@ export default function GeneralLedger() {
                         </p>
                       </div>
                     )}
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 mb-1">{t('total')}</p>
-                      <p className="text-sm font-semibold text-slate-900 tabular-nums">
-                        {formatCurrency(selectedEntry.total_debit || 0)}
-                      </p>
-                    </div>
+                    {selectedEntry.reversal_reason && (
+                      <div className="p-3 bg-orange-50 rounded-lg col-span-2">
+                        <p className="text-xs text-orange-600 mb-1">{t('reversal_reason') || 'Sabab'}</p>
+                        <p className="text-sm font-semibold text-orange-900">{selectedEntry.reversal_reason}</p>
+                      </div>
+                    )}
                   </div>
+                  {/* Tags */}
+                  {selectedEntry.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-3">
+                      {selectedEntry.tags.map((tag, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">{tag}</Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Journal Lines */}
@@ -568,6 +683,9 @@ export default function GeneralLedger() {
                               {line.account ? `${line.account.code} - ${line.account.name}` : line.description}
                             </p>
                           </div>
+                          {line.description && line.account && (
+                            <p className="text-xs text-slate-500 mb-2">{line.description}</p>
+                          )}
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <p className="text-xs text-slate-500 mb-1">{t('debit')}</p>
@@ -594,28 +712,82 @@ export default function GeneralLedger() {
 
                 {/* Totals */}
                 <div className="pt-4 border-t-2 border-slate-200">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-900">{t('total')} {t('debit')}/{t('credit')}</span>
-                    <span className="text-lg font-bold text-[var(--genix-blue)] tabular-nums">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm text-slate-600">{t('total')} {t('debit')}</span>
+                    <span className="text-sm font-bold text-green-600 tabular-nums">
                       {formatCurrency(selectedEntry.total_debit || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">{t('total')} {t('credit')}</span>
+                    <span className="text-sm font-bold text-red-600 tabular-nums">
+                      {formatCurrency(selectedEntry.total_credit || 0)}
                     </span>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-2">
+                <div className="space-y-2 pt-2">
+                  {/* Draft actions */}
+                  {selectedEntry.status === 'draft' && (
+                    <>
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:opacity-90 text-white"
+                          onClick={handlePostEntry}
+                          disabled={isActionLoading}
+                        >
+                          <Send className="w-3.5 h-3.5 mr-1.5" />
+                          {t('post') || 'Tasdiqlash'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-sm"
+                          onClick={handleEditEntry}
+                          disabled={isActionLoading}
+                        >
+                          <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                          {t('edit')}
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-sm text-orange-600 border-orange-200 hover:bg-orange-50"
+                          onClick={handleCancelEntry}
+                          disabled={isActionLoading}
+                        >
+                          <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                          {t('cancel_entry') || 'Bekor qilish'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-sm text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={handleDeleteEntry}
+                          disabled={isActionLoading}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                          {t('delete')}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                  {/* Posted actions */}
+                  {selectedEntry.status === 'posted' && !selectedEntry.reversed_entry_id && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-sm text-orange-600 border-orange-200 hover:bg-orange-50"
+                      onClick={openReverseModal}
+                      disabled={isActionLoading}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                      {t('reverse_entry') || 'Teskari yozuv'}
+                    </Button>
+                  )}
+                  {/* Always show PDF */}
                   <Button
                     variant="outline"
-                    className="flex-1 text-sm"
-                    onClick={handleEditEntry}
-                    disabled={selectedEntry.status === 'posted'}
-                  >
-                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                    {t('edit')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-sm"
+                    className="w-full text-sm"
                     onClick={handleViewPDF}
                     disabled={isLoadingLines}
                   >
@@ -641,16 +813,16 @@ export default function GeneralLedger() {
         </Card>
       </div>
 
-      {/* Create Journal Entry Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      {/* Create/Edit Journal Entry Modal */}
+      <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open) { resetForm(); } setShowCreateModal(open); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <FileText className="w-5 h-5 text-[var(--genix-blue)]" />
-              {t('create')} {t('journal_entries')}
+              {editingEntryId ? (t('edit') + ' ' + t('journal_entry')) : (t('create') + ' ' + t('journal_entries'))}
             </DialogTitle>
             <DialogDescription>
-              {t('create_journal_entry_description')}
+              {editingEntryId ? (t('edit_journal_entry_description') || 'Edit the draft journal entry') : (t('create_journal_entry_description'))}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -662,6 +834,7 @@ export default function GeneralLedger() {
                 <Select
                   value={newEntry.journal_id}
                   onValueChange={(value) => setNewEntry({...newEntry, journal_id: value})}
+                  disabled={!!editingEntryId}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_journal')} />
@@ -700,13 +873,48 @@ export default function GeneralLedger() {
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1 block">
-                {t('description')}
+                {t('description')} *
               </label>
               <Input
                 placeholder={t('enter_journal_description')}
                 value={newEntry.description}
                 onChange={(e) => setNewEntry({...newEntry, description: e.target.value})}
+                required
+                className={!newEntry.description?.trim() ? 'border-red-300' : ''}
               />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('tags') || 'Teglar'}
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder={t('add_tag') || 'Teg qo\'shing va Enter bosing'}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      e.preventDefault();
+                      const tag = e.target.value.trim();
+                      if (!newEntry.tags?.includes(tag)) {
+                        setNewEntry(prev => ({ ...prev, tags: [...(prev.tags || []), tag] }));
+                      }
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </div>
+              {newEntry.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {newEntry.tags.map((tag, i) => (
+                    <Badge key={i} variant="secondary" className="cursor-pointer" onClick={() => {
+                      setNewEntry(prev => ({ ...prev, tags: prev.tags.filter((_, idx) => idx !== i) }));
+                    }}>
+                      {tag} &times;
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Journal Lines */}
@@ -804,10 +1012,10 @@ export default function GeneralLedger() {
                       <TableCell colSpan={2} className="text-right">
                         {t('total')}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell></TableCell>
@@ -818,8 +1026,8 @@ export default function GeneralLedger() {
             </div>
 
             {/* Balance indicator */}
-            <div className={`p-3 rounded-lg ${isBalanced ? 'bg-green-50' : 'bg-red-50'}`}>
-              <p className={`text-sm ${isBalanced ? 'text-green-700' : 'text-red-700'}`}>
+            <div className={`p-3 rounded-lg flex items-center justify-between ${isBalanced ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <p className={`text-sm font-medium ${isBalanced ? 'text-green-700' : 'text-red-700'}`}>
                 {isBalanced ? (
                   <span className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
@@ -828,16 +1036,21 @@ export default function GeneralLedger() {
                 ) : (
                   <span className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    {t('debits_must_equal_credits')} ({t('difference')}: {Math.abs(totalDebit - totalCredit).toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                    {t('debits_must_equal_credits')}
                   </span>
                 )}
               </p>
+              <div className="text-sm tabular-nums">
+                <span className="text-green-700 font-medium">Dt: {totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span className="mx-2 text-slate-400">|</span>
+                <span className="text-red-700 font-medium">Kt: {totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4">
               <Button
                 variant="outline"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { resetForm(); setShowCreateModal(false); }}
                 className="flex-1"
                 disabled={isSaving}
               >
@@ -846,9 +1059,92 @@ export default function GeneralLedger() {
               <Button
                 onClick={handleCreateEntry}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newEntry.journal_id || !newEntry.entry_date || !isBalanced}
+                disabled={isSaving || !newEntry.journal_id || !newEntry.entry_date || !isBalanced || !newEntry.description?.trim()}
               >
-                {isSaving ? t('saving') : t('create')}
+                {isSaving ? t('saving') : (editingEntryId ? t('save') : t('create'))}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Entry Modal */}
+      <Dialog open={showReverseModal} onOpenChange={setShowReverseModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-orange-500" />
+              {t('reverse_entry') || 'Teskari yozuv yaratish'}
+            </DialogTitle>
+            <DialogDescription>
+              {t('reverse_entry_description') || 'Tasdiqlangan yozuvni bekor qilish uchun teskari yozuv yaratiladi'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <p className="text-xs text-slate-500 mb-1">{t('original_entry') || 'Asl yozuv'}</p>
+              <p className="text-sm font-semibold text-slate-900">{selectedEntry?.entry_number}</p>
+              <p className="text-xs text-slate-500 mt-1">{selectedEntry?.description}</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('date')} *
+              </label>
+              <Input
+                type="date"
+                value={reverseDate}
+                onChange={(e) => setReverseDate(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">
+                {t('reason') || 'Sabab'}
+              </label>
+              <Input
+                placeholder={t('enter_reversal_reason') || 'Teskari yozuv sababi...'}
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+              />
+            </div>
+
+            {/* Preview */}
+            {selectedJournalLines.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">{t('preview') || 'Natija'}</p>
+                <div className="border rounded-lg p-3 bg-orange-50/50 space-y-1">
+                  {selectedJournalLines.map((line, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-slate-700">
+                        {line.account ? `${line.account.code} - ${line.account.name}` : line.description}
+                      </span>
+                      <span className="tabular-nums">
+                        {line.credit_amount > 0 && <span className="text-green-600">Dt {formatCurrency(line.credit_amount)}</span>}
+                        {line.debit_amount > 0 && <span className="text-red-600">Kt {formatCurrency(line.debit_amount)}</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowReverseModal(false)}
+                className="flex-1"
+                disabled={isActionLoading}
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={handleReverseEntry}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                disabled={isActionLoading || !reverseDate}
+              >
+                {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+                {t('create_reversal') || 'Teskari yozuv yaratish'}
               </Button>
             </div>
           </div>
