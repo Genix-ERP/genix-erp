@@ -135,6 +135,10 @@ export default function StockCounting() {
   });
 
   const [approvedBy, setApprovedBy] = useState('');
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignLine, setAssignLine] = useState(null);
+  const [assignForm, setAssignForm] = useState({ employee_id: '', resolution: 'employee', note: '' });
+  const [assignLoading, setAssignLoading] = useState(false);
 
   // Fetch employees on mount
   useEffect(() => {
@@ -271,6 +275,40 @@ export default function StockCounting() {
     await cancelStockCount(selectedCount.id);
     setSelectedCount(null);
     setActiveTab('list');
+  };
+
+  const handleAssignResponsible = async () => {
+    if (!assignLine || !assignForm.employee_id) return;
+    setAssignLoading(true);
+    try {
+      await inventoryService.assignResponsible(assignLine.id, assignForm);
+      // Reload the stock count to reflect changes
+      const updated = await inventoryService.getStockCount(selectedCount.id);
+      setSelectedCount(updated);
+      setShowAssignModal(false);
+      setAssignLine(null);
+      setAssignForm({ employee_id: '', resolution: 'employee', note: '' });
+    } catch (err) {
+      console.error('Error assigning responsible:', err);
+      alert(err.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const openAssignModal = (line) => {
+    setAssignLine(line);
+    setAssignForm({ employee_id: '', resolution: 'employee', note: '' });
+    setShowAssignModal(true);
+  };
+
+  const getResolutionBadge = (resolution) => {
+    switch (resolution) {
+      case 'employee': return <Badge className="bg-orange-100 text-orange-700">Xodim</Badge>;
+      case 'company': return <Badge className="bg-blue-100 text-blue-700">Kompaniya</Badge>;
+      case 'cash': return <Badge className="bg-green-100 text-green-700">Naqd</Badge>;
+      default: return <Badge className="bg-gray-100 text-gray-500">Kutilmoqda</Badge>;
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -550,6 +588,7 @@ export default function StockCounting() {
                         <TableHead className="text-center">{t('counted')}</TableHead>
                         <TableHead className="text-center">{t('variance')}</TableHead>
                         <TableHead>{t('reason')}</TableHead>
+                        {selectedCount.status === 'completed' && <TableHead className="text-center">Mas'ul</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -561,6 +600,8 @@ export default function StockCounting() {
                         const hasCounted = countedQty !== null && countedQty !== undefined;
                         const variance = hasCounted ? (line.variance_quantity ?? line.variance ?? (countedQty - systemQty)) : 0;
                         const productName = line.product_name || product?.name || t('unknown');
+                        const hasShortage = variance < 0;
+                        const resolution = line.resolution || 'pending';
 
                         return (
                           <TableRow key={line.id || line.product_id} className="hover:bg-slate-50">
@@ -623,6 +664,32 @@ export default function StockCounting() {
                                 <span className="text-slate-500">{line.variance_reason || '-'}</span>
                               )}
                             </TableCell>
+                            {selectedCount.status === 'completed' && (
+                              <TableCell className="text-center">
+                                {hasShortage ? (
+                                  resolution !== 'pending' ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      {getResolutionBadge(resolution)}
+                                      {line.responsible_name && (
+                                        <span className="text-xs text-slate-500">{line.responsible_name}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                      onClick={() => openAssignModal(line)}
+                                    >
+                                      <User className="w-3 h-3 mr-1" />
+                                      Tayinlash
+                                    </Button>
+                                  )
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -1083,6 +1150,90 @@ export default function StockCounting() {
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 {isSaving ? t('completing') : t('confirm')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Assign Responsible Modal */}
+      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Kamomad uchun mas'ul tayinlash</DialogTitle>
+            <DialogDescription>
+              {assignLine && (() => {
+                const product = products.find(p => p.id === assignLine.product_id);
+                const productName = assignLine.product_name || product?.name || '';
+                const shortageQty = Math.abs(assignLine.variance_quantity ?? assignLine.variance ?? 0);
+                const unitCost = assignLine.unit_cost || 0;
+                const shortageAmount = shortageQty * unitCost;
+                return `${productName}: ${shortageQty} dona × ${formatCurrencyCompact(unitCost)} = ${formatCurrencyCompact(shortageAmount)}`;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Mas'ul xodim *</label>
+              <Select value={assignForm.employee_id} onValueChange={(v) => setAssignForm(f => ({ ...f, employee_id: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Xodimni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.name || `${emp.first_name} ${emp.last_name}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-2 block">Undirish usuli *</label>
+              <div className="space-y-2">
+                {[
+                  { value: 'employee', label: 'Maoshdan ushlab qolish', desc: 'Keyingi ish haqidan avtomatik chiqariladi' },
+                  { value: 'cash', label: 'Naqd to\'lash', desc: 'Xodim naqd pul keltiradi' },
+                  { value: 'company', label: 'Kompaniya zimmasida', desc: 'Hisobdan chiqariladi, xodimdan ushlanmaydi' },
+                ].map(opt => (
+                  <label
+                    key={opt.value}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      assignForm.resolution === opt.value ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="resolution"
+                      value={opt.value}
+                      checked={assignForm.resolution === opt.value}
+                      onChange={(e) => setAssignForm(f => ({ ...f, resolution: e.target.value }))}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="font-medium text-sm">{opt.label}</p>
+                      <p className="text-xs text-slate-500">{opt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Izoh</label>
+              <Textarea
+                value={assignForm.note}
+                onChange={(e) => setAssignForm(f => ({ ...f, note: e.target.value }))}
+                placeholder="Qo'shimcha izoh..."
+                rows={2}
+              />
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="outline" onClick={() => setShowAssignModal(false)}>Bekor qilish</Button>
+              <Button
+                onClick={handleAssignResponsible}
+                disabled={assignLoading || !assignForm.employee_id}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {assignLoading ? 'Saqlanmoqda...' : 'Saqlash'}
               </Button>
             </div>
           </div>

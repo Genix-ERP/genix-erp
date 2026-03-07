@@ -86,6 +86,29 @@ export const hrService = {
     const response = await apiClient.post(`/payroll-periods/${periodId}/entries`, data);
     return response.data.data;
   },
+
+  // Employee Deductions
+  async listEmployeeDeductions(employeeId, params = {}) {
+    const response = await apiClient.get(`/employees/${employeeId}/deductions`, { params });
+    return response.data.data;
+  },
+
+  async cancelDeduction(employeeId, deductionId, data) {
+    const response = await apiClient.post(`/employees/${employeeId}/deductions/${deductionId}/cancel`, data);
+    return response.data.data;
+  },
+
+  // Salary calculation with deductions
+  async calculateSalary(employeeId) {
+    const response = await apiClient.get(`/employees/${employeeId}/salary-calculate`);
+    return response.data.data;
+  },
+
+  // Confirm salary payment (marks deductions as deducted)
+  async confirmSalaryPayment(periodId, entryId) {
+    const response = await apiClient.post(`/payroll-periods/${periodId}/entries/${entryId}/confirm`);
+    return response.data.data;
+  },
 };
 
 export default hrService;
