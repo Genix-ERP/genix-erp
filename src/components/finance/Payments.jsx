@@ -36,7 +36,7 @@ export default function Payments() {
     isLoading
   } = useFinancials();
   // Use SalesContext invoices so newly created SO invoices appear immediately
-  const { invoices: salesInvoices } = useSales();
+  const { invoices: salesInvoices, refreshData: refreshSalesData } = useSales();
   const customerInvoices = salesInvoices || [];
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
@@ -203,11 +203,13 @@ export default function Payments() {
     }
   };
 
-  const handleConfirmPayment = (paymentId) => {
-    confirmPayment(paymentId);
+  const handleConfirmPayment = async (paymentId) => {
+    await confirmPayment(paymentId);
     if (selectedPayment?.id === paymentId) {
       setSelectedPayment({...selectedPayment, status: 'confirmed'});
     }
+    // Refresh invoices from SalesContext so the invoice list updates
+    try { await refreshSalesData(); } catch {}
   };
 
   const handleViewDetail = (payment) => {

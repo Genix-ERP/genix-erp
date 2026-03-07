@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw, Scale
+  Layers, Printer, HelpCircle, Truck, Calculator, RefreshCw, Scale, ChevronDown
 } from "lucide-react";
 import {
   Tooltip,
@@ -27,6 +27,9 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/components/contexts/CompanyContext";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import LotTracking from "./LotTracking";
 import PriceLabelPrinting from "./PriceLabelPrinting";
 import ProductVariants from "./ProductVariants";
@@ -78,7 +81,7 @@ const LabelWithHelp = ({ label, helpText, required }) => (
 export default function Products() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
+  const { formatCurrency, currency_symbol } = useCurrencyFormatter();
   const {
     products,
     categories,
@@ -95,6 +98,7 @@ export default function Products() {
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { companies } = useCompany();
   const { toast } = useToast();
 
   const emptyCategoryAccounts = {
@@ -348,6 +352,9 @@ export default function Products() {
     can_be_rented: false,
     can_be_subcontracted: false,
     is_overhead_expense: false,
+    is_manufacturable: false,
+    auto_manufacture: false,
+    organization_ids: [],
     tags: [],
     // New advanced fields
     brand: '',
@@ -572,6 +579,9 @@ export default function Products() {
       can_be_rented: false,
       can_be_subcontracted: false,
       is_overhead_expense: false,
+      is_manufacturable: false,
+      auto_manufacture: false,
+      organization_ids: [],
       tags: [],
       // Advanced fields
       brand: '',
@@ -774,7 +784,8 @@ export default function Products() {
       use_expiration_date: product.use_expiration_date || false,
       use_best_before_date: product.use_best_before_date || false,
       removal_time_days: product.removal_time_days?.toString() || '',
-      alert_time_days: product.alert_time_days?.toString() || ''
+      alert_time_days: product.alert_time_days?.toString() || '',
+      organization_ids: product.organization_ids || []
     });
     setShowAdvancedFields(hasAdvancedData || product.track_expiration);
     setShowEditModal(true);
@@ -1862,61 +1873,102 @@ export default function Products() {
               )}
             </div>
 
+            {/* Companies */}
+            {companies.length > 1 && (
+              <div>
+                <h4 className="font-semibold text-slate-900 mb-3">{t('companies')}</h4>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between text-left font-normal">
+                      <span className="truncate">
+                        {formData.organization_ids.length === 0
+                          ? t('select_companies_hint')
+                          : formData.organization_ids.length === companies.length
+                            ? t('all_companies') || 'All companies'
+                            : companies.filter(c => formData.organization_ids.includes(c.id)).map(c => c.company_name).join(', ')
+                        }
+                      </span>
+                      <ChevronDown className="w-4 h-4 ml-2 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-2" align="start">
+                    <div
+                      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
+                      onClick={() => {
+                        const allSelected = formData.organization_ids.length === companies.length;
+                        setFormData(prev => ({
+                          ...prev,
+                          organization_ids: allSelected ? [] : companies.map(c => c.id)
+                        }));
+                      }}
+                    >
+                      <Checkbox checked={formData.organization_ids.length === companies.length} />
+                      <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
+                    </div>
+                    <div className="border-t my-1" />
+                    {companies.map(company => (
+                      <div
+                        key={company.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            organization_ids: prev.organization_ids.includes(company.id)
+                              ? prev.organization_ids.filter(id => id !== company.id)
+                              : [...prev.organization_ids, company.id]
+                          }));
+                        }}
+                      >
+                        <Checkbox checked={formData.organization_ids.includes(company.id)} />
+                        <span className="text-sm">{company.company_name}</span>
+                      </div>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+                {formData.organization_ids.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-2">{t('no_companies_selected_warning')}</p>
+                )}
+              </div>
+            )}
+
             {/* Pricing */}
             <div>
               <h4 className="font-semibold text-slate-900 mb-3">{t('pricing')}</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <LabelWithHelp
                     label={t('cost_price')}
-                    helpText={t('help_cost_price') || "Mahsulotning sotib olish narxi. Foyda hisoblash uchun ishlatiladi"}
+                    helpText={t('help_cost_price')}
                   />
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      className="pl-9"
+                      className="pr-14"
                       value={formatPriceDisplay(formData.cost_price)}
                       onChange={(e) => handlePriceChange('cost_price', e.target.value)}
                     />
+                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
                 <div>
                   <LabelWithHelp
                     label={t('list_price')}
                     required
-                    helpText={t('help_list_price') || "Sotish narxi. Bu narx mijozlarga ko'rsatiladi"}
+                    helpText={t('help_list_price')}
                   />
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      className="pl-9"
+                      className="pr-14"
                       value={formatPriceDisplay(formData.list_price)}
                       onChange={(e) => handlePriceChange('list_price', e.target.value)}
                       required
                     />
-                  </div>
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('min_price')}
-                    helpText={t('help_min_price') || "Minimal sotish narxi. Chegirma berilganda ham bu narxdan past bo'lmasligi kerak"}
-                  />
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0"
-                      className="pl-9"
-                      value={formatPriceDisplay(formData.min_price)}
-                      onChange={(e) => handlePriceChange('min_price', e.target.value)}
-                    />
+                    <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
               </div>
@@ -1967,24 +2019,26 @@ export default function Products() {
                 <div className="flex gap-6 mt-4">
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={formData.is_stockable}
-                      onCheckedChange={(checked) => setFormData({...formData, is_stockable: checked})}
+                      checked={formData.is_manufacturable}
+                      onCheckedChange={(checked) => setFormData({...formData, is_manufacturable: checked, auto_manufacture: checked ? formData.auto_manufacture : false})}
                     />
                     <span className="text-sm text-slate-700 flex items-center">
-                      {t('stockable')}
-                      <FieldHelp text={t('help_stockable') || "Omborda saqlanadigan mahsulot. O'chirilsa, ombor hisobi yuritilmaydi"} />
+                      {t('is_manufacturable')}
+                      <FieldHelp text={t('help_is_manufacturable')} />
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={formData.track_inventory}
-                      onCheckedChange={(checked) => setFormData({...formData, track_inventory: checked})}
-                    />
-                    <span className="text-sm text-slate-700 flex items-center">
-                      {t('track_inventory')}
-                      <FieldHelp text={t('help_track_inventory') || "Ombor harakatlarini kuzatish. Kirim va chiqimlar qayd etiladi"} />
-                    </span>
-                  </div>
+                  {formData.is_manufacturable && (
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={formData.auto_manufacture}
+                        onCheckedChange={(checked) => setFormData({...formData, auto_manufacture: checked})}
+                      />
+                      <span className="text-sm text-slate-700 flex items-center">
+                        {t('auto_manufacture')}
+                        <FieldHelp text={t('help_auto_manufacture')} />
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2731,15 +2785,15 @@ export default function Products() {
                     <div>
                       <label className="text-sm font-medium text-slate-700 mb-1 block">{t('wholesale_price') || 'Wholesale Price'}</label>
                       <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
-                          className="pl-9"
+                          className="pr-14"
                           value={formatPriceDisplay(formData.wholesale_price)}
                           onChange={(e) => handlePriceChange('wholesale_price', e.target.value)}
                         />
+                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                       </div>
                     </div>
                   </div>
