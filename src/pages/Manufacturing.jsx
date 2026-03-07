@@ -164,7 +164,7 @@ export default function Manufacturing() {
           </TabsContent>
 
           <TabsContent value="shopfloor" className="mt-6">
-            <ShopFloorControl />
+            <ShopFloorControl isActive={activeTab === 'shopfloor'} />
           </TabsContent>
 
           <TabsContent value="categories" className="mt-6">
