@@ -1110,10 +1110,10 @@ export default function FixedAssets() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="regular_to">Oddiy TO (muddat uzayadi)</SelectItem>
-                    <SelectItem value="capital_repair">Kapital ta'mirlash (qiymat ortadi)</SelectItem>
-                    <SelectItem value="modernization">Modernizatsiya (ikkalasi)</SelectItem>
-                    <SelectItem value="minor_repair">Joriy ta'mirlash (faqat xarajat)</SelectItem>
+                    <SelectItem value="regular_to">Oddiy TO</SelectItem>
+                    <SelectItem value="capital_repair">Kapital ta'mirlash</SelectItem>
+                    <SelectItem value="modernization">Modernizatsiya</SelectItem>
+                    <SelectItem value="minor_repair">Joriy ta'mirlash</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
