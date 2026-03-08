@@ -370,6 +370,14 @@ function LayoutContent({ children, currentPageName }) {
     return dynamicItems;
   }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, t]);
 
+  const filteredNavigationItems = React.useMemo(() => {
+    if (!searchQuery.trim()) return navigationItems;
+    const q = searchQuery.toLowerCase().trim();
+    return navigationItems.filter(item =>
+      item.title.toLowerCase().includes(q)
+    );
+  }, [navigationItems, searchQuery]);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-slate-100">
@@ -409,18 +417,6 @@ function LayoutContent({ children, currentPageName }) {
           </SidebarHeader>
           
           <SidebarContent className="p-4">
-            <div className="mb-6 hidden md:block">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder={t("search")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-slate-50/80 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)] h-9 text-sm"
-                />
-              </div>
-            </div>
-
             <SidebarGroup>
               <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-1">
                 {t("core_modules") || "Core Modules"}
