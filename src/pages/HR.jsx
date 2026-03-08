@@ -454,7 +454,7 @@ Only return the JSON, no other text.`;
 
       setShowAddModal(false);
       setNewEmployee({
-        full_name: '', email: '', phone: '', job_title: '',
+        full_name: '', email: '', phone: '+998', job_title: '',
         department: '', hire_date: new Date().toISOString().split('T')[0],
         salary: '', status: 'active', performance_score: 3,
         turnover_risk: 'low', permission: 'important', organization_ids: []
@@ -1156,7 +1156,7 @@ Only return the JSON, no other text.`;
                   <Input
                     value={newEmployee.phone}
                     onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    placeholder={t('enter_phone')}
+                    placeholder="+998"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1446,7 +1446,7 @@ Only return the JSON, no other text.`;
                     <Input
                       value={selectedEmployee.phone}
                       onChange={e => setSelectedEmployee({...selectedEmployee, phone: e.target.value})}
-                      placeholder={t('enter_phone')}
+                      placeholder="+998"
                     />
                   </div>
                 </div>

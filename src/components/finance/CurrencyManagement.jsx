@@ -143,13 +143,15 @@ export default function CurrencyManagement() {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
-  // Calculate rate change
+  // Calculate rate change — returns { delta, percent } or null
   const getRateChange = (currencyCode) => {
     const history = getRateHistory(currencyCode);
     if (history.length < 2) return null;
     const current = history[0].rate;
     const previous = history[1].rate;
-    return ((current - previous) / previous * 100).toFixed(2);
+    const delta = current - previous;
+    const percent = ((delta) / previous * 100).toFixed(1);
+    return { delta: Math.round(delta), percent };
   };
 
   // Handle CBU sync
@@ -212,9 +214,9 @@ export default function CurrencyManagement() {
                     </p>
                   </div>
                   {rateChange && (
-                    <Badge className={parseFloat(rateChange) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
-                      {parseFloat(rateChange) >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                      {rateChange}%
+                    <Badge className={rateChange.delta >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
+                      {rateChange.delta >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                      {rateChange.delta >= 0 ? '+' : ''}{rateChange.percent}%
                     </Badge>
                   )}
                 </div>
@@ -276,8 +278,12 @@ export default function CurrencyManagement() {
                 </SelectContent>
               </Select>
               <div className="px-4 py-2 bg-white rounded-lg border min-w-[120px] text-center">
-                <span className="font-semibold">
-                  {converter.result !== null ? formatCurrency(converter.result, converter.to) : '-'}
+                <span className={`font-semibold ${converter.result === null ? 'text-slate-400 text-sm' : ''}`}>
+                  {converter.from === converter.to
+                    ? formatCurrency(parseFloat(converter.amount) || 0, converter.to)
+                    : converter.result !== null
+                      ? formatCurrency(converter.result, converter.to)
+                      : (t('rate_not_set') || "Kurs kiritilmagan")}
                 </span>
               </div>
             </div>
@@ -373,22 +379,31 @@ export default function CurrencyManagement() {
                               {getCurrencyIcon(currency.code)}
                             </div>
                             <span className="font-semibold">{currency.code}</span>
+                            {currency.is_base && (
+                              <Badge className="bg-green-100 text-green-700 border-green-200 text-xs" title={t('base_currency_tooltip') || "Tizimning asosiy valyutasi"}>
+                                {t('base') || 'Asosiy'}
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>{currency.name}</TableCell>
                         <TableCell className="text-lg">{currency.symbol}</TableCell>
                         <TableCell className="font-semibold">
                           {currency.is_base ? (
-                            <Badge variant="outline">{t('base_currency') || 'Base currency'}</Badge>
+                            <span className="text-slate-400">1.00</span>
                           ) : (
-                            latestRate ? formatCurrency(latestRate.rate) : '-'
+                            latestRate ? formatCurrency(latestRate.rate) : <span className="text-slate-400">{t('rate_not_set') || "Kiritilmagan"}</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {rateChange && (
-                            <Badge className={parseFloat(rateChange) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
-                              {parseFloat(rateChange) >= 0 ? '+' : ''}{rateChange}%
-                            </Badge>
+                          {rateChange ? (
+                            <div className={`flex items-center gap-1 text-sm font-medium ${rateChange.delta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {rateChange.delta >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                              <span>{rateChange.delta >= 0 ? '+' : ''}{rateChange.delta.toLocaleString()} so'm</span>
+                              <span className="text-xs opacity-70">({rateChange.delta >= 0 ? '+' : ''}{rateChange.percent}%)</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-sm">—</span>
                           )}
                         </TableCell>
                         <TableCell>

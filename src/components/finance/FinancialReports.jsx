@@ -166,6 +166,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const [incomeStatement, setIncomeStatement] = useState(null);
   const [balanceSheet, setBalanceSheet] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
+  const [exchangeDiffs, setExchangeDiffs] = useState(null);
 
   // Fetch all reports when period changes
   useEffect(() => {
@@ -177,17 +178,19 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
     const params = getDateParams(period);
 
     try {
-      const [tb, pnl, bs, cf] = await Promise.all([
+      const [tb, pnl, bs, cf, ed] = await Promise.all([
         financeService.getTrialBalance(params).catch(() => null),
         financeService.getIncomeStatement(params).catch(() => null),
         financeService.getBalanceSheet(params).catch(() => null),
-        financeService.getCashFlow(params).catch(() => null)
+        financeService.getCashFlow(params).catch(() => null),
+        financeService.listExchangeDiffs({ date_from: params.period_from, date_to: params.period_to }).catch(() => null),
       ]);
 
       setTrialBalance(tb);
       setIncomeStatement(pnl);
       setBalanceSheet(bs);
       setCashFlow(cf);
+      setExchangeDiffs(ed);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     } finally {
@@ -382,7 +385,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
       {/* Reports Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
           </TabsTrigger>
@@ -394,6 +397,9 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           </TabsTrigger>
           <TabsTrigger value="cash-flow">
             {language === 'uz' ? 'Pul Oqimi' : 'Cash Flow'}
+          </TabsTrigger>
+          <TabsTrigger value="exchange-diffs">
+            {language === 'uz' ? 'Kurs Farqlari' : 'Exchange Diff'}
           </TabsTrigger>
         </TabsList>
 
@@ -813,6 +819,84 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   {language === 'uz' ? 'Ma\'lumot topilmadi' : 'No data available'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Exchange Differences Tab */}
+        <TabsContent value="exchange-diffs">
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>{language === 'uz' ? 'Kurs Farqlari Hisoboti' : 'Exchange Differences Report'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+              ) : exchangeDiffs?.items?.length > 0 ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <p className="text-sm text-green-600 mb-1">{language === 'uz' ? 'Kurs foydasi' : 'Exchange Gain'}</p>
+                      <p className="text-xl font-bold text-green-700">{formatCurrency(exchangeDiffs.total_gain || 0)}</p>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded-lg">
+                      <p className="text-sm text-red-600 mb-1">{language === 'uz' ? 'Kurs zarari' : 'Exchange Loss'}</p>
+                      <p className="text-xl font-bold text-red-700">{formatCurrency(exchangeDiffs.total_loss || 0)}</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${(exchangeDiffs.net || 0) >= 0 ? 'bg-blue-50' : 'bg-orange-50'}`}>
+                      <p className="text-sm text-slate-600 mb-1">{language === 'uz' ? 'Sof farq' : 'Net Difference'}</p>
+                      <p className={`text-xl font-bold ${(exchangeDiffs.net || 0) >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                        {(exchangeDiffs.net || 0) >= 0 ? '+' : ''}{formatCurrency(exchangeDiffs.net || 0)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Details Table */}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Tavsif' : 'Description'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Summa (UZS)' : 'Amount (UZS)'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {exchangeDiffs.items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.date}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.currency_code}</Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.description}</TableCell>
+                          <TableCell>
+                            <Badge className={item.type === 'positive'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                              : 'bg-red-100 text-red-700 hover:bg-red-100'
+                            }>
+                              {item.type === 'positive'
+                                ? (language === 'uz' ? 'Foyda' : 'Gain')
+                                : (language === 'uz' ? 'Zarar' : 'Loss')
+                              }
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                            {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? 'Kurs farqlari topilmadi' : 'No exchange differences found'}
                 </div>
               )}
             </CardContent>

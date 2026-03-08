@@ -51,6 +51,7 @@ import {
   AlertTriangle,
   FileText,
   RotateCcw,
+  Globe,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -73,7 +74,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const { activeCompany } = useCompany();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { getSetting } = useAdminSettings();
-  const { taxRates = [], journals = [] } = useFinancials();
+  const { taxRates = [], journals = [], currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
   const bankCashJournals = journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
   // Get default tax from settings
@@ -150,11 +151,16 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const [creditNoteInvoice, setCreditNoteInvoice] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const baseCurrency = currencies.find(c => c.is_base) || { code: 'UZS' };
+  const foreignCurrencies = currencies.filter(c => !c.is_base && c.is_active);
+
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
     invoice_date: new Date().toISOString().split("T")[0],
     due_date: "",
+    currency_code: "UZS",
+    exchange_rate: 1,
     items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
     discount_amount: 0,
     tax_percent: defaultSalesTax?.rate || 0,
@@ -224,6 +230,20 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     return { subtotal: rawSubtotal, taxAmount, total, isInclusive: false };
   };
 
+  // Handle currency selection — auto-fill exchange rate from latest MB rate
+  const handleCurrencyChange = (code) => {
+    if (code === baseCurrency.code) {
+      setFormData(prev => ({ ...prev, currency_code: code, exchange_rate: 1 }));
+      return;
+    }
+    const latestRate = getLatestExchangeRate(code);
+    setFormData(prev => ({
+      ...prev,
+      currency_code: code,
+      exchange_rate: latestRate?.rate || prev.exchange_rate || 1,
+    }));
+  };
+
   const handleAddItem = () => {
     setFormData({
       ...formData,
@@ -275,12 +295,15 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
     );
 
     // Backend expects 'lines' not 'items', and 'description' is required
+    const currencyObj = currencies.find(c => c.code === formData.currency_code);
     const data = {
       customer_id: formData.customer_id,
       organization_id: activeCompany?.id,
       invoice_date: formData.invoice_date,
       due_date: formData.due_date,
       notes: formData.notes,
+      currency_id: currencyObj?.id || undefined,
+      exchange_rate: formData.exchange_rate || 1,
       lines: formData.items.map((item) => ({
         product_id: item.product_id,
         description: item.product_name || "Product",
@@ -308,6 +331,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
       customer_name: "",
       invoice_date: new Date().toISOString().split("T")[0],
       due_date: "",
+      currency_code: "UZS",
+      exchange_rate: 1,
       items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
       discount_amount: 0,
       tax_percent: defaultSalesTax?.rate || 0,
@@ -807,6 +832,46 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
               </div>
             </div>
 
+            {/* Currency & Exchange Rate */}
+            {foreignCurrencies.length > 0 && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('currency') || 'Valyuta'}</Label>
+                  <Select value={formData.currency_code} onValueChange={handleCurrencyChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={baseCurrency.code}>{baseCurrency.code} ({t('base') || 'Asosiy'})</SelectItem>
+                      {foreignCurrencies.map(c => (
+                        <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.currency_code !== baseCurrency.code && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>{t('exchange_rate') || 'Valyuta kursi'} (1 {formData.currency_code} = ? {baseCurrency.code})</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.exchange_rate}
+                        onChange={(e) => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{baseCurrency.code} {t('equivalent') || 'ekvivalent'}</Label>
+                      <div className="px-3 py-2 bg-slate-50 rounded-md border text-sm font-medium text-slate-700">
+                        {formatCurrency(total * (formData.exchange_rate || 1))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Items */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
@@ -1145,6 +1210,23 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                 )}
               </div>
 
+              {/* Currency info for foreign currency invoices */}
+              {selectedInvoice.exchange_rate && selectedInvoice.exchange_rate !== 1 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-blue-700">
+                    <Globe className="w-4 h-4" />
+                    <span className="font-medium">
+                      {currencies.find(c => c.id === selectedInvoice.currency_id)?.code || 'USD'}
+                    </span>
+                    <span>— {t('exchange_rate') || 'Valyuta kursi'}:</span>
+                    <span className="font-semibold">{Number(selectedInvoice.exchange_rate).toLocaleString()} {baseCurrency.code}</span>
+                  </div>
+                  <div className="text-xs text-blue-500">
+                    {selectedInvoice.status !== 'draft' && (t('rate_locked') || 'Kurs qotib qolgan')}
+                  </div>
+                </div>
+              )}
+
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -1191,23 +1273,111 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   <span>{t('total')}:</span>
                   <span>{formatCurrency(selectedInvoice.total_amount)}</span>
                 </div>
-                <div className="flex justify-between text-sm pt-2 border-t">
-                  <span>{t('paid')}:</span>
-                  <span className="text-green-600">
-                    {formatCurrency(selectedInvoice.paid_amount)}
-                  </span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>{t('balance')}:</span>
-                  <span
-                    className={
-                      selectedInvoice.balance > 0 ? "text-red-600" : "text-green-600"
-                    }
-                  >
-                    {formatCurrency(selectedInvoice.balance)}
-                  </span>
-                </div>
+                {(() => {
+                  const allocations = selectedInvoice.payment_allocations || [];
+                  const confirmedTotal = allocations
+                    .filter(a => a.status === 'confirmed')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  const draftTotal = allocations
+                    .filter(a => a.status === 'draft')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  const remainingDebt = selectedInvoice.total_amount - confirmedTotal;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm pt-2 border-t">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                          {t('confirmed_payments') || "To'langan"}:
+                        </span>
+                        <span className="text-green-600 font-medium">
+                          {formatCurrency(confirmedTotal)}
+                        </span>
+                      </div>
+                      {draftTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
+                            {t('pending_payments') || 'Kutilmoqda'}:
+                          </span>
+                          <span className="text-amber-600 font-medium">
+                            {formatCurrency(draftTotal)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-semibold">
+                        <span>{t('remaining_debt') || 'Qoldiq qarz'}:</span>
+                        <span className={remainingDebt > 0 ? "text-red-600" : "text-green-600"}>
+                          {formatCurrency(remainingDebt)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
+
+              {/* Payment History */}
+              {(selectedInvoice.payment_allocations || []).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2 border-b">
+                    <h4 className="text-sm font-medium">{t('payment_history') || "To'lovlar tarixi"}</h4>
+                  </div>
+                  <div className="divide-y">
+                    {(selectedInvoice.payment_allocations || []).map((alloc) => (
+                      <div key={alloc.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={alloc.status === 'confirmed' ? 'default' : 'secondary'}
+                            className={alloc.status === 'confirmed'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                              : 'bg-amber-100 text-amber-700 hover:bg-amber-100'
+                            }>
+                            {alloc.status === 'confirmed' ? t('confirmed') || 'Tasdiqlangan' : t('draft') || 'Qoralama'}
+                          </Badge>
+                          <span className="text-slate-600">{alloc.payment_number}</span>
+                          {alloc.journal_name && (
+                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500 text-xs">
+                            {format(new Date(alloc.payment_date), 'dd.MM.yyyy')}
+                          </span>
+                          <span className={`font-medium ${alloc.status === 'confirmed' ? 'text-green-600' : 'text-amber-600'}`}>
+                            {formatCurrency(alloc.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Exchange Differences */}
+              {(selectedInvoice.exchange_diffs || []).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-purple-50 px-4 py-2 border-b">
+                    <h4 className="text-sm font-medium text-purple-800">{t('exchange_difference') || 'Kurs farqi'}</h4>
+                  </div>
+                  <div className="divide-y">
+                    {selectedInvoice.exchange_diffs.map((ed) => (
+                      <div key={ed.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
+                            className={ed.type === 'positive'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                              : 'bg-red-100 text-red-700 hover:bg-red-100'
+                            }>
+                            {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
+                          </Badge>
+                          <span className="text-slate-600 text-xs">{ed.description}</span>
+                        </div>
+                        <span className={`font-medium ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                          {ed.type === 'positive' ? '+' : '-'}{formatCurrency(ed.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedInvoice.early_discount_amount > 0 && selectedInvoice.early_discount_date && (
                 <div className={`p-3 rounded-lg border text-sm space-y-1 ${

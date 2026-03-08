@@ -110,9 +110,18 @@ export default function FinanceVendorBills() {
     };
   }, [vendorBills]);
 
-  const handleViewDetail = (bill) => {
+  const handleViewDetail = async (bill) => {
     setSelectedBill(bill);
     setShowDetailModal(true);
+    // Fetch full detail with payment_allocations
+    try {
+      const fullBill = await financeService.getPurchaseInvoice(bill.id);
+      if (fullBill) {
+        setSelectedBill(prev => ({ ...prev, ...fullBill }));
+      }
+    } catch (err) {
+      console.warn('Failed to fetch bill detail:', err);
+    }
   };
 
   const handleOpenPayment = (bill, e) => {
@@ -514,19 +523,83 @@ export default function FinanceVendorBills() {
                     {formatCurrency(selectedBill.total_amount || 0)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">{t('amount_paid') || "To'langan"}</span>
-                  <span className="font-medium text-green-600">
-                    {formatCurrency(selectedBill.amount_paid || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-base font-bold">
-                  <span className="text-slate-900">{t('amount_due') || 'Qolgan qarz'}</span>
-                  <span className="text-red-600">
-                    {formatCurrency(selectedBill.amount_due ?? ((selectedBill.total_amount || 0) - (selectedBill.amount_paid || 0)))}
-                  </span>
-                </div>
+                {(() => {
+                  const allocations = selectedBill.payment_allocations || [];
+                  const confirmedTotal = allocations
+                    .filter(a => a.status === 'confirmed')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  const draftTotal = allocations
+                    .filter(a => a.status === 'draft')
+                    .reduce((sum, a) => sum + (a.amount || 0), 0);
+                  const remainingDebt = (selectedBill.total_amount || 0) - confirmedTotal;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                          {t('confirmed_payments') || "To'langan"}
+                        </span>
+                        <span className="font-medium text-green-600">
+                          {formatCurrency(confirmedTotal)}
+                        </span>
+                      </div>
+                      {draftTotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
+                            {t('pending_payments') || 'Kutilmoqda'}
+                          </span>
+                          <span className="font-medium text-amber-600">
+                            {formatCurrency(draftTotal)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-bold">
+                        <span className="text-slate-900">{t('remaining_debt') || 'Qoldiq qarz'}</span>
+                        <span className={remainingDebt > 0 ? "text-red-600" : "text-green-600"}>
+                          {formatCurrency(remainingDebt)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
+
+              {/* Payment History */}
+              {(selectedBill.payment_allocations || []).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-2 border-b">
+                    <h4 className="text-sm font-medium">{t('payment_history') || "To'lovlar tarixi"}</h4>
+                  </div>
+                  <div className="divide-y">
+                    {(selectedBill.payment_allocations || []).map((alloc) => (
+                      <div key={alloc.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={alloc.status === 'confirmed' ? 'default' : 'secondary'}
+                            className={alloc.status === 'confirmed'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                              : 'bg-amber-100 text-amber-700 hover:bg-amber-100'
+                            }>
+                            {alloc.status === 'confirmed' ? t('confirmed') || 'Tasdiqlangan' : t('draft') || 'Qoralama'}
+                          </Badge>
+                          <span className="text-slate-600">{alloc.payment_number}</span>
+                          {alloc.journal_name && (
+                            <span className="text-slate-400 text-xs">({alloc.journal_name})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500 text-xs">
+                            {format(new Date(alloc.payment_date), 'dd.MM.yyyy')}
+                          </span>
+                          <span className={`font-medium ${alloc.status === 'confirmed' ? 'text-green-600' : 'text-amber-600'}`}>
+                            {formatCurrency(alloc.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Pay button in detail modal */}
               {canPay(selectedBill) && (

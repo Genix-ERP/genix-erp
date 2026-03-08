@@ -42,7 +42,8 @@ import {
   Edit,
   Trash2,
   Link as LinkIcon,
-  Calculator
+  Calculator,
+  Globe
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -53,6 +54,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from '@/api/services/inventory';
 import { financeService } from '@/api/services/finance';
 import { useProcurement } from '@/components/contexts/ProcurementContext';
+import { useFinancials } from '@/components/contexts/FinancialsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function VendorBills() {
@@ -60,7 +62,11 @@ export default function VendorBills() {
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
   const { suppliers, purchaseOrders: contextPOs } = useProcurement();
+
+  const baseCurrency = currencies.find(c => c.is_base) || { code: 'UZS' };
+  const foreignCurrencies = currencies.filter(c => !c.is_base && c.is_active);
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -86,6 +92,8 @@ export default function VendorBills() {
     goods_receipt_id: '',
     payment_terms: '30',
     currency: 'UZS',
+    currency_code: 'UZS',
+    exchange_rate: 1,
     subtotal: 0,
     tax_amount: 0,
     total_amount: 0,
@@ -137,7 +145,9 @@ export default function VendorBills() {
         paid_amount: inv.amount_paid || 0,
         status: inv.status === 'confirmed' ? 'approved' : inv.status || 'draft',
         matching_status: inv.three_way_match_status || 'pending',
-        currency: 'UZS',
+        currency: inv.currency_code || 'UZS',
+        currency_code: inv.currency_code || 'UZS',
+        exchange_rate: inv.exchange_rate || 1,
         notes: inv.notes || '',
         created_at: inv.created_at,
         _raw_id: inv.id,
@@ -175,6 +185,7 @@ export default function VendorBills() {
 
   const handleCreateBill = async () => {
     try {
+      const currencyObj = currencies.find(c => c.code === newBill.currency_code);
       const data = {
         vendor_id: newBill.vendor_id,
         invoice_date: newBill.bill_date,
@@ -183,6 +194,8 @@ export default function VendorBills() {
         tax_amount: newBill.tax_amount,
         total_amount: newBill.total_amount,
         notes: newBill.notes,
+        currency_id: currencyObj?.id || undefined,
+        exchange_rate: newBill.exchange_rate || 1,
         purchase_order_id: newBill.purchase_order_id || undefined,
         lines: newBill.lines.map(l => ({
           product_id: l.product_id,
@@ -286,11 +299,29 @@ export default function VendorBills() {
       goods_receipt_id: '',
       payment_terms: '30',
       currency: 'UZS',
+      currency_code: 'UZS',
+      exchange_rate: 1,
       subtotal: 0,
       tax_amount: 0,
       total_amount: 0,
       notes: '',
       lines: []
+    });
+  };
+
+  const handleCurrencyChange = (code) => {
+    const setter = editingBill ? setEditingBill : setNewBill;
+    const current = editingBill || newBill;
+    if (code === baseCurrency.code) {
+      setter({ ...current, currency: code, currency_code: code, exchange_rate: 1 });
+      return;
+    }
+    const latestRate = getLatestExchangeRate(code);
+    setter({
+      ...current,
+      currency: code,
+      currency_code: code,
+      exchange_rate: latestRate?.rate || current.exchange_rate || 1,
     });
   };
 
@@ -597,7 +628,16 @@ export default function VendorBills() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => { setSelectedBill(bill); setShowDetailsDialog(true); }}
+                            onClick={async () => {
+                              setSelectedBill(bill);
+                              setShowDetailsDialog(true);
+                              try {
+                                const fullBill = await financeService.getPurchaseInvoice(bill.id);
+                                if (fullBill) {
+                                  setSelectedBill(prev => ({ ...prev, ...fullBill, currency: fullBill.currency_code || prev.currency }));
+                                }
+                              } catch (err) { console.warn('Failed to fetch bill detail:', err); }
+                            }}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -800,6 +840,52 @@ export default function VendorBills() {
               </div>
             </div>
 
+            {/* Currency */}
+            {foreignCurrencies.length > 0 && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label><Globe className="w-4 h-4 inline mr-1" />{t('currency') || 'Valyuta'}</Label>
+                  <Select value={editingBill?.currency_code || newBill.currency_code} onValueChange={handleCurrencyChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={baseCurrency.code}>{baseCurrency.code} ({t('base') || 'Asosiy'})</SelectItem>
+                      {foreignCurrencies.map(c => (
+                        <SelectItem key={c.code} value={c.code}>{c.code} — {c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(editingBill?.currency_code || newBill.currency_code) !== baseCurrency.code && (
+                  <div className="space-y-2">
+                    <div>
+                      <Label>{t('exchange_rate') || 'Valyuta kursi'} (1 {editingBill?.currency_code || newBill.currency_code} = ? {baseCurrency.code})</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editingBill?.exchange_rate || newBill.exchange_rate}
+                        onChange={(e) => {
+                          const rate = parseFloat(e.target.value) || 0;
+                          if (editingBill) {
+                            setEditingBill({ ...editingBill, exchange_rate: rate });
+                          } else {
+                            setNewBill({ ...newBill, exchange_rate: rate });
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label>{baseCurrency.code} {t('equivalent') || 'ekvivalent'}</Label>
+                      <p className="text-lg font-semibold text-muted-foreground">
+                        {formatCurrency((editingBill?.total_amount || newBill.total_amount) * ((editingBill?.exchange_rate || newBill.exchange_rate) || 1))}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Line Items */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -984,6 +1070,21 @@ export default function VendorBills() {
                 </div>
               </div>
 
+              {selectedBill.exchange_rate && selectedBill.exchange_rate !== 1 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-blue-800">
+                    {selectedBill.currency_code || selectedBill.currency}
+                    <span className="mx-1">—</span>
+                    <span>{t('exchange_rate') || 'Valyuta kursi'}:</span>
+                    <span className="font-semibold ml-1">{Number(selectedBill.exchange_rate).toLocaleString()} {baseCurrency.code}</span>
+                    {selectedBill.status !== 'draft' && (
+                      <Badge variant="outline" className="ml-2 text-xs">{t('rate_locked') || 'Kurs qulflangan'}</Badge>
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div>
                 <Label className="text-muted-foreground">{t('line_items') || 'Line Items'}</Label>
                 <Table className="mt-2">
@@ -1027,13 +1128,87 @@ export default function VendorBills() {
                   <span className="font-bold">{t('total') || 'Total'}:</span>
                   <span className="font-bold">{selectedBill.total_amount.toLocaleString()} {selectedBill.currency}</span>
                 </div>
-                {selectedBill.paid_amount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>{t('paid') || 'Paid'}:</span>
-                    <span className="font-semibold">{selectedBill.paid_amount.toLocaleString()} {selectedBill.currency}</span>
-                  </div>
-                )}
+                {(() => {
+                  const allocs = selectedBill.payment_allocations || [];
+                  const confirmedAmt = allocs.filter(a => a.status === 'confirmed').reduce((s, a) => s + (a.amount || 0), 0);
+                  const pendingAmt = allocs.filter(a => a.status === 'draft').reduce((s, a) => s + (a.amount || 0), 0);
+                  const paidAmt = confirmedAmt || selectedBill.paid_amount || 0;
+                  const remaining = (selectedBill.total_amount || 0) - paidAmt;
+                  return (
+                    <>
+                      {paidAmt > 0 && (
+                        <div className="flex justify-between text-green-600">
+                          <span>{t('confirmed_payments') || 'Tasdiqlangan to\'lovlar'}:</span>
+                          <span className="font-semibold">{paidAmt.toLocaleString()} {selectedBill.currency}</span>
+                        </div>
+                      )}
+                      {pendingAmt > 0 && (
+                        <div className="flex justify-between text-yellow-600">
+                          <span>{t('pending') || 'Kutilmoqda'}:</span>
+                          <span className="font-semibold">{pendingAmt.toLocaleString()} {selectedBill.currency}</span>
+                        </div>
+                      )}
+                      {remaining > 0 && (
+                        <div className="flex justify-between text-orange-600">
+                          <span>{t('remaining_debt') || 'Qoldiq qarz'}:</span>
+                          <span className="font-semibold">{remaining.toLocaleString()} {selectedBill.currency}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
+
+              {/* Payment History */}
+              {(selectedBill.payment_allocations || []).length > 0 && (
+                <div>
+                  <Label className="text-muted-foreground">{t('payment_history') || 'To\'lov tarixi'}</Label>
+                  <div className="mt-2 space-y-2">
+                    {selectedBill.payment_allocations.map((alloc, idx) => (
+                      <div key={alloc.id || idx} className="flex items-center justify-between border rounded-lg p-3">
+                        <div className="flex items-center gap-3">
+                          <Badge variant={alloc.status === 'confirmed' ? 'default' : 'secondary'}>
+                            {alloc.status === 'confirmed' ? (t('confirmed') || 'Tasdiqlangan') : (t('draft') || 'Qoralama')}
+                          </Badge>
+                          <div>
+                            <p className="font-medium text-sm">{alloc.payment_number}</p>
+                            {alloc.payment_date && (
+                              <p className="text-xs text-muted-foreground">{format(parseISO(alloc.payment_date), 'dd.MM.yyyy')}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-semibold">{(alloc.amount || 0).toLocaleString()} {selectedBill.currency}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Exchange Differences */}
+              {(selectedBill.exchange_diffs || []).length > 0 && (
+                <div>
+                  <Label className="text-muted-foreground">{t('exchange_difference') || 'Kurs farqi'}</Label>
+                  <div className="mt-2 space-y-2">
+                    {selectedBill.exchange_diffs.map((ed, idx) => (
+                      <div key={ed.id || idx} className="flex items-center justify-between border rounded-lg p-3">
+                        <div className="flex items-center gap-3">
+                          <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
+                            className={ed.type === 'positive'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                            }>
+                            {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">{ed.description}</span>
+                        </div>
+                        <span className={`font-semibold ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                          {ed.type === 'positive' ? '+' : '-'}{(ed.amount || 0).toLocaleString()} UZS
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedBill.notes && (
                 <div>

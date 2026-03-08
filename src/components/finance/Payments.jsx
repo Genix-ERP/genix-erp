@@ -44,6 +44,10 @@ export default function Payments() {
   const [activeTab, setActiveTab] = useState("customer");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("all");
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -129,8 +133,30 @@ export default function Payments() {
       filtered = filtered.filter(payment => payment.status === statusFilter);
     }
 
+    if (methodFilter !== "all") {
+      filtered = filtered.filter(payment => payment.payment_method === methodFilter);
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter(payment => {
+        const d = payment.payment_date?.split('T')[0];
+        return d && d >= dateFrom;
+      });
+    }
+
+    if (dateTo) {
+      filtered = filtered.filter(payment => {
+        const d = payment.payment_date?.split('T')[0];
+        return d && d <= dateTo;
+      });
+    }
+
+    if (customerFilter !== "all") {
+      filtered = filtered.filter(payment => payment.contact_id === customerFilter || payment.party_id === customerFilter);
+    }
+
     return filtered;
-  }, [currentPayments, searchQuery, statusFilter]);
+  }, [currentPayments, searchQuery, statusFilter, methodFilter, dateFrom, dateTo, customerFilter]);
 
   // Summary stats per tab
   const summaryStats = useMemo(() => {
@@ -188,6 +214,8 @@ export default function Payments() {
         contact_id: newPayment.contact_id,
         payment_date: newPayment.payment_date,
         amount: paymentAmount,
+        currency_id: newPayment.currency_id || undefined,
+        exchange_rate: newPayment.exchange_rate || 1,
         reference: newPayment.reference,
         notes: newPayment.description,
         journal_id: newPayment.journal_id || undefined,
@@ -236,13 +264,15 @@ export default function Payments() {
       payment_date: new Date().toISOString().split('T')[0],
       amount: amountDue.toString(),
       currency: '',
-      reference: `${t('payment_for') || 'Payment for'} ${invoice.invoice_number}`,
+      reference: `${invoice.invoice_number} uchun to'lov`,
       description: '',
       contact_id: contactId,
       journal_id: bankCashJournals.length > 0 ? (bankCashJournals.find(j => j.type === 'bank') || bankCashJournals[0]).id : '',
       bill_id: !isCustomer ? invoice.id : '',
       invoice_id: isCustomer ? invoice.id : '',
       invoice_party_name: partyName,
+      currency_id: invoice.currency_id || undefined,
+      exchange_rate: invoice.exchange_rate || 1,
     });
 
     // Ensure contacts are loaded
@@ -321,7 +351,7 @@ export default function Payments() {
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchQuery(''); setStatusFilter('all'); }}>
+      <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchQuery(''); setStatusFilter('all'); setMethodFilter('all'); setDateFrom(''); setDateTo(''); setCustomerFilter('all'); }}>
         <TabsList className="bg-white/60 p-1 rounded-lg border border-slate-200/60 shadow-sm mb-4">
           <TabsTrigger value="customer" className={subTabClass}>
             <ArrowDownLeft className="w-4 h-4" />
@@ -444,111 +474,109 @@ export default function Payments() {
               </Select>
             </div>
 
-            {/* Invoice Selector - Only show for customer payments */}
-            {isCustomerTab && unpaidInvoices.length > 0 && (
+            {/* Invoice Selector - Required for customer payments */}
+            {isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('apply_to_invoice') || 'Apply to Invoice'} ({t('optional') || 'Optional'})
+                  {t('invoice') || 'Faktura'} *
                 </label>
-                <Select
-                  value={newPayment.invoice_id || '__none__'}
-                  onValueChange={(value) => {
-                    if (value === '__none__') {
-                      setNewPayment({...newPayment, invoice_id: ''});
-                      return;
-                    }
-                    const selectedInv = unpaidInvoices.find(inv => inv.id === value);
-                    if (selectedInv) {
-                      const due = (selectedInv.total_amount || 0) - (selectedInv.amount_paid || 0);
-                      setNewPayment({
-                        ...newPayment,
-                        invoice_id: value,
-                        amount: due.toString(),
-                        contact_id: selectedInv.customer_id || '',
-                        reference: `${t('payment_for') || 'Payment for'} ${selectedInv.invoice_number}`,
-                      });
-                    } else {
-                      setNewPayment({...newPayment, invoice_id: value});
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_invoice') || 'Select an invoice'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-slate-500">{t('no_specific_invoice') || 'No specific invoice'}</span>
-                    </SelectItem>
-                    {unpaidInvoices.map(inv => {
-                      const due = (inv.total_amount || 0) - (inv.amount_paid || 0);
-                      return (
-                        <SelectItem key={inv.id} value={inv.id}>
-                          <div className="flex items-center justify-between gap-4 w-full">
-                            <span className="font-mono text-sm">{inv.invoice_number}</span>
-                            <span className="text-slate-500">
-                              {inv.customer_name || '-'}
-                            </span>
-                            <span className="font-semibold text-red-600">
-                              {formatCurrency(due)}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                {unpaidInvoices.length > 0 ? (
+                  <Select
+                    value={newPayment.invoice_id || undefined}
+                    onValueChange={(value) => {
+                      const selectedInv = unpaidInvoices.find(inv => inv.id === value);
+                      if (selectedInv) {
+                        const due = (selectedInv.total_amount || 0) - (selectedInv.amount_paid || 0);
+                        setNewPayment({
+                          ...newPayment,
+                          invoice_id: value,
+                          amount: due.toString(),
+                          contact_id: selectedInv.customer_id || '',
+                          reference: `${selectedInv.invoice_number} uchun to'lov`,
+                          currency_id: selectedInv.currency_id || undefined,
+                          exchange_rate: selectedInv.exchange_rate || 1,
+                        });
+                      } else {
+                        setNewPayment({...newPayment, invoice_id: value});
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_invoice') || 'Fakturani tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unpaidInvoices.map(inv => {
+                        const due = (inv.total_amount || 0) - (inv.amount_paid || 0);
+                        return (
+                          <SelectItem key={inv.id} value={inv.id}>
+                            <div className="flex items-center justify-between gap-4 w-full">
+                              <span className="font-mono text-sm">{inv.invoice_number}</span>
+                              <span className="text-slate-500">
+                                {inv.customer_name || '-'}
+                              </span>
+                              <span className="font-semibold text-red-600">
+                                {formatCurrency(due)}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_unpaid_invoices') || "To'lanmagan fakturalar yo'q"}</p>
+                )}
               </div>
             )}
 
-            {/* Bill Selector - Only show for vendor payments */}
-            {!isCustomerTab && unpaidBills.length > 0 && (
+            {/* Bill Selector - Required for vendor payments */}
+            {!isCustomerTab && (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  {t('apply_to_bill') || 'Apply to Bill'} ({t('optional') || 'Optional'})
+                  {t('bill') || 'Hisob-faktura'} *
                 </label>
-                <Select
-                  value={newPayment.bill_id}
-                  onValueChange={(value) => {
-                    if (value === '__none__') {
-                      setNewPayment({...newPayment, bill_id: ''});
-                      return;
-                    }
-                    const selectedBill = unpaidBills.find(b => b.id === value);
-                    if (selectedBill) {
-                      setNewPayment({
-                        ...newPayment,
-                        bill_id: value,
-                        amount: (selectedBill.amount_due || selectedBill.total_amount || 0).toString(),
-                        contact_id: selectedBill.vendor_id || selectedBill.partner_id || '',
-                        reference: `Payment for ${selectedBill.invoice_number}`,
-                      });
-                    } else {
-                      setNewPayment({...newPayment, bill_id: value});
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select_bill') || 'Select a bill to pay'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-slate-500">{t('no_bill') || 'No specific bill'}</span>
-                    </SelectItem>
-                    {unpaidBills.map(bill => (
-                      <SelectItem key={bill.id} value={bill.id}>
-                        <div className="flex items-center justify-between gap-4 w-full">
-                          <span className="font-mono text-sm">{bill.invoice_number}</span>
-                          <span className="text-slate-500">
-                            {bill.partner_name || bill.vendor_name}
-                          </span>
-                          <span className="font-semibold text-red-600">
-                            {formatCurrency(bill.amount_due || bill.total_amount || 0)}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {unpaidBills.length > 0 ? (
+                  <Select
+                    value={newPayment.bill_id || undefined}
+                    onValueChange={(value) => {
+                      const selectedBill = unpaidBills.find(b => b.id === value);
+                      if (selectedBill) {
+                        setNewPayment({
+                          ...newPayment,
+                          bill_id: value,
+                          amount: (selectedBill.amount_due || selectedBill.total_amount || 0).toString(),
+                          contact_id: selectedBill.vendor_id || selectedBill.partner_id || '',
+                          reference: `${selectedBill.invoice_number} uchun to'lov`,
+                          currency_id: selectedBill.currency_id || undefined,
+                          exchange_rate: selectedBill.exchange_rate || 1,
+                        });
+                      } else {
+                        setNewPayment({...newPayment, bill_id: value});
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_bill') || 'Hisob-fakturani tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unpaidBills.map(bill => (
+                        <SelectItem key={bill.id} value={bill.id}>
+                          <div className="flex items-center justify-between gap-4 w-full">
+                            <span className="font-mono text-sm">{bill.invoice_number}</span>
+                            <span className="text-slate-500">
+                              {bill.partner_name || bill.vendor_name}
+                            </span>
+                            <span className="font-semibold text-red-600">
+                              {formatCurrency(bill.amount_due || bill.total_amount || 0)}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_unpaid_bills') || "To'lanmagan hisob-fakturalar yo'q"}</p>
+                )}
               </div>
             )}
 
@@ -649,7 +677,7 @@ export default function Payments() {
               <Button
                 onClick={handleCreatePayment}
                 className="flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]"
-                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id}
+                disabled={isSaving || !newPayment.amount || !newPayment.contact_id || !newPayment.payment_date || !newPayment.journal_id || (isCustomerTab ? !newPayment.invoice_id : !newPayment.bill_id)}
               >
                 {isSaving ? t('saving') : t('create_payment')}
               </Button>
@@ -851,36 +879,78 @@ export default function Payments() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder={t('search_payments')}
-                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder={t('search_payments')}
+                      className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[140px] bg-slate-50">
+                      <SelectValue placeholder={t('status')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all_status')}</SelectItem>
+                      <SelectItem value="draft">{t('draft')}</SelectItem>
+                      <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
+                      <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={methodFilter} onValueChange={setMethodFilter}>
+                    <SelectTrigger className="w-[160px] bg-slate-50">
+                      <SelectValue placeholder={t('payment_method') || 'Usul'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all') || 'Barchasi'}</SelectItem>
+                      <SelectItem value="bank_transfer">{t('bank_transfer')}</SelectItem>
+                      <SelectItem value="cash">{t('cash')}</SelectItem>
+                      <SelectItem value="check">{t('check')}</SelectItem>
+                      <SelectItem value="credit_card">{t('credit_card')}</SelectItem>
+                      <SelectItem value="wire">{t('wire_transfer')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button
+                      onClick={handleOpenCreate}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
+                    </Button>
+                  )}
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[140px] bg-slate-50">
-                    <SelectValue placeholder={t('status')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('all_status')}</SelectItem>
-                    <SelectItem value="draft">{t('draft')}</SelectItem>
-                    <SelectItem value="pending">{t('pending')}</SelectItem>
-                    <SelectItem value="confirmed">{t('confirmed')}</SelectItem>
-                    <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
-                  </SelectContent>
-                </Select>
-                {canCreate(MODULES.FINANCIALS) && (
-                  <Button
-                    onClick={handleOpenCreate}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
-                  >
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_payment')}
-                  </Button>
-                )}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 whitespace-nowrap">{t('from') || 'Dan'}:</label>
+                    <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-[150px] bg-slate-50 h-9" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 whitespace-nowrap">{t('to') || 'Gacha'}:</label>
+                    <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-[150px] bg-slate-50 h-9" />
+                  </div>
+                  <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                    <SelectTrigger className="w-[180px] bg-slate-50 h-9">
+                      <SelectValue placeholder={isCustomerTab ? (t('customer') || 'Mijoz') : (t('vendor') || 'Yetkazuvchi')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t('all') || 'Barchasi'}</SelectItem>
+                      {[...new Map(currentPayments.filter(p => p.party_name).map(p => [p.contact_id || p.party_id || p.party_name, p])).values()].map(p => (
+                        <SelectItem key={p.contact_id || p.party_id || p.party_name} value={p.contact_id || p.party_id || p.party_name}>
+                          {p.party_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(dateFrom || dateTo || methodFilter !== 'all' || customerFilter !== 'all') && (
+                    <Button variant="ghost" size="sm" className="h-9 text-slate-500" onClick={() => { setDateFrom(''); setDateTo(''); setMethodFilter('all'); setCustomerFilter('all'); }}>
+                      {t('clear_filters') || 'Tozalash'}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </CardHeader>
