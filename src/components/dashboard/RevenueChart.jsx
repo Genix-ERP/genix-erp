@@ -5,10 +5,18 @@ import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { TrendingUp } from "lucide-react";
 
+function formatAxisTick(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')} mlrd`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')} mln`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')} ming`;
+  return value.toString();
+}
+
 export default function RevenueChart({ data }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact, currency_symbol } = useCurrencyFormatter();
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -59,8 +67,8 @@ export default function RevenueChart({ data }) {
               fontSize={11}
               tickLine={false}
               axisLine={false}
-              width={65}
-              tickFormatter={(value) => formatCurrencyCompact(value)}
+              width={55}
+              tickFormatter={formatAxisTick}
             />
             <Tooltip
               formatter={(value) => [formatCurrency(value), t('revenue')]}

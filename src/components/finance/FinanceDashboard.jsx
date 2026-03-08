@@ -166,7 +166,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_income')}</p>
               <p className="text-3xl font-bold text-green-600 tabular-nums">
-                {formatCurrencyCompact(metrics.totalIncome)}
+                {formatCurrency(metrics.totalIncome)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month')}</p>
             </div>
@@ -188,7 +188,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('total_expenses')}</p>
               <p className="text-3xl font-bold text-red-600 tabular-nums">
-                {formatCurrencyCompact(metrics.totalExpenses)}
+                {formatCurrency(metrics.totalExpenses)}
               </p>
               <p className="text-xs text-slate-500 mt-2">{t('vs_last_month')}</p>
             </div>
@@ -212,7 +212,7 @@ export default function FinanceDashboard() {
             <div>
               <p className="text-sm font-medium text-slate-600 mb-1">{t('net_profit')}</p>
               <p className={`text-3xl font-bold tabular-nums ${metrics.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                {formatCurrencyCompact(metrics.netProfit)}
+                {formatCurrency(metrics.netProfit)}
               </p>
               <p className="text-xs text-slate-500 mt-2">
                 {metrics.netProfit >= 0 ? t('healthy_profit') : t('needs_attention')}
