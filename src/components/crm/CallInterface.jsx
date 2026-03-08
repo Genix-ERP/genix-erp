@@ -56,7 +56,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   const { t } = useTranslation(language);
   const { customers, leads } = useCustomers();
   const [activeCall, setActiveCall] = useState(null);
-  const [dialNumber, setDialNumber] = useState(customer?.phone || '');
+  const [dialNumber, setDialNumber] = useState(customer?.phone || '+998');
   const [selectedContact, setSelectedContact] = useState(customer || null);
   const [isMuted, setIsMuted] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
@@ -401,7 +401,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
             <div className="space-y-3">
               <div className="relative">
                 <Input
-                  placeholder={t('enter_phone_number') || 'Telefon raqamini kiriting'}
+                  placeholder="+998"
                   value={dialNumber}
                   onChange={(e) => setDialNumber(e.target.value)}
                   className="pr-10 text-lg font-mono"

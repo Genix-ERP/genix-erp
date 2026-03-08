@@ -51,7 +51,7 @@ export default function ActSverka() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendMethod, setSendMethod] = useState('email'); // 'email' or 'whatsapp'
   const [sendEmail, setSendEmail] = useState('');
-  const [sendPhone, setSendPhone] = useState('');
+  const [sendPhone, setSendPhone] = useState('+998');
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState(null);
   const [showSendDropdown, setShowSendDropdown] = useState(false);
