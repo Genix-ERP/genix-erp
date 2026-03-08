@@ -616,7 +616,7 @@ export function InventoryProvider({ children }) {
             inventoryService.listCategories(),
             inventoryService.listWarehouses(),
             inventoryService.listInventory(),
-            inventoryService.listInventoryMovements()
+            inventoryService.listInventoryMovements({ limit: 1000 })
           ]);
 
           console.log('[InventoryContext] API Response:', {

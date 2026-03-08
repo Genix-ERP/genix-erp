@@ -12,7 +12,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 
-export default function AccountCombobox({ accounts = [], value, onValueChange, placeholder = "Hisobni tanlang" }) {
+export default function AccountCombobox({ accounts = [], value, onValueChange, placeholder = "Hisobni tanlang", allowNone = false, noneLabel = "Yo'q", disabled = false }) {
   const [open, setOpen] = useState(false);
 
   const selectedAccount = accounts.find((a) => a.id === value);
@@ -24,20 +24,38 @@ export default function AccountCombobox({ accounts = [], value, onValueChange, p
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="w-full justify-between font-normal h-9 px-3 text-sm"
         >
           <span className="truncate">
-            {selectedAccount ? `${selectedAccount.code} - ${selectedAccount.name}` : placeholder}
+            {selectedAccount ? `${selectedAccount.code} - ${selectedAccount.name}` : (value && value !== 'none' ? value : placeholder)}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
+      <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
-          <CommandInput placeholder={placeholder} />
+          <CommandInput placeholder="Qidirish..." />
           <CommandList>
             <CommandEmpty>Topilmadi</CommandEmpty>
             <CommandGroup>
+              {allowNone && (
+                <CommandItem
+                  value={noneLabel}
+                  onSelect={() => {
+                    onValueChange('');
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      !value || value === 'none' ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {noneLabel}
+                </CommandItem>
+              )}
               {accounts.map((account) => (
                 <CommandItem
                   key={account.id}

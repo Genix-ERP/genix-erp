@@ -958,6 +958,81 @@ export const analyzeFinancials = (transactions, invoices = [], expenses = [], la
 };
 
 /**
+ * Analyzes financial data using pre-computed metrics (from Income Statement API)
+ */
+export const analyzeFinancialsFromMetrics = ({ totalIncome, totalExpenses, netProfit, profitMargin, expensesByCategory = [] }, language = 'en', formatCurrency = defaultFormatter) => {
+  const t = getT(language);
+
+  if (totalIncome === 0 && totalExpenses === 0) {
+    return { summary: t.noFinancialData, insights: [], recommendations: [] };
+  }
+
+  const insights = [];
+
+  if (profitMargin > 20) {
+    insights.push({
+      type: 'positive',
+      title: t.healthyProfitMargin,
+      description: t.profitMarginAbove(profitMargin.toFixed(1)),
+      metric: `${profitMargin.toFixed(1)}%`,
+      priority: 'high'
+    });
+  } else if (profitMargin < 10 && profitMargin > 0) {
+    insights.push({
+      type: 'warning',
+      title: t.lowProfitMargin,
+      description: t.profitMarginBelow(profitMargin.toFixed(1)),
+      metric: `${profitMargin.toFixed(1)}%`,
+      priority: 'high'
+    });
+  } else if (profitMargin <= 0) {
+    insights.push({
+      type: 'negative',
+      title: t.operatingAtLoss,
+      description: t.expensesExceedIncome,
+      metric: `${formatCurrency(Math.abs(netProfit))} loss`,
+      priority: 'critical'
+    });
+  }
+
+  // Find largest expense category
+  if (expensesByCategory.length > 0 && totalExpenses > 0) {
+    const largest = expensesByCategory[0]; // already sorted desc
+    const pct = (largest.amount / totalExpenses) * 100;
+    if (pct > 40) {
+      insights.push({
+        type: 'info',
+        title: t.expenseConcentration,
+        description: t.categoryAccountsFor(largest.category, pct.toFixed(0)),
+        metric: formatCurrency(largest.amount),
+        priority: 'medium'
+      });
+    }
+  }
+
+  const recommendations = [];
+  if (profitMargin < 15) {
+    recommendations.push({
+      action: t.reviewExpenseCategories,
+      description: t.analyzeTopExpense,
+      impact: 'high'
+    });
+  }
+  recommendations.push({
+    action: t.cashFlowForecast,
+    description: t.projectNextMonth,
+    impact: 'medium'
+  });
+
+  return {
+    summary: `Income: ${formatCurrency(totalIncome)} | Expenses: ${formatCurrency(totalExpenses)} | Net: ${formatCurrency(netProfit)}`,
+    metrics: { totalIncome, totalExpenses, netProfit, profitMargin },
+    insights,
+    recommendations
+  };
+};
+
+/**
  * Analyzes HR data and provides insights
  */
 export const analyzeHR = (employees, payrolls = [], language = 'en') => {
