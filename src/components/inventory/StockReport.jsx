@@ -81,7 +81,7 @@ export default function StockReport() {
       const type = m.movement_type || m.transaction_type;
       const qty = Math.abs(m.quantity || 0);
       const value = Math.abs(m.total_value || m.total_cost || qty * (m.unit_cost || 0));
-      if (type === "receipt" || type === "purchase" || (type === "adjustment" && m.quantity > 0)) {
+      if (type === "receipt" || type === "purchase" || type === "stock_in" || (type === "adjustment" && m.quantity > 0)) {
         totalIn += qty;
         totalInValue += value;
       } else {
@@ -104,6 +104,10 @@ export default function StockReport() {
         return <ArrowLeftRight className="w-4 h-4 text-blue-600" />;
       case "adjustment":
         return <FileText className="w-4 h-4 text-orange-600" />;
+      case "stock_in":
+        return <ArrowDownLeft className="w-4 h-4 text-green-600" />;
+      case "stock_out":
+        return <ArrowUpRight className="w-4 h-4 text-red-600" />;
       case "scrap":
         return <Minus className="w-4 h-4 text-red-600" />;
       default:
@@ -119,6 +123,8 @@ export default function StockReport() {
       sale: { label: language === "uz" ? "Sotuv" : "Sale", color: "bg-red-100 text-red-700" },
       transfer: { label: language === "uz" ? "O'tkazma" : "Transfer", color: "bg-blue-100 text-blue-700" },
       adjustment: { label: language === "uz" ? "Tuzatish" : "Adjustment", color: "bg-orange-100 text-orange-700" },
+      stock_in: { label: language === "uz" ? "Kirim" : "Stock In", color: "bg-green-100 text-green-700" },
+      stock_out: { label: language === "uz" ? "Chiqim" : "Stock Out", color: "bg-red-100 text-red-700" },
       scrap: { label: language === "uz" ? "Yaroqsiz" : "Scrap", color: "bg-red-100 text-red-700" },
     };
     const info = labels[type] || { label: type || "-", color: "bg-slate-100 text-slate-700" };
@@ -156,7 +162,7 @@ export default function StockReport() {
       const qty = Math.abs(m.quantity || 0);
       const value = Math.abs(m.total_value || m.total_cost || qty * (m.unit_cost || 0));
 
-      if (type === "receipt" || type === "purchase" || (type === "adjustment" && m.quantity > 0)) {
+      if (type === "receipt" || type === "purchase" || type === "stock_in" || (type === "adjustment" && m.quantity > 0)) {
         productMap[pid].total_in += qty;
         productMap[pid].total_in_value += value;
       } else {
@@ -182,10 +188,11 @@ export default function StockReport() {
     let totalProfit = 0;
     let totalLoss = 0;
 
-    // From stock movements (adjustments)
+    // From stock movements (adjustments, stock_in, stock_out)
+    const pnlTypes = new Set(["adjustment", "stock_in", "stock_out"]);
     (stockMovements || []).forEach((m) => {
       const type = m.movement_type || m.transaction_type;
-      if (type !== "adjustment") return;
+      if (!pnlTypes.has(type)) return;
 
       const date = m.created_at || m.transaction_date;
       const dateStr = date ? new Date(date).toISOString().split("T")[0] : "";

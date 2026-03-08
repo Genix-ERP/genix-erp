@@ -20,6 +20,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAlertModal } from "@/hooks/useAlertModal";
 import AlertModal from "@/components/shared/AlertModal";
 import financeService from "@/api/services/finance";
+import AccountCombobox from "@/components/shared/AccountCombobox";
 
 const JOURNAL_TYPES = [
   { value: 'general', labelKey: 'general', icon: BookOpen, color: 'bg-slate-100 text-slate-800 border-slate-200' },
@@ -454,19 +455,14 @@ export default function JournalManagement() {
                             <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('suspense_account_help') || 'Temporarily holds transactions until reconciled'}>?</span>
                           </label>
                           <div className="md:col-span-2">
-                            <Select
-                              value={editForm.suspense_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('suspense_account_id', v === 'none' ? '' : v)}
+                            <AccountCombobox
+                              accounts={(accounts || []).filter(a => a.is_active !== false)}
+                              value={editForm.suspense_account_id}
+                              onValueChange={(v) => handleUpdateField('suspense_account_id', v)}
+                              allowNone
+                              noneLabel={t('none')}
                               disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </div>
                         </div>
 
@@ -476,19 +472,14 @@ export default function JournalManagement() {
                             <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('profit_account_help') || 'Account used when a difference gain is recognized'}>?</span>
                           </label>
                           <div className="md:col-span-2">
-                            <Select
-                              value={editForm.profit_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('profit_account_id', v === 'none' ? '' : v)}
+                            <AccountCombobox
+                              accounts={(accounts || []).filter(a => a.is_active !== false)}
+                              value={editForm.profit_account_id}
+                              onValueChange={(v) => handleUpdateField('profit_account_id', v)}
+                              allowNone
+                              noneLabel={t('none')}
                               disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </div>
                         </div>
 
@@ -498,19 +489,14 @@ export default function JournalManagement() {
                             <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-300 text-slate-400 text-[10px] font-bold cursor-help" title={t('loss_account_help') || 'Account used when a difference loss is recognized'}>?</span>
                           </label>
                           <div className="md:col-span-2">
-                            <Select
-                              value={editForm.loss_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('loss_account_id', v === 'none' ? '' : v)}
+                            <AccountCombobox
+                              accounts={(accounts || []).filter(a => a.is_active !== false)}
+                              value={editForm.loss_account_id}
+                              onValueChange={(v) => handleUpdateField('loss_account_id', v)}
+                              allowNone
+                              noneLabel={t('none')}
                               disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </div>
                         </div>
                       </div>
@@ -524,19 +510,14 @@ export default function JournalManagement() {
                             {detail.type === 'sales' ? t('default_receivable_account') : detail.type === 'purchase' ? t('default_expense_account') : t('default_debit_account')}
                           </label>
                           <div className="md:col-span-2">
-                            <Select
-                              value={editForm.default_debit_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('default_debit_account_id', v === 'none' ? '' : v)}
+                            <AccountCombobox
+                              accounts={(accounts || []).filter(a => a.is_active !== false)}
+                              value={editForm.default_debit_account_id}
+                              onValueChange={(v) => handleUpdateField('default_debit_account_id', v)}
+                              allowNone
+                              noneLabel={t('none')}
                               disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-start">
@@ -544,19 +525,14 @@ export default function JournalManagement() {
                             {detail.type === 'sales' ? t('default_income_account') : detail.type === 'purchase' ? t('default_payable_account') : t('default_credit_account')}
                           </label>
                           <div className="md:col-span-2">
-                            <Select
-                              value={editForm.default_credit_account_id || 'none'}
-                              onValueChange={(v) => handleUpdateField('default_credit_account_id', v === 'none' ? '' : v)}
+                            <AccountCombobox
+                              accounts={(accounts || []).filter(a => a.is_active !== false)}
+                              value={editForm.default_credit_account_id}
+                              onValueChange={(v) => handleUpdateField('default_credit_account_id', v)}
+                              allowNone
+                              noneLabel={t('none')}
                               disabled={!canUpdate(MODULES.FINANCIALS)}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">{t('none')}</SelectItem>
-                                {(accounts || []).filter(a => a.is_active !== false).map(acc => (
-                                  <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </div>
                         </div>
                       </div>
@@ -1244,25 +1220,16 @@ export default function JournalManagement() {
                   : t('default_account')}
                 {(createForm.type === 'cash' || createForm.type === 'bank') && <span className="text-red-500"> *</span>}
               </label>
-              <Select
+              <AccountCombobox
+                accounts={(accounts || []).filter(acc => {
+                  if (createForm.type === 'cash') return acc.code?.startsWith('1000');
+                  if (createForm.type === 'bank') return acc.code?.startsWith('1010');
+                  return true;
+                })}
                 value={createForm.default_debit_account_id}
                 onValueChange={(value) => setCreateForm({...createForm, default_debit_account_id: value, default_credit_account_id: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_account')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(accounts || []).filter(acc => {
-                    if (createForm.type === 'cash') return acc.code?.startsWith('1000');
-                    if (createForm.type === 'bank') return acc.code?.startsWith('1010');
-                    return true;
-                  }).map(acc => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.code} - {acc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={t('select_account')}
+              />
             </div>
           </div>
           <div className="flex gap-3 pt-2">
