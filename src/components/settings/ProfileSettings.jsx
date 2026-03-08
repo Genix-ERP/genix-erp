@@ -18,7 +18,7 @@ export default function ProfileSettings() {
   const [formData, setFormData] = useState({
     full_name: '',
     title: '',
-    phone_number: '',
+    phone_number: '+998',
     bio: '',
     profile_picture_url: ''
   });
@@ -32,7 +32,7 @@ export default function ProfileSettings() {
         full_name: currentUser.full_name || '',
         email: currentUser.email || '',
         title: currentUser.title || '',
-        phone_number: currentUser.phone_number || '',
+        phone_number: currentUser.phone_number || '+998',
         bio: currentUser.bio || '',
         profile_picture_url: currentUser.profile_picture_url || ''
       });
@@ -112,7 +112,7 @@ export default function ProfileSettings() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone_number">{t('phone_number')}</Label>
-              <Input id="phone_number" value={formData.phone_number} onChange={handleChange} placeholder="+1 234 567 890" />
+              <Input id="phone_number" value={formData.phone_number} onChange={handleChange} placeholder="+998" />
             </div>
           </div>
           

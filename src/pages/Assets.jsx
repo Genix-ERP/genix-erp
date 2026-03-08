@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, Monitor, TrendingDown, Wrench, DollarSign, AlertTriangle, Brain, CheckCircle, Target, Lightbulb, Edit2, Download, Trash2, ArrowRightLeft, History, Printer, FileText } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { analyzeAssets } from '@/api/services/aiAnalytics';
+import financeService from '@/api/services/finance';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -66,6 +67,7 @@ export default function Assets() {
     asset_category: 'equipment',
     purchase_date: new Date().toISOString().split('T')[0],
     purchase_cost: '',
+    salvage_value: 0,
     useful_life_years: 5,
     depreciation_method: 'straight_line'
   });
@@ -107,6 +109,7 @@ export default function Assets() {
       await createAsset({
         ...newAsset,
         purchase_cost: parseFloat(newAsset.purchase_cost),
+        salvage_value: parseFloat(newAsset.salvage_value) || 0,
         useful_life_years: parseInt(newAsset.useful_life_years),
         current_value: parseFloat(newAsset.purchase_cost),
         accumulated_depreciation: 0,
@@ -119,6 +122,7 @@ export default function Assets() {
         asset_category: 'equipment',
         purchase_date: new Date().toISOString().split('T')[0],
         purchase_cost: '',
+        salvage_value: 0,
         useful_life_years: 5,
         depreciation_method: 'straight_line'
       });
@@ -193,22 +197,27 @@ export default function Assets() {
     }
   };
 
-  const handleAddMaintenance = () => {
+  const handleAddMaintenance = async () => {
     if (assetForMaintenance) {
-      const newRecord = {
-        date: maintenanceData.date,
-        type: maintenanceData.type,
-        description: maintenanceData.description,
-        cost: parseFloat(maintenanceData.cost) || 0
-      };
-      setMaintenanceHistory({
-        ...maintenanceHistory,
-        [assetForMaintenance.id]: [...(maintenanceHistory[assetForMaintenance.id] || []), newRecord]
-      });
-      addAuditLog('maintenance', assetForMaintenance.id, `${assetForMaintenance.asset_code} - ${maintenanceData.type}`);
-      setShowMaintenanceModal(false);
-      setAssetForMaintenance(null);
-      setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
+      try {
+        await financeService.recordMaintenance(assetForMaintenance.id, {
+          maintenance_type: maintenanceData.type,
+          service_date: maintenanceData.date,
+          description: maintenanceData.description,
+          cost: parseFloat(maintenanceData.cost) || 0
+        });
+        const records = await financeService.listMaintenance(assetForMaintenance.id);
+        setMaintenanceHistory({
+          ...maintenanceHistory,
+          [assetForMaintenance.id]: records || []
+        });
+        addAuditLog('maintenance', assetForMaintenance.id, `${assetForMaintenance.asset_code} - ${maintenanceData.type}`);
+        setShowMaintenanceModal(false);
+        setAssetForMaintenance(null);
+        setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
+      } catch (err) {
+        console.error('Failed to record maintenance:', err);
+      }
     }
   };
 
@@ -245,8 +254,9 @@ export default function Assets() {
   assets.forEach(a => {
     categoryData[a.asset_category] = (categoryData[a.asset_category] || 0) + (a.current_value || 0);
   });
+  const categoryLabels = { buildings: t('category_buildings') || 'Binolar', vehicles: t('category_vehicles') || 'Transport vositalari', equipment: t('category_equipment') || 'Jihozlar', computers: t('category_computers') || 'Kompyuterlar', furniture: t('category_furniture') || 'Mebel', intangible: t('category_intangible') || 'Nomoddiy aktivlar', other: t('category_other_assets') || 'Boshqa' };
   const chartData = Object.entries(categoryData).map(([name, value]) => ({
-    name: t(name), // Translate category name
+    name: categoryLabels[name] || t(name),
     value
   }));
 
@@ -486,11 +496,13 @@ export default function Assets() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t('all_categories')}</SelectItem>
-                    <SelectItem value="machinery">{t('machinery')}</SelectItem>
-                    <SelectItem value="equipment">{t('equipment')}</SelectItem>
-                    <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
-                    <SelectItem value="buildings">{t('buildings')}</SelectItem>
-                    <SelectItem value="computers">{t('computers')}</SelectItem>
+                    <SelectItem value="buildings">{t('category_buildings') || 'Binolar'}</SelectItem>
+                    <SelectItem value="vehicles">{t('category_vehicles') || 'Transport vositalari'}</SelectItem>
+                    <SelectItem value="equipment">{t('category_equipment') || 'Jihozlar'}</SelectItem>
+                    <SelectItem value="computers">{t('category_computers') || 'Kompyuterlar'}</SelectItem>
+                    <SelectItem value="furniture">{t('category_furniture') || 'Mebel'}</SelectItem>
+                    <SelectItem value="intangible">{t('category_intangible') || 'Nomoddiy aktivlar'}</SelectItem>
+                    <SelectItem value="other">{t('category_other_assets') || 'Boshqa'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -518,7 +530,7 @@ export default function Assets() {
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="font-bold text-lg">{asset.asset_name}</h3>
                               <Badge className={getStatusColor(asset.status)}>{t(asset.status)}</Badge>
-                              <Badge variant="outline">{t(asset.asset_category)}</Badge>
+                              <Badge variant="outline">{categoryLabels[asset.asset_category] || t(asset.asset_category)}</Badge>
                             </div>
                             <p className="text-sm text-slate-500 mb-3">{asset.asset_code}</p>
 
@@ -560,7 +572,7 @@ export default function Assets() {
                               </Button>
                             )}
                             {canUpdate(MODULES.ASSETS) && (
-                              <Button size="sm" variant="ghost" onClick={() => { setAssetForMaintenance(asset); setShowMaintenanceModal(true); }} title={t('add_maintenance')}>
+                              <Button size="sm" variant="ghost" onClick={async () => { setAssetForMaintenance(asset); setShowMaintenanceModal(true); try { const records = await financeService.listMaintenance(asset.id); setMaintenanceHistory(prev => ({...prev, [asset.id]: records || []})); } catch(e) { console.error(e); } }} title={t('add_maintenance')}>
                                 <Wrench className="w-4 h-4" />
                               </Button>
                             )}
@@ -604,12 +616,13 @@ export default function Assets() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="machinery">{t('machinery')}</SelectItem>
-                      <SelectItem value="equipment">{t('equipment')}</SelectItem>
-                      <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
-                      <SelectItem value="buildings">{t('buildings')}</SelectItem>
-                      <SelectItem value="furniture">{t('furniture')}</SelectItem>
-                      <SelectItem value="computers">{t('computers')}</SelectItem>
+                      <SelectItem value="buildings">{t('category_buildings') || 'Binolar'}</SelectItem>
+                      <SelectItem value="vehicles">{t('category_vehicles') || 'Transport vositalari'}</SelectItem>
+                      <SelectItem value="equipment">{t('category_equipment') || 'Jihozlar'}</SelectItem>
+                      <SelectItem value="computers">{t('category_computers') || 'Kompyuterlar'}</SelectItem>
+                      <SelectItem value="furniture">{t('category_furniture') || 'Mebel'}</SelectItem>
+                      <SelectItem value="intangible">{t('category_intangible') || 'Nomoddiy aktivlar'}</SelectItem>
+                      <SelectItem value="other">{t('category_other_assets') || 'Boshqa'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -624,7 +637,7 @@ export default function Assets() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('purchase_cost')} *</label>
                   <Input
@@ -635,6 +648,17 @@ export default function Assets() {
                     required
                   />
                 </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">{t('salvage_value') || 'Tugatish qiymati'}</label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={newAsset.salvage_value}
+                    onChange={(e) => setNewAsset({...newAsset, salvage_value: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('useful_life_years')} *</label>
                   <Input
@@ -654,6 +678,8 @@ export default function Assets() {
                     <SelectContent>
                       <SelectItem value="straight_line">{t('straight_line')}</SelectItem>
                       <SelectItem value="declining_balance">{t('declining_balance')}</SelectItem>
+                      <SelectItem value="double_declining">{t('double_declining') || 'Ikki karrali kamaytirish'}</SelectItem>
+                      <SelectItem value="sum_of_years">{t('sum_of_years') || 'Yillar yig\'indisi'}</SelectItem>
                       <SelectItem value="units_of_production">{t('units_of_production')}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -709,12 +735,13 @@ export default function Assets() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="machinery">{t('machinery')}</SelectItem>
-                        <SelectItem value="equipment">{t('equipment')}</SelectItem>
-                        <SelectItem value="vehicles">{t('vehicles')}</SelectItem>
-                        <SelectItem value="buildings">{t('buildings')}</SelectItem>
-                        <SelectItem value="furniture">{t('furniture')}</SelectItem>
-                        <SelectItem value="computers">{t('computers')}</SelectItem>
+                        <SelectItem value="buildings">{t('category_buildings') || 'Binolar'}</SelectItem>
+                        <SelectItem value="vehicles">{t('category_vehicles') || 'Transport vositalari'}</SelectItem>
+                        <SelectItem value="equipment">{t('category_equipment') || 'Jihozlar'}</SelectItem>
+                        <SelectItem value="computers">{t('category_computers') || 'Kompyuterlar'}</SelectItem>
+                        <SelectItem value="furniture">{t('category_furniture') || 'Mebel'}</SelectItem>
+                        <SelectItem value="intangible">{t('category_intangible') || 'Nomoddiy aktivlar'}</SelectItem>
+                        <SelectItem value="other">{t('category_other_assets') || 'Boshqa'}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -899,7 +926,7 @@ export default function Assets() {
 
         {/* Add Maintenance Modal */}
         <Dialog open={showMaintenanceModal} onOpenChange={setShowMaintenanceModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{t('add_maintenance_record')}</DialogTitle>
             </DialogHeader>
@@ -950,6 +977,29 @@ export default function Assets() {
                   onChange={(e) => setMaintenanceData({...maintenanceData, cost: e.target.value})}
                 />
               </div>
+              {/* Maintenance History */}
+              {assetForMaintenance && (maintenanceHistory[assetForMaintenance.id] || []).length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 border-b">
+                    <h4 className="text-sm font-medium text-slate-700">{t('maintenance_history') || "Ta'mirlash tarixi"}</h4>
+                  </div>
+                  <div className="divide-y max-h-48 overflow-y-auto">
+                    {maintenanceHistory[assetForMaintenance.id].map((record, idx) => {
+                      const typeLabels = { regular_to: 'Oddiy TO', capital_repair: 'Kapital', modernization: 'Modernizatsiya', minor_repair: 'Joriy' };
+                      return (
+                        <div key={record.id || idx} className="px-3 py-2 text-sm flex items-center justify-between">
+                          <div>
+                            <span className="text-slate-500">{record.service_date ? format(new Date(record.service_date), 'dd.MM.yyyy') : record.date}</span>
+                            <Badge variant="outline" className="ml-2 text-xs">{typeLabels[record.maintenance_type || record.type] || record.maintenance_type || record.type}</Badge>
+                            {record.description && <p className="text-slate-600 text-xs mt-0.5">{record.description}</p>}
+                          </div>
+                          {(record.cost > 0) && <span className="font-medium text-slate-700">{formatCurrency(record.cost)}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 }); }} className="flex-1">
                   {t('cancel')}
