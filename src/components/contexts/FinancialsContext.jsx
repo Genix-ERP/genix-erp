@@ -339,7 +339,7 @@ export function FinancialsProvider({ children }) {
             financeService.listJournalEntries().catch(() => []),
             salesService.listInvoices().catch(() => []),
             financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
-            financeService.listPayments().catch(() => []),
+            financeService.listPayments({ limit: 100 }).catch(() => []),
             financeService.listTaxRates().catch(() => []),
             financeService.listAccountTypes().catch(() => []),
             financeService.listPurchaseInvoices().catch(() => ({ data: [] })),
