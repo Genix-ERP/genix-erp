@@ -124,6 +124,9 @@ export default function SalesOrders() {
     return invoices.some(inv => inv.sales_order_id === orderId && inv.status !== 'cancelled');
   }, [invoices]);
 
+  // Track newly created invoice to auto-open it
+  const [newInvoiceId, setNewInvoiceId] = useState(null);
+
   // Carrier state
   const [showCarrierModal, setShowCarrierModal] = useState(false);
   const [editingCarrier, setEditingCarrier] = useState(null);
@@ -821,9 +824,13 @@ export default function SalesOrders() {
 
   const handleCreateInvoice = async (orderId) => {
     try {
-      await createInvoiceFromOrder(orderId);
+      const newInvoice = await createInvoiceFromOrder(orderId);
       // Refresh to get updated invoices
       if (refreshSalesData) refreshSalesData();
+      // Set the new invoice ID so Invoices component auto-opens it
+      if (newInvoice?.id) {
+        setNewInvoiceId(newInvoice.id);
+      }
       // Switch to invoices tab to show the new invoice
       setActiveTab('invoices');
     } catch (error) {
@@ -1192,7 +1199,7 @@ export default function SalesOrders() {
 
           {/* Invoices Tab */}
           <TabsContent value="invoices">
-            <Invoices />
+            <Invoices openInvoiceId={newInvoiceId} onInvoiceOpened={() => setNewInvoiceId(null)} />
           </TabsContent>
 
           {/* Discounts Tab */}

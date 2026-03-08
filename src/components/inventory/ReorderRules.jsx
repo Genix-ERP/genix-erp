@@ -51,7 +51,8 @@ import {
   Settings2,
   BarChart3,
   Target,
-  HelpCircle
+  HelpCircle,
+  Loader2
 } from "lucide-react";
 import {
   Tooltip,
@@ -65,6 +66,8 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/components/ui/use-toast";
+import apiClient from "@/api/client";
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -140,6 +143,8 @@ export default function ReorderRules() {
   const [selectedTab, setSelectedTab] = useState("rules");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState(null);
+  const [creatingPO, setCreatingPO] = useState(null);
+  const { toast } = useToast();
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -301,6 +306,39 @@ export default function ReorderRules() {
 
   const handleToggleActive = async (rule) => {
     await updateReorderRule(rule.id, { is_active: !rule.is_active });
+  };
+
+  const handleCreatePO = async (item) => {
+    if (!item.id) return;
+    setCreatingPO(item.id);
+    try {
+      const response = await apiClient.post("/replenishment/run", {
+        rule_ids: [item.id],
+      });
+      const data = response.data.data;
+      if (data?.orders_created > 0) {
+        toast({
+          title: t('success'),
+          description: `${t('created') || 'Created'} ${data.orders_created} ${t('purchase_order') || 'purchase order(s)'}`,
+        });
+      } else {
+        const reason = data?.skipped_items?.[0]?.reason || t('no_vendor_set') || 'No preferred vendor set in reorder rule';
+        toast({
+          variant: "destructive",
+          title: t('error'),
+          description: reason,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to create PO:", error);
+      toast({
+        variant: "destructive",
+        title: t('error'),
+        description: error.response?.data?.message || t('failed_to_create_po') || 'Failed to create purchase order',
+      });
+    } finally {
+      setCreatingPO(null);
+    }
   };
 
   const getProductName = (productId, rule) => {
@@ -600,8 +638,14 @@ export default function ReorderRules() {
                           <Button
                             size="sm"
                             className="bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={creatingPO === item.id}
+                            onClick={() => handleCreatePO(item)}
                           >
-                            <ShoppingCart className="w-4 h-4 mr-2" />
+                            {creatingPO === item.id ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <ShoppingCart className="w-4 h-4 mr-2" />
+                            )}
                             {t('create_po') || 'Create PO'}
                           </Button>
                         </TableCell>

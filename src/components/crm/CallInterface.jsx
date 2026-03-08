@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import {
   PhoneMissed,
   PhoneOff,
   Play,
+  Pause,
   Volume2,
   Mic,
   MicOff,
@@ -20,7 +21,11 @@ import {
   Loader2,
   Delete,
   Users,
-  Search
+  Search,
+  Filter,
+  RefreshCw,
+  Download,
+  Copy,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -34,6 +39,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { pbxService } from '@/api/services';
@@ -57,29 +69,42 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   const [localCallLogs, setLocalCallLogs] = useState([]);
   const [contactSearch, setContactSearch] = useState('');
   const [showContactPicker, setShowContactPicker] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState(null);
+  const audioRef = useRef(null);
   const timerRef = useRef(null);
 
   // Load PBX config on mount
   useEffect(() => {
-    const config = pbxService.getConfig();
-    setPbxConfig(config || {
-      enabled: false,
-      serverUrl: '',
-      apiKey: '',
-      extension: '',
-      callerId: ''
-    });
-    setIsConfigured(pbxService.isConfigured());
-
-    // Load call logs (async)
-    const loadCallLogs = async () => {
-      const logs = await pbxService.getCallLogs(companyId);
-      setLocalCallLogs(Array.isArray(logs) ? logs : []);
+    const loadConfig = async () => {
+      const config = await pbxService.getConfig();
+      setPbxConfig(config || {
+        enabled: false,
+        provider: 'onlinepbx',
+        domain: '',
+        api_key: '',
+        extension: '',
+        caller_id: ''
+      });
+      setIsConfigured(pbxService.isConfigured(config));
     };
+    loadConfig();
     loadCallLogs();
   }, [companyId]);
 
-  // Update dial number and selected contact when customer prop changes
+  const loadCallLogs = useCallback(async () => {
+    setIsLoadingLogs(true);
+    try {
+      const logs = await pbxService.getCallLogs(companyId);
+      setLocalCallLogs(Array.isArray(logs) ? logs : []);
+    } catch (err) {
+      console.error('Failed to load call logs:', err);
+    }
+    setIsLoadingLogs(false);
+  }, [companyId]);
+
+  // Update dial number when customer prop changes
   useEffect(() => {
     if (customer?.phone) {
       setDialNumber(customer.phone);
@@ -89,7 +114,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
 
   // Filter contacts for the picker
   const filteredContacts = [...(Array.isArray(customers) ? customers : []), ...(Array.isArray(leads) ? leads : [])]
-    .filter(c => c.phone) // Only contacts with phone numbers
+    .filter(c => c.phone)
     .filter(c => {
       if (!contactSearch) return true;
       const searchLower = contactSearch.toLowerCase();
@@ -100,9 +125,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
         c.phone?.includes(contactSearch)
       );
     })
-    .slice(0, 10); // Limit to 10 results
+    .slice(0, 10);
 
-  // Handle contact selection
   const handleSelectContact = (contact) => {
     setSelectedContact(contact);
     setDialNumber(contact.phone || '');
@@ -110,7 +134,6 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
     setContactSearch('');
   };
 
-  // Clear selected contact
   const handleClearContact = () => {
     setSelectedContact(null);
     setDialNumber('');
@@ -123,16 +146,10 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
         setCallDuration(prev => prev + 1);
       }, 1000);
     } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
       setCallDuration(0);
     }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [activeCall, isCallInProgress]);
 
   const getCallTypeIcon = (type) => {
@@ -144,49 +161,69 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
     }
   };
 
+  const getCallTypeBadge = (type) => {
+    const styles = {
+      inbound: 'bg-blue-100 text-blue-700',
+      outbound: 'bg-green-100 text-green-700',
+      missed: 'bg-red-100 text-red-700',
+    };
+    return <Badge className={styles[type] || 'bg-slate-100 text-slate-700'}>{t(`call_${type}`) || type}</Badge>;
+  };
+
+  const getOutcomeBadge = (outcome) => {
+    const styles = {
+      answered: 'bg-green-100 text-green-700',
+      completed: 'bg-green-100 text-green-700',
+      no_answer: 'bg-yellow-100 text-yellow-700',
+      busy: 'bg-orange-100 text-orange-700',
+      failed: 'bg-red-100 text-red-700',
+      voicemail: 'bg-purple-100 text-purple-700',
+      initiated: 'bg-slate-100 text-slate-600',
+    };
+    return <Badge variant="outline" className={styles[outcome] || ''}>{t(`call_${outcome}`) || outcome}</Badge>;
+  };
+
   const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60);
+    if (!seconds || seconds <= 0) return '0:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getSentimentBadge = (score) => {
-    if (score > 0.3) return <Badge className="bg-green-100 text-green-800">{t('positive')}</Badge>;
-    if (score < -0.3) return <Badge className="bg-red-100 text-red-800">{t('negative')}</Badge>;
-    return <Badge className="bg-yellow-100 text-yellow-800">{t('neutral')}</Badge>;
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    const locale = language === 'ru' ? 'ru-RU' : language === 'uz' ? 'uz-UZ' : 'en-US';
+    const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return time;
+    if (isYesterday) return `${t('yesterday')} ${time}`;
+    return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) + ' ' + time;
   };
 
-  const handleDialDigit = (digit) => {
-    setDialNumber(prev => prev + digit);
-  };
-
-  const handleBackspace = () => {
-    setDialNumber(prev => prev.slice(0, -1));
-  };
+  const handleDialDigit = (digit) => setDialNumber(prev => prev + digit);
+  const handleBackspace = () => setDialNumber(prev => prev.slice(0, -1));
 
   const handleMakeCall = async () => {
     if (!dialNumber.trim()) return;
-
     setIsCallInProgress(true);
-
     try {
       const result = await pbxService.makeCall(dialNumber, {
         customerId: selectedContact?.id,
         customerName: selectedContact?.company_name || selectedContact?.contact_name || selectedContact?.name,
         companyId
       });
-
-      setActiveCall({
-        id: result.callId,
-        number: dialNumber,
-        status: 'connecting'
-      });
-
-      // Simulate call connected after 2 seconds (in real integration, this would come from WebSocket)
+      setActiveCall({ id: result.callId, number: dialNumber, status: 'connecting' });
       setTimeout(() => {
         setActiveCall(prev => prev ? { ...prev, status: 'connected' } : null);
       }, 2000);
-
     } catch (error) {
       console.error('Failed to make call:', error);
       setIsCallInProgress(false);
@@ -196,84 +233,86 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   const handleEndCall = async () => {
     if (activeCall) {
       try {
-        await pbxService.endCall(activeCall.id);
-
-        // Update call log with duration
-        pbxService.updateCallLog(activeCall.id, {
-          call_duration: callDuration,
-          call_outcome: 'completed'
-        }, companyId);
-
-        // Refresh call logs
-        const refreshedLogs = await pbxService.getCallLogs(companyId);
-        setLocalCallLogs(Array.isArray(refreshedLogs) ? refreshedLogs : []);
+        await pbxService.endCall(activeCall.id, companyId);
+        await pbxService.updateCallLog(activeCall.id, { call_duration: callDuration, call_outcome: 'completed' }, companyId);
+        await loadCallLogs();
       } catch (error) {
         console.error('Failed to end call:', error);
       }
     }
-
     setActiveCall(null);
     setIsCallInProgress(false);
     setCallDuration(0);
   };
 
-  const handleSaveConfig = () => {
-    pbxService.saveConfig(pbxConfig);
-    setIsConfigured(pbxService.isConfigured());
+  const handleSaveConfig = async () => {
+    await pbxService.saveConfig(pbxConfig);
+    setIsConfigured(pbxService.isConfigured(pbxConfig));
     setShowSettings(false);
   };
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
     setConnectionStatus(null);
-
     const success = await pbxService.testConnection(pbxConfig);
     setConnectionStatus(success ? 'success' : 'failed');
     setTestingConnection(false);
   };
 
-  const handleCallBack = (phoneNumber) => {
-    setDialNumber(phoneNumber);
-    handleMakeCall();
+  const handlePlayRecording = (url, callId) => {
+    if (playingAudio === callId) {
+      audioRef.current?.pause();
+      setPlayingAudio(null);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    const audio = new Audio(url);
+    audio.onended = () => setPlayingAudio(null);
+    audio.play();
+    audioRef.current = audio;
+    setPlayingAudio(callId);
   };
 
-  // Combine provided callLogs with local logs
+  // Combine and filter call logs
   const safeCallLogs = Array.isArray(callLogs) ? callLogs : [];
   const safeLocalCallLogs = Array.isArray(localCallLogs) ? localCallLogs : [];
   const allCallLogs = [...safeCallLogs, ...safeLocalCallLogs]
-    .filter((log, index, self) =>
-      index === self.findIndex((l) => l.id === log.id)
-    )
+    .filter((log, index, self) => index === self.findIndex((l) => l.id === log.id))
     .sort((a, b) => new Date(b.call_start_time) - new Date(a.call_start_time));
+
+  const filteredLogs = typeFilter === 'all'
+    ? allCallLogs
+    : allCallLogs.filter(log => log.call_type === typeFilter);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Hidden audio element */}
+      <audio ref={audioRef} className="hidden" />
+
       {/* Call Interface */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <PhoneCall className="w-5 h-5 text-green-600" />
-              {t('pbx_interface')}
+              {t('pbx_interface') || 'PBX interfeysi'}
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(true)}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
               <Settings className="w-4 h-4" />
             </Button>
           </div>
           {isConfigured ? (
-            <Badge className="bg-green-100 text-green-700 w-fit">{t('pbx_connected')}</Badge>
+            <Badge className="bg-green-100 text-green-700 w-fit">{t('pbx_connected') || 'Ulangan'}</Badge>
           ) : (
-            <Badge className="bg-yellow-100 text-yellow-700 w-fit">{t('pbx_not_configured')}</Badge>
+            <Badge className="bg-yellow-100 text-yellow-700 w-fit">{t('pbx_not_configured') || 'Sozlanmagan'}</Badge>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Contact Selector */}
           <div className="space-y-2">
-            <Label className="text-sm text-slate-600">{t('select_contact')}</Label>
+            <Label className="text-sm text-slate-600">{t('select_contact') || 'Kontaktni tanlash'}</Label>
             {selectedContact ? (
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between">
                 <div>
@@ -282,24 +321,16 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                   </p>
                   <p className="text-sm text-blue-700">{selectedContact.phone}</p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearContact}
-                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
-                >
+                <Button variant="ghost" size="sm" onClick={handleClearContact} className="h-8 w-8 p-0 text-blue-600">
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             ) : (
               <Popover open={showContactPicker} onOpenChange={setShowContactPicker}>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-slate-500 font-normal"
-                  >
+                  <Button variant="outline" className="w-full justify-start text-slate-500 font-normal">
                     <Users className="w-4 h-4 mr-2" />
-                    {t('choose_customer_lead')}
+                    {t('choose_customer_lead') || 'Mijoz yoki lidni tanlang...'}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 p-0" align="start">
@@ -307,7 +338,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
-                        placeholder={t('search_contacts')}
+                        placeholder={t('search_contacts') || 'Qidirish...'}
                         value={contactSearch}
                         onChange={(e) => setContactSearch(e.target.value)}
                         className="pl-9"
@@ -318,7 +349,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                   <div className="max-h-64 overflow-y-auto">
                     {filteredContacts.length === 0 ? (
                       <div className="p-4 text-center text-sm text-slate-500">
-                        {t('no_contacts_found')}
+                        {t('no_contacts_found') || 'Kontaktlar topilmadi'}
                       </div>
                     ) : (
                       filteredContacts.map((contact) => (
@@ -345,33 +376,21 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
             <div className="p-4 bg-green-50 rounded-lg border border-green-200 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-green-600">{t('active_call')}</p>
+                  <p className="text-sm text-green-600">{t('active_call') || "Faol qo'ng'iroq"}</p>
                   <p className="font-bold text-green-900">{activeCall.number}</p>
                 </div>
                 <Badge className={`${activeCall.status === 'connected' ? 'bg-green-500' : 'bg-yellow-500'} text-white`}>
-                  {activeCall.status === 'connecting' ? t('connecting') : formatDuration(callDuration)}
+                  {activeCall.status === 'connecting' ? (t('connecting') || 'Ulanmoqda...') : formatDuration(callDuration)}
                 </Badge>
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsMuted(!isMuted)}
-                  className={isMuted ? 'bg-red-50 border-red-200' : ''}
-                >
+                <Button variant="outline" size="sm" onClick={() => setIsMuted(!isMuted)} className={isMuted ? 'bg-red-50 border-red-200' : ''}>
                   {isMuted ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4" />}
                 </Button>
-                <Button variant="outline" size="sm">
-                  <Volume2 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={handleEndCall}
-                >
+                <Button variant="outline" size="sm"><Volume2 className="w-4 h-4" /></Button>
+                <Button variant="destructive" size="sm" className="ml-auto" onClick={handleEndCall}>
                   <PhoneOff className="w-4 h-4 mr-1" />
-                  {t('end_call')}
+                  {t('end_call') || 'Tugatish'}
                 </Button>
               </div>
             </div>
@@ -382,18 +401,13 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
             <div className="space-y-3">
               <div className="relative">
                 <Input
-                  placeholder={t('enter_phone_number')}
+                  placeholder={t('enter_phone_number') || 'Telefon raqamini kiriting'}
                   value={dialNumber}
                   onChange={(e) => setDialNumber(e.target.value)}
                   className="pr-10 text-lg font-mono"
                 />
                 {dialNumber && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                    onClick={handleBackspace}
-                  >
+                  <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0" onClick={handleBackspace}>
                     <Delete className="w-4 h-4" />
                   </Button>
                 )}
@@ -422,21 +436,40 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                 ) : (
                   <PhoneCall className="w-5 h-5 mr-2" />
                 )}
-                {t('call')} {dialNumber || ''}
+                {t('call') || "Qo'ng'iroq"} {dialNumber || ''}
               </Button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Recent Calls */}
+      {/* Call History */}
       <div className="lg:col-span-2">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader>
-            <CardTitle>{t('recent_calls')}</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>{t('recent_calls')}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-[140px] h-8 text-sm">
+                    <Filter className="w-3 h-3 mr-1" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_calls')}</SelectItem>
+                    <SelectItem value="inbound">{t('call_inbound')}</SelectItem>
+                    <SelectItem value="outbound">{t('call_outbound')}</SelectItem>
+                    <SelectItem value="missed">{t('call_missed')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={loadCallLogs} disabled={isLoadingLogs}>
+                  <RefreshCw className={`w-4 h-4 ${isLoadingLogs ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {allCallLogs.length === 0 ? (
+            {filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <PhoneCall className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                 <p>{t('no_call_history')}</p>
@@ -446,59 +479,92 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t('contact')}</TableHead>
-                      <TableHead>{t('type')}</TableHead>
-                      <TableHead>{t('duration')}</TableHead>
-                      <TableHead>{t('sentiment')}</TableHead>
-                      <TableHead>{t('outcome')}</TableHead>
-                      <TableHead>{t('actions')}</TableHead>
+                      <TableHead>{t('type') || 'Turi'}</TableHead>
+                      <TableHead>{t('contact') || 'Kontakt'}</TableHead>
+                      <TableHead>{t('time') || 'Vaqt'}</TableHead>
+                      <TableHead>{t('duration') || "Davomiyligi"}</TableHead>
+                      <TableHead>{t('status') || 'Holat'}</TableHead>
+                      <TableHead>{t('recording')}</TableHead>
+                      <TableHead>{t('actions') || 'Amallar'}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {allCallLogs.slice(0, 10).map((call) => (
+                    {filteredLogs.slice(0, 50).map((call) => (
                       <TableRow key={call.id} className="hover:bg-slate-50/80">
                         <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getCallTypeIcon(call.call_type)}
+                            {getCallTypeBadge(call.call_type)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div>
-                            <p className="font-medium">{call.customer_name || call.caller_number}</p>
-                            <p className="text-sm text-slate-500">
-                              {new Date(call.call_start_time).toLocaleString()}
+                            <p className="font-medium text-slate-900">
+                              {call.contact_name || call.customer_name || (call.call_type === 'outbound' ? call.receiver_number : call.caller_number) || '-'}
+                            </p>
+                            <p className="text-xs text-slate-500 font-mono">
+                              {call.call_type === 'outbound' ? call.receiver_number : call.caller_number}
                             </p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getCallTypeIcon(call.call_type)}
-                            <span className="capitalize">{t(call.call_type) || call.call_type}</span>
-                          </div>
+                          <span className="text-sm text-slate-600">
+                            {formatTime(call.call_start_time)}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{formatDuration(call.call_duration || 0)}</span>
+                            <span className="tabular-nums">{formatDuration(call.call_duration || 0)}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          {call.sentiment_score !== undefined && getSentimentBadge(call.sentiment_score)}
+                          {getOutcomeBadge(call.call_outcome)}
                         </TableCell>
                         <TableCell>
-                          {call.call_outcome && (
-                            <Badge variant="outline" className="capitalize">
-                              {t(call.call_outcome) || call.call_outcome.replace('_', ' ')}
-                            </Badge>
+                          {call.recording_url ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-7 p-0"
+                                onClick={() => handlePlayRecording(call.recording_url, call.id)}
+                              >
+                                {playingAudio === call.id ? (
+                                  <Pause className="w-3 h-3 text-blue-600" />
+                                ) : (
+                                  <Play className="w-3 h-3 text-blue-600" />
+                                )}
+                              </Button>
+                              <a
+                                href={call.recording_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex"
+                              >
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                  <Download className="w-3 h-3 text-slate-500" />
+                                </Button>
+                              </a>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCallBack(call.caller_number)}
-                              disabled={isCallInProgress}
-                            >
-                              <PhoneCall className="w-3 h-3 mr-1" />
-                              {t('call_back')}
-                            </Button>
-                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7"
+                            onClick={() => {
+                              const num = call.call_type === 'inbound' ? call.caller_number : call.receiver_number;
+                              if (num) setDialNumber(num);
+                            }}
+                            disabled={isCallInProgress}
+                          >
+                            <PhoneCall className="w-3 h-3 mr-1" />
+                            {t('call')}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -536,15 +602,16 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
 
             {pbxConfig?.enabled && (
               <>
-                {/* Server URL */}
+                {/* Domain */}
                 <div className="space-y-2">
-                  <Label htmlFor="server-url">{t('pbx_server_url')}</Label>
+                  <Label htmlFor="pbx-domain">{t('pbx_domain')}</Label>
                   <Input
-                    id="server-url"
-                    placeholder="https://pbx.example.com"
-                    value={pbxConfig?.serverUrl || ''}
-                    onChange={(e) => setPbxConfig(prev => ({ ...prev, serverUrl: e.target.value }))}
+                    id="pbx-domain"
+                    placeholder="pbx36019.onpbx.ru"
+                    value={pbxConfig?.domain || ''}
+                    onChange={(e) => setPbxConfig(prev => ({ ...prev, domain: e.target.value }))}
                   />
+                  <p className="text-xs text-slate-500">OnlinePBX panel domeni</p>
                 </div>
 
                 {/* API Key */}
@@ -554,8 +621,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                     id="api-key"
                     type="password"
                     placeholder="API Key"
-                    value={pbxConfig?.apiKey || ''}
-                    onChange={(e) => setPbxConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                    value={pbxConfig?.api_key || ''}
+                    onChange={(e) => setPbxConfig(prev => ({ ...prev, api_key: e.target.value }))}
                   />
                 </div>
 
@@ -575,18 +642,46 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                   <Label htmlFor="caller-id">{t('pbx_caller_id')}</Label>
                   <Input
                     id="caller-id"
-                    placeholder="+1234567890"
-                    value={pbxConfig?.callerId || ''}
-                    onChange={(e) => setPbxConfig(prev => ({ ...prev, callerId: e.target.value }))}
+                    placeholder="+998901234567"
+                    value={pbxConfig?.caller_id || ''}
+                    onChange={(e) => setPbxConfig(prev => ({ ...prev, caller_id: e.target.value }))}
                   />
                 </div>
+
+                {/* Webhook URL info */}
+                {(() => {
+                  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+                  const webhookUrl = `${apiBase}/webhooks/pbx?tenant_id=${localStorage.getItem('tenantId') || 'YOUR_TENANT_ID'}`;
+                  return (
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-slate-700">Webhook URL</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => navigator.clipboard.writeText(webhookUrl)}
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      {t('copy')}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500 font-mono break-all">
+                    {webhookUrl}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {t('webhook_url_hint')}
+                  </p>
+                </div>
+                  );
+                })()}
 
                 {/* Test Connection */}
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     onClick={handleTestConnection}
-                    disabled={testingConnection || !pbxConfig?.serverUrl}
+                    disabled={testingConnection || !pbxConfig?.domain}
                   >
                     {testingConnection ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
+import { useAuth } from "@/components/contexts/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import apiClient from "@/api/client";
 
 export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
+  const { user } = useAuth();
+  const { MODULES, canDelete } = usePermissions();
+  // canDelete on CUSTOMERS = "grant" level = sales head / admin
+  const canChangeAssignment = canDelete(MODULES.CUSTOMERS);
+
+  const [users, setUsers] = useState([]);
 
   const [formData, setFormData] = useState({
     contact_name: lead?.contact_name || "",
@@ -18,8 +27,22 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     phone: lead?.phone || "",
     status: lead?.status || "new",
     source: lead?.source || "website",
-    notes: lead?.notes || ""
+    notes: lead?.notes || "",
+    assigned_to: lead?.assigned_to || user?.id || ""
   });
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await apiClient.get('/users', { params: { limit: 100 } });
+        const data = response.data.data;
+        setUsers(Array.isArray(data) ? data : data?.users || []);
+      } catch (err) {
+        console.warn('Failed to fetch users:', err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -29,6 +52,11 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  const assignedUser = users.find(u => u.id === formData.assigned_to);
+  const assignedName = assignedUser
+    ? (assignedUser.full_name || `${assignedUser.first_name || ''} ${assignedUser.last_name || ''}`.trim())
+    : lead?.assigned_to_name || '';
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -77,7 +105,6 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                   htmlFor="email"
                   label={t('email')}
                   helpText={t('help_lead_email')}
-                  required
                 />
                 <Input
                   id="email"
@@ -85,7 +112,6 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                   value={formData.email}
                   onChange={(e) => handleChange("email", e.target.value)}
                   placeholder="email@example.com"
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -143,6 +169,39 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Sales Person / Assigned To */}
+            <div className="space-y-2">
+              <LabelWithHelp
+                htmlFor="assigned_to"
+                label={t('sales_person')}
+                helpText={t('help_sales_person')}
+              />
+              {canChangeAssignment ? (
+                <Select
+                  value={formData.assigned_to || ""}
+                  onValueChange={(value) => handleChange("assigned_to", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_sales_person')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.filter(u => u.is_active !== false).map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.full_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="assigned_to"
+                  value={assignedName || user?.full_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+                  disabled
+                  className="bg-slate-50"
+                />
+              )}
             </div>
 
             <div className="space-y-2">

@@ -307,6 +307,12 @@ export default function LeadsKanban({
               </Badge>
             </div>
           )}
+          {lead.assigned_to_name && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-1">
+              <User className="w-3 h-3" />
+              <span>{lead.assigned_to_name}</span>
+            </div>
+          )}
           {lead.created_at && (
             <div className="flex items-center gap-1.5 text-xs text-slate-400 pt-1">
               <Calendar className="w-3 h-3" />

@@ -11,13 +11,20 @@ import {
   TrendingUp,
   Phone,
   PhoneCall,
+  PhoneIncoming,
+  PhoneOutgoing,
+  PhoneMissed,
   Mail,
   UserPlus,
   Building,
   Target,
   Trash2,
   ShoppingCart,
+  FileText,
+  ArrowUpDown,
+  Clock,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,6 +54,404 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { pbxService } from "@/api/services";
 import { useToast } from "@/components/ui/use-toast";
+import { useSales } from "@/components/contexts/SalesContext";
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+
+function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, formatCurrency, language, t }) {
+  const [sortField, setSortField] = useState('totalSales');
+  const [sortDir, setSortDir] = useState('desc');
+  const [callViewMode, setCallViewMode] = useState('daily'); // 'daily' | 'monthly'
+
+  const customerStats = useMemo(() => {
+    const stats = {};
+
+    // Initialize all customers
+    customers.forEach(c => {
+      stats[c.id] = {
+        id: c.id,
+        name: c.company_name || c.contact_name || '-',
+        contact: c.contact_name || '',
+        phone: c.phone || '',
+        orderCount: 0,
+        totalSales: 0,
+        invoiceCount: 0,
+        totalInvoiced: 0,
+        totalPaid: 0,
+        totalDebt: 0,
+        lastOrderDate: null,
+      };
+    });
+
+    // Aggregate sales orders
+    salesOrders.forEach(order => {
+      const cid = order.customer_id;
+      if (!cid || !stats[cid]) return;
+      stats[cid].orderCount += 1;
+      stats[cid].totalSales += (order.total_amount || 0);
+      const orderDate = order.created_at || order.date;
+      if (orderDate && (!stats[cid].lastOrderDate || orderDate > stats[cid].lastOrderDate)) {
+        stats[cid].lastOrderDate = orderDate;
+      }
+    });
+
+    // Aggregate invoices
+    invoices.forEach(inv => {
+      const cid = inv.customer_id;
+      if (!cid || !stats[cid]) return;
+      stats[cid].invoiceCount += 1;
+      stats[cid].totalInvoiced += (inv.total_amount || 0);
+      stats[cid].totalPaid += (inv.paid_amount || 0);
+      stats[cid].totalDebt += ((inv.total_amount || 0) - (inv.paid_amount || 0));
+    });
+
+    return Object.values(stats);
+  }, [customers, salesOrders, invoices]);
+
+  const sortedStats = useMemo(() => {
+    return [...customerStats].sort((a, b) => {
+      const aVal = a[sortField] || 0;
+      const bVal = b[sortField] || 0;
+      return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+  }, [customerStats, sortField, sortDir]);
+
+  const totals = useMemo(() => {
+    return customerStats.reduce((acc, c) => ({
+      orderCount: acc.orderCount + c.orderCount,
+      totalSales: acc.totalSales + c.totalSales,
+      totalInvoiced: acc.totalInvoiced + c.totalInvoiced,
+      totalPaid: acc.totalPaid + c.totalPaid,
+      totalDebt: acc.totalDebt + c.totalDebt,
+    }), { orderCount: 0, totalSales: 0, totalInvoiced: 0, totalPaid: 0, totalDebt: 0 });
+  }, [customerStats]);
+
+  // Daily leads chart data (last 30 days)
+  const dailyLeadsData = useMemo(() => {
+    const days = 30;
+    const data = [];
+    const now = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const count = (leads || []).filter(l => {
+        const created = l.created_at?.split('T')[0];
+        return created === dateStr;
+      }).length;
+      data.push({
+        date: dateStr,
+        label: `${date.getDate()}/${date.getMonth() + 1}`,
+        count,
+      });
+    }
+    return data;
+  }, [leads]);
+
+  // Call statistics data
+  const callStatsData = useMemo(() => {
+    const logs = callLogs || [];
+    if (callViewMode === 'daily') {
+      const days = 30;
+      const data = [];
+      const now = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayLogs = logs.filter(l => (l.call_start_time || l.created_at)?.split('T')[0] === dateStr);
+        data.push({
+          date: dateStr,
+          label: `${date.getDate()}/${date.getMonth() + 1}`,
+          inbound: dayLogs.filter(l => l.call_type === 'inbound').length,
+          outbound: dayLogs.filter(l => l.call_type === 'outbound').length,
+          missed: dayLogs.filter(l => l.call_type === 'missed').length,
+        });
+      }
+      return data;
+    } else {
+      // Monthly view - last 12 months
+      const monthNames = {
+        en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        uz: ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'],
+        ru: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+      };
+      const names = monthNames[language] || monthNames.en;
+      const data = [];
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const monthLogs = logs.filter(l => {
+          const d = new Date(l.call_start_time || l.created_at);
+          return d.getFullYear() === year && d.getMonth() === month;
+        });
+        data.push({
+          label: `${names[month]} ${year}`,
+          inbound: monthLogs.filter(l => l.call_type === 'inbound').length,
+          outbound: monthLogs.filter(l => l.call_type === 'outbound').length,
+          missed: monthLogs.filter(l => l.call_type === 'missed').length,
+        });
+      }
+      return data;
+    }
+  }, [callLogs, callViewMode, language]);
+
+  // Call duration data (hours per day, last 30 days)
+  const callDurationData = useMemo(() => {
+    const logs = callLogs || [];
+    const days = 30;
+    const data = [];
+    const now = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayLogs = logs.filter(l => (l.call_start_time || l.created_at)?.split('T')[0] === dateStr);
+      const inboundSecs = dayLogs.filter(l => l.call_type === 'inbound').reduce((s, l) => s + (l.call_duration || 0), 0);
+      const outboundSecs = dayLogs.filter(l => l.call_type === 'outbound').reduce((s, l) => s + (l.call_duration || 0), 0);
+      data.push({
+        date: dateStr,
+        label: `${date.getDate()}/${date.getMonth() + 1}`,
+        inboundHours: +(inboundSecs / 3600).toFixed(2),
+        outboundHours: +(outboundSecs / 3600).toFixed(2),
+      });
+    }
+    return data;
+  }, [callLogs]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  const SortHeader = ({ field, children }) => (
+    <TableHead
+      className="cursor-pointer hover:bg-slate-50 select-none"
+      onClick={() => handleSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        <ArrowUpDown className={`w-3 h-3 ${sortField === field ? 'text-blue-600' : 'text-slate-400'}`} />
+      </div>
+    </TableHead>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-600 mb-1">{t('total_orders') || 'Jami buyurtmalar'}</p>
+            <p className="text-2xl font-bold text-slate-900">{totals.orderCount}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-600 mb-1">{t('total_sales') || 'Jami sotuvlar'}</p>
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(totals.totalSales)}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-600 mb-1">{t('total_paid') || "To'langan"}</p>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(totals.totalPaid)}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-600 mb-1">{t('total_debt') || 'Qarzdorlik'}</p>
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(totals.totalDebt)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Daily Leads Chart */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-purple-600" />
+            {t('daily_leads')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dailyLeadsData.some(d => d.count > 0) ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyLeadsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.date || ''}
+                  />
+                  <Bar dataKey="count" name={t('leads_per_day')} fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <Target className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+              <p>{t('no_leads_data')}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Call Statistics Chart */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <PhoneCall className="w-5 h-5 text-blue-600" />
+              {t('call_statistics')}
+            </CardTitle>
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setCallViewMode('daily')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  callViewMode === 'daily' ? 'bg-white shadow-sm text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t('daily_view')}
+              </button>
+              <button
+                onClick={() => setCallViewMode('monthly')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  callViewMode === 'monthly' ? 'bg-white shadow-sm text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t('monthly_view')}
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {callStatsData.some(d => d.inbound > 0 || d.outbound > 0 || d.missed > 0) ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={callStatsData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={callViewMode === 'daily' ? 2 : 0} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                  <Legend />
+                  <Bar dataKey="inbound" name={t('incoming_calls')} fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="outbound" name={t('outgoing_calls')} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="missed" name={t('missed_calls')} fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <PhoneCall className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+              <p>{t('no_calls_data')}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Call Duration Report */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-orange-600" />
+            {t('call_duration_report')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {callDurationData.some(d => d.inboundHours > 0 || d.outboundHours > 0) ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={callDurationData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    formatter={(value) => [`${value} ${t('hours_spent')}`, undefined]}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.date || ''}
+                  />
+                  <Legend />
+                  <Bar dataKey="inboundHours" name={t('incoming_hours')} fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="outboundHours" name={t('outgoing_hours')} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <Clock className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+              <p>{t('no_calls_data')}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Customer report table */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <CardTitle>{t('customer_report') || 'Mijozlar bo\'yicha hisobot'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead>{t('customer') || 'Mijoz'}</TableHead>
+                  <SortHeader field="orderCount">{t('orders') || 'Buyurtmalar'}</SortHeader>
+                  <SortHeader field="totalSales">{t('total_sales') || 'Sotuvlar'}</SortHeader>
+                  <SortHeader field="totalInvoiced">{t('invoiced') || 'Hisob-faktura'}</SortHeader>
+                  <SortHeader field="totalPaid">{t('paid') || "To'langan"}</SortHeader>
+                  <SortHeader field="totalDebt">{t('debt') || 'Qarzdorlik'}</SortHeader>
+                  <TableHead>{t('last_order') || 'Oxirgi buyurtma'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedStats.map((c, idx) => (
+                  <TableRow key={c.id} className="hover:bg-slate-50/80">
+                    <TableCell className="text-slate-500">{idx + 1}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-slate-900">{c.name}</p>
+                        {c.contact && c.contact !== c.name && (
+                          <p className="text-xs text-slate-500">{c.contact}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="tabular-nums">{c.orderCount}</TableCell>
+                    <TableCell className="tabular-nums font-medium">{formatCurrency(c.totalSales)}</TableCell>
+                    <TableCell className="tabular-nums">{formatCurrency(c.totalInvoiced)}</TableCell>
+                    <TableCell className="tabular-nums text-green-600">{formatCurrency(c.totalPaid)}</TableCell>
+                    <TableCell className={`tabular-nums font-medium ${c.totalDebt > 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                      {formatCurrency(c.totalDebt)}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-500">
+                      {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US') : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {sortedStats.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                      {t('no_data') || "Ma'lumot topilmadi"}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function Customers() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,6 +461,8 @@ export default function Customers() {
   const { activeCompany } = useCompany();
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const { toast } = useToast();
+  const { salesOrders, invoices } = useSales();
+  const { formatCurrency } = useCurrencyFormatter();
   const {
     customers,
     leads,
@@ -77,7 +484,8 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const activeTab = searchParams.get("tab") || "customers";
+  const rawTab = searchParams.get("tab") || "customers";
+  const activeTab = rawTab === "analytics" ? "reports" : rawTab;
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [showOpportunityForm, setShowOpportunityForm] = useState(false);
@@ -286,12 +694,12 @@ export default function Customers() {
               <span className="sm:hidden">Calls</span>
             </TabsTrigger>
             <TabsTrigger
-              value="analytics"
+              value="reports"
               className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
             >
-              <TrendingUp className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{t('analytics')}</span>
-              <span className="sm:hidden">Analytics</span>
+              <FileText className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">{t('reports') || 'Hisobotlar'}</span>
+              <span className="sm:hidden">{t('reports') || 'Hisobotlar'}</span>
             </TabsTrigger>
           </TabsList>
 
@@ -486,48 +894,17 @@ export default function Customers() {
             />
           </TabsContent>
 
-          <TabsContent value="analytics">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardHeader>
-                  <CardTitle>{t('customer_analytics')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4 text-center py-8">
-                    <TrendingUp className="w-16 h-16 mx-auto text-slate-300" />
-                    <p className="text-slate-600">{t('advanced_analytics_coming_soon')}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
-                <CardHeader>
-                  <CardTitle>{t('sector_breakdown')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {['technology', 'healthcare', 'retail', 'manufacturing', 'services'].map(industry => {
-                      const count = customers.filter(c => c.industry === industry).length;
-                      const percentage = customers.length > 0 ? (count / customers.length * 100) : 0;
-                      return (
-                        <div key={industry} className="flex items-center justify-between">
-                          <span className="capitalize text-sm text-slate-600">{t(industry)}</span>
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 bg-slate-200 rounded-full h-2">
-                              <div
-                                className="bg-[var(--genix-blue)] h-2 rounded-full"
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium text-slate-900">{count}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="reports">
+            <CustomerReports
+              customers={customers}
+              salesOrders={salesOrders}
+              invoices={invoices}
+              leads={leads}
+              callLogs={callLogs}
+              formatCurrency={formatCurrency}
+              language={language}
+              t={t}
+            />
           </TabsContent>
         </Tabs>
 
