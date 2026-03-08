@@ -37,6 +37,17 @@ export function formatAmount(amount, options = {}) {
   return formatted + ' ' + symbol;
 }
 
+// Format number for chart axis ticks (no currency symbol, just abbreviated number)
+export function formatAxisTick(value) {
+  const num = Number(value) || 0;
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return sign + (abs / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + ' mlrd';
+  if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' mln';
+  if (abs >= 1_000) return sign + (abs / 1_000).toFixed(1).replace(/\.0$/, '') + ' ming';
+  return num.toString();
+}
+
 // Format large numbers compactly with abbreviations (mln, mlrd, ming)
 export function formatCompactNumber(amount, options = {}) {
   const {
