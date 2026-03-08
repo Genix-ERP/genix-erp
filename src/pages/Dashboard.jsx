@@ -244,7 +244,7 @@ export default function Dashboard() {
                               ? 'bg-amber-50 text-amber-600'
                               : 'bg-blue-50 text-blue-600'
                         }`}>
-                          {insight.priority}
+                          {t(`priority_${insight.priority}`) || insight.priority}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 line-clamp-2">{insight.description}</p>

@@ -210,7 +210,7 @@ const aiTranslations = {
 
     // Financial
     noFinancialData: "Moliyaviy ma'lumotlar mavjud emas.",
-    healthyProfitMargin: "Sog'lom foyda marjasi",
+    healthyProfitMargin: "Foyda marjasi",
     profitMarginAbove: (margin) => `Sizning foyda marjangiz ${margin}% sohaviy o'rtachadan yuqori`,
     lowProfitMargin: "Past foyda marjasi",
     profitMarginBelow: (margin) => `${margin}% foyda marjasi optimal darajadan past`,
