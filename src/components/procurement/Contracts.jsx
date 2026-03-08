@@ -325,11 +325,7 @@ export default function Contracts() {
               <div>
                 <p className="text-xs text-slate-500">{t('total_value') || "Jami qiymat"}</p>
                 <p className="text-lg font-bold text-purple-600">
-                  {stats.totalValue > 1000000000
-                    ? `${(stats.totalValue / 1000000000).toFixed(1)} mlrd`
-                    : stats.totalValue > 1000000
-                    ? `${(stats.totalValue / 1000000).toFixed(1)} mln`
-                    : stats.totalValue.toLocaleString()}
+                  {Math.round(stats.totalValue).toLocaleString('ru-RU')}
                 </p>
               </div>
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">

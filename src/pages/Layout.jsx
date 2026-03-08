@@ -26,7 +26,8 @@ import {
   LogOut,
   Cog,
   Ship,
-  Building2
+  Building2,
+  Sparkles
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -466,6 +467,10 @@ function LayoutContent({ children, currentPageName }) {
               </div>
               <div className="flex items-center gap-1.5 md:gap-2">
                 <LanguageSelector />
+                <Link to={createPageUrl("AIAssistant")} className="hidden sm:inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {t('ai_assistant')}
+                </Link>
                 <Button
                   variant="ghost"
                   size="icon"
