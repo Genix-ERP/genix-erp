@@ -122,7 +122,7 @@ export const productionOrdersService = {
 // =====================================================
 export const workOrdersService = {
   async list(companyId, params = {}) {
-    const response = await apiClient.get('/work-orders', { params });
+    const response = await apiClient.get('/work-orders', { params: { limit: 100, ...params } });
     return response.data.data || [];
   },
 
