@@ -393,26 +393,19 @@ function LayoutContent({ children, currentPageName }) {
             }
             .genix-logo-transparent {
               mix-blend-mode: multiply;
-              filter: brightness(1.1) contrast(1.05);
+              filter: contrast(1.1);
             }
           `}
         </style>
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
-          <SidebarHeader className="border-b border-slate-200/60 px-4 py-3">
-            <div className="flex flex-col gap-2">
+          <SidebarHeader className="border-b border-slate-100 px-4 py-5">
+            <div className="flex items-center justify-center h-10 overflow-hidden">
               <img
                 src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-                alt="Genix Logo"
-                className="h-36 w-auto object-contain genix-logo-transparent -mt-2"
+                alt="Genix"
+                className="h-[120px] w-auto object-contain genix-logo-transparent"
               />
-              <div className="flex items-center gap-2">
-                <div className="h-[1px] flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-transparent opacity-30"></div>
-                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-slate-400 whitespace-nowrap">
-                  AI-Powered ERP
-                </span>
-                <div className="h-[1px] flex-1 bg-gradient-to-l from-[var(--genix-blue)] to-transparent opacity-30"></div>
-              </div>
             </div>
           </SidebarHeader>
           
