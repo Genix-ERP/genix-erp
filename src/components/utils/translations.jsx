@@ -46,6 +46,8 @@ export const translations = {
 
     // Navigation & Layout
     "dashboard": "Dashboard",
+    "business_overview": "Business overview",
+    "quick_overview": "Quick Overview",
     "salesorders": "Sales Orders",
     "inventory": "Inventory",
     "customers": "Customers",
@@ -6226,6 +6228,8 @@ export const translations = {
 
     // Navigation & Layout
     "dashboard": "Asosiy panel",
+    "business_overview": "Biznes umumiy ko'rinishi",
+    "quick_overview": "Qisqacha ko'rinish",
     "salesorders": "Savdo buyurtmalari",
     "inventory": "Ombor",
     "customers": "Mijozlar",
@@ -12562,6 +12566,8 @@ export const translations = {
 
     // Navigation & Layout
     "dashboard": "Панель управления",
+    "business_overview": "Обзор бизнеса",
+    "quick_overview": "Краткий обзор",
     "salesorders": "Заказы на продажу",
     "inventory": "Склад",
     "customers": "Клиенты",
