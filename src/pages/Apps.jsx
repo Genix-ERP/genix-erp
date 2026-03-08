@@ -320,15 +320,6 @@ export default function Apps() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
 
-        {/* Header Section - Redesigned */}
-        <div className="bg-gradient-to-r from-white via-white to-blue-50/30 rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200/60">
-          <div className="flex-1">
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[var(--genix-navy)] to-[var(--genix-blue)] bg-clip-text text-transparent mb-3">
-              {t('apps_title')}
-            </h1>
-          </div>
-        </div>
-
         {/* Search Section - Enhanced */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />

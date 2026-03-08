@@ -58,7 +58,7 @@ import {
   useAuditTrail,
 } from '@/components/shared';
 import { useCompany } from '@/components/contexts/CompanyContext';
-import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { formatPriceInput, parsePriceInput, formatAxisTick } from '@/utils/formatCurrency';
 
 export default function SalesOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1149,7 +1149,7 @@ export default function SalesOrders() {
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" fontSize={12} />
-                      <YAxis fontSize={12} tickFormatter={(v) => formatCurrencyCompact(v)} />
+                      <YAxis fontSize={12} width={55} tickFormatter={formatAxisTick} />
                       <Tooltip formatter={(value) => formatCurrency(value)} />
                       <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
                     </LineChart>

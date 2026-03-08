@@ -1,78 +1,57 @@
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Users, ArrowRight } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
-
-const statusColors = {
-  prospect: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  active: "bg-green-100 text-green-800 border-green-200",
-  inactive: "bg-gray-100 text-gray-800 border-gray-200",
-  churned: "bg-red-100 text-red-800 border-red-200"
-};
 
 export default function RecentCustomers({ customers }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { formatCurrency } = useCurrencyFormatter();
 
   return (
-    <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-[var(--genix-blue)]" />
-          {t('recent_customers')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {customers.length > 0 ? (
-          <div className="space-y-4">
-            {customers.slice(0, 5).map((customer) => (
-              <div key={customer.id} className="flex items-center justify-between p-3 bg-slate-50/80 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-[var(--genix-blue)] to-[var(--genix-purple)] rounded-full flex items-center justify-center">
-                    <span className="text-white font-semibold text-sm">
-                      {customer.company_name?.charAt(0) || 'C'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">{customer.company_name}</p>
-                    <p className="text-sm text-slate-500">{customer.contact_name}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <Badge className={statusColors[customer.status]}>
-                    {t(customer.status)}
-                  </Badge>
-                  {customer.monthly_value && (
-                    <p className="text-sm text-slate-600 mt-1">
-                      {formatCurrency(customer.monthly_value)}{t("per_month")}
-                    </p>
-                  )}
-                </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-slate-900">{t('recent_customers')}</h3>
+        <Link to={createPageUrl("Customers")} className="text-xs text-indigo-500 hover:text-indigo-700 font-medium flex items-center gap-1 transition-colors">
+          {t('view_all_customers')} <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      {customers.length > 0 ? (
+        <div className="space-y-0.5">
+          {customers.slice(0, 6).map((customer) => (
+            <div key={customer.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
+                <span className="text-indigo-600 font-semibold text-sm">
+                  {customer.company_name?.charAt(0) || 'C'}
+                </span>
               </div>
-            ))}
-            <Link to={createPageUrl("Customers")}>
-              <Button variant="outline" className="w-full mt-4">
-                {t('view_all_customers')} <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </Link>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{customer.company_name}</p>
+                {customer.contact_name && (
+                  <p className="text-xs text-slate-400 truncate">{customer.contact_name}</p>
+                )}
+              </div>
+              {customer.industry && (
+                <span className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md hidden sm:block">
+                  {customer.industry}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-10">
+          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mx-auto mb-3">
+            <Users className="w-6 h-6 text-slate-300" />
           </div>
-        ) : (
-          <div className="text-center py-8 text-slate-500">
-            <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
-            <p>{t('no_customers_yet')}</p>
-            <Link to={createPageUrl("Customers")}>
-              <Button className="mt-4">{t('add_first_customer')}</Button>
-            </Link>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          <p className="text-sm text-slate-500 mb-3">{t('no_customers_yet')}</p>
+          <Link to={createPageUrl("Customers")}>
+            <button className="text-sm text-indigo-500 hover:text-indigo-700 font-medium">
+              {t('add_first_customer')}
+            </button>
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
