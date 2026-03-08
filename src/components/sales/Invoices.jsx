@@ -67,7 +67,7 @@ import { useAdminSettings } from "@/components/contexts/AdminSettingsContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
-export default function Invoices() {
+export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { activeCompany } = useCompany();
@@ -114,6 +114,30 @@ export default function Invoices() {
     };
     loadProducts();
   }, []);
+
+  // Auto-open invoice when openInvoiceId is provided (e.g. after creating from order)
+  useEffect(() => {
+    if (openInvoiceId) {
+      const openInvoice = async () => {
+        try {
+          const fullInvoice = await getInvoice(openInvoiceId);
+          setSelectedInvoice(fullInvoice);
+          setShowDetails(true);
+        } catch (error) {
+          console.error('Failed to open invoice:', error);
+          // Try from list
+          const inv = invoices.find(i => i.id === openInvoiceId);
+          if (inv) {
+            setSelectedInvoice(inv);
+            setShowDetails(true);
+          }
+        }
+        if (onInvoiceOpened) onInvoiceOpened();
+      };
+      openInvoice();
+    }
+  }, [openInvoiceId]);
+
   const [showForm, setShowForm] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);

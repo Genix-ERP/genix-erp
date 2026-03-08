@@ -103,10 +103,11 @@ export default function TaxReports() {
     notes: '',
   });
 
-  // Load data
+  // Load data on mount only
   useEffect(() => {
     loadSummary();
-  }, [startDate, endDate]);
+    loadPeriods();
+  }, []);
 
   useEffect(() => {
     loadPeriods();
@@ -116,7 +117,7 @@ export default function TaxReports() {
     if (activeTab === 'transactions') {
       loadTransactions();
     }
-  }, [activeTab, startDate, endDate]);
+  }, [activeTab]);
 
   const loadSummary = async () => {
     try {
