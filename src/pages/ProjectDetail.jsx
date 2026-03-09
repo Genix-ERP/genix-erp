@@ -953,7 +953,6 @@ export default function ProjectDetail() {
               projectEndDate={project.end_date}
               onTaskUpdate={(taskId, updates) => {
                 // Handle task date updates if needed
-                console.log('Task update:', taskId, updates);
               }}
             />
           </TabsContent>

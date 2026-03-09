@@ -106,7 +106,7 @@ export const Core = {
             return JSON.parse(result);
           } catch {
             // If parsing fails, return a default structure based on schema
-            console.log('Could not parse AI response as JSON, returning default structure');
+            // Could not parse AI response as JSON, returning default structure
             return getDefaultResponse(options.response_json_schema, 'Unable to parse AI response. Please try again.');
           }
         } else if (typeof result === 'object') {
@@ -128,8 +128,7 @@ export const Core = {
 
   // Email functionality (placeholder - would need email backend)
   SendEmail: async (options) => {
-    console.log('SendEmail called:', options);
-    // For now, just log - would need email service implementation
+    // Placeholder - would need email service implementation
     return { success: true, message: 'Email functionality not yet implemented' };
   },
 
@@ -150,13 +149,13 @@ export const Core = {
 
   // Image generation (placeholder)
   GenerateImage: async (options) => {
-    console.log('GenerateImage called:', options);
+    // Placeholder - image generation not yet implemented
     return { success: false, message: 'Image generation not yet implemented' };
   },
 
   // Extract data from file (placeholder)
   ExtractDataFromUploadedFile: async (options) => {
-    console.log('ExtractDataFromUploadedFile called:', options);
+    // Placeholder - file extraction not yet implemented
     return { success: false, message: 'File extraction not yet implemented' };
   },
 

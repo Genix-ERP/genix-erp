@@ -1,40 +1,48 @@
+import React, { Suspense } from 'react';
 import Layout from "./Layout.jsx";
-import Login from "./Login";
-import Register from "./Register";
-import AcceptInvite from "./AcceptInvite";
-import Dashboard from "./Dashboard";
-import AIAssistant from "./AIAssistant";
-import Inventory from "./Inventory";
-import Workflows from "./Workflows";
-import HR from "./HR";
-import Apps from "./Apps";
-import Customers from "./Customers";
-import Settings from "./Settings";
-import MySettings from "./MySettings";
-import Financials from "./Financials";
-import Notifications from "./Notifications";
-import AdminPanel from "./AdminPanel";
-import AdminSettings from "./AdminSettings";
-import Manufacturing from "./Manufacturing";
-import Procurement from "./Procurement";
-import Projects from "./Projects";
-import ProjectDetail from "./ProjectDetail";
-import SalesOrders from "./SalesOrders";
-import Assets from "./Assets";
-import Expenses from "./Expenses";
-import Payroll from "./Payroll";
-import Contracts from "./Contracts";
-import Companies from "./Companies";
-import AddCompany from "./AddCompany";
-import LeaveManagement from "./LeaveManagement";
-import Attendance from "./Attendance";
-import EmployeeContracts from "./EmployeeContracts";
-import Cargo from "./Cargo";
-import POS from "./POS";
-import Construction from "./Construction";
-import OperationTypeDetail from "./OperationTypeDetail";
-import ForgotPassword from "./ForgotPassword";
-import ResetPassword from "./ResetPassword";
+
+const Login = React.lazy(() => import('./Login'));
+const Register = React.lazy(() => import('./Register'));
+const AcceptInvite = React.lazy(() => import('./AcceptInvite'));
+const Dashboard = React.lazy(() => import('./Dashboard'));
+const AIAssistant = React.lazy(() => import('./AIAssistant'));
+const Inventory = React.lazy(() => import('./Inventory'));
+const Workflows = React.lazy(() => import('./Workflows'));
+const HR = React.lazy(() => import('./HR'));
+const Apps = React.lazy(() => import('./Apps'));
+const Customers = React.lazy(() => import('./Customers'));
+const Settings = React.lazy(() => import('./Settings'));
+const MySettings = React.lazy(() => import('./MySettings'));
+const Financials = React.lazy(() => import('./Financials'));
+const Notifications = React.lazy(() => import('./Notifications'));
+const AdminPanel = React.lazy(() => import('./AdminPanel'));
+const AdminSettings = React.lazy(() => import('./AdminSettings'));
+const Manufacturing = React.lazy(() => import('./Manufacturing'));
+const Procurement = React.lazy(() => import('./Procurement'));
+const Projects = React.lazy(() => import('./Projects'));
+const ProjectDetail = React.lazy(() => import('./ProjectDetail'));
+const SalesOrders = React.lazy(() => import('./SalesOrders'));
+const Assets = React.lazy(() => import('./Assets'));
+const Expenses = React.lazy(() => import('./Expenses'));
+const Payroll = React.lazy(() => import('./Payroll'));
+const Contracts = React.lazy(() => import('./Contracts'));
+const Companies = React.lazy(() => import('./Companies'));
+const AddCompany = React.lazy(() => import('./AddCompany'));
+const LeaveManagement = React.lazy(() => import('./LeaveManagement'));
+const Attendance = React.lazy(() => import('./Attendance'));
+const EmployeeContracts = React.lazy(() => import('./EmployeeContracts'));
+const Cargo = React.lazy(() => import('./Cargo'));
+const POS = React.lazy(() => import('./POS'));
+const Construction = React.lazy(() => import('./Construction'));
+const OperationTypeDetail = React.lazy(() => import('./OperationTypeDetail'));
+const ForgotPassword = React.lazy(() => import('./ForgotPassword'));
+const ResetPassword = React.lazy(() => import('./ResetPassword'));
+
+const SuspenseFallback = (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    </div>
+);
 
 import { BrowserRouter as Router, Route, Routes, useLocation, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/components/contexts/AuthContext';
@@ -165,6 +173,7 @@ function LayoutWrapper() {
 // Create a wrapper component that uses useLocation inside the Router context
 function PagesContent() {
     return (
+        <Suspense fallback={SuspenseFallback}>
         <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -197,8 +206,8 @@ function PagesContent() {
                 <Route path="my-settings" element={<MySettings />} />
                 <Route path="financials" element={<ModuleRoute moduleId="financials"><Financials /></ModuleRoute>} />
                 <Route path="notifications" element={<Notifications />} />
-                <Route path="adminpanel" element={<AdminPanel />} />
-                <Route path="adminsettings" element={<AdminSettings />} />
+                <Route path="adminpanel" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+                <Route path="adminsettings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                 <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
                 <Route path="procurement" element={<ModuleRoute moduleId="procurement"><Procurement /></ModuleRoute>} />
                 <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
@@ -213,6 +222,7 @@ function PagesContent() {
                 <Route path="addcompany" element={<AdminRoute><AddCompany /></AdminRoute>} />
             </Route>
         </Routes>
+        </Suspense>
     );
 }
 

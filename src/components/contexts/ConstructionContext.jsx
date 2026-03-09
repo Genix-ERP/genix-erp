@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 import { constructionService } from '@/api/services/construction';
 
@@ -299,7 +299,7 @@ export const ConstructionProvider = ({ children }) => {
     });
   }, [sections]);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     projects,
     selectedProject,
@@ -341,7 +341,7 @@ export const ConstructionProvider = ({ children }) => {
     getProjectsByStatus,
     getProjectStats,
     getSectionTotals,
-  };
+  }), [projects, selectedProject, sections, selectedSection, items, loading, projectDashboard, loadProjects, getProject, createProject, updateProject, deleteProject, loadProjectDashboard, loadSections, createSection, updateSection, deleteSection, loadItems, createItem, updateItem, deleteItem, getProjectsByStatus, getProjectStats, getSectionTotals]);
 
   return (
     <ConstructionContext.Provider value={value}>

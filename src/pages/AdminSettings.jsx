@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
@@ -75,6 +75,11 @@ export default function AdminSettings() {
     return searchParams.get('tab') || 'general';
   });
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const saveSuccessTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (saveSuccessTimeoutRef.current) clearTimeout(saveSuccessTimeoutRef.current); };
+  }, []);
 
   const {
     settings,
@@ -136,7 +141,8 @@ export default function AdminSettings() {
     const success = await saveSettings();
     if (success) {
       setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 3000);
+      if (saveSuccessTimeoutRef.current) clearTimeout(saveSuccessTimeoutRef.current);
+      saveSuccessTimeoutRef.current = setTimeout(() => setShowSaveSuccess(false), 3000);
     }
   };
 

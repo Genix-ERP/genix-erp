@@ -211,8 +211,6 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
       }
 
       // In a real implementation, update the opportunity stage
-      console.log(`Moving ${draggedItem.customer} from ${draggedItem.stage} to ${targetStage}`);
-      
       // Log the stage change
       await logStageChange(draggedItem, targetStage);
       
@@ -236,7 +234,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
 
   const logStageChange = async (deal, newStage) => {
     // Log stage change for AI learning
-    console.log(`Stage change logged: ${deal.customer} moved to ${newStage}`);
+    // Stage change logged for AI learning
   };
 
   const addCustomStage = async (stageName, position) => {

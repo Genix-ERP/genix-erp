@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { hrService, purchaseService, salesService, financeService, procurementService, projectsService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { checkBackendHealth } from '@/config/dataMode';
@@ -704,41 +704,43 @@ export function ModulesProvider({ children }) {
     loadPermissions();
   }, [loadPermissions]);
 
+  const value = useMemo(() => ({
+    // Data
+    employees, purchaseOrders, salesOrders, projects, assets, expenses, payrolls, contracts,
+    isLoading, backendAvailable,
+    // Employee methods
+    createEmployee, updateEmployee, deleteEmployee,
+    // Purchase Order methods
+    createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+    // Sales Order methods
+    createSalesOrder, updateSalesOrder, deleteSalesOrder,
+    // Project methods
+    createProject, updateProject, deleteProject,
+    // Asset methods
+    createAsset, updateAsset, deleteAsset, disposeAsset,
+    // Expense methods
+    createExpense, updateExpense, deleteExpense, approveExpense,
+    // Payroll methods
+    createPayroll, updatePayroll, deletePayroll, processPayroll,
+    // Contract methods
+    createContract, updateContract, deleteContract,
+    // Permission methods
+    permissions,
+    allModules: ALL_MODULES,
+    coreModules: CORE_MODULES,
+    appModules: APP_MODULES,
+    getEmployeePermissions,
+    setEmployeePermissions,
+    updateModulePermission,
+    hasPermission,
+    setModuleFullAccess,
+    deleteEmployeePermissions,
+    // Refresh
+    refreshData: loadData
+  }), [employees, purchaseOrders, salesOrders, projects, assets, expenses, payrolls, contracts, isLoading, backendAvailable, createEmployee, updateEmployee, deleteEmployee, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, createProject, updateProject, deleteProject, createAsset, updateAsset, deleteAsset, disposeAsset, createExpense, updateExpense, deleteExpense, approveExpense, createPayroll, updatePayroll, deletePayroll, processPayroll, createContract, updateContract, deleteContract, permissions, getEmployeePermissions, setEmployeePermissions, updateModulePermission, hasPermission, setModuleFullAccess, deleteEmployeePermissions, loadData]);
+
   return (
-    <ModulesContext.Provider value={{
-      // Data
-      employees, purchaseOrders, salesOrders, projects, assets, expenses, payrolls, contracts,
-      isLoading, backendAvailable,
-      // Employee methods
-      createEmployee, updateEmployee, deleteEmployee,
-      // Purchase Order methods
-      createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
-      // Sales Order methods
-      createSalesOrder, updateSalesOrder, deleteSalesOrder,
-      // Project methods
-      createProject, updateProject, deleteProject,
-      // Asset methods
-      createAsset, updateAsset, deleteAsset, disposeAsset,
-      // Expense methods
-      createExpense, updateExpense, deleteExpense, approveExpense,
-      // Payroll methods
-      createPayroll, updatePayroll, deletePayroll, processPayroll,
-      // Contract methods
-      createContract, updateContract, deleteContract,
-      // Permission methods
-      permissions,
-      allModules: ALL_MODULES,
-      coreModules: CORE_MODULES,
-      appModules: APP_MODULES,
-      getEmployeePermissions,
-      setEmployeePermissions,
-      updateModulePermission,
-      hasPermission,
-      setModuleFullAccess,
-      deleteEmployeePermissions,
-      // Refresh
-      refreshData: loadData
-    }}>
+    <ModulesContext.Provider value={value}>
       {children}
     </ModulesContext.Provider>
   );
