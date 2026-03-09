@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
@@ -840,7 +841,7 @@ export default function SalesOrders() {
         if (refreshModulesData) refreshModulesData();
         setActiveTab('invoices');
       } else {
-        alert(t('error_creating_invoice') || 'Failed to create invoice');
+        toast.error(t('error_creating_invoice') || 'Failed to create invoice');
       }
     }
   };
@@ -872,7 +873,7 @@ export default function SalesOrders() {
       resetCarrierForm();
     } catch (error) {
       console.error('Failed to create carrier:', error);
-      alert(t('error_creating_carrier') || 'Failed to create carrier');
+      toast.error(t('error_creating_carrier') || 'Failed to create carrier');
     }
   };
 
@@ -885,7 +886,7 @@ export default function SalesOrders() {
       setEditingCarrier(null);
     } catch (error) {
       console.error('Failed to update carrier:', error);
-      alert(t('error_updating_carrier') || 'Failed to update carrier');
+      toast.error(t('error_updating_carrier') || 'Failed to update carrier');
     }
   };
 
@@ -910,7 +911,7 @@ export default function SalesOrders() {
       setCarriers(prev => prev.filter(c => c.id !== carrier.id));
     } catch (error) {
       console.error('Failed to delete carrier:', error);
-      alert(t('error_deleting_carrier') || 'Failed to delete carrier');
+      toast.error(t('error_deleting_carrier') || 'Failed to delete carrier');
     }
   };
 

@@ -26,6 +26,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { salesService } from "@/api/services/sales";
 import { inventoryService } from "@/api/services/inventory";
+import { toast } from 'sonner';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -175,7 +176,7 @@ export default function DeliveryOrders() {
       }));
 
     if (validLines.length === 0) {
-      alert(t('no_items_to_deliver') || 'Please enter quantities for at least one item');
+      toast.error(t('no_items_to_deliver') || 'Please enter quantities for at least one item');
       return;
     }
 
@@ -201,7 +202,7 @@ export default function DeliveryOrders() {
       });
     } catch (error) {
       console.error('Failed to create delivery order:', error);
-      alert(t('error_creating_delivery') || 'Failed to create delivery order');
+      toast.error(t('error_creating_delivery') || 'Failed to create delivery order');
     }
   };
 
@@ -221,7 +222,7 @@ export default function DeliveryOrders() {
       setShowValidateModal(true);
     } catch (error) {
       console.error('Failed to fetch DO details:', error);
-      alert(t('error_fetching_details') || 'Failed to fetch delivery order details');
+      toast.error(t('error_fetching_details') || 'Failed to fetch delivery order details');
     }
   };
 
@@ -237,7 +238,7 @@ export default function DeliveryOrders() {
     } catch (error) {
       console.error('Failed to validate delivery order:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
-      alert((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
+      toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
     }
   };
 
@@ -255,7 +256,7 @@ export default function DeliveryOrders() {
       setSelectedDO(null);
     } catch (error) {
       console.error('Failed to cancel delivery order:', error);
-      alert(t('error_cancelling_delivery') || 'Failed to cancel delivery order');
+      toast.error(t('error_cancelling_delivery') || 'Failed to cancel delivery order');
     }
   };
 
