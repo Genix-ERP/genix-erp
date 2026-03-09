@@ -25,6 +25,7 @@ import {
   MapPin,
   CalendarClock,
   BarChart3,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,6 +46,7 @@ import OperationTypes from "@/components/inventory/OperationTypes";
 import StockOperations from "@/components/inventory/StockOperations";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import StockReport from "@/components/inventory/StockReport";
+import StockTransfers from "@/components/inventory/StockTransfers";
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -275,6 +277,14 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
+              value="transfers"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('transfers') || "O'tkazmalar"}</span>
+            </TabsTrigger>
+
+            <TabsTrigger
               value="stock-ops"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
@@ -382,6 +392,11 @@ export default function Inventory() {
           {/* Operation Types Tab */}
           <TabsContent value="operations" className="mt-6">
             <OperationTypes />
+          </TabsContent>
+
+          {/* Transfers Tab */}
+          <TabsContent value="transfers" className="mt-6">
+            <StockTransfers />
           </TabsContent>
 
           {/* Stock Operations Tab (TT: Receipt, Delivery, Internal, Write-off) */}

@@ -120,8 +120,10 @@ export default function InventoryManagement() {
 
     const getMovementType = (movement) => {
       const type = movement.transaction_type || movement.movement_type;
-      if (type === 'receipt') return 'inbound';
-      if (type === 'issue') return 'outbound';
+      if (type === 'receipt' || type === 'stock_in') return 'inbound';
+      if (type === 'issue' || type === 'stock_out') return 'outbound';
+      if (type === 'adjustment' && movement.quantity < 0) return 'outbound';
+      if (type === 'adjustment' && movement.quantity > 0) return 'inbound';
       return type || 'unknown';
     };
 
@@ -279,8 +281,10 @@ export default function InventoryManagement() {
   const getMovementTypeColor = (type) => {
     const colors = {
       receipt: 'bg-green-100 text-green-800 border-green-200',
+      stock_in: 'bg-green-100 text-green-800 border-green-200',
       shipment: 'bg-red-100 text-red-800 border-red-200',
       issue: 'bg-red-100 text-red-800 border-red-200',
+      stock_out: 'bg-red-100 text-red-800 border-red-200',
       adjustment: 'bg-blue-100 text-blue-800 border-blue-200',
       transfer: 'bg-purple-100 text-purple-800 border-purple-200',
       count: 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -291,8 +295,8 @@ export default function InventoryManagement() {
   const getMovementTypeIcon = (type, quantity) => {
     if (type === 'transfer') return ArrowRightLeft;
     if (type === 'adjustment' || type === 'count') return RotateCcw;
-    if (type === 'issue' || type === 'shipment') return ArrowUpRight;
-    if (type === 'receipt') return ArrowDownLeft;
+    if (type === 'issue' || type === 'shipment' || type === 'stock_out') return ArrowUpRight;
+    if (type === 'receipt' || type === 'stock_in') return ArrowDownLeft;
     return quantity > 0 ? ArrowDownLeft : ArrowUpRight;
   };
 
@@ -591,37 +595,60 @@ export default function InventoryManagement() {
                 </Card>
               </div>
 
-              {/* ABC Analysis */}
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg">{t('abc_analysis')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                      <div className="text-2xl font-bold text-green-600">
-                        {products.filter(p => p.abc_classification === 'A').length}
+              {/* ABC Analysis - calculated dynamically from inventory value */}
+              {(() => {
+                // Calculate total inventory value per product
+                const productValues = products
+                  .filter(p => p.is_stockable !== false)
+                  .map(p => {
+                    const totalQty = inventory
+                      .filter(i => i.product_id === p.id)
+                      .reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+                    const unitCost = p.cost_price || p.list_price || 0;
+                    return { id: p.id, value: totalQty * unitCost };
+                  })
+                  .sort((a, b) => b.value - a.value);
+
+                const totalValue = productValues.reduce((sum, p) => sum + p.value, 0);
+                let cumulative = 0;
+                const abcMap = {};
+                productValues.forEach(p => {
+                  cumulative += p.value;
+                  const pct = totalValue > 0 ? (cumulative / totalValue) * 100 : 100;
+                  abcMap[p.id] = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
+                });
+
+                const aCount = Object.values(abcMap).filter(v => v === 'A').length;
+                const bCount = Object.values(abcMap).filter(v => v === 'B').length;
+                const cCount = Object.values(abcMap).filter(v => v === 'C').length;
+
+                return (
+                  <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg">{t('abc_analysis')}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center p-4 bg-green-50 rounded-lg">
+                          <div className="text-2xl font-bold text-green-600">{aCount}</div>
+                          <div className="text-sm text-slate-600">{t('a_items')}</div>
+                          <div className="text-xs text-slate-500">{t('high')}</div>
+                        </div>
+                        <div className="text-center p-4 bg-blue-50 rounded-lg">
+                          <div className="text-2xl font-bold text-blue-600">{bCount}</div>
+                          <div className="text-sm text-slate-600">{t('b_items')}</div>
+                          <div className="text-xs text-slate-500">{t('medium')}</div>
+                        </div>
+                        <div className="text-center p-4 bg-slate-50 rounded-lg">
+                          <div className="text-2xl font-bold text-slate-600">{cCount}</div>
+                          <div className="text-sm text-slate-600">{t('c_items')}</div>
+                          <div className="text-xs text-slate-500">{t('low')}</div>
+                        </div>
                       </div>
-                      <div className="text-sm text-slate-600">{t('a_items')}</div>
-                      <div className="text-xs text-slate-500">{t('high')}</div>
-                    </div>
-                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {products.filter(p => p.abc_classification === 'B').length}
-                      </div>
-                      <div className="text-sm text-slate-600">{t('b_items')}</div>
-                      <div className="text-xs text-slate-500">{t('medium')}</div>
-                    </div>
-                    <div className="text-center p-4 bg-slate-50 rounded-lg">
-                      <div className="text-2xl font-bold text-slate-600">
-                        {products.filter(p => p.abc_classification === 'C' || !p.abc_classification).length}
-                      </div>
-                      <div className="text-sm text-slate-600">{t('c_items')}</div>
-                      <div className="text-xs text-slate-500">{t('low')}</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </CardContent>
           </TabsContent>
 

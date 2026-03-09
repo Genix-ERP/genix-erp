@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +56,7 @@ import {
   Calendar,
   AlertCircle,
   RefreshCw,
+  CreditCard,
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -68,6 +70,7 @@ export default function TaxReports() {
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const [, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);
@@ -76,10 +79,10 @@ export default function TaxReports() {
   const [transactions, setTransactions] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
 
-  // Date filters
+  // Date filters — default to all time so all transactions are visible
   const now = new Date();
-  const [startDate, setStartDate] = useState(format(startOfMonth(now), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(endOfMonth(now), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [periodTypeFilter, setPeriodTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState(now.getFullYear().toString());
@@ -297,11 +300,15 @@ export default function TaxReports() {
     }));
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, deadline) => {
+    // Check if overdue: not filed and past deadline
+    if (deadline && status !== 'filed' && new Date(deadline) < new Date()) {
+      return <Badge className="bg-red-100 text-red-700">{t('overdue') || 'Overdue'}</Badge>;
+    }
     const styles = {
-      draft: 'bg-slate-100 text-slate-700',
+      draft: 'bg-yellow-100 text-yellow-700',
       calculated: 'bg-blue-100 text-blue-700',
-      submitted: 'bg-yellow-100 text-yellow-700',
+      submitted: 'bg-purple-100 text-purple-700',
       filed: 'bg-green-100 text-green-700',
     };
     return <Badge className={styles[status] || styles.draft}>{t(status) || status}</Badge>;
@@ -359,6 +366,16 @@ export default function TaxReports() {
               </div>
               <DollarSign className="w-8 h-8 text-orange-500" />
             </div>
+            {(summary?.net_tax_liability || 0) > 0 && (
+              <Button
+                size="sm"
+                className="w-full mt-3 bg-orange-600 hover:bg-orange-700"
+                onClick={() => setSearchParams({ tab: 'payments' })}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                {t('record_payment') || "To'lovni qayd etish"}
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -542,6 +559,7 @@ export default function TaxReports() {
                     <TableHead className="text-right">{t('sales_tax') || 'Sales Tax'}</TableHead>
                     <TableHead className="text-right">{t('purchase_tax') || 'Purchase Tax'}</TableHead>
                     <TableHead className="text-right">{t('net_liability') || 'Net Liability'}</TableHead>
+                    <TableHead>{t('deadline') || 'Deadline'}</TableHead>
                     <TableHead>{t('status') || 'Status'}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
@@ -549,7 +567,7 @@ export default function TaxReports() {
                 <TableBody>
                   {periods.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                         {t('no_periods') || 'No tax report periods found'}
                       </TableCell>
                     </TableRow>
@@ -572,7 +590,10 @@ export default function TaxReports() {
                         <TableCell className={`text-right font-medium ${period.net_tax_liability >= 0 ? 'text-orange-600' : 'text-blue-600'}`}>
                           {formatCurrency(period.net_tax_liability)}
                         </TableCell>
-                        <TableCell>{getStatusBadge(period.status)}</TableCell>
+                        <TableCell className="text-sm">
+                          {period.deadline ? format(new Date(period.deadline), 'dd.MM.yyyy') : '-'}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(period.status, period.deadline)}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -828,7 +849,7 @@ export default function TaxReports() {
               <div className="flex justify-between items-center pt-4 border-t">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">{t('status') || 'Status'}:</span>
-                  {getStatusBadge(selectedPeriod.period.status)}
+                  {getStatusBadge(selectedPeriod.period.status, selectedPeriod.period.deadline)}
                 </div>
                 <div className="flex gap-2">
                   {canUpdate(MODULES.FINANCIALS) && selectedPeriod.period.status !== 'filed' && (
