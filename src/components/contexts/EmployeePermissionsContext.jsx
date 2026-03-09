@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import authService from '@/api/services/auth';
 import { hrService } from '@/api/services';
@@ -284,7 +284,7 @@ export function EmployeePermissionsProvider({ children }) {
     }
   }, [backendAvailable]);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     permissions,
     isAdmin,
@@ -312,7 +312,7 @@ export function EmployeePermissionsProvider({ children }) {
     // Utility
     refreshPermissions: loadPermissions,
     availableModules: AVAILABLE_MODULES,
-  };
+  }), [permissions, isAdmin, employeeId, organizationIds, isLoading, error, hasPermission, canAccessModule, canCreate, canUpdate, canDelete, getModulePermissions, canAccessOrganization, getEmployeePermissions, updateEmployeePermissions, updateEmployeeModulePermission, setEmployeeModuleFullAccess, deleteEmployeePermissions, loadPermissions]);
 
   return (
     <EmployeePermissionsContext.Provider value={value}>

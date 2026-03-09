@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authService } from '@/api/services/auth';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -19,6 +19,11 @@ export default function ResetPassword() {
   const [isSuccess, setIsSuccess] = useState(false);
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const redirectTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current); };
+  }, []);
 
   // No token in URL
   if (!token) {
@@ -66,7 +71,7 @@ export default function ResetPassword() {
       await authService.resetPassword(token, password);
       setIsSuccess(true);
       // Redirect to login after 2 seconds
-      setTimeout(() => navigate('/login'), 2000);
+      redirectTimeoutRef.current = setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       const msg = err.response?.data?.error?.message;
       if (msg && msg.includes('expired')) {

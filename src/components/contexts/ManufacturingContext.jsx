@@ -623,72 +623,74 @@ export function ManufacturingProvider({ children }) {
     ? workCenters.reduce((sum, wc) => sum + (wc.current_utilization || 0), 0) / workCenters.length
     : 0;
 
+  const value = useMemo(() => ({
+    // State
+    workCenters: Array.isArray(workCenters) ? workCenters : [],
+    productionOrders: Array.isArray(productionOrders) ? productionOrders : [],
+    workOrders: Array.isArray(workOrders) ? workOrders : [],
+    boms: Array.isArray(boms) ? boms : [],
+    manufacturingStats,
+    isLoading,
+    loading: isLoading,
+    backendAvailable,
+    error,
+
+    // Computed
+    activeProductionOrders,
+    completedToday,
+    availableWorkCenters,
+    averageOEE,
+
+    // Work Center Operations
+    createWorkCenter,
+    updateWorkCenter,
+    deleteWorkCenter,
+
+    // Production Order Operations
+    createProductionOrder,
+    updateProductionOrder,
+    deleteProductionOrder,
+    confirmProductionOrder,
+    startProductionOrder,
+    pauseProductionOrder,
+    completeProductionOrder,
+    cancelProductionOrder,
+    recordProduction,
+
+    // Work Order Operations
+    createWorkOrder,
+    startWorkOrder,
+    pauseWorkOrder,
+    completeWorkOrder,
+    recordWorkOrderTime,
+
+    // BOM Operations
+    createBOM,
+    updateBOM,
+    deleteBOM,
+
+    // Manufacturing Categories
+    manufacturingCategories: Array.isArray(manufacturingCategories) ? manufacturingCategories : [],
+    createManufacturingCategory,
+    updateManufacturingCategory,
+    deleteManufacturingCategory,
+
+    // Refresh
+    refreshData: loadData,
+
+    // Admin Settings (from Admin Settings page)
+    settings: manufacturingSettings,
+    // Helper functions for settings
+    getPlanningMethod: () => manufacturingSettings.planningMethod,
+    getDefaultLeadTime: () => manufacturingSettings.defaultLeadTimeDays,
+    getDefaultCapacity: () => manufacturingSettings.defaultCapacityHours,
+    getDefaultEfficiency: () => manufacturingSettings.defaultEfficiencyRate,
+    isAutoConsumeEnabled: () => manufacturingSettings.autoConsumeComponents,
+    isBackflushEnabled: () => manufacturingSettings.backflushEnabled
+  }), [workCenters, productionOrders, workOrders, boms, manufacturingStats, isLoading, backendAvailable, error, activeProductionOrders, completedToday, availableWorkCenters, averageOEE, createWorkCenter, updateWorkCenter, deleteWorkCenter, createProductionOrder, updateProductionOrder, deleteProductionOrder, confirmProductionOrder, startProductionOrder, pauseProductionOrder, completeProductionOrder, cancelProductionOrder, recordProduction, createWorkOrder, startWorkOrder, pauseWorkOrder, completeWorkOrder, recordWorkOrderTime, createBOM, updateBOM, deleteBOM, manufacturingCategories, createManufacturingCategory, updateManufacturingCategory, deleteManufacturingCategory, loadData, manufacturingSettings]);
+
   return (
-    <ManufacturingContext.Provider value={{
-      // State
-      workCenters: Array.isArray(workCenters) ? workCenters : [],
-      productionOrders: Array.isArray(productionOrders) ? productionOrders : [],
-      workOrders: Array.isArray(workOrders) ? workOrders : [],
-      boms: Array.isArray(boms) ? boms : [],
-      manufacturingStats,
-      isLoading,
-      loading: isLoading,
-      backendAvailable,
-      error,
-
-      // Computed
-      activeProductionOrders,
-      completedToday,
-      availableWorkCenters,
-      averageOEE,
-
-      // Work Center Operations
-      createWorkCenter,
-      updateWorkCenter,
-      deleteWorkCenter,
-
-      // Production Order Operations
-      createProductionOrder,
-      updateProductionOrder,
-      deleteProductionOrder,
-      confirmProductionOrder,
-      startProductionOrder,
-      pauseProductionOrder,
-      completeProductionOrder,
-      cancelProductionOrder,
-      recordProduction,
-
-      // Work Order Operations
-      createWorkOrder,
-      startWorkOrder,
-      pauseWorkOrder,
-      completeWorkOrder,
-      recordWorkOrderTime,
-
-      // BOM Operations
-      createBOM,
-      updateBOM,
-      deleteBOM,
-
-      // Manufacturing Categories
-      manufacturingCategories: Array.isArray(manufacturingCategories) ? manufacturingCategories : [],
-      createManufacturingCategory,
-      updateManufacturingCategory,
-      deleteManufacturingCategory,
-
-      // Refresh
-      refreshData: loadData,
-
-      // Admin Settings (from Admin Settings page)
-      settings: manufacturingSettings,
-      // Helper functions for settings
-      getPlanningMethod: () => manufacturingSettings.planningMethod,
-      getDefaultLeadTime: () => manufacturingSettings.defaultLeadTimeDays,
-      getDefaultCapacity: () => manufacturingSettings.defaultCapacityHours,
-      getDefaultEfficiency: () => manufacturingSettings.defaultEfficiencyRate,
-      isAutoConsumeEnabled: () => manufacturingSettings.autoConsumeComponents,
-      isBackflushEnabled: () => manufacturingSettings.backflushEnabled
-    }}>
+    <ManufacturingContext.Provider value={value}>
       {children}
     </ManufacturingContext.Provider>
   );

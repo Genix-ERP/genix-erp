@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 import { isDemoMode } from '@/config/dataMode';
 
@@ -269,26 +269,28 @@ export function VendorsProvider({ children }) {
     };
   }, [vendors]);
 
+  const value = useMemo(() => ({
+    vendors,
+    isLoading,
+    error,
+    // CRUD operations
+    createVendor,
+    updateVendor,
+    deleteVendor,
+    // Query operations
+    getVendorById,
+    getVendorByName,
+    listVendors,
+    getActiveVendors,
+    getPreferredVendors,
+    getVendorStats,
+    // Utilities
+    generateVendorCode,
+    refreshData: loadData
+  }), [vendors, isLoading, error, createVendor, updateVendor, deleteVendor, getVendorById, getVendorByName, listVendors, getActiveVendors, getPreferredVendors, getVendorStats, generateVendorCode, loadData]);
+
   return (
-    <VendorsContext.Provider value={{
-      vendors,
-      isLoading,
-      error,
-      // CRUD operations
-      createVendor,
-      updateVendor,
-      deleteVendor,
-      // Query operations
-      getVendorById,
-      getVendorByName,
-      listVendors,
-      getActiveVendors,
-      getPreferredVendors,
-      getVendorStats,
-      // Utilities
-      generateVendorCode,
-      refreshData: loadData
-    }}>
+    <VendorsContext.Provider value={value}>
       {children}
     </VendorsContext.Provider>
   );

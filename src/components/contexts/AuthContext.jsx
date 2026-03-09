@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import authService from '@/api/services/auth';
 import { checkBackendHealth } from '@/config/dataMode';
 
@@ -115,7 +115,7 @@ export function AuthProvider({ children }) {
             await fetchUserFromBackend();
           } catch (err) {
             // Token invalid - user needs to login again
-            console.log('Token invalid, user needs to re-login');
+            // Token invalid - user needs to re-login
             setIsAuthenticated(false);
           }
         } else if (!isAvailable) {
@@ -486,7 +486,7 @@ export function AuthProvider({ children }) {
     return isSiteAdmin();
   }, [isSiteAdmin]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     isLoading,
     isAuthenticated,
@@ -510,7 +510,7 @@ export function AuthProvider({ children }) {
     canManageRoles,
     canAccessAdminPanel,
     ROLE_TYPES,
-  };
+  }), [user, isLoading, isAuthenticated, error, backendAvailable, login, register, registerWithOTP, loginWithGoogle, logout, updateUser, changePassword, forgotPassword, resetPassword, clearError, refreshUser, isSiteAdmin, isOwner, canManageCompany, canManageRoles, canAccessAdminPanel]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -71,14 +71,14 @@ export const clearDemoData = () => {
     }
   }
   keysToRemove.forEach(key => localStorage.removeItem(key));
-  console.log(`Cleared ${keysToRemove.length} demo data entries`);
+  // Demo data cleared
 };
 
 // Log current mode
 export const logDataMode = () => {
   const mode = isDemoMode() ? 'DEMO' : 'PRODUCTION';
   const backend = isBackendConfigured() ? API_BASE_URL : 'Not configured';
-  console.log(`[Genix ERP] Data mode: ${mode}, Backend: ${backend}`);
+  // Data mode logged internally
 };
 
 export default {
