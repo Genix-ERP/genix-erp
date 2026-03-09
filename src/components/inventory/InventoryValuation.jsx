@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign, TrendingUp, TrendingDown, Package, Download,
-  Calendar, Filter, PieChart, BarChart3, FileText, Warehouse,
+  Calendar, Filter, PieChart as PieChartIcon, BarChart3, FileText, Warehouse,
   AlertTriangle, CheckCircle2, ArrowUpRight, ArrowDownRight
 } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -228,7 +229,7 @@ export default function InventoryValuation() {
             {t('detailed_report') || 'Detailed Report'}
           </TabsTrigger>
           <TabsTrigger value="category" className="flex items-center gap-2">
-            <PieChart className="w-4 h-4" />
+            <PieChartIcon className="w-4 h-4" />
             {t('by_category') || 'By Category'}
           </TabsTrigger>
           <TabsTrigger value="costing" className="flex items-center gap-2">
@@ -388,53 +389,119 @@ export default function InventoryValuation() {
 
         {/* By Category Tab */}
         <TabsContent value="category" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PieChart className="w-5 h-5 text-[var(--genix-blue)]" />
-                {t('valuation_by_category') || 'Valuation by Category'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {Object.keys(summary.categoryBreakdown).length === 0 ? (
+          {Object.keys(summary.categoryBreakdown).length === 0 ? (
+            <Card>
+              <CardContent>
                 <div className="text-center py-8 text-slate-500">
                   {t('no_category_data') || 'No category data available'}
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="w-8">#</TableHead>
-                      <TableHead>{t('category') || 'Kategoriya'}</TableHead>
-                      <TableHead className="text-center">{t('items') || 'Elementlar'}</TableHead>
-                      <TableHead className="text-right">{t('quantity') || 'Miqdori'}</TableHead>
-                      <TableHead className="text-right">{t('total_value') || 'Qiymati'}</TableHead>
-                      <TableHead className="text-right">%</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(summary.categoryBreakdown)
-                      .sort(([,a], [,b]) => b.value - a.value)
-                      .map(([category, data], index) => {
-                        const percentage = summary.totalValue > 0
-                          ? (data.value / summary.totalValue * 100)
-                          : 0;
-                        return (
-                          <TableRow key={category}>
-                            <TableCell className="text-slate-500">{index + 1}</TableCell>
-                            <TableCell className="font-medium">{category}</TableCell>
-                            <TableCell className="text-center">{data.items}</TableCell>
-                            <TableCell className="text-right tabular-nums">{data.qty.toLocaleString()}</TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(data.value)}</TableCell>
-                            <TableCell className="text-right text-slate-500 tabular-nums">{percentage.toFixed(1)}%</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Pie Chart */}
+              <Card className="lg:col-span-1">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <PieChartIcon className="w-5 h-5 text-[var(--genix-blue)]" />
+                    {t('category_distribution') || "Kategoriya taqsimoti"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(summary.categoryBreakdown)
+                          .sort(([,a], [,b]) => b.value - a.value)
+                          .map(([category, data]) => ({
+                            name: category,
+                            value: data.value,
+                          }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={90}
+                        paddingAngle={3}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+                        labelLine={true}
+                      >
+                        {Object.entries(summary.categoryBreakdown)
+                          .sort(([,a], [,b]) => b.value - a.value)
+                          .map(([category], index) => (
+                            <Cell key={category} fill={['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#6366F1'][index % 8]} />
+                          ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Category Table */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BarChart3 className="w-5 h-5 text-[var(--genix-blue)]" />
+                    {t('valuation_by_category') || 'Kategoriya bo\'yicha baholash'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50">
+                        <TableHead className="w-8">#</TableHead>
+                        <TableHead>{t('category') || 'Kategoriya'}</TableHead>
+                        <TableHead className="text-center">{t('items') || 'Elementlar'}</TableHead>
+                        <TableHead className="text-right">{t('quantity') || 'Miqdori'}</TableHead>
+                        <TableHead className="text-right">{t('total_value') || 'Qiymati'}</TableHead>
+                        <TableHead className="text-right w-20">%</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(summary.categoryBreakdown)
+                        .sort(([,a], [,b]) => b.value - a.value)
+                        .map(([category, data], index) => {
+                          const percentage = summary.totalValue > 0
+                            ? (data.value / summary.totalValue * 100)
+                            : 0;
+                          const colors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#6366F1'];
+                          return (
+                            <TableRow key={category}>
+                              <TableCell className="text-slate-500">{index + 1}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colors[index % 8] }} />
+                                  <span className="font-medium">{category}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary">{data.items}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{data.qty.toLocaleString()}</TableCell>
+                              <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(data.value)}</TableCell>
+                              <TableCell className="text-right">
+                                <span className="text-slate-600 tabular-nums">{percentage.toFixed(1)}%</span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      <TableRow className="bg-slate-50 font-semibold">
+                        <TableCell></TableCell>
+                        <TableCell>{t('total') || 'Jami'}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary">{summary.itemCount}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{summary.totalQty.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCurrency(summary.totalValue)}</TableCell>
+                        <TableCell className="text-right tabular-nums">100%</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         {/* By Costing Method Tab */}
