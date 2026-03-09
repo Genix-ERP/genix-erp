@@ -39,6 +39,7 @@ import {
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzeProcurement } from '@/api/services/aiAnalytics';
+import { formatAxisTick } from '@/utils/formatCurrency';
 
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -732,7 +733,7 @@ export default function Procurement() {
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
-                        <YAxis fontSize={12} tickFormatter={(v) => formatCurrencyCompact(v)} />
+                        <YAxis fontSize={12} width={55} tickFormatter={formatAxisTick} />
                         <Tooltip formatter={(value) => [formatCurrency(value), t('amount') || 'Amount']} />
                         <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                       </BarChart>

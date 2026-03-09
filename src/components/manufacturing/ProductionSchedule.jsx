@@ -249,7 +249,7 @@ export default function ProductionSchedule() {
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge className={`text-xs ${statusColor.bg} ${statusColor.text}`}>
-                                {order.status?.replace('_', ' ')}
+                                {t(`status_${order.status}`) || order.status?.replace('_', ' ')}
                               </Badge>
                               {order.isOverdue && (
                                 <Badge className="text-xs bg-red-100 text-red-700">
@@ -274,7 +274,7 @@ export default function ProductionSchedule() {
                           title={`${order.product_name}\n${order.scheduled_start || order.actual_start || ''} - ${order.scheduled_end || order.actual_end || ''}`}
                         >
                           <span className="text-xs text-white font-medium truncate">
-                            {order.quantity_planned || order.quantity_to_produce} {order.uom || 'units'}
+                            {order.quantity_planned || order.quantity_to_produce} {order.uom || t('units') || 'dona'}
                           </span>
                         </div>
                       </div>
