@@ -137,6 +137,24 @@ apiClient.interceptors.request.use(
   }
 );
 
+// --- Token refresh queue (prevents race conditions with concurrent 401s) ---
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const onRefreshed = (newToken) => {
+  refreshSubscribers.forEach(cb => cb(newToken));
+  refreshSubscribers = [];
+};
+
+const onRefreshFailed = (err) => {
+  refreshSubscribers.forEach(cb => cb(null, err));
+  refreshSubscribers = [];
+};
+
+const addRefreshSubscriber = (cb) => {
+  refreshSubscribers.push(cb);
+};
+
 // Response interceptor - handle token refresh + 429 retry with backoff
 apiClient.interceptors.response.use(
   (response) => {
@@ -177,6 +195,24 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       originalRequest._isRetry = true;
 
+      // If already refreshing, queue this request to retry after refresh completes
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          addRefreshSubscriber((newToken, err) => {
+            if (err) {
+              releaseRequest();
+              reject(err);
+              return;
+            }
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            releaseRequest();
+            resolve(apiClient.request(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
+
       try {
         const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
           refresh_token: refreshToken,
@@ -184,12 +220,18 @@ apiClient.interceptors.response.use(
 
         const { access_token, refresh_token } = response.data.data;
         setTokens(access_token, refresh_token);
+        isRefreshing = false;
+
+        // Notify all queued requests with new token
+        onRefreshed(access_token);
 
         // Retry original request with new token
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         releaseRequest();
         return apiClient.request(originalRequest);
       } catch (refreshError) {
+        isRefreshing = false;
+        onRefreshFailed(refreshError);
         // Refresh failed - clear tokens and redirect to login
         clearTokens();
         releaseRequest();
