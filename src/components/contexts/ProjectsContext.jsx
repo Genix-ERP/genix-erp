@@ -229,7 +229,7 @@ export function ProjectsProvider({ children }) {
     await loadData();
   }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     projects,
     tasks,
@@ -286,7 +286,7 @@ export function ProjectsProvider({ children }) {
       }
       return { valid: true };
     }
-  };
+  }), [projects, tasks, milestones, timeEntries, isLoading, error, createProject, updateProject, deleteProject, getProjectById, createTask, updateTask, deleteTask, getTasksByProject, createMilestone, updateMilestone, deleteMilestone, getMilestonesByProject, createTimeEntry, updateTimeEntry, deleteTimeEntry, getTimeEntriesByProject, getProjectAnalytics, refreshData, projectsSettings]);
 
   return (
     <ProjectsContext.Provider value={value}>

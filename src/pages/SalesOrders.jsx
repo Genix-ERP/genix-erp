@@ -672,8 +672,6 @@ export default function SalesOrders() {
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
 
-    console.log('Creating sales order with data:', orderData);
-
     try {
       const createdOrder = await createSalesOrder(orderData);
 

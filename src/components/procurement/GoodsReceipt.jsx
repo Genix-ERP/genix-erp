@@ -229,7 +229,6 @@ export default function GoodsReceipt() {
         notes: newGR.notes || '',
         lines: validLines,
       };
-      console.log('Creating GR with payload:', JSON.stringify(payload, null, 2));
       await procurementService.createGoodsReceipt(payload);
 
       // Refresh the list

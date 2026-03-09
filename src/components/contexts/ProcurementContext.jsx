@@ -717,9 +717,6 @@ export function ProcurementProvider({ children }) {
         }
 
         // Debug: log what we're sending
-        console.log('[ProcurementContext] Update PO - received updates:', updates);
-        console.log('[ProcurementContext] Update PO - sending to backend:', backendUpdates);
-
         // Only call API if there are updates to send
         if (Object.keys(backendUpdates).length > 0) {
           await procurementService.updateOrder(id, backendUpdates);
@@ -926,7 +923,7 @@ export function ProcurementProvider({ children }) {
     }
   }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     suppliers,
     purchaseOrders,
@@ -991,7 +988,7 @@ export function ProcurementProvider({ children }) {
     isVendorRatingEnabled: () => purchaseSettings.vendorRatingEnabled,
     isPreferredVendorsOnly: () => purchaseSettings.preferredVendorsOnly,
     isBlanketOrdersEnabled: () => purchaseSettings.blanketOrdersEnabled
-  };
+  }), [suppliers, purchaseOrders, rfqs, contracts, priceHistory, isLoading, error, backendAvailable, createSupplier, updateSupplier, deleteSupplier, getSupplierById, updateSupplierRating, getSupplierStats, createRFQ, updateRFQ, deleteRFQ, submitRFQResponse, selectRFQWinner, createContract, updateContract, deleteContract, addPriceRecord, getProductPriceHistory, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, refreshData, purchaseSettings]);
 
   return (
     <ProcurementContext.Provider value={value}>

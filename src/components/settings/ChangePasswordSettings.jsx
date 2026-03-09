@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,11 @@ export default function ChangePasswordSettings() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const successTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current); };
+  }, []);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -79,7 +84,8 @@ export default function ChangePasswordSettings() {
         confirmPassword: ''
       });
       
-      setTimeout(() => setSuccess(false), 5000);
+      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = setTimeout(() => setSuccess(false), 5000);
     } catch (error) {
       console.error("Failed to change password", error);
       setError(error.message || 'Failed to change password. Please check your current password.');

@@ -495,12 +495,14 @@ const generateProgressReportHTML = (project, buildings, sections) => {
 // Print or download report
 const printReport = (htmlContent, title) => {
   const printWindow = window.open('', '_blank');
-  printWindow.document.write(htmlContent);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 500);
+  if (printWindow) {
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  }
 };
 
 // Report Generator Component
