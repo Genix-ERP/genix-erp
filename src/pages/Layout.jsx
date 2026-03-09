@@ -129,6 +129,16 @@ function LayoutContent({ children, currentPageName }) {
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
 
+  // Set browser title based on language
+  React.useEffect(() => {
+    const titles = {
+      uz: "Genix ERP — Sun'iy intellekt orqali biznes boshqaruvi",
+      ru: "Genix ERP — Система управления бизнесом на основе ИИ",
+      en: "Genix ERP — AI-Powered Business Management System",
+    };
+    document.title = titles[language] || titles.en;
+  }, [language]);
+
   // Force re-render when user role changes by including user in dependency tracking
   const userRole = currentUser?.role;
   const isUserOwner = isOwner();
