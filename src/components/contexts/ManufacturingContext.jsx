@@ -394,6 +394,9 @@ export function ManufacturingProvider({ children }) {
     try {
       const updated = await productionOrdersService.confirm(id, companyId);
       setProductionOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'confirmed', ...updated } : po));
+      // Re-fetch work orders since confirm creates them from BOM operations
+      const woData = await workOrdersService.list(companyId);
+      setWorkOrders(woData || []);
       return updated;
     } catch (error) {
       console.error('Failed to confirm production order:', error);
@@ -406,6 +409,9 @@ export function ManufacturingProvider({ children }) {
     try {
       const updated = await productionOrdersService.start(id, companyId);
       setProductionOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'in_progress', ...updated } : po));
+      // Re-fetch work orders since start may create them (fallback) and auto-starts first one
+      const woData = await workOrdersService.list(companyId);
+      setWorkOrders(woData || []);
       return updated;
     } catch (error) {
       console.error('Failed to start production order:', error);
