@@ -62,6 +62,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { procurementService } from "@/api/services/procurement";
 import { inventoryService } from "@/api/services/inventory";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 export default function BlanketOrders() {
   const { language } = useLanguage();
@@ -221,7 +222,7 @@ export default function BlanketOrders() {
       resetForm();
     } catch (error) {
       console.error("Failed to save blanket order:", error);
-      alert(t("failed_to_save") || "Failed to save blanket order");
+      toast.error(t("failed_to_save") || "Failed to save blanket order");
     }
   };
 
@@ -235,7 +236,7 @@ export default function BlanketOrders() {
       setOrderToDelete(null);
     } catch (error) {
       console.error("Failed to delete blanket order:", error);
-      alert(t("failed_to_delete") || "Failed to delete blanket order");
+      toast.error(t("failed_to_delete") || "Failed to delete blanket order");
     }
   };
 
@@ -250,7 +251,7 @@ export default function BlanketOrders() {
       }
     } catch (error) {
       console.error("Failed to activate blanket order:", error);
-      alert(t("failed_to_activate") || "Failed to activate blanket order");
+      toast.error(t("failed_to_activate") || "Failed to activate blanket order");
     }
   };
 
@@ -368,7 +369,7 @@ export default function BlanketOrders() {
     try {
       const linesToSubmit = releaseData.lines.filter((l) => l.quantity > 0);
       if (linesToSubmit.length === 0) {
-        alert(t("select_items") || "Please select items to release");
+        toast.error(t("select_items") || "Please select items to release");
         return;
       }
 
@@ -387,7 +388,7 @@ export default function BlanketOrders() {
       }
     } catch (error) {
       console.error("Failed to create release:", error);
-      alert(error.response?.data?.error?.message || t("failed_to_create_release") || "Failed to create release");
+      toast.error(error.response?.data?.error?.message || t("failed_to_create_release") || "Failed to create release");
     }
   };
 
@@ -400,7 +401,7 @@ export default function BlanketOrders() {
       await fetchBlanketOrders();
     } catch (error) {
       console.error("Failed to confirm release:", error);
-      alert(t("failed_to_confirm") || "Failed to confirm release");
+      toast.error(t("failed_to_confirm") || "Failed to confirm release");
     }
   };
 
@@ -413,7 +414,7 @@ export default function BlanketOrders() {
       await fetchBlanketOrders();
     } catch (error) {
       console.error("Failed to cancel release:", error);
-      alert(t("failed_to_cancel") || "Failed to cancel release");
+      toast.error(t("failed_to_cancel") || "Failed to cancel release");
     }
   };
 

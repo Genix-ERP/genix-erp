@@ -16,6 +16,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 
@@ -123,7 +124,7 @@ export default function CargoShipments() {
   // Add item to shipment
   const handleAddItem = () => {
     if (!currentItem.name || currentItem.quantity <= 0) {
-      alert('Iltimos tovar nomi va miqdorini kiriting');
+      toast.error('Iltimos tovar nomi va miqdorini kiriting');
       return;
     }
 
@@ -201,7 +202,7 @@ export default function CargoShipments() {
   // Submit new shipment
   const handleSubmit = async () => {
     if (formData.items.length === 0) {
-      alert('Iltimos kamida bitta tovar qo\'shing');
+      toast.error('Iltimos kamida bitta tovar qo\'shing');
       return;
     }
 
@@ -229,17 +230,17 @@ export default function CargoShipments() {
     try {
       if (isEditMode && selectedShipment) {
         await updateShipment(selectedShipment.id, backendData);
-        alert('Yuk muvaffaqiyatli yangilandi');
+        toast.success('Yuk muvaffaqiyatli yangilandi');
       } else {
         await createShipment(backendData);
-        alert('Yuk muvaffaqiyatli yaratildi');
+        toast.success('Yuk muvaffaqiyatli yaratildi');
       }
       setShowAddModal(false);
       setIsEditMode(false);
       resetForm();
     } catch (error) {
       console.error('Error saving shipment:', error);
-      alert('Yukni saqlashda xatolik yuz berdi');
+      toast.error('Yukni saqlashda xatolik yuz berdi');
     }
   };
 
@@ -370,11 +371,11 @@ export default function CargoShipments() {
           createShipment(shipment);
         });
 
-        alert(`${Object.keys(shipmentsMap).length} ta yuk muvaffaqiyatli yuklandi!`);
+        toast.success(`${Object.keys(shipmentsMap).length} ta yuk muvaffaqiyatli yuklandi!`);
         e.target.value = ''; // Reset file input
       } catch (error) {
         console.error('Excel import error:', error);
-        alert('Excel faylini yuklashda xatolik yuz berdi');
+        toast.error('Excel faylini yuklashda xatolik yuz berdi');
       }
     };
     reader.readAsBinaryString(file);
@@ -510,10 +511,10 @@ export default function CargoShipments() {
                             if (window.confirm('Bu yukni o\'chirmoqchimisiz?')) {
                               try {
                                 await deleteShipment(shipment.id);
-                                alert('Yuk muvaffaqiyatli o\'chirildi');
+                                toast.success('Yuk muvaffaqiyatli o\'chirildi');
                               } catch (error) {
                                 console.error('Delete error:', error);
-                                alert('Yukni o\'chirishda xatolik yuz berdi');
+                                toast.error('Yukni o\'chirishda xatolik yuz berdi');
                               }
                             }
                           }}

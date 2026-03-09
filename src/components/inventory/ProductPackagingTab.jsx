@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from "@/api/services/inventory";
+import { toast } from 'sonner';
 
 export default function ProductPackagingTab({ productId, productName }) {
   const { language } = useLanguage();
@@ -75,7 +76,7 @@ export default function ProductPackagingTab({ productId, productName }) {
 
   const handleSave = async () => {
     if (!formData.name || !formData.qty) {
-      alert(t('please_fill_required_fields') || 'Please fill in all required fields');
+      toast.error(t('please_fill_required_fields') || 'Please fill in all required fields');
       return;
     }
 
@@ -98,7 +99,7 @@ export default function ProductPackagingTab({ productId, productName }) {
       fetchPackagings();
     } catch (error) {
       console.error('Failed to save packaging:', error);
-      alert(t('error_saving') || 'Failed to save packaging');
+      toast.error(t('error_saving') || 'Failed to save packaging');
     }
   };
 
@@ -111,7 +112,7 @@ export default function ProductPackagingTab({ productId, productName }) {
       fetchPackagings();
     } catch (error) {
       console.error('Failed to delete packaging:', error);
-      alert(t('error_deleting') || 'Failed to delete packaging');
+      toast.error(t('error_deleting') || 'Failed to delete packaging');
     }
   };
 

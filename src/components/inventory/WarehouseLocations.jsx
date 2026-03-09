@@ -23,6 +23,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { inventoryService } from '@/api/services';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useInventory } from "@/components/contexts/InventoryContext";
+import { toast } from 'sonner';
 
 // Location type options (matching Odoo)
 const LOCATION_TYPES = [
@@ -189,7 +190,7 @@ export default function WarehouseLocations() {
       setLocationToDelete(null);
     } catch (err) {
       console.error('Error deleting location:', err);
-      alert(err.response?.data?.error || 'Failed to delete location');
+      toast.error(err.response?.data?.error || 'Failed to delete location');
     }
   };
 

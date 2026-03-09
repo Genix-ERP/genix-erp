@@ -18,6 +18,7 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 
@@ -129,10 +130,10 @@ export default function CargoCashRegister() {
         // Reload cash summary from backend to get fresh data
         await loadCashSummary();
 
-        alert('Tranzaksiya muvaffaqiyatli yangilandi');
+        toast.success('Tranzaksiya muvaffaqiyatli yangilandi');
       } catch (error) {
         console.error('Error updating transaction:', error);
-        alert('Tranzaksiyani yangilashda xatolik yuz berdi');
+        toast.error('Tranzaksiyani yangilashda xatolik yuz berdi');
         return;
       }
     } else {
@@ -148,7 +149,7 @@ export default function CargoCashRegister() {
         });
       } catch (error) {
         console.error('Error adding transaction:', error);
-        alert('Tranzaksiya qo\'shishda xatolik yuz berdi');
+        toast.error('Tranzaksiya qo\'shishda xatolik yuz berdi');
         return;
       }
     }
@@ -191,10 +192,10 @@ export default function CargoCashRegister() {
       // Reload cash summary from backend to get fresh data
       await loadCashSummary();
 
-      alert('Tranzaksiya muvaffaqiyatli o\'chirildi');
+      toast.success('Tranzaksiya muvaffaqiyatli o\'chirildi');
     } catch (error) {
       console.error('Error deleting transaction from backend:', error);
-      alert('Tranzaksiyani o\'chirishda xatolik yuz berdi');
+      toast.error('Tranzaksiyani o\'chirishda xatolik yuz berdi');
     }
   };
 

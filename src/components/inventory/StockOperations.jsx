@@ -22,6 +22,7 @@ import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { inventoryService, contactsService } from '@/api/services';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ export default function StockOperations() {
       await refreshDetail();
       loadData();
       // Show confirmation
-      alert(`${t('backorder_created') || 'Backorder created'}: ${backorder.name}`);
+      toast.success(`${t('backorder_created') || 'Backorder created'}: ${backorder.name}`);
     } catch (e) {
       console.error('Failed to create backorder', e);
     } finally {
