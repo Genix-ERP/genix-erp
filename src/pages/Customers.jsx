@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,11 @@ import {
   FileText,
   ArrowUpDown,
   Clock,
+  Play,
+  Pause,
+  Download,
+  Filter,
+  X,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,7 +57,7 @@ import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { pbxService } from "@/api/services";
+import { pbxService, apiClient } from "@/api/services";
 import { useToast } from "@/components/ui/use-toast";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -61,6 +66,91 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
   const [sortField, setSortField] = useState('totalSales');
   const [sortDir, setSortDir] = useState('desc');
   const [callViewMode, setCallViewMode] = useState('daily'); // 'daily' | 'monthly'
+
+  // Filter state
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('all');
+  const [users, setUsers] = useState([]);
+
+  // Audio playback state
+  const audioRef = useRef(null);
+  const [playingAudio, setPlayingAudio] = useState(null);
+
+  // Fetch users for employee filter
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await apiClient.get('/users', { params: { limit: 100 } });
+        setUsers(response.data?.data || response.data || []);
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const hasActiveFilters = dateFrom || dateTo || selectedAgent !== 'all';
+
+  const resetFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setSelectedAgent('all');
+  };
+
+  // Helper: check if a date string falls within the filter range
+  const isInDateRange = (dateStr) => {
+    if (!dateStr) return true;
+    const d = dateStr.split('T')[0];
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
+    return true;
+  };
+
+  // Filter data based on active filters
+  const filteredSalesOrders = useMemo(() => {
+    let filtered = salesOrders || [];
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter(o => isInDateRange(o.created_at || o.date));
+    }
+    if (selectedAgent !== 'all') {
+      filtered = filtered.filter(o => o.sales_rep_id === selectedAgent || o.created_by === selectedAgent);
+    }
+    return filtered;
+  }, [salesOrders, dateFrom, dateTo, selectedAgent]);
+
+  const filteredInvoices = useMemo(() => {
+    let filtered = invoices || [];
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter(inv => isInDateRange(inv.created_at || inv.date || inv.invoice_date));
+    }
+    if (selectedAgent !== 'all') {
+      filtered = filtered.filter(inv => inv.created_by === selectedAgent);
+    }
+    return filtered;
+  }, [invoices, dateFrom, dateTo, selectedAgent]);
+
+  const filteredLeads = useMemo(() => {
+    let filtered = leads || [];
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter(l => isInDateRange(l.created_at));
+    }
+    if (selectedAgent !== 'all') {
+      filtered = filtered.filter(l => l.assigned_to === selectedAgent);
+    }
+    return filtered;
+  }, [leads, dateFrom, dateTo, selectedAgent]);
+
+  const filteredCallLogs = useMemo(() => {
+    let filtered = callLogs || [];
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter(l => isInDateRange(l.call_start_time || l.created_at));
+    }
+    if (selectedAgent !== 'all') {
+      filtered = filtered.filter(l => l.agent_id === selectedAgent);
+    }
+    return filtered;
+  }, [callLogs, dateFrom, dateTo, selectedAgent]);
 
   const customerStats = useMemo(() => {
     const stats = {};
@@ -83,7 +173,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
     });
 
     // Aggregate sales orders
-    salesOrders.forEach(order => {
+    filteredSalesOrders.forEach(order => {
       const cid = order.customer_id;
       if (!cid || !stats[cid]) return;
       stats[cid].orderCount += 1;
@@ -95,7 +185,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
     });
 
     // Aggregate invoices
-    invoices.forEach(inv => {
+    filteredInvoices.forEach(inv => {
       const cid = inv.customer_id;
       if (!cid || !stats[cid]) return;
       stats[cid].invoiceCount += 1;
@@ -105,7 +195,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
     });
 
     return Object.values(stats);
-  }, [customers, salesOrders, invoices]);
+  }, [customers, filteredSalesOrders, filteredInvoices]);
 
   const sortedStats = useMemo(() => {
     return [...customerStats].sort((a, b) => {
@@ -134,7 +224,7 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      const count = (leads || []).filter(l => {
+      const count = filteredLeads.filter(l => {
         const created = l.created_at?.split('T')[0];
         return created === dateStr;
       }).length;
@@ -145,11 +235,11 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
       });
     }
     return data;
-  }, [leads]);
+  }, [filteredLeads]);
 
   // Call statistics data
   const callStatsData = useMemo(() => {
-    const logs = callLogs || [];
+    const logs = filteredCallLogs;
     if (callViewMode === 'daily') {
       const days = 30;
       const data = [];
@@ -195,11 +285,11 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
       }
       return data;
     }
-  }, [callLogs, callViewMode, language]);
+  }, [filteredCallLogs, callViewMode, language]);
 
   // Call duration data (hours per day, last 30 days)
   const callDurationData = useMemo(() => {
-    const logs = callLogs || [];
+    const logs = filteredCallLogs;
     const days = 30;
     const data = [];
     const now = new Date();
@@ -218,7 +308,14 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
       });
     }
     return data;
-  }, [callLogs]);
+  }, [filteredCallLogs]);
+
+  // Recent calls for table (limited to 50)
+  const recentCalls = useMemo(() => {
+    return [...filteredCallLogs]
+      .sort((a, b) => new Date(b.call_start_time || b.created_at) - new Date(a.call_start_time || a.created_at))
+      .slice(0, 50);
+  }, [filteredCallLogs]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -226,6 +323,37 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
     } else {
       setSortField(field);
       setSortDir('desc');
+    }
+  };
+
+  const handlePlayRecording = (url, callId) => {
+    if (playingAudio === callId) {
+      audioRef.current?.pause();
+      setPlayingAudio(null);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    const audio = new Audio(url);
+    audio.onended = () => setPlayingAudio(null);
+    audio.play();
+    audioRef.current = audio;
+    setPlayingAudio(callId);
+  };
+
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const getCallTypeBadge = (type) => {
+    switch (type) {
+      case 'inbound': return <Badge className="bg-green-100 text-green-700">{t('incoming_calls') || 'Kiruvchi'}</Badge>;
+      case 'outbound': return <Badge className="bg-blue-100 text-blue-700">{t('outgoing_calls') || 'Chiquvchi'}</Badge>;
+      case 'missed': return <Badge className="bg-red-100 text-red-700">{t('missed_calls') || 'Javobsiz'}</Badge>;
+      default: return <Badge variant="outline">{type}</Badge>;
     }
   };
 
@@ -243,6 +371,58 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
 
   return (
     <div className="space-y-6">
+      {/* Hidden audio element */}
+      <audio ref={audioRef} className="hidden" />
+
+      {/* Filter Bar */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <Filter className="w-4 h-4" />
+              {t('filters') || 'Filtrlar'}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">{t('date_from') || 'Dan'}</label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-40 h-8 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">{t('date_to') || 'Gacha'}</label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-40 h-8 text-sm"
+              />
+            </div>
+            <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+              <SelectTrigger className="w-48 h-8 text-sm">
+                <SelectValue placeholder={t('all_employees') || 'Barcha xodimlar'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('all_employees') || 'Barcha xodimlar'}</SelectItem>
+                {users.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.first_name} {u.last_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 text-sm text-slate-500">
+                <X className="w-3 h-3 mr-1" />
+                {t('reset_filters') || 'Tozalash'}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
@@ -387,6 +567,105 @@ function CustomerReports({ customers, salesOrders, invoices, leads, callLogs, fo
           ) : (
             <div className="text-center py-12 text-slate-500">
               <Clock className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+              <p>{t('no_calls_data')}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Call Recordings Table */}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PhoneCall className="w-5 h-5 text-indigo-600" />
+            {t('calls_table') || "Qo'ng'iroqlar jadvali"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentCalls.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead>{t('date') || 'Sana'}</TableHead>
+                    <TableHead>{t('contact') || 'Kontakt'}</TableHead>
+                    <TableHead>{t('agent') || 'Xodim'}</TableHead>
+                    <TableHead>{t('type') || 'Turi'}</TableHead>
+                    <TableHead>{t('duration') || 'Davomiyligi'}</TableHead>
+                    <TableHead>{t('recording') || 'Yozuv'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentCalls.map((call, idx) => (
+                    <TableRow key={call.id} className="hover:bg-slate-50/80">
+                      <TableCell className="text-slate-500">{idx + 1}</TableCell>
+                      <TableCell className="text-sm">
+                        {call.call_start_time
+                          ? new Date(call.call_start_time).toLocaleString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', {
+                              day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })
+                          : '-'
+                        }
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {call.contact_name || (call.call_type === 'outbound' ? call.receiver_number : call.caller_number) || '-'}
+                          </p>
+                          <p className="text-xs text-slate-500 font-mono">
+                            {call.call_type === 'outbound' ? call.receiver_number : call.caller_number}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {call.agent_name || '-'}
+                      </TableCell>
+                      <TableCell>{getCallTypeBadge(call.call_type)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span className="tabular-nums text-sm">{formatDuration(call.call_duration || 0)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {call.recording_url ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handlePlayRecording(call.recording_url, call.id)}
+                            >
+                              {playingAudio === call.id ? (
+                                <Pause className="w-3 h-3 text-blue-600" />
+                              ) : (
+                                <Play className="w-3 h-3 text-blue-600" />
+                              )}
+                            </Button>
+                            <a
+                              href={call.recording_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex"
+                            >
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Download className="w-3 h-3 text-slate-500" />
+                              </Button>
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <PhoneCall className="w-10 h-10 mx-auto mb-3 text-slate-300" />
               <p>{t('no_calls_data')}</p>
             </div>
           )}
