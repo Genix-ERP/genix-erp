@@ -162,7 +162,7 @@ export default function Payments() {
   const summaryStats = useMemo(() => {
     const tabPayments = currentPayments;
     return {
-      totalAmount: tabPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
+      totalAmount: tabPayments.filter(p => p.status === 'confirmed' || p.status === 'posted').reduce((sum, p) => sum + (p.amount || 0), 0),
       pendingCount: tabPayments.filter(p => p.status === 'draft' || p.status === 'pending').length,
       confirmedCount: tabPayments.filter(p => p.status === 'confirmed' || p.status === 'posted').length,
     };

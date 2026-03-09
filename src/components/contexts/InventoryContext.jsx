@@ -1781,12 +1781,14 @@ export function InventoryProvider({ children }) {
 
       if (totalStock <= rule.min_qty) {
         const product = products.find(p => p.id === rule.product_id);
+        const maxQty = rule.max_qty || rule.min_qty;
+        const suggestedOrder = Math.max(maxQty - totalStock, 0);
         productsNeedingReorder.push({
           ...rule,
           product,
           current_stock: totalStock,
           shortage: rule.min_qty - totalStock,
-          suggested_order: rule.reorder_qty
+          suggested_order: suggestedOrder
         });
       }
     });

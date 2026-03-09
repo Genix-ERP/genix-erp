@@ -120,8 +120,10 @@ export default function InventoryManagement() {
 
     const getMovementType = (movement) => {
       const type = movement.transaction_type || movement.movement_type;
-      if (type === 'receipt') return 'inbound';
-      if (type === 'issue') return 'outbound';
+      if (type === 'receipt' || type === 'stock_in') return 'inbound';
+      if (type === 'issue' || type === 'stock_out') return 'outbound';
+      if (type === 'adjustment' && movement.quantity < 0) return 'outbound';
+      if (type === 'adjustment' && movement.quantity > 0) return 'inbound';
       return type || 'unknown';
     };
 
@@ -279,8 +281,10 @@ export default function InventoryManagement() {
   const getMovementTypeColor = (type) => {
     const colors = {
       receipt: 'bg-green-100 text-green-800 border-green-200',
+      stock_in: 'bg-green-100 text-green-800 border-green-200',
       shipment: 'bg-red-100 text-red-800 border-red-200',
       issue: 'bg-red-100 text-red-800 border-red-200',
+      stock_out: 'bg-red-100 text-red-800 border-red-200',
       adjustment: 'bg-blue-100 text-blue-800 border-blue-200',
       transfer: 'bg-purple-100 text-purple-800 border-purple-200',
       count: 'bg-yellow-100 text-yellow-800 border-yellow-200'
@@ -291,8 +295,8 @@ export default function InventoryManagement() {
   const getMovementTypeIcon = (type, quantity) => {
     if (type === 'transfer') return ArrowRightLeft;
     if (type === 'adjustment' || type === 'count') return RotateCcw;
-    if (type === 'issue' || type === 'shipment') return ArrowUpRight;
-    if (type === 'receipt') return ArrowDownLeft;
+    if (type === 'issue' || type === 'shipment' || type === 'stock_out') return ArrowUpRight;
+    if (type === 'receipt' || type === 'stock_in') return ArrowDownLeft;
     return quantity > 0 ? ArrowDownLeft : ArrowUpRight;
   };
 

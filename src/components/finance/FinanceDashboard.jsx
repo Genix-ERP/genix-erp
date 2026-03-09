@@ -80,9 +80,9 @@ export default function FinanceDashboard() {
             return name;
           };
 
-          // Build expense breakdown by individual accounts
+          // Build expense breakdown by individual accounts (exclude COGS — it's cost of sales, not expense)
           const categoryBreakdown = [];
-          [...cogsItems, ...opexItems, ...otherExpItems].forEach(item => {
+          [...opexItems, ...otherExpItems].forEach(item => {
             const amount = Math.abs(item.amount || 0);
             if (amount > 0) {
               categoryBreakdown.push({
