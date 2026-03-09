@@ -18,7 +18,7 @@ export const DEFAULT_ADMIN_SETTINGS = {
       },
       contact: {
         email: '',
-        phone: '',
+        phone: '+998',
         website: ''
       },
       logo_url: null

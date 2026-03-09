@@ -97,7 +97,8 @@ export default function ActSverka() {
       return Math.abs(closing) > 0.01;
     }).length;
     const draft = reconciliationActs.filter(a => a.status === 'draft').length;
-    return { total, confirmed, withDifference, draft };
+    const discrepancy = reconciliationActs.filter(a => a.status === 'discrepancy').length;
+    return { total, confirmed, withDifference, draft, discrepancy };
   }, [reconciliationActs]);
 
   // Filter
@@ -144,13 +145,15 @@ export default function ActSverka() {
       draft: 'bg-yellow-100 text-yellow-800',
       sent: 'bg-blue-100 text-blue-800',
       confirmed: 'bg-green-100 text-green-800',
-      disputed: 'bg-red-100 text-red-800'
+      disputed: 'bg-red-100 text-red-800',
+      discrepancy: 'bg-orange-100 text-orange-800'
     };
     const labels = {
       draft: t('draft') || 'Qoralama',
       sent: t('sent') || 'Yuborilgan',
       confirmed: t('confirmed') || 'Tasdiqlangan',
-      disputed: t('disputed') || 'Munozarali'
+      disputed: t('disputed') || 'Munozarali',
+      discrepancy: t('discrepancy') || 'Solishtirishda xatolik'
     };
     return (
       <Badge className={styles[status] || 'bg-gray-100 text-gray-800'}>
@@ -481,7 +484,7 @@ export default function ActSverka() {
                 </>
               )}
             </div>
-            {act.status === 'draft' && (
+            {(act.status === 'draft' || act.status === 'discrepancy') && (
               <Button
                 size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -491,7 +494,18 @@ export default function ActSverka() {
                 {t('confirm') || 'Tasdiqlash'}
               </Button>
             )}
-            {act.status === 'confirmed' && (
+            {act.status === 'draft' && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => handleStatusChange('discrepancy')}
+              >
+                <AlertTriangle className="w-4 h-4 mr-1" />
+                {t('discrepancy') || 'Solishtirishda xatolik'}
+              </Button>
+            )}
+            {(act.status === 'confirmed' || act.status === 'discrepancy') && (
               <Button variant="outline" size="sm" onClick={() => handleStatusChange('draft')}>
                 {t('revert_to_draft') || 'Qoralamaga qaytarish'}
               </Button>
@@ -740,6 +754,19 @@ export default function ActSverka() {
             </div>
           </CardContent>
         </Card>
+        {stats.discrepancy > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">{t('discrepancy') || 'Solishtirishda xatolik'}</p>
+                  <p className="text-2xl font-bold text-orange-600">{stats.discrepancy}</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-orange-500" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Actions & Filters */}
@@ -766,6 +793,7 @@ export default function ActSverka() {
                   <SelectItem value="sent">{t('sent') || 'Yuborilgan'}</SelectItem>
                   <SelectItem value="confirmed">{t('confirmed') || 'Tasdiqlangan'}</SelectItem>
                   <SelectItem value="disputed">{t('disputed') || 'Munozarali'}</SelectItem>
+                  <SelectItem value="discrepancy">{t('discrepancy') || 'Solishtirishda xatolik'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

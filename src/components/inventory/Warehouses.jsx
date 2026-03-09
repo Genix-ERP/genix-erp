@@ -789,7 +789,6 @@ export default function Warehouses() {
             <div className="pt-4 border-t border-slate-200">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 {t('warehouse_operations') || 'Warehouse Operations'}
-                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
               </h4>
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -955,69 +954,69 @@ export default function Warehouses() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('location_type') || 'Location Type'}
-                    helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
+                    label={t('name')}
+                    required
+                    helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
                   />
-                  <Select
-                    value={locationForm.type}
-                    onValueChange={(value) => setLocationForm({...locationForm, type: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="storage">
-                        <div className="flex items-center gap-2">
-                          <Box className="w-4 h-4" />
-                          {t('loc_type_storage') || 'Storage'}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="receiving">
-                        <div className="flex items-center gap-2">
-                          <Truck className="w-4 h-4" />
-                          {t('loc_type_receiving') || 'Receiving'}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="shipping">
-                        <div className="flex items-center gap-2">
-                          <PackageCheck className="w-4 h-4" />
-                          {t('loc_type_shipping') || 'Shipping'}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="staging">
-                        <div className="flex items-center gap-2">
-                          <Layers className="w-4 h-4" />
-                          {t('loc_type_staging') || 'Staging'}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="quality">
-                        <div className="flex items-center gap-2">
-                          <ClipboardCheck className="w-4 h-4" />
-                          {t('loc_type_quality') || 'Quality Control'}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="returns">
-                        <div className="flex items-center gap-2">
-                          <RotateCcw className="w-4 h-4" />
-                          {t('loc_type_returns') || 'Returns'}
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
+                    value={locationForm.name}
+                    onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
+                    required
+                  />
                 </div>
               </div>
               <div className="mt-4">
                 <LabelWithHelp
-                  label={t('name')}
-                  required
-                  helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
+                  label={t('location_type') || 'Location Type'}
+                  helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
                 />
-                <Input
-                  placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
-                  value={locationForm.name}
-                  onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
-                  required
-                />
+                <Select
+                  value={locationForm.type}
+                  onValueChange={(value) => setLocationForm({...locationForm, type: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="storage">
+                      <div className="flex items-center gap-2">
+                        <Box className="w-4 h-4" />
+                        {t('loc_type_storage') || 'Storage'}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="receiving">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4" />
+                        {t('loc_type_receiving') || 'Receiving'}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="shipping">
+                      <div className="flex items-center gap-2">
+                        <PackageCheck className="w-4 h-4" />
+                        {t('loc_type_shipping') || 'Shipping'}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="staging">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4" />
+                        {t('loc_type_staging') || 'Staging'}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="quality">
+                      <div className="flex items-center gap-2">
+                        <ClipboardCheck className="w-4 h-4" />
+                        {t('loc_type_quality') || 'Quality Control'}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="returns">
+                      <div className="flex items-center gap-2">
+                        <RotateCcw className="w-4 h-4" />
+                        {t('loc_type_returns') || 'Returns'}
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {selectedWarehouse?.locations?.length > 0 && (
                 <div className="mt-4">
@@ -1160,7 +1159,6 @@ export default function Warehouses() {
             <div>
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 {t('special_location_flags') || 'Special Location Flags'}
-                <Badge className="bg-orange-100 text-orange-700 text-xs">Odoo</Badge>
               </h4>
               <div className="flex flex-wrap gap-6">
                 <div className="flex items-center gap-2">
@@ -1260,39 +1258,39 @@ export default function Warehouses() {
                 </div>
                 <div>
                   <LabelWithHelp
-                    label={t('location_type') || 'Location Type'}
-                    helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
+                    label={t('name')}
+                    required
+                    helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
                   />
-                  <Select
-                    value={locationForm.type}
-                    onValueChange={(value) => setLocationForm({...locationForm, type: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="storage">{t('loc_type_storage') || 'Storage'}</SelectItem>
-                      <SelectItem value="receiving">{t('loc_type_receiving') || 'Receiving'}</SelectItem>
-                      <SelectItem value="shipping">{t('loc_type_shipping') || 'Shipping'}</SelectItem>
-                      <SelectItem value="staging">{t('loc_type_staging') || 'Staging'}</SelectItem>
-                      <SelectItem value="quality">{t('loc_type_quality') || 'Quality Control'}</SelectItem>
-                      <SelectItem value="returns">{t('loc_type_returns') || 'Returns'}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
+                    value={locationForm.name}
+                    onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
+                    required
+                  />
                 </div>
               </div>
               <div className="mt-4">
                 <LabelWithHelp
-                  label={t('name')}
-                  required
-                  helpText={t('help_location_name') || "Joylashuvning tavsifiy nomi. Xodimlar uchun oson tushunarli bo'lishi kerak."}
+                  label={t('location_type') || 'Location Type'}
+                  helpText={t('help_location_type') || "Joylashuv turi operatsion qoidalarni belgilaydi: Saqlash - asosiy zaxira, Qabul - keluvchi tovarlar, Jo'natish - chiquvchi tovarlar."}
                 />
-                <Input
-                  placeholder={t('location_name_placeholder') || 'e.g., Aisle A, Rack 1, Shelf 2'}
-                  value={locationForm.name}
-                  onChange={(e) => setLocationForm({...locationForm, name: e.target.value})}
-                  required
-                />
+                <Select
+                  value={locationForm.type}
+                  onValueChange={(value) => setLocationForm({...locationForm, type: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="storage">{t('loc_type_storage') || 'Storage'}</SelectItem>
+                    <SelectItem value="receiving">{t('loc_type_receiving') || 'Receiving'}</SelectItem>
+                    <SelectItem value="shipping">{t('loc_type_shipping') || 'Shipping'}</SelectItem>
+                    <SelectItem value="staging">{t('loc_type_staging') || 'Staging'}</SelectItem>
+                    <SelectItem value="quality">{t('loc_type_quality') || 'Quality Control'}</SelectItem>
+                    <SelectItem value="returns">{t('loc_type_returns') || 'Returns'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

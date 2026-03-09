@@ -515,13 +515,18 @@ export default function Payroll() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              {payroll.status === 'draft' && canUpdate(MODULES.PAYROLL) && (
+                                <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
+                                  {t('approve')}
+                                </Button>
+                              )}
                               {payroll.status === 'calculated' && canUpdate(MODULES.PAYROLL) && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
+                                <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
                                 </Button>
                               )}
                               {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) && (
-                                <Button size="sm" variant="ghost" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
+                                <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
                                   {t('pay')}
                                 </Button>
                               )}

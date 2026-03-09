@@ -87,8 +87,8 @@ export default function CompanySettings() {
     intercompany_relations: "", // Intercompany aloqa
     intercompany_vendor_ids: [],
     director_name: "",    // Direktor F.I.O.
-    director_phone: "",   // Direktor telefon
-    phone: "",            // Kompaniya telefon
+    director_phone: "+998",   // Direktor telefon
+    phone: "+998",            // Kompaniya telefon
     email: "",
     legal_address: "",    // Yuridik manzil
     notes: "",            // Izoh
@@ -110,8 +110,8 @@ export default function CompanySettings() {
     intercompany_relations: "",
     intercompany_vendor_ids: [],
     director_name: "",
-    director_phone: "",
-    phone: "",
+    director_phone: "+998",
+    phone: "+998",
     email: "",
     legal_address: "",
     notes: "",
@@ -255,8 +255,8 @@ export default function CompanySettings() {
       intercompany_relations: "",
       intercompany_vendor_ids: [],
       director_name: "",
-      director_phone: "",
-      phone: "",
+      director_phone: "+998",
+      phone: "+998",
       email: "",
       legal_address: "",
       notes: "",

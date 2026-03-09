@@ -410,7 +410,8 @@ export default function Products() {
     use_expiration_date: false,
     use_best_before_date: false,
     removal_time_days: '', // Days before expiration to remove from available stock
-    alert_time_days: '' // Days before expiration to show alert
+    alert_time_days: '', // Days before expiration to show alert
+    inventory_type: 'trade',
   });
 
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
@@ -629,7 +630,8 @@ export default function Products() {
       use_expiration_date: false,
       use_best_before_date: false,
       removal_time_days: '',
-      alert_time_days: ''
+      alert_time_days: '',
+      inventory_type: 'trade',
     });
     setShowAdvancedFields(false);
     setNewVariantAttribute({ name: '', values: '' });
@@ -653,6 +655,7 @@ export default function Products() {
       const productData = {
         ...formData,
         code: generatedCode,
+        inventory_type: formData.inventory_type,
         cost_price: parseFloat(formData.cost_price) || 0,
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
@@ -784,7 +787,8 @@ export default function Products() {
       use_best_before_date: product.use_best_before_date || false,
       removal_time_days: product.removal_time_days?.toString() || '',
       alert_time_days: product.alert_time_days?.toString() || '',
-      organization_ids: product.organization_ids || []
+      organization_ids: product.organization_ids || [],
+      inventory_type: product.inventory_type || 'trade',
     });
     setShowAdvancedFields(hasAdvancedData || product.track_expiration);
     setShowEditModal(true);
@@ -855,6 +859,7 @@ export default function Products() {
     try {
       const productData = {
         ...formData,
+        inventory_type: formData.inventory_type,
         cost_price: parseFloat(formData.cost_price) || 0,
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
@@ -1626,7 +1631,8 @@ export default function Products() {
                       type: value,
                       is_stockable: value === 'product',
                       track_inventory: value === 'product',
-                      bundle_items: value === 'bundle' ? formData.bundle_items : []
+                      bundle_items: value === 'bundle' ? formData.bundle_items : [],
+                      inventory_type: value === 'service' ? 'service' : (value === 'product' ? 'trade' : formData.inventory_type)
                     })}
                   >
                     <SelectTrigger>
@@ -1639,6 +1645,27 @@ export default function Products() {
                     </SelectContent>
                   </Select>
                 </div>
+                {formData.type === 'product' && (
+                  <div>
+                    <LabelWithHelp
+                      label="Tovar turi (buxgalteriya)"
+                      helpText="Xom ashyo (1310), Sotish uchun (1340), Tayyor mahsulot (1330)"
+                    />
+                    <Select
+                      value={formData.inventory_type}
+                      onValueChange={(value) => setFormData({...formData, inventory_type: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="trade">Sotish uchun tovar (1340)</SelectItem>
+                        <SelectItem value="raw">Xom ashyo (1310)</SelectItem>
+                        <SelectItem value="finished">Tayyor mahsulot (1330)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
@@ -1915,7 +1942,7 @@ export default function Products() {
             {/* Pricing */}
             <div>
               <h4 className="font-semibold text-slate-900 mb-3">{t('pricing')}</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className={`grid ${formData.can_be_sold ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
                 <div>
                   <LabelWithHelp
                     label={t('cost_price')}
@@ -1933,6 +1960,7 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
+                {formData.can_be_sold && (
                 <div>
                   <LabelWithHelp
                     label={t('list_price')}
@@ -1952,6 +1980,7 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
+                )}
               </div>
             </div>
 
@@ -2158,20 +2187,6 @@ export default function Products() {
                     <FieldHelp text={t('help_can_be_purchased') || "Bu mahsulot Sotib olish modulida ko'rinadi"} />
                   </label>
                 </div>
-                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="available_in_pos"
-                    checked={formData.available_in_pos}
-                    onChange={(e) => setFormData({...formData, available_in_pos: e.target.checked})}
-                    className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
-                  />
-                  <label htmlFor="available_in_pos" className="text-sm text-slate-700 flex items-center cursor-pointer">
-                    <Printer className="w-4 h-4 mr-1 text-purple-500" />
-                    {t('pos') || 'Savdo nuqtasi'}
-                    <FieldHelp text={t('help_available_in_pos') || "Bu mahsulot POS (Savdo nuqtasi) modulida ko'rinadi"} />
-                  </label>
-                </div>
                 <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-lg">
                   <input
                     type="checkbox"
@@ -2184,48 +2199,6 @@ export default function Products() {
                     <DollarSign className="w-4 h-4 mr-1 text-orange-500" />
                     {t('expenses') || 'Xarajatlar'}
                     <FieldHelp text={t('help_can_be_expensed') || "Bu mahsulot Xarajatlar modulida ko'rinadi"} />
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 p-2 bg-cyan-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="can_be_rented"
-                    checked={formData.can_be_rented}
-                    onChange={(e) => setFormData({...formData, can_be_rented: e.target.checked})}
-                    className="w-4 h-4 text-cyan-600 rounded border-slate-300 focus:ring-cyan-500"
-                  />
-                  <label htmlFor="can_be_rented" className="text-sm text-slate-700 flex items-center cursor-pointer">
-                    <History className="w-4 h-4 mr-1 text-cyan-500" />
-                    {t('rental') || 'Ijara'}
-                    <FieldHelp text={t('help_can_be_rented') || "Bu mahsulot Ijara modulida ko'rinadi"} />
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="can_be_subcontracted"
-                    checked={formData.can_be_subcontracted}
-                    onChange={(e) => setFormData({...formData, can_be_subcontracted: e.target.checked})}
-                    className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
-                  />
-                  <label htmlFor="can_be_subcontracted" className="text-sm text-slate-700 flex items-center cursor-pointer">
-                    <Layers className="w-4 h-4 mr-1 text-red-500" />
-                    {t('subcontracting') || 'Subpudrat'}
-                    <FieldHelp text={t('help_can_be_subcontracted') || "Bu mahsulot Ishlab chiqarish modulida subpudrat sifatida ishlatiladi"} />
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="is_overhead_expense"
-                    checked={formData.is_overhead_expense}
-                    onChange={(e) => setFormData({...formData, is_overhead_expense: e.target.checked})}
-                    className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
-                  />
-                  <label htmlFor="is_overhead_expense" className="text-sm text-slate-700 flex items-center cursor-pointer">
-                    <Truck className="w-4 h-4 mr-1 text-amber-500" />
-                    {t('overhead_expense') || 'Nakladnoy xarajat'}
-                    <FieldHelp text={t('help_is_overhead_expense') || "Bu mahsulot nakladnoy xarajatlar (transport, bojxona, yuk tashish) sifatida ishlatiladi"} />
                   </label>
                 </div>
               </div>
@@ -2255,6 +2228,69 @@ export default function Products() {
             {/* Advanced Fields Section */}
             {showAdvancedFields && (
               <>
+                {/* Additional Module Visibility */}
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">{t('additional_modules') || "Qo'shimcha modullar"}</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="available_in_pos"
+                        checked={formData.available_in_pos}
+                        onChange={(e) => setFormData({...formData, available_in_pos: e.target.checked})}
+                        className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+                      />
+                      <label htmlFor="available_in_pos" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                        <Printer className="w-4 h-4 mr-1 text-purple-500" />
+                        {t('pos') || 'Savdo nuqtasi'}
+                        <FieldHelp text={t('help_available_in_pos') || "Bu mahsulot POS (Savdo nuqtasi) modulida ko'rinadi"} />
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 bg-cyan-50 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="can_be_rented"
+                        checked={formData.can_be_rented}
+                        onChange={(e) => setFormData({...formData, can_be_rented: e.target.checked})}
+                        className="w-4 h-4 text-cyan-600 rounded border-slate-300 focus:ring-cyan-500"
+                      />
+                      <label htmlFor="can_be_rented" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                        <History className="w-4 h-4 mr-1 text-cyan-500" />
+                        {t('rental') || 'Ijara'}
+                        <FieldHelp text={t('help_can_be_rented') || "Bu mahsulot Ijara modulida ko'rinadi"} />
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="can_be_subcontracted"
+                        checked={formData.can_be_subcontracted}
+                        onChange={(e) => setFormData({...formData, can_be_subcontracted: e.target.checked})}
+                        className="w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500"
+                      />
+                      <label htmlFor="can_be_subcontracted" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                        <Layers className="w-4 h-4 mr-1 text-red-500" />
+                        {t('subcontracting') || 'Subpudrat'}
+                        <FieldHelp text={t('help_can_be_subcontracted') || "Bu mahsulot Ishlab chiqarish modulida subpudrat sifatida ishlatiladi"} />
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="is_overhead_expense"
+                        checked={formData.is_overhead_expense}
+                        onChange={(e) => setFormData({...formData, is_overhead_expense: e.target.checked})}
+                        className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+                      />
+                      <label htmlFor="is_overhead_expense" className="text-sm text-slate-700 flex items-center cursor-pointer">
+                        <Truck className="w-4 h-4 mr-1 text-amber-500" />
+                        {t('overhead_expense') || 'Nakladnoy xarajat'}
+                        <FieldHelp text={t('help_is_overhead_expense') || "Bu mahsulot nakladnoy xarajatlar (transport, bojxona, yuk tashish) sifatida ishlatiladi"} />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Brand & Manufacturer */}
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">{t('brand_manufacturer') || 'Brand & Manufacturer'}</h4>

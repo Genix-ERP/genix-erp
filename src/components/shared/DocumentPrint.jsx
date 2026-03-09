@@ -141,7 +141,7 @@ export const generateDocumentPDF = (config) => {
   const doc = new jsPDF({
     orientation: templateConfig.orientation,
     unit: "mm",
-    format: [210, 148.5], // Half A4
+    format: "a4",
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -150,90 +150,101 @@ export const generateDocumentPDF = (config) => {
 
   let yPos = margins.top;
 
-  // Header with company info
+  // ═══════════════════════════════════════════
+  // TOP HEADER: Company info (left) + Doc number (right)
+  // ═══════════════════════════════════════════
+
+  // Company logo
   if (templateConfig.showCompanyLogo && company.logo) {
     try {
-      doc.addImage(company.logo, "PNG", margins.left, yPos, 30, 15);
+      doc.addImage(company.logo, "PNG", margins.left, yPos, 25, 12);
     } catch (e) {
       console.warn("Logo qo'shishda xatolik:", e);
     }
   }
 
-  // Company details
-  const companyX = templateConfig.showCompanyLogo ? margins.left + 35 : margins.left;
-  doc.setFontSize(13);
-  doc.setFont(undefined, "bold");
-  doc.text(company.name, companyX, yPos + 5);
-  doc.setFontSize(8);
-  doc.setFont(undefined, "normal");
-  doc.setTextColor(100);
-  doc.text(company.address, companyX, yPos + 10);
-  doc.text(`Tel: ${company.phone} | Email: ${company.email}`, companyX, yPos + 14);
-  doc.text(`INN: ${company.inn}`, companyX, yPos + 18);
-  doc.setTextColor(0);
-
-  yPos += 24;
-
-  // Horizontal divider
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(0.5);
-  doc.line(margins.left, yPos, pageWidth - margins.right, yPos);
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.2);
-  doc.line(margins.left, yPos + 1, pageWidth - margins.right, yPos + 1);
-  doc.setLineWidth(0.1);
-  yPos += 10;
-
-  // Document title and number
+  // Company name - top left
   doc.setFontSize(16);
   doc.setFont(undefined, "bold");
-  doc.text(title || templateConfig.title, pageWidth / 2, yPos, { align: "center" });
-  yPos += 8;
+  doc.setTextColor(15, 23, 42);
+  doc.text(company.name, margins.left, yPos + 6);
 
+  // Document number - top right, colored
   if (documentNumber) {
-    doc.setFontSize(11);
-    doc.setFont(undefined, "normal");
-    doc.text(`#${documentNumber}`, pageWidth / 2, yPos, { align: "center" });
-    yPos += 6;
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.setTextColor(37, 99, 235);
+    doc.text(documentNumber, pageWidth - margins.right, yPos + 6, { align: "right" });
   }
 
+  // Company details - second line
+  doc.setFontSize(8);
+  doc.setFont(undefined, "normal");
+  doc.setTextColor(100, 116, 139);
+  const companyDetails = [company.address, `info@genix.uz`, `INN: ${company.inn}`].filter(Boolean).join("  |  ");
+  doc.text(companyDetails, margins.left, yPos + 12);
+
+  // Date - right side under doc number
   if (documentDate) {
     doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(`${dateLabel}: ${documentDate}`, pageWidth / 2, yPos, { align: "center" });
-    doc.setTextColor(0);
-    yPos += 10;
+    doc.setTextColor(100, 116, 139);
+    doc.text(documentDate, pageWidth - margins.right, yPos + 12, { align: "right" });
   }
 
-  // Header fields (2 columns)
-  if (headerFields.length > 0) {
-    // Draw a light background box
-    const boxHeight = Math.ceil(headerFields.length / 2) * 7 + 4;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(margins.left, yPos - 3, contentWidth, boxHeight, 2, 2, 'FD');
+  yPos += 20;
 
+  // ═══════════════════════════════════════════
+  // BLUE TITLE BAR
+  // ═══════════════════════════════════════════
+  const barHeight = 10;
+  doc.setFillColor(37, 99, 235);
+  doc.rect(margins.left, yPos, contentWidth, barHeight, 'F');
+  doc.setFontSize(12);
+  doc.setFont(undefined, "bold");
+  doc.setTextColor(255, 255, 255);
+  doc.text(title || templateConfig.title, pageWidth / 2, yPos + 7, { align: "center" });
+
+  yPos += barHeight + 6;
+
+  // ═══════════════════════════════════════════
+  // HEADER FIELDS (2 columns, clean layout)
+  // ═══════════════════════════════════════════
+  if (headerFields.length > 0) {
     doc.setFontSize(9);
     const colWidth = contentWidth / 2;
-    headerFields.forEach((field, index) => {
-      const col = index % 2;
-      const row = Math.floor(index / 2);
-      const x = margins.left + 4 + col * colWidth;
-      const y = yPos + 3 + row * 7;
+    const rows = Math.ceil(headerFields.length / 2);
 
-      doc.setFont(undefined, "bold");
-      doc.setTextColor(71, 85, 105);
-      doc.text(`${field.label}:`, x, y);
-      const labelWidth = doc.getTextWidth(`${field.label}:`) + 3;
-      doc.setFont(undefined, "normal");
-      doc.setTextColor(15, 23, 42);
-      doc.text(String(field.value || "-"), x + labelWidth, y);
-    });
-    doc.setTextColor(0);
-    yPos += boxHeight + 5;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < 2; col++) {
+        const idx = row * 2 + col;
+        if (idx >= headerFields.length) continue;
+        const field = headerFields[idx];
+        const x = margins.left + col * colWidth;
+        const y = yPos + row * 8;
+
+        // Label
+        doc.setFont(undefined, "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.text(`${field.label}`, x, y);
+        // Value
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(field.value || "-"), x, y + 4.5);
+      }
+    }
+
+    yPos += rows * 8 + 4;
+
+    // Thin separator line
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(margins.left, yPos, pageWidth - margins.right, yPos);
+    yPos += 5;
   }
 
-  // Table
+  // ═══════════════════════════════════════════
+  // TABLE
+  // ═══════════════════════════════════════════
   if (tableColumns.length > 0 && tableData.length > 0) {
     const tableHeaders = tableColumns.map((col) => col.label);
     const tableRows = tableData.map((row) =>
@@ -248,8 +259,20 @@ export const generateDocumentPDF = (config) => {
       body: tableRows,
       startY: yPos,
       margin: { left: margins.left, right: margins.right },
-      styles: { fontSize: 8.5, cellPadding: 3, lineColor: [226, 232, 240], lineWidth: 0.2 },
-      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold", cellPadding: 4 },
+      styles: {
+        fontSize: 9,
+        cellPadding: 3.5,
+        lineColor: [226, 232, 240],
+        lineWidth: 0.2,
+        textColor: [15, 23, 42],
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: 255,
+        fontStyle: "bold",
+        cellPadding: 4,
+        fontSize: 9,
+      },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: tableColumns.reduce((acc, col, index) => {
         if (col.align) {
@@ -262,37 +285,63 @@ export const generateDocumentPDF = (config) => {
       }, {}),
     });
 
-    yPos = doc.lastAutoTable.finalY + 8;
+    yPos = doc.lastAutoTable.finalY + 6;
   }
 
-  // Totals
+  // ═══════════════════════════════════════════
+  // TOTALS (right-aligned, clean lines)
+  // ═══════════════════════════════════════════
   if (totals.length > 0) {
-    const totalBoxWidth = 90;
-    const totalBoxX = pageWidth - margins.right - totalBoxWidth;
-    const totalBoxHeight = totals.length * 7 + 4;
+    const totalBlockWidth = 100;
+    const totalBlockX = pageWidth - margins.right - totalBlockWidth;
+    const lineX = totalBlockX;
+    const valueX = pageWidth - margins.right;
 
-    doc.setFillColor(248, 250, 252);
+    // Separator before totals
     doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(totalBoxX, yPos - 3, totalBoxWidth, totalBoxHeight, 1.5, 1.5, 'FD');
+    doc.setLineWidth(0.3);
+    doc.line(totalBlockX, yPos, pageWidth - margins.right, yPos);
+    yPos += 4;
 
-    doc.setFontSize(9.5);
-    totals.forEach((total) => {
-      const x = totalBoxX + 4;
-      doc.setFont(undefined, total.bold ? "bold" : "normal");
-      doc.text(`${total.label}:`, x, yPos + 2);
-      doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 2, { align: "right" });
-      yPos += 7;
+    totals.forEach((total, idx) => {
+      const isLast = idx === totals.length - 1;
+
+      if (isLast && total.bold) {
+        // Grand total - blue bar
+        yPos += 2;
+        const barH = 9;
+        doc.setFillColor(37, 99, 235);
+        doc.roundedRect(margins.left, yPos - 1, contentWidth, barH, 1.5, 1.5, 'F');
+        doc.setFontSize(10);
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.text(`${total.label}:`, margins.left + 4, yPos + 5.5);
+        doc.text(String(total.value), pageWidth - margins.right - 4, yPos + 5.5, { align: "right" });
+        yPos += barH + 4;
+      } else {
+        doc.setFontSize(9);
+        doc.setFont(undefined, total.bold ? "bold" : "normal");
+        doc.setTextColor(71, 85, 105);
+        doc.text(`${total.label}:`, lineX + 2, yPos + 2);
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(total.value), valueX, yPos + 2, { align: "right" });
+        yPos += 7;
+      }
     });
-    yPos += 8;
+    yPos += 4;
   }
 
-  // Footer fields
+  // ═══════════════════════════════════════════
+  // FOOTER FIELDS
+  // ═══════════════════════════════════════════
   if (footerFields.length > 0) {
     doc.setFontSize(9);
     footerFields.forEach((field) => {
       doc.setFont(undefined, "bold");
+      doc.setTextColor(71, 85, 105);
       doc.text(`${field.label}:`, margins.left, yPos);
       doc.setFont(undefined, "normal");
+      doc.setTextColor(15, 23, 42);
       doc.text(String(field.value || "-"), margins.left + 30, yPos);
       yPos += 5;
     });
@@ -303,63 +352,84 @@ export const generateDocumentPDF = (config) => {
   if (notes) {
     doc.setFontSize(8);
     doc.setFont(undefined, "italic");
+    doc.setTextColor(100, 116, 139);
     const splitNotes = doc.splitTextToSize(notes, contentWidth);
     doc.text(splitNotes, margins.left, yPos);
     yPos += splitNotes.length * 4 + 5;
   }
 
-  // Signature section - add some spacing but don't force to bottom
+  // ═══════════════════════════════════════════
+  // SIGNATURE SECTION
+  // ═══════════════════════════════════════════
   if (templateConfig.showSignature) {
-    yPos += 15; // Add spacing before signatures
+    yPos += 15;
 
-    doc.setDrawColor(150);
-    doc.setFontSize(8);
+    doc.setDrawColor(150, 150, 150);
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(9);
 
-    // Left signature
+    // Left signature - Topshirdi
+    doc.setFont(undefined, "bold");
     doc.text("Topshirdi:", margins.left, yPos);
-    doc.line(margins.left, yPos + 12, margins.left + 50, yPos + 12);
-    doc.text("(imzo)", margins.left + 15, yPos + 16);
+    doc.setLineWidth(0.3);
+    doc.line(margins.left, yPos + 14, margins.left + 55, yPos + 14);
+    doc.setFontSize(8);
+    doc.setFont(undefined, "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text("(imzo)", margins.left + 18, yPos + 19);
 
-    // Stamp placeholder in center (between signatures)
+    // Stamp placeholder in center
     if (templateConfig.showStamp) {
-      doc.setDrawColor(150);
+      doc.setDrawColor(180, 180, 180);
       doc.setLineDash([2, 2]);
-      doc.circle(pageWidth / 2, yPos + 8, 12);
-      doc.setFontSize(6);
-      doc.text("M.O.", pageWidth / 2, yPos + 8, { align: "center" });
+      doc.setLineWidth(0.4);
+      doc.circle(pageWidth / 2, yPos + 9, 14);
+      doc.setFontSize(7);
+      doc.setTextColor(180, 180, 180);
+      doc.text("M.O.", pageWidth / 2, yPos + 10, { align: "center" });
       doc.setLineDash([]);
     }
 
-    // Right signature
-    doc.text("Qabul qildi:", pageWidth - margins.right - 50, yPos);
-    doc.line(pageWidth - margins.right - 50, yPos + 12, pageWidth - margins.right, yPos + 12);
-    doc.text("(imzo)", pageWidth - margins.right - 35, yPos + 16);
+    // Right signature - Qabul qildi
+    doc.setFontSize(9);
+    doc.setFont(undefined, "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Qabul qildi:", pageWidth - margins.right - 55, yPos);
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.3);
+    doc.line(pageWidth - margins.right - 55, yPos + 14, pageWidth - margins.right, yPos + 14);
+    doc.setFontSize(8);
+    doc.setFont(undefined, "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text("(imzo)", pageWidth - margins.right - 37, yPos + 19);
 
-    yPos += 25;
+    yPos += 28;
   } else if (templateConfig.showStamp) {
-    // Stamp without signatures
     yPos += 10;
-    doc.setDrawColor(150);
+    doc.setDrawColor(180, 180, 180);
     doc.setLineDash([2, 2]);
-    doc.circle(pageWidth / 2, yPos + 8, 12);
-    doc.setFontSize(6);
-    doc.text("M.O.", pageWidth / 2, yPos + 8, { align: "center" });
+    doc.setLineWidth(0.4);
+    doc.circle(pageWidth / 2, yPos + 9, 14);
+    doc.setFontSize(7);
+    doc.setTextColor(180, 180, 180);
+    doc.text("M.O.", pageWidth / 2, yPos + 10, { align: "center" });
     doc.setLineDash([]);
   }
 
   // Barcode placeholder
   if (templateConfig.showBarcode && documentNumber) {
     doc.setFontSize(8);
-    doc.text(`||||| ${documentNumber} |||||`, pageWidth - margins.right - 30, pageHeight - 10);
+    doc.setTextColor(100);
+    doc.text(`||||| ${documentNumber} |||||`, pageWidth - margins.right - 30, pageHeight - 12);
   }
 
   // Footer with generation info
   doc.setFontSize(7);
-  doc.setTextColor(150);
+  doc.setTextColor(180, 180, 180);
   doc.text(
     `Genix ERP | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
     margins.left,
-    pageHeight - 5
+    pageHeight - 8
   );
 
   return doc;

@@ -62,11 +62,15 @@ export default function VendorBills() {
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
-  const { currencies = [], exchangeRates = [], getLatestExchangeRate } = useFinancials();
+  const { currencies = [], exchangeRates = [], getLatestExchangeRate, taxRates = [] } = useFinancials();
   const { suppliers, purchaseOrders: contextPOs } = useProcurement();
 
   const baseCurrency = currencies.find(c => c.is_base) || { code: 'UZS' };
   const foreignCurrencies = currencies.filter(c => !c.is_base && c.is_active);
+
+  // Purchase tax rates
+  const purchaseTaxRates = taxRates.filter(tr => tr.tax_type === 'purchase' || !tr.tax_type);
+  const defaultPurchaseTax = purchaseTaxRates.find(tr => tr.is_active) || null;
 
   const [bills, setBills] = useState([]);
   const [filteredBills, setFilteredBills] = useState([]);
@@ -95,6 +99,8 @@ export default function VendorBills() {
     currency_code: 'UZS',
     exchange_rate: 1,
     subtotal: 0,
+    tax_rate_id: '',
+    tax_percent: 12,
     tax_amount: 0,
     total_amount: 0,
     notes: '',
@@ -140,6 +146,8 @@ export default function VendorBills() {
         purchase_order_id: inv.purchase_order_number || inv.purchase_order_id || '',
         goods_receipt_id: inv.goods_receipt_id || '',
         subtotal: inv.subtotal || 0,
+        tax_rate_id: inv.tax_rate_id || '',
+        tax_percent: inv.subtotal > 0 && inv.tax_amount > 0 ? Math.round((inv.tax_amount / inv.subtotal) * 10000) / 100 : 12,
         tax_amount: inv.tax_amount || 0,
         total_amount: inv.total_amount || 0,
         paid_amount: inv.amount_paid || 0,
@@ -191,6 +199,7 @@ export default function VendorBills() {
         invoice_date: newBill.bill_date,
         due_date: newBill.due_date,
         subtotal: newBill.subtotal,
+        tax_rate_id: newBill.tax_rate_id || undefined,
         tax_amount: newBill.tax_amount,
         total_amount: newBill.total_amount,
         notes: newBill.notes,
@@ -302,6 +311,8 @@ export default function VendorBills() {
       currency_code: 'UZS',
       exchange_rate: 1,
       subtotal: 0,
+      tax_rate_id: defaultPurchaseTax?.id || '',
+      tax_percent: defaultPurchaseTax?.rate || 12,
       tax_amount: 0,
       total_amount: 0,
       notes: '',
@@ -362,7 +373,8 @@ export default function VendorBills() {
 
     // Recalculate totals
     const subtotal = updatedLines.reduce((sum, line) => sum + line.amount, 0);
-    const tax_amount = subtotal * 0.1; // 10% tax
+    const taxRate = parseFloat(currentBill.tax_percent) || 0;
+    const tax_amount = subtotal * taxRate / 100;
     const total_amount = subtotal + tax_amount;
 
     if (editingBill) {
@@ -390,7 +402,8 @@ export default function VendorBills() {
 
     // Recalculate totals
     const subtotal = updatedLines.reduce((sum, line) => sum + line.amount, 0);
-    const tax_amount = subtotal * 0.1;
+    const taxRate = parseFloat(currentBill.tax_percent) || 0;
+    const tax_amount = subtotal * taxRate / 100;
     const total_amount = subtotal + tax_amount;
 
     if (editingBill) {
@@ -928,7 +941,8 @@ export default function VendorBills() {
                               };
 
                               const subtotal = updatedLines.reduce((sum, l) => sum + l.amount, 0);
-                              const tax_amount = subtotal * 0.1;
+                              const taxRate = parseFloat(currentBill.tax_percent) || 0;
+                              const tax_amount = subtotal * taxRate / 100;
                               const total_amount = subtotal + tax_amount;
 
                               if (editingBill) {
@@ -984,6 +998,62 @@ export default function VendorBills() {
               </div>
             </div>
 
+            {/* Tax Rate Selector */}
+            <div className="space-y-2">
+              <Label>{t('tax_rate') || 'Tax Rate'} (%)</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={(editingBill?.tax_rate_id || newBill.tax_rate_id) || 'custom'}
+                  onValueChange={(value) => {
+                    const setter = editingBill ? setEditingBill : setNewBill;
+                    const current = editingBill || newBill;
+                    if (value === 'none') {
+                      const subtotal = current.subtotal;
+                      setter({ ...current, tax_rate_id: '', tax_percent: 0, tax_amount: 0, total_amount: subtotal });
+                    } else if (value === 'custom') {
+                      setter({ ...current, tax_rate_id: '' });
+                    } else {
+                      const selectedRate = purchaseTaxRates.find(tr => String(tr.id) === value);
+                      if (selectedRate) {
+                        const subtotal = current.subtotal;
+                        const tax_amount = subtotal * selectedRate.rate / 100;
+                        setter({ ...current, tax_rate_id: value, tax_percent: selectedRate.rate, tax_amount, total_amount: subtotal + tax_amount });
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder={t('select_tax_rate') || 'Select tax rate'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('no_tax') || 'No Tax'} (0%)</SelectItem>
+                    {purchaseTaxRates.filter(tr => tr.is_active).map(tr => (
+                      <SelectItem key={tr.id} value={String(tr.id)}>
+                        {tr.name} ({tr.rate}%)
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">{t('custom') || 'Custom'}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  className="w-[100px]"
+                  value={editingBill?.tax_percent ?? newBill.tax_percent}
+                  onChange={(e) => {
+                    const setter = editingBill ? setEditingBill : setNewBill;
+                    const current = editingBill || newBill;
+                    const rate = parseFloat(e.target.value) || 0;
+                    const tax_amount = current.subtotal * rate / 100;
+                    setter({ ...current, tax_percent: rate, tax_rate_id: '', tax_amount, total_amount: current.subtotal + tax_amount });
+                  }}
+                  min="0"
+                  max="100"
+                  step="0.01"
+                />
+                <span className="flex items-center text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+
             {/* Totals */}
             <div className="bg-muted p-4 rounded-lg space-y-2">
               <div className="flex justify-between">
@@ -993,7 +1063,7 @@ export default function VendorBills() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>{t('tax') || 'Tax'} (10%):</span>
+                <span>{t('tax') || 'Tax'} ({editingBill?.tax_percent ?? newBill.tax_percent}%):</span>
                 <span className="font-semibold">
                   {(editingBill?.tax_amount || newBill.tax_amount).toLocaleString()} {editingBill?.currency || newBill.currency}
                 </span>

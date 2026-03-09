@@ -167,6 +167,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const [balanceSheet, setBalanceSheet] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
   const [exchangeDiffs, setExchangeDiffs] = useState(null);
+  const [currencyDebt, setCurrencyDebt] = useState(null);
 
   // Fetch all reports when period changes
   useEffect(() => {
@@ -178,12 +179,13 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
     const params = getDateParams(period);
 
     try {
-      const [tb, pnl, bs, cf, ed] = await Promise.all([
+      const [tb, pnl, bs, cf, ed, cd] = await Promise.all([
         financeService.getTrialBalance(params).catch(() => null),
         financeService.getIncomeStatement(params).catch(() => null),
         financeService.getBalanceSheet(params).catch(() => null),
         financeService.getCashFlow(params).catch(() => null),
         financeService.listExchangeDiffs({ date_from: params.period_from, date_to: params.period_to }).catch(() => null),
+        financeService.getCurrencyDebtReport().catch(() => null),
       ]);
 
       setTrialBalance(tb);
@@ -191,6 +193,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
       setBalanceSheet(bs);
       setCashFlow(cf);
       setExchangeDiffs(ed);
+      setCurrencyDebt(cd);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     } finally {
@@ -290,6 +293,8 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa xarajatlar' : 'Less Other Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
             ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
+          <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Soliqdan oldingi foyda' : 'Pre-tax Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.pre_tax_profit || 0)}</strong></td></tr>
+          <tr><td style="padding-left:30px">${language === 'uz' ? "Daromad solig'i (15%)" : 'Income Tax (15%)'}</td><td class="amount negative">-${formatCurrency(incomeStatement.income_tax || 0)}</td></tr>
           <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Sof foyda' : 'Net Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.net_income)}</strong></td></tr>
         </table>
         ` : ''}
@@ -385,7 +390,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
       {/* Reports Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 bg-white/80">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
           </TabsTrigger>
@@ -400,6 +405,9 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           </TabsTrigger>
           <TabsTrigger value="exchange-diffs">
             {language === 'uz' ? 'Kurs Farqlari' : 'Exchange Diff'}
+          </TabsTrigger>
+          <TabsTrigger value="currency-debt">
+            {language === 'uz' ? 'Valyuta Qarzi' : 'Currency Debt'}
           </TabsTrigger>
         </TabsList>
 
@@ -584,6 +592,26 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                         />
                       )}
 
+                      {/* Pre-tax Profit */}
+                      <tr className="bg-slate-100 border-y border-slate-300">
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          {language === 'uz' ? 'Soliqdan oldingi foyda' : 'Pre-tax Profit'}
+                        </td>
+                        <td className={`py-3 px-4 text-right font-bold tabular-nums ${(incomeStatement.pre_tax_profit || 0) >= 0 ? 'text-slate-900' : 'text-red-700'}`}>
+                          {formatCurrency(incomeStatement.pre_tax_profit || 0)}
+                        </td>
+                      </tr>
+
+                      {/* Income Tax */}
+                      <tr className="border-b border-slate-200">
+                        <td className="py-3 px-4 text-slate-700">
+                          {language === 'uz' ? 'Daromad solig\'i (15%)' : 'Income Tax (15%)'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-red-600 tabular-nums">
+                          {(incomeStatement.income_tax || 0) > 0 ? '-' : ''}{formatCurrency(incomeStatement.income_tax || 0)}
+                        </td>
+                      </tr>
+
                       {/* Net Profit */}
                       <tr className="bg-slate-200 border-y-2 border-slate-400">
                         <td className="py-4 px-4 font-bold text-lg text-slate-900">
@@ -761,6 +789,10 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                               <span className="font-mono">{formatCurrency(item.amount)}</span>
                             </div>
                           ))}
+                          <div className="flex justify-between text-sm font-semibold border-t pt-2 mt-2">
+                            <span>{language === 'uz' ? 'Operatsion faoliyatdan sof pul' : 'Net cash from operations'}</span>
+                            <span className="font-mono">{formatCurrency(cashFlow.operating_activities?.total || 0)}</span>
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
@@ -785,6 +817,10 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                               <span className="font-mono">{formatCurrency(item.amount)}</span>
                             </div>
                           ))}
+                          <div className="flex justify-between text-sm font-semibold border-t pt-2 mt-2">
+                            <span>{language === 'uz' ? 'Investitsiya faoliyatidan sof pul' : 'Net cash from investing'}</span>
+                            <span className="font-mono">{formatCurrency(cashFlow.investing_activities?.total || 0)}</span>
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
@@ -809,6 +845,10 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                               <span className="font-mono">{formatCurrency(item.amount)}</span>
                             </div>
                           ))}
+                          <div className="flex justify-between text-sm font-semibold border-t pt-2 mt-2">
+                            <span>{language === 'uz' ? 'Moliyaviy faoliyatdan sof pul' : 'Net cash from financing'}</span>
+                            <span className="font-mono">{formatCurrency(cashFlow.financing_activities?.total || 0)}</span>
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm text-slate-500">{language === 'uz' ? 'Ma\'lumot yo\'q' : 'No items'}</p>
@@ -861,30 +901,32 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{language === 'uz' ? 'Sana' : 'Date'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Hujjat №' : 'Document #'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Kontragent' : 'Counterparty'}</TableHead>
                         <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Tavsif' : 'Description'}</TableHead>
-                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
-                        <TableHead className="text-right">{language === 'uz' ? 'Summa (UZS)' : 'Amount (UZS)'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Miqdor' : 'Amount'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? "Boshlang'ich kurs" : 'Initial Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Yakuniy kurs' : 'Final Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? "Farq (so'mda)" : 'Diff (UZS)'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {exchangeDiffs.items.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>{item.date}</TableCell>
+                          <TableCell className="font-mono text-sm">{item.document_number || '—'}</TableCell>
+                          <TableCell className="text-sm">{item.counterparty || '—'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{item.currency_code}</Badge>
                           </TableCell>
-                          <TableCell className="text-sm text-slate-600">{item.description}</TableCell>
-                          <TableCell>
-                            <Badge className={item.type === 'positive'
-                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                              : 'bg-red-100 text-red-700 hover:bg-red-100'
-                            }>
-                              {item.type === 'positive'
-                                ? (language === 'uz' ? 'Foyda' : 'Gain')
-                                : (language === 'uz' ? 'Zarar' : 'Loss')
-                              }
-                            </Badge>
+                          <TableCell className="text-right font-mono">
+                            {item.foreign_amount ? Number(item.foreign_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {item.initial_rate ? Number(item.initial_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {item.final_rate ? Number(item.final_rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                           </TableCell>
                           <TableCell className={`text-right font-medium ${item.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
                             {item.type === 'positive' ? '+' : '-'}{formatCurrency(item.amount)}
@@ -897,6 +939,104 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   {language === 'uz' ? 'Kurs farqlari topilmadi' : 'No exchange differences found'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Currency Debt Tab */}
+        <TabsContent value="currency-debt">
+          <Card>
+            <CardContent className="p-6">
+              {currencyDebt && (currencyDebt.items || []).length > 0 ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+                      <CardContent className="p-4">
+                        <p className="text-sm text-blue-600 font-medium">
+                          {language === 'uz' ? 'HF kursidagi qiymat' : 'Invoice Rate Value'}
+                        </p>
+                        <p className="text-xl font-bold text-blue-800">
+                          {formatCurrency(currencyDebt.total_invoice_uzs)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+                      <CardContent className="p-4">
+                        <p className="text-sm text-purple-600 font-medium">
+                          {language === 'uz' ? 'Joriy kursdagi qiymat' : 'Current Rate Value'}
+                        </p>
+                        <p className="text-xl font-bold text-purple-800">
+                          {formatCurrency(currencyDebt.total_current_uzs)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className={`bg-gradient-to-br ${currencyDebt.total_diff >= 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-green-50 to-green-100 border-green-200'}`}>
+                      <CardContent className="p-4">
+                        <p className={`text-sm font-medium ${currencyDebt.total_diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {language === 'uz' ? 'Kurs farqi' : 'Rate Difference'}
+                        </p>
+                        <p className={`text-xl font-bold ${currencyDebt.total_diff >= 0 ? 'text-red-800' : 'text-green-800'}`}>
+                          {currencyDebt.total_diff >= 0 ? '+' : ''}{formatCurrency(currencyDebt.total_diff)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Detail Table */}
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50">
+                        <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {currencyDebt.items.map((item, idx) => (
+                        <TableRow key={item.id || idx} className="hover:bg-slate-50">
+                          <TableCell className="font-medium">{item.invoice_number}</TableCell>
+                          <TableCell>
+                            <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
+                              {item.type === 'sales'
+                                ? (language === 'uz' ? 'Sotish' : 'Sales')
+                                : (language === 'uz' ? 'Xarid' : 'Purchase')
+                              }
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.partner_name}</TableCell>
+                          <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
+                          <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? "Valyutadagi to'lanmagan hisob-fakturalar topilmadi" : 'No unpaid foreign currency invoices found'}
                 </div>
               )}
             </CardContent>
