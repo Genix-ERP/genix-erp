@@ -319,6 +319,12 @@ export default function LeadsKanban({
               <span>{new Date(lead.created_at).toLocaleDateString()}</span>
             </div>
           )}
+          {lead.last_modified_by && lead.last_modified_at && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-500 pt-1">
+              <Clock className="w-3 h-3" />
+              <span>{t('modified_by')}: {lead.last_modified_by} · {new Date(lead.last_modified_at).toLocaleString()}</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -12,7 +12,9 @@ export const taxReportsService = {
 
   // Transactions
   getTransactions: async (startDate, endDate, type = null) => {
-    const params = { start_date: startDate, end_date: endDate };
+    const params = {};
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
     if (type) params.type = type;
     const response = await apiClient.get('/tax-reports/transactions', { params });
     return response.data.data || [];

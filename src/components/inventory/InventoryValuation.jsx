@@ -84,7 +84,8 @@ export default function InventoryValuation() {
         potentialProfit,
         margin,
         reorderLevel: product.reorder_level || 0,
-        isLowStock: totalQty <= (product.reorder_level || 0),
+        isOutOfStock: totalQty <= 0,
+        isLowStock: totalQty > 0 && totalQty <= (product.reorder_level || 0),
       };
     });
   }, [products, inventory, categories, selectedWarehouse, selectedCategory, costingMethod, searchQuery]);
@@ -95,7 +96,7 @@ export default function InventoryValuation() {
     const totalQty = valuationData.reduce((sum, item) => sum + item.quantity, 0);
     const totalPotentialRevenue = valuationData.reduce((sum, item) => sum + item.potentialRevenue, 0);
     const totalPotentialProfit = valuationData.reduce((sum, item) => sum + item.potentialProfit, 0);
-    const lowStockItems = valuationData.filter(item => item.isLowStock).length;
+    const lowStockItems = valuationData.filter(item => item.isLowStock || item.isOutOfStock).length;
     const avgMargin = valuationData.length > 0
       ? valuationData.reduce((sum, item) => sum + item.margin, 0) / valuationData.length
       : 0;
@@ -328,7 +329,7 @@ export default function InventoryValuation() {
                     </TableHeader>
                     <TableBody>
                       {valuationData.map(item => (
-                        <TableRow key={item.id} className={item.isLowStock ? 'bg-orange-50' : ''}>
+                        <TableRow key={item.id} className={item.isOutOfStock ? 'bg-red-50' : item.isLowStock ? 'bg-orange-50' : ''}>
                           <TableCell className="font-mono text-sm">{item.sku || '-'}</TableCell>
                           <TableCell className="font-medium">{item.name}</TableCell>
                           <TableCell>
@@ -353,10 +354,15 @@ export default function InventoryValuation() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            {item.isLowStock ? (
+                            {item.isOutOfStock ? (
+                              <Badge className="bg-red-100 text-red-800">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                {t('out_of_stock') || 'Qolmagan'}
+                              </Badge>
+                            ) : item.isLowStock ? (
                               <Badge className="bg-orange-100 text-orange-800">
                                 <AlertTriangle className="w-3 h-3 mr-1" />
-                                {t('low_stock') || 'Low'}
+                                {t('low_stock') || 'Kam qolgan'}
                               </Badge>
                             ) : (
                               <Badge className="bg-green-100 text-green-800">
