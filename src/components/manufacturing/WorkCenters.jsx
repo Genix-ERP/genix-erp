@@ -67,9 +67,36 @@ export default function WorkCenters() {
     currency: 'USD',
     status: 'active',
     is_available: true,
-    notes: ''
+    notes: '',
+    asset_value: '',
+    useful_life_years: '10',
+    power_kw: '',
+    electricity_rate: '',
+    annual_maintenance: '',
+    operator_monthly_salary: '',
   });
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
+
+  // Auto-calculate cost breakdown from detailed inputs
+  const calculatedCosts = useMemo(() => {
+    const workingHours = parseFloat(newWorkCenter.working_hours_per_day) || 8;
+    const annualHours = workingHours * 250;
+    const assetValue = parseFloat(newWorkCenter.asset_value) || 0;
+    const usefulLife = parseFloat(newWorkCenter.useful_life_years) || 10;
+    const powerKw = parseFloat(newWorkCenter.power_kw) || 0;
+    const elecRate = parseFloat(newWorkCenter.electricity_rate) || 0;
+    const annualMaint = parseFloat(newWorkCenter.annual_maintenance) || 0;
+    const monthlySalary = parseFloat(newWorkCenter.operator_monthly_salary) || 0;
+    const overhead = parseFloat(newWorkCenter.overhead_cost) || 0;
+
+    const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
+    const electricity = powerKw * elecRate;
+    const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
+    const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+    const total = depreciation + electricity + maintenance + labor + overhead;
+
+    return { depreciation, electricity, maintenance, labor, overhead, total };
+  }, [newWorkCenter]);
 
   // Get equipment not assigned to any work center (available for assignment)
   const getUnassignedEquipment = () => {
@@ -112,7 +139,13 @@ export default function WorkCenters() {
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
         is_available: newWorkCenter.is_available !== false,
-        notes: newWorkCenter.notes || null
+        notes: newWorkCenter.notes || null,
+        asset_value: parseFloat(newWorkCenter.asset_value) || 0,
+        useful_life_years: parseFloat(newWorkCenter.useful_life_years) || 10,
+        power_kw: parseFloat(newWorkCenter.power_kw) || 0,
+        electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
+        annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
+        operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
       };
 
       const createdWC = await createWorkCenter(wcData);
@@ -144,7 +177,13 @@ export default function WorkCenters() {
       currency: 'USD',
       status: 'active',
       is_available: true,
-      notes: ''
+      notes: '',
+      asset_value: '',
+      useful_life_years: '10',
+      power_kw: '',
+      electricity_rate: '',
+      annual_maintenance: '',
+      operator_monthly_salary: '',
     });
     setSelectedEquipmentIds([]);
   };
@@ -168,7 +207,13 @@ export default function WorkCenters() {
       currency: wc.currency || 'USD',
       status: wc.status || 'active',
       is_available: wc.is_available !== false,
-      notes: wc.notes || ''
+      notes: wc.notes || '',
+      asset_value: wc.asset_value || '',
+      useful_life_years: wc.useful_life_years || '10',
+      power_kw: wc.power_kw || '',
+      electricity_rate: wc.electricity_rate || '',
+      annual_maintenance: wc.annual_maintenance || '',
+      operator_monthly_salary: wc.operator_monthly_salary || '',
     });
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
@@ -192,7 +237,13 @@ export default function WorkCenters() {
         currency: newWorkCenter.currency || 'USD',
         status: newWorkCenter.status || 'active',
         is_available: newWorkCenter.is_available !== false,
-        notes: newWorkCenter.notes || null
+        notes: newWorkCenter.notes || null,
+        asset_value: parseFloat(newWorkCenter.asset_value) || 0,
+        useful_life_years: parseFloat(newWorkCenter.useful_life_years) || 10,
+        power_kw: parseFloat(newWorkCenter.power_kw) || 0,
+        electricity_rate: parseFloat(newWorkCenter.electricity_rate) || 0,
+        annual_maintenance: parseFloat(newWorkCenter.annual_maintenance) || 0,
+        operator_monthly_salary: parseFloat(newWorkCenter.operator_monthly_salary) || 0,
       };
 
       await updateWorkCenter(selectedWorkCenter.id, wcData);
@@ -511,6 +562,111 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            {/* Soatlik tarif hisoblash - Cost Breakdown Section */}
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <p className="text-sm font-semibold text-slate-700">Soatlik tarif hisoblash</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
+                  <Input
+                    id="wc_asset_value"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.asset_value}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_useful_life" label="Foydali muddat (yil)" helpText="Uskunaning foydali xizmat muddati yillarda" />
+                  <Input
+                    id="wc_useful_life"
+                    type="number"
+                    placeholder="10"
+                    value={newWorkCenter.useful_life_years}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, useful_life_years: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_power_kw" label="Quvvat (kVt)" helpText="Uskunaning soatlik elektr quvvati kVt da" />
+                  <Input
+                    id="wc_power_kw"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.power_kw}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, power_kw: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
+                  <Input
+                    id="wc_elec_rate"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.electricity_rate}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
+                  <Input
+                    id="wc_annual_maint"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.annual_maintenance}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <Input
+                    id="wc_operator_salary"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.operator_monthly_salary}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Cost Breakdown Card */}
+              {calculatedCosts.total > 0 && (
+                <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 mb-2">Tarif tarkibi (so'm/soat)</p>
+                  <div className="space-y-1 text-sm font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Amortizatsiya:</span>
+                      <span className="font-medium">{calculatedCosts.depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Elektr:</span>
+                      <span className="font-medium">{calculatedCosts.electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Ta'mirlash:</span>
+                      <span className="font-medium">{calculatedCosts.maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Operator:</span>
+                      <span className="font-medium">{calculatedCosts.labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Boshqa:</span>
+                      <span className="font-medium">{calculatedCosts.overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="border-t border-slate-300 my-1"></div>
+                    <div className="flex justify-between font-bold text-slate-900">
+                      <span>JAMI TARIF:</span>
+                      <span>{calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Equipment Selection */}
             <div className="space-y-2 pt-4 border-t border-slate-100">
               <LabelWithHelp
@@ -667,6 +823,111 @@ export default function WorkCenters() {
               </div>
             </div>
 
+            {/* Soatlik tarif hisoblash - Cost Breakdown Section */}
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <p className="text-sm font-semibold text-slate-700">Soatlik tarif hisoblash</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_asset_value" label="Stanok narxi" helpText="Uskunaning umumiy narxi (sotib olish qiymati)" />
+                  <Input
+                    id="edit_wc_asset_value"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.asset_value}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, asset_value: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_useful_life" label="Foydali muddat (yil)" helpText="Uskunaning foydali xizmat muddati yillarda" />
+                  <Input
+                    id="edit_wc_useful_life"
+                    type="number"
+                    placeholder="10"
+                    value={newWorkCenter.useful_life_years}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, useful_life_years: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_power_kw" label="Quvvat (kVt)" helpText="Uskunaning soatlik elektr quvvati kVt da" />
+                  <Input
+                    id="edit_wc_power_kw"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.power_kw}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, power_kw: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_elec_rate" label="Elektr narxi (so'm/kVt)" helpText="1 kVt soat elektr energiyasi narxi" />
+                  <Input
+                    id="edit_wc_elec_rate"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.electricity_rate}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, electricity_rate: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_annual_maint" label="Yillik ta'mirlash" helpText="Yillik ta'mirlash va texnik xizmat xarajatlari" />
+                  <Input
+                    id="edit_wc_annual_maint"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.annual_maintenance}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, annual_maintenance: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="edit_wc_operator_salary" label="Operator ish haqi (so'm/oy)" helpText="Operator oylik ish haqi" />
+                  <Input
+                    id="edit_wc_operator_salary"
+                    type="number"
+                    placeholder="0"
+                    value={newWorkCenter.operator_monthly_salary}
+                    onChange={(e) => setNewWorkCenter({...newWorkCenter, operator_monthly_salary: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Cost Breakdown Card */}
+              {calculatedCosts.total > 0 && (
+                <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 mb-2">Tarif tarkibi (so'm/soat)</p>
+                  <div className="space-y-1 text-sm font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Amortizatsiya:</span>
+                      <span className="font-medium">{calculatedCosts.depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Elektr:</span>
+                      <span className="font-medium">{calculatedCosts.electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Ta'mirlash:</span>
+                      <span className="font-medium">{calculatedCosts.maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Operator:</span>
+                      <span className="font-medium">{calculatedCosts.labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Boshqa:</span>
+                      <span className="font-medium">{calculatedCosts.overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                    <div className="border-t border-slate-300 my-1"></div>
+                    <div className="flex justify-between font-bold text-slate-900">
+                      <span>JAMI TARIF:</span>
+                      <span>{calculatedCosts.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Equipment Selection for Edit */}
             {selectedWorkCenter && (
               <div className="space-y-2 pt-4 border-t border-slate-100">
@@ -817,6 +1078,63 @@ export default function WorkCenters() {
                   <p className="text-lg font-bold text-slate-900">{selectedWorkCenter.working_hours_per_day || 0}h</p>
                 </div>
               </div>
+
+              {/* Cost Breakdown in View Modal */}
+              {(() => {
+                const wc = selectedWorkCenter;
+                const workingHours = parseFloat(wc.working_hours_per_day) || 8;
+                const annualHours = workingHours * 250;
+                const assetValue = parseFloat(wc.asset_value) || 0;
+                const usefulLife = parseFloat(wc.useful_life_years) || 10;
+                const powerKw = parseFloat(wc.power_kw) || 0;
+                const elecRate = parseFloat(wc.electricity_rate) || 0;
+                const annualMaint = parseFloat(wc.annual_maintenance) || 0;
+                const monthlySalary = parseFloat(wc.operator_monthly_salary) || 0;
+                const overhead = parseFloat(wc.overhead_cost) || 0;
+
+                const depreciation = assetValue > 0 && usefulLife > 0 ? assetValue / usefulLife / annualHours : 0;
+                const electricity = powerKw * elecRate;
+                const maintenance = annualMaint > 0 ? annualMaint / annualHours : 0;
+                const labor = monthlySalary > 0 ? monthlySalary / 176 : 0;
+                const total = depreciation + electricity + maintenance + labor + overhead;
+
+                if (total <= 0) return null;
+
+                return (
+                  <div className="space-y-3 pt-4 border-t border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700">Soatlik tarif tarkibi</p>
+                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="space-y-1 text-sm font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Amortizatsiya:</span>
+                          <span className="font-medium">{depreciation.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Elektr:</span>
+                          <span className="font-medium">{electricity.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Ta'mirlash:</span>
+                          <span className="font-medium">{maintenance.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Operator:</span>
+                          <span className="font-medium">{labor.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Boshqa:</span>
+                          <span className="font-medium">{overhead.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                        <div className="border-t border-slate-300 my-1"></div>
+                        <div className="flex justify-between font-bold text-slate-900">
+                          <span>JAMI TARIF:</span>
+                          <span>{total.toLocaleString(undefined, { maximumFractionDigits: 2 })} so'm/soat</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {selectedWorkCenter.notes && (
                 <div className="space-y-1 pt-4 border-t border-slate-100">
