@@ -92,7 +92,7 @@ export function ModulesProvider({ children }) {
       ] = await Promise.all([
         hrService.listEmployees().catch(err => { console.warn('Employees API error:', err); return []; }),
         purchaseService.listOrders().catch(err => { console.warn('PO API error:', err); return []; }),
-        salesService.listOrders().catch(err => { console.warn('SO API error:', err); return []; }),
+        salesService.listOrders({ page_size: 1000 }).catch(err => { console.warn('SO API error:', err); return []; }),
         projectsService.listProjects().catch(err => { console.warn('Projects API error:', err); return []; }),
         procurementService.listContracts().catch(err => { console.warn('Contracts API error:', err); return []; }),
         financeService.listExpenses().catch(err => { console.warn('Expenses API error:', err); return []; }),

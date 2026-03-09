@@ -157,24 +157,24 @@ export default function ReorderRules() {
   const [formData, setFormData] = useState({
     product_id: "",
     warehouse_id: "",
-    min_qty: 10,
-    max_qty: 100,
-    reorder_qty: 50,
+    min_qty: '',
+    max_qty: '',
+    reorder_qty: '',
     trigger_type: "min_qty",
-    lead_time_days: 7,
+    lead_time_days: '',
     is_active: true,
     auto_create_po: false,
     notes: "",
     // SAP-style Safety Stock
-    safety_stock: 0,
+    safety_stock: '',
     safety_stock_method: 'fixed', // fixed, percentage, days_of_supply
-    safety_stock_percentage: 10,
-    safety_days_of_supply: 7,
+    safety_stock_percentage: '',
+    safety_days_of_supply: '',
     // SAP Economic Order Quantity (EOQ)
     use_eoq: false,
-    ordering_cost: 0, // Cost per order
+    ordering_cost: '', // Cost per order
     holding_cost_rate: 0.20, // Annual holding cost as % of unit cost
-    annual_demand: 0, // Expected annual demand
+    annual_demand: '', // Expected annual demand
     // Odoo Procurement Type
     procurement_type: 'buy', // buy, make, transfer
     preferred_vendor_id: '',
@@ -226,22 +226,22 @@ export default function ReorderRules() {
     setFormData({
       product_id: "",
       warehouse_id: "",
-      min_qty: 10,
-      max_qty: 100,
-      reorder_qty: 50,
+      min_qty: '',
+      max_qty: '',
+      reorder_qty: '',
       trigger_type: "min_qty",
-      lead_time_days: 7,
+      lead_time_days: '',
       is_active: true,
       auto_create_po: false,
       notes: "",
-      safety_stock: 0,
+      safety_stock: '',
       safety_stock_method: 'fixed',
-      safety_stock_percentage: 10,
-      safety_days_of_supply: 7,
+      safety_stock_percentage: '',
+      safety_days_of_supply: '',
       use_eoq: false,
-      ordering_cost: 0,
+      ordering_cost: '',
       holding_cost_rate: 0.20,
-      annual_demand: 0,
+      annual_demand: '',
       procurement_type: 'buy',
       preferred_vendor_id: '',
       lot_sizing_policy: 'lot_for_lot',
@@ -282,13 +282,42 @@ export default function ReorderRules() {
       return;
     }
 
-    if (editingRule) {
-      await updateReorderRule(editingRule.id, formData);
-    } else {
-      await createReorderRule(formData);
+    const submitData = {
+      ...formData,
+      min_qty: parseFloat(formData.min_qty) || 0,
+      max_qty: parseFloat(formData.max_qty) || 0,
+      reorder_qty: parseFloat(formData.reorder_qty) || 0,
+      lead_time_days: parseInt(formData.lead_time_days) || 0,
+      safety_stock: parseFloat(formData.safety_stock) || 0,
+      safety_stock_percentage: parseFloat(formData.safety_stock_percentage) || 0,
+      safety_days_of_supply: parseInt(formData.safety_days_of_supply) || 0,
+      ordering_cost: parseFloat(formData.ordering_cost) || 0,
+      annual_demand: parseFloat(formData.annual_demand) || 0,
+    };
+
+    try {
+      if (editingRule) {
+        await updateReorderRule(editingRule.id, submitData);
+      } else {
+        await createReorderRule(submitData);
+      }
+      setShowForm(false);
+      resetForm();
+    } catch (error) {
+      if (error.response?.status === 409) {
+        toast({
+          variant: "destructive",
+          title: t('error') || 'Error',
+          description: t('reorder_rule_already_exists') || 'A reorder rule already exists for this product/warehouse combination',
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t('error') || 'Error',
+          description: error.response?.data?.message || error.message,
+        });
+      }
     }
-    setShowForm(false);
-    resetForm();
   };
 
   const handleDeleteClick = (rule) => {
@@ -679,7 +708,7 @@ export default function ReorderRules() {
                 />
                 <Select
                   value={formData.product_id}
-                  onValueChange={(value) => setFormData({ ...formData, product_id: value })}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, product_id: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_product') || 'Select product'} />
@@ -700,7 +729,7 @@ export default function ReorderRules() {
                 />
                 <Select
                   value={formData.warehouse_id || "all"}
-                  onValueChange={(value) => setFormData({ ...formData, warehouse_id: value === "all" ? "" : value })}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, warehouse_id: value === "all" ? "" : value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('select_warehouse') || 'Select warehouse'} />
@@ -733,7 +762,7 @@ export default function ReorderRules() {
                           ? 'bg-orange-100 border-orange-400'
                           : 'bg-white border-slate-200 hover:border-orange-300'
                       }`}
-                      onClick={() => setFormData({ ...formData, procurement_type: pt.value })}
+                      onClick={() => setFormData(prev => ({ ...prev, procurement_type: pt.value }))}
                     >
                       <Icon className={`w-5 h-5 mx-auto mb-1 ${formData.procurement_type === pt.value ? 'text-orange-600' : 'text-slate-400'}`} />
                       <p className="text-xs text-center font-medium">{t(pt.labelKey) || pt.fallback}</p>
@@ -754,7 +783,7 @@ export default function ReorderRules() {
                   type="number"
                   min="0"
                   value={formData.min_qty}
-                  onChange={(e) => setFormData({ ...formData, min_qty: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, min_qty: parseInt(e.target.value) || 0 }))}
                 />
               </div>
               <div className="space-y-2">
@@ -766,7 +795,7 @@ export default function ReorderRules() {
                   type="number"
                   min="0"
                   value={formData.max_qty}
-                  onChange={(e) => setFormData({ ...formData, max_qty: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, max_qty: parseInt(e.target.value) || 0 }))}
                 />
               </div>
               <div className="space-y-2">
@@ -778,7 +807,7 @@ export default function ReorderRules() {
                   type="number"
                   min="1"
                   value={formData.reorder_qty}
-                  onChange={(e) => setFormData({ ...formData, reorder_qty: parseInt(e.target.value) || 1 })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, reorder_qty: parseInt(e.target.value) || 1 }))}
                 />
               </div>
               <div className="space-y-2">
@@ -790,7 +819,7 @@ export default function ReorderRules() {
                   type="number"
                   min="0"
                   value={formData.lead_time_days}
-                  onChange={(e) => setFormData({ ...formData, lead_time_days: parseInt(e.target.value) || 0 })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, lead_time_days: parseInt(e.target.value) || 0 }))}
                 />
               </div>
             </div>
@@ -805,7 +834,7 @@ export default function ReorderRules() {
                   <Label className="text-xs">{t('method') || 'Method'}</Label>
                   <Select
                     value={formData.safety_stock_method}
-                    onValueChange={(value) => setFormData({ ...formData, safety_stock_method: value })}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, safety_stock_method: value }))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -825,7 +854,7 @@ export default function ReorderRules() {
                       min="0"
                       className="h-9"
                       value={formData.safety_stock}
-                      onChange={(e) => setFormData({ ...formData, safety_stock: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, safety_stock: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
                 )}
@@ -838,7 +867,7 @@ export default function ReorderRules() {
                       max="100"
                       className="h-9"
                       value={formData.safety_stock_percentage}
-                      onChange={(e) => setFormData({ ...formData, safety_stock_percentage: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, safety_stock_percentage: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
                 )}
@@ -850,7 +879,7 @@ export default function ReorderRules() {
                       min="0"
                       className="h-9"
                       value={formData.safety_days_of_supply}
-                      onChange={(e) => setFormData({ ...formData, safety_days_of_supply: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, safety_days_of_supply: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
                 )}
@@ -867,7 +896,7 @@ export default function ReorderRules() {
                   <Label className="text-xs">{t('policy') || 'Policy'}</Label>
                   <Select
                     value={formData.lot_sizing_policy}
-                    onValueChange={(value) => setFormData({ ...formData, lot_sizing_policy: value })}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, lot_sizing_policy: value }))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -892,7 +921,7 @@ export default function ReorderRules() {
                       min="1"
                       className="h-9"
                       value={formData.fixed_order_period_days}
-                      onChange={(e) => setFormData({ ...formData, fixed_order_period_days: parseInt(e.target.value) || 7 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, fixed_order_period_days: parseInt(e.target.value) || 7 }))}
                     />
                   </div>
                 )}
@@ -907,7 +936,7 @@ export default function ReorderRules() {
                 </p>
                 <Switch
                   checked={formData.use_eoq}
-                  onCheckedChange={(checked) => setFormData({ ...formData, use_eoq: checked })}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, use_eoq: checked }))}
                 />
               </div>
               {formData.use_eoq && (
@@ -919,7 +948,7 @@ export default function ReorderRules() {
                       min="0"
                       className="h-9"
                       value={formData.annual_demand}
-                      onChange={(e) => setFormData({ ...formData, annual_demand: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, annual_demand: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
                   <div className="space-y-2">
@@ -930,7 +959,7 @@ export default function ReorderRules() {
                       step="0.01"
                       className="h-9"
                       value={formData.ordering_cost}
-                      onChange={(e) => setFormData({ ...formData, ordering_cost: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ordering_cost: parseFloat(e.target.value) || 0 }))}
                     />
                   </div>
                   <div className="space-y-2">
@@ -942,7 +971,7 @@ export default function ReorderRules() {
                       step="0.01"
                       className="h-9"
                       value={formData.holding_cost_rate}
-                      onChange={(e) => setFormData({ ...formData, holding_cost_rate: parseFloat(e.target.value) || 0.20 })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, holding_cost_rate: parseFloat(e.target.value) || 0.20 }))}
                     />
                   </div>
                 </div>
@@ -961,7 +990,7 @@ export default function ReorderRules() {
                 <Label>{t('trigger_type') || 'Trigger Type'}</Label>
                 <Select
                   value={formData.trigger_type}
-                  onValueChange={(value) => setFormData({ ...formData, trigger_type: value })}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, trigger_type: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -980,7 +1009,7 @@ export default function ReorderRules() {
                   <Label>{t('forecast_method') || 'Forecast Method'}</Label>
                   <Select
                     value={formData.forecast_method}
-                    onValueChange={(value) => setFormData({ ...formData, forecast_method: value })}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, forecast_method: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1005,7 +1034,7 @@ export default function ReorderRules() {
               </div>
               <Switch
                 checked={formData.auto_create_po}
-                onCheckedChange={(checked) => setFormData({ ...formData, auto_create_po: checked })}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, auto_create_po: checked }))}
               />
             </div>
 
@@ -1019,7 +1048,7 @@ export default function ReorderRules() {
               </div>
               <Switch
                 checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
               />
             </div>
           </div>
