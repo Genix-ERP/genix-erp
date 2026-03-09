@@ -15,7 +15,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     company_name: customer?.company_name || "",
     contact_name: customer?.contact_name || "",
     email: customer?.email || "",
-    phone: customer?.phone || "",
+    phone: customer?.phone || "+998",
     tags: customer?.tags || [],
     notes: customer?.notes || "",
     expected_revenue: customer?.expected_revenue || "",

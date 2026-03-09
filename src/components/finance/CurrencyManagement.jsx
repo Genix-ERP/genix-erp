@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ export default function CurrencyManagement() {
   const [revalueDate, setRevalueDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [activeTab, setActiveTab] = useState("currencies");
+  const [chartCurrency, setChartCurrency] = useState('USD');
   const [showCreateCurrencyModal, setShowCreateCurrencyModal] = useState(false);
   const [showSetRateModal, setShowSetRateModal] = useState(false);
   const [showConverterModal, setShowConverterModal] = useState(false);
@@ -74,6 +76,8 @@ export default function CurrencyManagement() {
     to: 'UZS',
     result: null
   });
+
+  const foreignCurrencies = useMemo(() => currencies.filter(c => !c.is_base), [currencies]);
 
   // Get currency icon
   const getCurrencyIcon = (code) => {
@@ -438,6 +442,57 @@ export default function CurrencyManagement() {
 
         {/* Rates History Tab */}
         <TabsContent value="rates">
+          {/* Chart Section */}
+          <Card className="mb-4">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">{t('rate_chart') || 'Kurs grafigi'}</CardTitle>
+                <Select value={chartCurrency} onValueChange={setChartCurrency}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {foreignCurrencies.map(c => (
+                      <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const chartData = exchangeRates
+                  .filter(r => r.from_currency === chartCurrency)
+                  .sort((a, b) => new Date(a.effective_date || a.date) - new Date(b.effective_date || b.date))
+                  .map(r => ({
+                    date: format(new Date(r.effective_date || r.date), 'dd.MM'),
+                    fullDate: format(new Date(r.effective_date || r.date), 'dd.MM.yyyy'),
+                    rate: r.rate,
+                  }));
+                if (chartData.length === 0) {
+                  return <p className="text-center text-slate-500 py-8">{t('no_rates_history') || 'Kurs tarixi mavjud emas'}</p>;
+                }
+                const rates = chartData.map(d => d.rate);
+                const minRate = Math.floor(Math.min(...rates) * 0.999);
+                const maxRate = Math.ceil(Math.max(...rates) * 1.001);
+                return (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis domain={[minRate, maxRate]} tick={{ fontSize: 12 }} tickFormatter={v => new Intl.NumberFormat('uz-UZ').format(v)} />
+                      <Tooltip
+                        formatter={(value) => [new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(value) + " so'm", 'Kurs']}
+                        labelFormatter={(label, payload) => payload?.[0]?.payload?.fullDate || label}
+                      />
+                      <Line type="monotone" dataKey="rate" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardContent className="p-0">
               <Table>

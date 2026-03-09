@@ -134,7 +134,7 @@ export default function SalesOrders() {
     code: '',
     name: '',
     tracking_url: '',
-    phone: '',
+    phone: '+998',
     email: '',
     website: '',
     notes: '',
@@ -825,8 +825,9 @@ export default function SalesOrders() {
   const handleCreateInvoice = async (orderId) => {
     try {
       const newInvoice = await createInvoiceFromOrder(orderId);
-      // Refresh to get updated invoices
+      // Refresh both contexts to get updated invoices and order has_invoice flags
       if (refreshSalesData) refreshSalesData();
+      if (refreshModulesData) refreshModulesData();
       // Set the new invoice ID so Invoices component auto-opens it
       if (newInvoice?.id) {
         setNewInvoiceId(newInvoice.id);
@@ -835,7 +836,14 @@ export default function SalesOrders() {
       setActiveTab('invoices');
     } catch (error) {
       console.error('Failed to create invoice:', error);
-      alert(t('error_creating_invoice') || 'Failed to create invoice');
+      // If invoice already exists (400), refresh data silently to hide the button
+      if (error?.response?.status === 400) {
+        if (refreshSalesData) refreshSalesData();
+        if (refreshModulesData) refreshModulesData();
+        setActiveTab('invoices');
+      } else {
+        alert(t('error_creating_invoice') || 'Failed to create invoice');
+      }
     }
   };
 
@@ -913,7 +921,7 @@ export default function SalesOrders() {
       code: '',
       name: '',
       tracking_url: '',
-      phone: '',
+      phone: '+998',
       email: '',
       website: '',
       notes: '',
@@ -1506,7 +1514,7 @@ export default function SalesOrders() {
                             </div>
                           </div>
                         )}
-                        <div className="flex-[2] min-w-0">
+                        <div className="flex-[1.5] min-w-0">
                           {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
                           <Input
                             type="text"
@@ -1515,6 +1523,12 @@ export default function SalesOrders() {
                             value={formatPriceInput(line.unit_price)}
                             onChange={(e) => handleLineChange(newOrder, setNewOrder, index, 'unit_price', parsePriceInput(e.target.value), isDeliveryDateManual)}
                           />
+                        </div>
+                        <div className="flex-[1.5] min-w-0">
+                          {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('total')}</Label>}
+                          <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
+                            {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                          </div>
                         </div>
                         {!line.packaging_id && (
                           <div className="flex-[2] min-w-0">
@@ -2150,7 +2164,7 @@ export default function SalesOrders() {
                               </div>
                             </div>
                           )}
-                          <div className="flex-[2] min-w-0">
+                          <div className="flex-[1.5] min-w-0">
                             {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('price')}</Label>}
                             <Input
                               type="text"
@@ -2159,6 +2173,12 @@ export default function SalesOrders() {
                               value={formatPriceInput(line.unit_price)}
                               onChange={(e) => handleLineChange(editingOrder, setEditingOrder, index, 'unit_price', parsePriceInput(e.target.value), isEditDeliveryDateManual)}
                             />
+                          </div>
+                          <div className="flex-[1.5] min-w-0">
+                            {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('total')}</Label>}
+                            <div className="h-9 flex items-center justify-end px-3 bg-white border rounded-md text-sm font-medium text-slate-700">
+                              {formatPriceInput(String((parseFloat(line.quantity || 0) * parseFloat(line.unit_price || 0)).toFixed(2)))}
+                            </div>
                           </div>
                           {!line.packaging_id && (
                             <div className="flex-[2] min-w-0">
