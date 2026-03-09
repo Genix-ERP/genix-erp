@@ -167,6 +167,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const [balanceSheet, setBalanceSheet] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
   const [exchangeDiffs, setExchangeDiffs] = useState(null);
+  const [currencyDebt, setCurrencyDebt] = useState(null);
 
   // Fetch all reports when period changes
   useEffect(() => {
@@ -178,12 +179,13 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
     const params = getDateParams(period);
 
     try {
-      const [tb, pnl, bs, cf, ed] = await Promise.all([
+      const [tb, pnl, bs, cf, ed, cd] = await Promise.all([
         financeService.getTrialBalance(params).catch(() => null),
         financeService.getIncomeStatement(params).catch(() => null),
         financeService.getBalanceSheet(params).catch(() => null),
         financeService.getCashFlow(params).catch(() => null),
         financeService.listExchangeDiffs({ date_from: params.period_from, date_to: params.period_to }).catch(() => null),
+        financeService.getCurrencyDebtReport().catch(() => null),
       ]);
 
       setTrialBalance(tb);
@@ -191,6 +193,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
       setBalanceSheet(bs);
       setCashFlow(cf);
       setExchangeDiffs(ed);
+      setCurrencyDebt(cd);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     } finally {
@@ -385,7 +388,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
 
       {/* Reports Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 bg-white/80">
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 bg-white/80">
           <TabsTrigger value="trial-balance">
             {language === 'uz' ? 'Sinov Balansi' : 'Trial Balance'}
           </TabsTrigger>
@@ -400,6 +403,9 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           </TabsTrigger>
           <TabsTrigger value="exchange-diffs">
             {language === 'uz' ? 'Kurs Farqlari' : 'Exchange Diff'}
+          </TabsTrigger>
+          <TabsTrigger value="currency-debt">
+            {language === 'uz' ? 'Valyuta Qarzi' : 'Currency Debt'}
           </TabsTrigger>
         </TabsList>
 
@@ -897,6 +903,104 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   {language === 'uz' ? 'Kurs farqlari topilmadi' : 'No exchange differences found'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Currency Debt Tab */}
+        <TabsContent value="currency-debt">
+          <Card>
+            <CardContent className="p-6">
+              {currencyDebt && (currencyDebt.items || []).length > 0 ? (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+                      <CardContent className="p-4">
+                        <p className="text-sm text-blue-600 font-medium">
+                          {language === 'uz' ? 'HF kursidagi qiymat' : 'Invoice Rate Value'}
+                        </p>
+                        <p className="text-xl font-bold text-blue-800">
+                          {formatCurrency(currencyDebt.total_invoice_uzs)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+                      <CardContent className="p-4">
+                        <p className="text-sm text-purple-600 font-medium">
+                          {language === 'uz' ? 'Joriy kursdagi qiymat' : 'Current Rate Value'}
+                        </p>
+                        <p className="text-xl font-bold text-purple-800">
+                          {formatCurrency(currencyDebt.total_current_uzs)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card className={`bg-gradient-to-br ${currencyDebt.total_diff >= 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-green-50 to-green-100 border-green-200'}`}>
+                      <CardContent className="p-4">
+                        <p className={`text-sm font-medium ${currencyDebt.total_diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {language === 'uz' ? 'Kurs farqi' : 'Rate Difference'}
+                        </p>
+                        <p className={`text-xl font-bold ${currencyDebt.total_diff >= 0 ? 'text-red-800' : 'text-green-800'}`}>
+                          {currencyDebt.total_diff >= 0 ? '+' : ''}{formatCurrency(currencyDebt.total_diff)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Detail Table */}
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50">
+                        <TableHead>{language === 'uz' ? 'Hujjat' : 'Document'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Turi' : 'Type'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Hamkor' : 'Partner'}</TableHead>
+                        <TableHead>{language === 'uz' ? 'Valyuta' : 'Currency'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Qoldiq' : 'Due'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'HF kursi' : 'Inv. Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy kurs' : 'Curr. Rate'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'HF UZS' : 'Inv. UZS'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Joriy UZS' : 'Curr. UZS'}</TableHead>
+                        <TableHead className="text-right">{language === 'uz' ? 'Farq' : 'Diff'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {currencyDebt.items.map((item, idx) => (
+                        <TableRow key={item.id || idx} className="hover:bg-slate-50">
+                          <TableCell className="font-medium">{item.invoice_number}</TableCell>
+                          <TableCell>
+                            <Badge variant={item.type === 'sales' ? 'default' : 'secondary'}>
+                              {item.type === 'sales'
+                                ? (language === 'uz' ? 'Sotish' : 'Sales')
+                                : (language === 'uz' ? 'Xarid' : 'Purchase')
+                              }
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.partner_name}</TableCell>
+                          <TableCell><Badge variant="outline">{item.currency_code}</Badge></TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 2 }).format(item.amount_due)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ').format(item.invoice_rate)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {new Intl.NumberFormat('uz-UZ').format(item.current_rate)}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.invoice_uzs)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.current_uzs)}</TableCell>
+                          <TableCell className={`text-right font-medium ${item.diff >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {item.diff >= 0 ? '+' : ''}{formatCurrency(item.diff)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  {language === 'uz' ? "Valyutadagi to'lanmagan hisob-fakturalar topilmadi" : 'No unpaid foreign currency invoices found'}
                 </div>
               )}
             </CardContent>
