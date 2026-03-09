@@ -37,57 +37,50 @@ export function formatAmount(amount, options = {}) {
   return formatted + ' ' + symbol;
 }
 
-// Compact format for large numbers (e.g., 5.2 mlrd, 10 mln)
+// Format number for chart axis ticks (no currency symbol, just abbreviated number)
+export function formatAxisTick(value) {
+  const num = Number(value) || 0;
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return sign + (abs / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + ' mlrd';
+  if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' mln';
+  if (abs >= 1_000) return sign + (abs / 1_000).toFixed(1).replace(/\.0$/, '') + ' ming';
+  return num.toString();
+}
+
+// Format large numbers compactly with abbreviations (mln, mlrd, ming)
 export function formatCompactNumber(amount, options = {}) {
   const {
     symbol = "so'm",
     position = 'after',
-    locale = 'uz', // 'uz' for Uzbek, 'en' for English
   } = options;
 
   const num = Number(amount) || 0;
   const isNegative = num < 0;
   const absNum = Math.abs(num);
 
-  // Define thresholds and suffixes
-  const suffixes = locale === 'uz'
-    ? { billion: 'mlrd', million: 'mln', thousand: 'ming' }
-    : { billion: 'B', million: 'M', thousand: 'K' };
-
   let formatted;
-  let suffix = '';
-
   if (absNum >= 1_000_000_000) {
-    // Billions (mlrd)
-    const value = absNum / 1_000_000_000;
-    formatted = value >= 10 ? Math.round(value).toString() : value.toFixed(1).replace(/\.0$/, '');
-    suffix = ' ' + suffixes.billion;
+    const val = absNum / 1_000_000_000;
+    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' mlrd';
   } else if (absNum >= 1_000_000) {
-    // Millions (mln)
-    const value = absNum / 1_000_000;
-    formatted = value >= 10 ? Math.round(value).toString() : value.toFixed(1).replace(/\.0$/, '');
-    suffix = ' ' + suffixes.million;
-  } else if (absNum >= 10_000) {
-    // Thousands (ming) - only for very large thousands
-    const value = absNum / 1_000;
-    formatted = Math.round(value).toString();
-    suffix = ' ' + suffixes.thousand;
+    const val = absNum / 1_000_000;
+    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' mln';
+  } else if (absNum >= 1_000) {
+    const val = absNum / 1_000;
+    formatted = (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1).replace(/\.0$/, '')) + ' ming';
   } else {
-    // Regular formatting with thousands separator
-    formatted = Math.round(absNum).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    formatted = Math.round(absNum).toString();
   }
 
   if (isNegative) {
     formatted = '-' + formatted;
   }
 
-  // Add suffix and symbol
-  const valueWithSuffix = formatted + suffix;
-
   if (position === 'before') {
-    return symbol + valueWithSuffix;
+    return symbol + formatted;
   }
-  return valueWithSuffix + ' ' + symbol;
+  return formatted + ' ' + symbol;
 }
 
 // Format a raw number string for display in price inputs (adds thousands separators)
@@ -146,7 +139,6 @@ export function createCompactCurrencyFormatter(settings = {}) {
     currency = 'UZS',
     currency_symbol = "so'm",
     currency_position = 'after',
-    locale = 'uz',
   } = settings;
 
   return function formatCurrencyCompact(amount, overrideCurrencyCode = null) {
@@ -161,7 +153,6 @@ export function createCompactCurrencyFormatter(settings = {}) {
     return formatCompactNumber(amount, {
       symbol: sym,
       position: pos,
-      locale,
     });
   };
 }

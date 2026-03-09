@@ -542,8 +542,13 @@ export default function Products() {
   }, [searchQuery, categoryFilter, typeFilter, statusFilter, products]);
 
   const getProductStock = (productId) => {
-    const stockItems = inventory.filter(i => i.product_id === productId);
+    const stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap');
     return stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
+  };
+
+  const getProductScrapStock = (productId) => {
+    const scrapItems = inventory.filter(i => i.product_id === productId && i.warehouse_type === 'scrap');
+    return scrapItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   const resetForm = () => {
@@ -1313,6 +1318,14 @@ export default function Products() {
                                   {stockStatus.label}
                                 </Badge>
                               )}
+                              {(() => {
+                                const scrap = getProductScrapStock(product.id);
+                                return scrap > 0 ? (
+                                  <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs mt-1">
+                                    {t('scrap')}: {scrap}
+                                  </Badge>
+                                ) : null;
+                              })()}
                             </div>
                           ) : (
                             <span className="text-slate-400">N/A</span>

@@ -24,8 +24,9 @@ export default function ManufacturingReport() {
     const reject = order.reject_quantity || 0;
     if (reject <= 0) return 0;
     const produced = order.quantity_produced || 0;
-    if (produced > 0 && order.actual_cost > 0) {
-      return reject * (order.actual_cost / produced);
+    const total = produced + reject;
+    if (total > 0 && order.actual_cost > 0) {
+      return reject * (order.actual_cost / total);
     }
     const planned = order.quantity_planned || 1;
     if (order.material_cost > 0) {

@@ -26,7 +26,8 @@ import {
   LogOut,
   Cog,
   Ship,
-  Building2
+  Building2,
+  Sparkles
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -369,6 +370,14 @@ function LayoutContent({ children, currentPageName }) {
     return dynamicItems;
   }, [coreNavigationItems, adminNavigationItems, appNavigationMap, isAdmin, isUserSiteAdmin, isUserOwner, userRole, canAccessModule, isAppInstalled, t]);
 
+  const filteredNavigationItems = React.useMemo(() => {
+    if (!searchQuery.trim()) return navigationItems;
+    const q = searchQuery.toLowerCase().trim();
+    return navigationItems.filter(item =>
+      item.title.toLowerCase().includes(q)
+    );
+  }, [navigationItems, searchQuery]);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-slate-100">
@@ -384,42 +393,23 @@ function LayoutContent({ children, currentPageName }) {
             }
             .genix-logo-transparent {
               mix-blend-mode: multiply;
-              filter: brightness(1.1) contrast(1.05);
+              filter: contrast(1.1);
             }
           `}
         </style>
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
-          <SidebarHeader className="border-b border-slate-200/60 px-4 py-3">
-            <div className="flex flex-col gap-2">
+          <SidebarHeader className="border-b border-slate-100 px-4 py-5">
+            <div className="flex items-center justify-center h-10 overflow-hidden">
               <img
                 src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-                alt="Genix Logo"
-                className="h-36 w-auto object-contain genix-logo-transparent -mt-2"
+                alt="Genix"
+                className="h-[120px] w-auto object-contain genix-logo-transparent"
               />
-              <div className="flex items-center gap-2">
-                <div className="h-[1px] flex-1 bg-gradient-to-r from-[var(--genix-blue)] to-transparent opacity-30"></div>
-                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-slate-400 whitespace-nowrap">
-                  AI-Powered ERP
-                </span>
-                <div className="h-[1px] flex-1 bg-gradient-to-l from-[var(--genix-blue)] to-transparent opacity-30"></div>
-              </div>
             </div>
           </SidebarHeader>
           
           <SidebarContent className="p-4">
-            <div className="mb-6 hidden md:block">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder={t("search")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-slate-50/80 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 focus:border-[var(--genix-blue)] h-9 text-sm"
-                />
-              </div>
-            </div>
-
             <SidebarGroup>
               <SidebarGroupLabel className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 py-2 mb-1">
                 {t("core_modules") || "Core Modules"}
@@ -466,6 +456,10 @@ function LayoutContent({ children, currentPageName }) {
               </div>
               <div className="flex items-center gap-1.5 md:gap-2">
                 <LanguageSelector />
+                <Link to={createPageUrl("AIAssistant")} className="hidden sm:inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {t('ai_assistant')}
+                </Link>
                 <Button
                   variant="ghost"
                   size="icon"

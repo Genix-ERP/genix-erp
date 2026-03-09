@@ -40,7 +40,7 @@ const WORK_ORDER_STATUS = {
   failed: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
 };
 
-export default function ShopFloorControl() {
+export default function ShopFloorControl({ isActive }) {
   const { language } = useLanguage();
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
   const { refreshData: refreshInventory } = useInventory();
@@ -79,6 +79,13 @@ export default function ShopFloorControl() {
       localStorage.setItem('genix_work_order_time_logs', JSON.stringify(timeLogs));
     }
   }, [timeLogs]);
+
+  // Refresh data when tab becomes active
+  useEffect(() => {
+    if (isActive) {
+      refreshData();
+    }
+  }, [isActive]);
 
   // Build a map of production_order_id -> manufacturing_category_id for category filtering
   const poCategoryMap = useMemo(() => {
@@ -727,7 +734,15 @@ export default function ShopFloorControl() {
                 <Input
                   type="number"
                   value={completionData.quantity_scrapped}
-                  onChange={e => setCompletionData({ ...completionData, quantity_scrapped: e.target.value })}
+                  onChange={e => {
+                    const scrap = parseFloat(e.target.value) || 0;
+                    const planned = activeWorkOrder?.quantity_to_produce || 0;
+                    setCompletionData({
+                      ...completionData,
+                      quantity_scrapped: e.target.value,
+                      quantity_produced: Math.max(0, planned - scrap),
+                    });
+                  }}
                   placeholder="0"
                 />
               </div>
