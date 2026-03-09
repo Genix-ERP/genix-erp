@@ -735,6 +735,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async getCurrencyDebtReport() {
+    const response = await apiClient.get('/currency/debt-report');
+    return response.data.data;
+  },
+
   // ========== Reconciliation Acts (Akt sverka) ==========
   async listReconciliationActs(params = {}) {
     const response = await apiClient.get('/reconciliation', { params });

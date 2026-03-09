@@ -80,9 +80,12 @@ export default function Orders({
     return returns.some(r => r.sales_order_id === orderId);
   }, [returns]);
 
-  // Check if an order already has an invoice
-  const orderHasInvoice = useCallback((orderId) => {
-    return invoices.some(inv => inv.sales_order_id === orderId && inv.status !== 'cancelled');
+  // Check if an order already has an invoice (uses backend-provided flag)
+  const orderHasInvoice = useCallback((order) => {
+    // Primary: use backend has_invoice flag (reliable, no cross-context dependency)
+    if (order.has_invoice !== undefined) return order.has_invoice;
+    // Fallback: check invoices from context
+    return invoices.some(inv => inv.sales_order_id === order.id && inv.status !== 'cancelled');
   }, [invoices]);
 
   // Filter orders
@@ -262,7 +265,7 @@ export default function Orders({
                                   <Truck className="w-4 h-4" />
                                 </Button>
                               )}
-                              {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order.id) && onCreateInvoice && (
+                              {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order) && onCreateInvoice && (
                                 <Button size="sm" variant="ghost" onClick={() => onCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
                                   <Receipt className="w-4 h-4 text-green-600" />
                                 </Button>

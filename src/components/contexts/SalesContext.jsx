@@ -60,7 +60,7 @@ export function SalesProvider({ children }) {
       const [quotationsData, ordersData, invoicesData, returnsData, discountsData] = await Promise.all([
         salesService.listQuotations(),
         salesService.listOrders(),
-        salesService.listInvoices(),
+        salesService.listInvoices({ page_size: 1000 }),
         salesService.listReturns(),
         salesService.listDiscounts(),
       ]);

@@ -599,6 +599,7 @@ export const translations = {
     "delete_lead_confirm": "Are you sure you want to delete this lead?",
     "updating": "Updating",
     "update_failed": "Update Failed",
+    "modified_by": "Modified by",
     "lead": "Lead",
     "source": "Source",
     "website": "Website",
@@ -1898,6 +1899,7 @@ export const translations = {
     // Reorder Rules
     "reorder_rules": "Reorder Rules",
     "reorder_rules_description": "Configure automatic reorder points and purchase suggestions",
+    "reorder_rule_already_exists": "A reorder rule already exists for this product/warehouse combination",
     "total_rules": "Total Rules",
     "active_rules": "Active Rules",
     "need_reorder": "Need Reorder",
@@ -6786,6 +6788,7 @@ export const translations = {
     "delete_lead_confirm": "Ushbu lidni o'chirishni xohlaysizmi?",
     "updating": "Yangilanmoqda",
     "update_failed": "Yangilash muvaffaqiyatsiz",
+    "modified_by": "O'zgartirgan",
     "lead": "Lid",
     "source": "Manba",
     "website": "Veb-sayt",
@@ -8095,6 +8098,7 @@ export const translations = {
     // Reorder Rules
     "reorder_rules": "Qayta buyurtma qoidalari",
     "reorder_rules_description": "Avtomatik qayta buyurtma nuqtalari va xarid takliflarini sozlash",
+    "reorder_rule_already_exists": "Bu mahsulot/ombor kombinatsiyasi uchun qayta buyurtma qoidasi allaqachon mavjud",
     "total_rules": "Jami qoidalar",
     "active_rules": "Faol qoidalar",
     "need_reorder": "Qayta buyurtma kerak",
@@ -13145,6 +13149,7 @@ export const translations = {
     "delete_lead_confirm": "Вы уверены, что хотите удалить этот лид?",
     "updating": "Обновление",
     "update_failed": "Ошибка обновления",
+    "modified_by": "Изменил",
     "lead": "Лид",
     "source": "Источник",
     "website": "Веб-сайт",
@@ -14474,6 +14479,7 @@ export const translations = {
     // Reorder Rules
     "reorder_rules": "Правила дозаказа",
     "reorder_rules_description": "Настройка автоматических точек дозаказа и предложений по закупке",
+    "reorder_rule_already_exists": "Правило дозаказа для этой комбинации товар/склад уже существует",
     "total_rules": "Всего правил",
     "active_rules": "Активные правила",
     "need_reorder": "Требуют дозаказа",
