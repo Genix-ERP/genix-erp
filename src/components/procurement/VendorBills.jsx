@@ -510,12 +510,12 @@ export default function VendorBills() {
           <CardHeader className="pb-2">
             <CardDescription>{t('total_amount') || 'Total Amount'}</CardDescription>
             <CardTitle className="text-3xl">
-              {(totalAmount / 1000000).toFixed(1)}M
+              {formatCurrency(totalAmount)}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-sm text-green-600">
-              {t('currency') || 'UZS'}
+              {bills.filter(b => b.payment_status === 'paid').length} {t('paid') || "to'langan"}
             </div>
           </CardContent>
         </Card>
@@ -524,7 +524,7 @@ export default function VendorBills() {
           <CardHeader className="pb-2">
             <CardDescription>{t('paid_amount') || 'Paid'}</CardDescription>
             <CardTitle className="text-3xl text-green-600">
-              {(paidAmount / 1000000).toFixed(1)}M
+              {formatCurrency(paidAmount)}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -538,7 +538,7 @@ export default function VendorBills() {
           <CardHeader className="pb-2">
             <CardDescription>{t('outstanding') || 'Outstanding'}</CardDescription>
             <CardTitle className="text-3xl text-orange-600">
-              {(outstandingAmount / 1000000).toFixed(1)}M
+              {formatCurrency(outstandingAmount)}
             </CardTitle>
           </CardHeader>
           <CardContent>
