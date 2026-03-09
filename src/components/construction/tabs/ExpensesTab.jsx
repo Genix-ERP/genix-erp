@@ -15,6 +15,7 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { toast } from 'sonner';
 
 const STATUS_COLORS = {
   draft: 'bg-slate-100 text-slate-700',
@@ -166,7 +167,7 @@ const ExpensesTab = ({ project }) => {
       await constructionService.approveExpenseLine(line.id);
       load();
     } catch (e) {
-      alert(e?.response?.data?.message || t('error_occurred'));
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     }
   };
 
@@ -177,7 +178,7 @@ const ExpensesTab = ({ project }) => {
       setDeleteTarget(null);
       load();
     } catch (e) {
-      alert(e?.response?.data?.message || t('error_occurred'));
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     }
   };
 
@@ -189,7 +190,7 @@ const ExpensesTab = ({ project }) => {
       setCancelReason('');
       load();
     } catch (e) {
-      alert(e?.response?.data?.message || t('error_occurred'));
+      toast.error(e?.response?.data?.message || t('error_occurred'));
     }
   };
 

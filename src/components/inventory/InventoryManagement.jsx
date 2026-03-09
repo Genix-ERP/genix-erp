@@ -26,6 +26,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import apiClient from "@/api/client";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -234,7 +235,7 @@ export default function InventoryManagement() {
       setShowAdjustModal(false);
     } catch (error) {
       console.error('Error adjusting inventory:', error);
-      alert(error.response?.data?.error?.message || error.message || 'Adjustment failed');
+      toast.error(error.response?.data?.error?.message || error.message || 'Adjustment failed');
     } finally {
       setIsSaving(false);
     }
@@ -257,7 +258,7 @@ export default function InventoryManagement() {
       console.error('Error transferring inventory:', error);
       console.error('Error response:', error.response?.data);
       const errorMsg = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Transfer failed';
-      alert(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }

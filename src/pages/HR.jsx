@@ -3,6 +3,7 @@ import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
 import { useToast } from "@/components/ui/use-toast";
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -605,7 +606,7 @@ Only return the JSON, no other text.`;
       await loadEmployees();
     } catch (error) {
       console.error("Error updating employee:", error);
-      alert("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+      toast.error("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }

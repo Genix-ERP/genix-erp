@@ -5,6 +5,7 @@ import { useSubscription } from '@/components/contexts/SubscriptionContext';
 import apiClient from '@/api/client';
 import { SendEmail } from '@/api/integrations';
 import { useToast } from "@/components/ui/use-toast";
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,14 +151,14 @@ export default function AdminPanel() {
 
   const handleInviteUser = async () => {
     if (!inviteData.email || !inviteData.full_name) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     // Check if can add more users
     if (!canAddUser()) {
       const limits = getPlanLimits();
-      alert(`⚠️ Foydalanuvchi limiti tugadi!\n\nJoriy tarifingiz ${limits.maxUsers} ta foydalanuvchiga ruxsat beradi.\n\nKo'proq foydalanuvchi qo'shish uchun tarifingizni yangilang.`);
+      toast.error(`Foydalanuvchi limiti tugadi! Joriy tarifingiz ${limits.maxUsers} ta foydalanuvchiga ruxsat beradi. Ko'proq foydalanuvchi qo'shish uchun tarifingizni yangilang.`);
       return;
     }
 
@@ -173,11 +174,11 @@ export default function AdminPanel() {
     });
 
     if (result.success) {
-      alert(`✅ Foydalanuvchi qo'shildi!\n\nIsm: ${inviteData.full_name}\nEmail: ${inviteData.email}\nRol: ${getRoleDisplayName(inviteData.role)}\n\nFoydalanuvchi tizimga kirish uchun parol yaratishi kerak.`);
+      toast.success(`Foydalanuvchi qo'shildi! Ism: ${inviteData.full_name}, Email: ${inviteData.email}, Rol: ${getRoleDisplayName(inviteData.role)}`);
       setShowInviteModal(false);
       setInviteData({ email: '', full_name: '', role: 'user' });
     } else {
-      alert(`❌ Xatolik: ${result.message}`);
+      toast.error(`Xatolik: ${result.message}`);
     }
 
     setIsSendingInvite(false);
@@ -265,16 +266,16 @@ export default function AdminPanel() {
       });
 
       if (result.success) {
-        alert(`✅ Sinov muddati ${extendTrialData.days} kunga uzaytirildi!\nYangi tugash sanasi: ${format(newEndDate, 'MMM dd, yyyy')}`);
+        toast.success(`Sinov muddati ${extendTrialData.days} kunga uzaytirildi! Yangi tugash sanasi: ${format(newEndDate, 'MMM dd, yyyy')}`);
         setShowExtendTrialModal(false);
         setSelectedUser(null);
         setExtendTrialData({ days: 14, reason: '' });
       } else {
-        alert(`❌ Xatolik: ${result.message}`);
+        toast.error(`Xatolik: ${result.message}`);
       }
     } catch (error) {
       console.error('Error extending trial:', error);
-      alert(`❌ Xatolik: ${error.message}`);
+      toast.error(`Xatolik: ${error.message}`);
     }
   };
 
@@ -294,16 +295,16 @@ export default function AdminPanel() {
       });
 
       if (result.success) {
-        alert(`✅ Obuna faollashtirildi!\nTarif: ${upgradeData.plan.toUpperCase()}\nAmal qilish muddati: ${format(endDate, 'MMM dd, yyyy')}`);
+        toast.success(`Obuna faollashtirildi! Tarif: ${upgradeData.plan.toUpperCase()}, Amal qilish muddati: ${format(endDate, 'MMM dd, yyyy')}`);
         setShowUpgradeModal(false);
         setSelectedUser(null);
         setUpgradeData({ plan: 'professional', duration: 12 });
       } else {
-        alert(`❌ Xatolik: ${result.message}`);
+        toast.error(`Xatolik: ${result.message}`);
       }
     } catch (error) {
       console.error('Error upgrading subscription:', error);
-      alert(`❌ Xatolik: ${error.message}`);
+      toast.error(`Xatolik: ${error.message}`);
     }
   };
 

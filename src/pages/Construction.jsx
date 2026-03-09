@@ -69,6 +69,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
 import { WBSTree } from '@/components/construction/WBSTree';
 import ActivityTab from '@/components/construction/tabs/ActivityTab';
@@ -1104,7 +1105,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
     } catch (error) {
       console.error('Error saving daily log:', error);
-      alert(error?.response?.data?.message || 'Failed to save daily log');
+      toast.error(error?.response?.data?.message || 'Failed to save daily log');
       setUploadingDailyLog(false);
       return;
     }

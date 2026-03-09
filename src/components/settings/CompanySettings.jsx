@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from 'sonner';
 import { ImportModal } from "@/components/shared/ImportExport";
 import {
   Building2,
@@ -347,7 +348,7 @@ export default function CompanySettings() {
 
       const result = await importCompanies(mappedData);
       if (result.success) {
-        alert(`Import muvaffaqiyatli: ${result.data.imported} ta qo'shildi, ${result.data.skipped} ta o'tkazib yuborildi`);
+        toast.success(`Import muvaffaqiyatli: ${result.data.imported} ta qo'shildi, ${result.data.skipped} ta o'tkazib yuborildi`);
       } else {
         throw new Error(result.error);
       }
