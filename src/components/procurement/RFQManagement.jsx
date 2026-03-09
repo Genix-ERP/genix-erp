@@ -53,6 +53,7 @@ import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { procurementService } from "@/api/services/procurement";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 export default function RFQManagement() {
   const { language } = useLanguage();
@@ -185,18 +186,18 @@ export default function RFQManagement() {
     setConvertingToPO(true);
     try {
       const result = await procurementService.convertRFQToPO(rfqId);
-      alert(
+      toast.success(
         (t('po_created_success') || "Buyurtma muvaffaqiyatli yaratildi!") +
-        `\n\n${t('order_number') || "Buyurtma raqami"}: ${result.order_number}\n` +
-        `${t('vendor') || "Ta'minotchi"}: ${result.vendor_name}\n` +
+        ` ${t('order_number') || "Buyurtma raqami"}: ${result.order_number}, ` +
+        `${t('vendor') || "Ta'minotchi"}: ${result.vendor_name}, ` +
         `${t('total') || "Jami"}: ${formatCurrency(result.total_amount || 0)}`
       );
       setShowDetails(false);
     } catch (error) {
       console.error('Failed to convert RFQ to PO:', error);
-      alert(
+      toast.error(
         (t('po_creation_failed') || "Buyurtma yaratishda xatolik yuz berdi") +
-        (error.response?.data?.error ? `:\n${error.response.data.error}` : '')
+        (error.response?.data?.error ? `: ${error.response.data.error}` : '')
       );
     } finally {
       setConvertingToPO(false);

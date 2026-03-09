@@ -14,6 +14,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { inventoryService } from "@/api/services/inventory";
+import { toast } from 'sonner';
 
 export default function PackageTypes() {
   const { language } = useLanguage();
@@ -108,7 +109,7 @@ export default function PackageTypes() {
 
   const handleSave = async () => {
     if (!formData.name) {
-      alert(t('name_required') || 'Name is required');
+      toast.error(t('name_required') || 'Name is required');
       return;
     }
 
@@ -134,7 +135,7 @@ export default function PackageTypes() {
       fetchPackageTypes();
     } catch (error) {
       console.error('Failed to save package type:', error);
-      alert(t('error_saving') || 'Failed to save package type');
+      toast.error(t('error_saving') || 'Failed to save package type');
     }
   };
 
@@ -147,7 +148,7 @@ export default function PackageTypes() {
       fetchPackageTypes();
     } catch (error) {
       console.error('Failed to delete package type:', error);
-      alert(t('error_deleting') || 'Failed to delete package type');
+      toast.error(t('error_deleting') || 'Failed to delete package type');
     }
   };
 

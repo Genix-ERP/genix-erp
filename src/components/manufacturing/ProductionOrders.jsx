@@ -16,6 +16,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, productionOrdersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 export default function ProductionOrders() {
   const { language } = useLanguage();
@@ -210,7 +211,7 @@ export default function ProductionOrders() {
       const errorMsg = typeof error.response?.data?.error === 'string'
         ? error.response.data.error
         : error.response?.data?.error?.message || error.message;
-      alert(`Failed to create production order: ${errorMsg}`);
+      toast.error(`Failed to create production order: ${errorMsg}`);
     }
   };
 
@@ -355,7 +356,7 @@ export default function ProductionOrders() {
         }
       } catch (error) {
         console.error('Error advancing stage:', error);
-        alert(t('error_advancing_stage') || 'Failed to advance stage');
+        toast.error(t('error_advancing_stage') || 'Failed to advance stage');
       }
     }
   };
@@ -381,7 +382,7 @@ export default function ProductionOrders() {
       refreshInventory();
     } catch (error) {
       console.error('Error recording output:', error);
-      alert(t('error_recording_output') || 'Failed to record output: ' + (error.response?.data?.error?.message || error.message));
+      toast.error(t('error_recording_output') || 'Failed to record output: ' + (error.response?.data?.error?.message || error.message));
     }
   };
 

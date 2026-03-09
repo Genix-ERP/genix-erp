@@ -58,6 +58,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -189,19 +190,19 @@ export default function ScrapManagement() {
 
   const handleSave = async () => {
     if (!formData.product_id || !formData.warehouse_id) {
-      alert(t('select_product_warehouse') || 'Please select product and warehouse');
+      toast.error(t('select_product_warehouse') || 'Please select product and warehouse');
       return;
     }
 
     if (formData.quantity <= 0) {
-      alert(t('invalid_quantity') || 'Quantity must be greater than 0');
+      toast.error(t('invalid_quantity') || 'Quantity must be greater than 0');
       return;
     }
 
     // Check available stock
     const availableStock = getAvailableStock(formData.product_id, formData.warehouse_id);
     if (formData.quantity > availableStock) {
-      alert(t('insufficient_stock') || `Insufficient stock. Available: ${availableStock}`);
+      toast.error(t('insufficient_stock') || `Insufficient stock. Available: ${availableStock}`);
       return;
     }
 

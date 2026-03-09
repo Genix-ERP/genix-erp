@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -282,7 +283,7 @@ export default function ProjectDetail() {
       resetNewTask();
     } catch (error) {
       console.error('Error creating task:', error);
-      alert(t('error_creating_task') || 'Error creating task');
+      toast.error(t('error_creating_task') || 'Error creating task');
     }
   };
 
@@ -304,7 +305,7 @@ export default function ProjectDetail() {
       setEditingTask(null);
     } catch (error) {
       console.error('Error updating task:', error);
-      alert(t('error_updating_task') || 'Error updating task');
+      toast.error(t('error_updating_task') || 'Error updating task');
     }
   };
 
@@ -331,7 +332,7 @@ export default function ProjectDetail() {
       resetNewMilestone();
     } catch (error) {
       console.error('Error creating milestone:', error);
-      alert(t('error_creating_milestone') || 'Error creating milestone');
+      toast.error(t('error_creating_milestone') || 'Error creating milestone');
     }
   };
 
@@ -348,7 +349,7 @@ export default function ProjectDetail() {
       setEditingMilestone(null);
     } catch (error) {
       console.error('Error updating milestone:', error);
-      alert(t('error_updating_milestone') || 'Error updating milestone');
+      toast.error(t('error_updating_milestone') || 'Error updating milestone');
     }
   };
 
@@ -360,7 +361,7 @@ export default function ProjectDetail() {
       await loadMilestones(projectId);
     } catch (error) {
       console.error('Error completing milestone:', error);
-      alert(t('error_completing_milestone') || 'Error completing milestone');
+      toast.error(t('error_completing_milestone') || 'Error completing milestone');
     }
   };
 
@@ -389,7 +390,7 @@ export default function ProjectDetail() {
       resetNewTeamMember();
     } catch (error) {
       console.error('Error adding team member:', error);
-      alert(t('error_adding_team_member') || 'Error adding team member');
+      toast.error(t('error_adding_team_member') || 'Error adding team member');
     }
   };
 
@@ -400,7 +401,7 @@ export default function ProjectDetail() {
         await loadTeamMembers(projectId);
       } catch (error) {
         console.error('Error removing team member:', error);
-        alert(t('error_removing_team_member') || 'Error removing team member');
+        toast.error(t('error_removing_team_member') || 'Error removing team member');
       }
     }
   };
@@ -422,7 +423,7 @@ export default function ProjectDetail() {
       resetNewTimeEntry();
     } catch (error) {
       console.error('Error creating time entry:', error);
-      alert(t('error_creating_time_entry') || 'Error creating time entry');
+      toast.error(t('error_creating_time_entry') || 'Error creating time entry');
     }
   };
 
@@ -458,7 +459,7 @@ export default function ProjectDetail() {
       resetNewExpense();
     } catch (error) {
       console.error('Error creating expense:', error);
-      alert(t('error_creating_expense') || 'Error creating expense');
+      toast.error(t('error_creating_expense') || 'Error creating expense');
     }
   };
 

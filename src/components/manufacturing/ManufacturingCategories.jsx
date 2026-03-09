@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import { toast } from 'sonner';
 
 export default function ManufacturingCategories() {
   const { language } = useLanguage();
@@ -49,7 +50,7 @@ export default function ManufacturingCategories() {
       }
       setShowModal(false);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to save category');
+      toast.error(err.response?.data?.error || 'Failed to save category');
     }
   };
 
@@ -58,7 +59,7 @@ export default function ManufacturingCategories() {
     try {
       await deleteManufacturingCategory(cat.id);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to delete category');
+      toast.error(err.response?.data?.error || 'Failed to delete category');
     }
   };
 
