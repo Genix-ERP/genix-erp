@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { aiService } from '@/api/services/ai';
 import { useAuth } from './AuthContext';
 import { useSubscription } from './SubscriptionContext';
@@ -2157,7 +2157,13 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
     }
   }, [isBackendConnected, activeConversation]);
 
-  const value = {
+  const canExecuteActions = isOwner() || isSiteAdmin();
+  const aiUsageRemaining = getRemainingAIRequests();
+  const aiUsagePercentage = getAIUsagePercentage();
+  const aiRequestsLimit = getPlanLimits().aiRequestsPerMonth;
+  const aiPlan = subscription?.plan || 'free_trial';
+
+  const value = useMemo(() => ({
     // State
     conversations,
     activeConversation,
@@ -2170,10 +2176,10 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
 
     // AI Usage Info
     aiUsage: {
-      remaining: getRemainingAIRequests(),
-      percentage: getAIUsagePercentage(),
-      limit: getPlanLimits().aiRequestsPerMonth,
-      plan: subscription?.plan || 'free_trial'
+      remaining: aiUsageRemaining,
+      percentage: aiUsagePercentage,
+      limit: aiRequestsLimit,
+      plan: aiPlan
     },
 
     // Available AI Actions
@@ -2191,8 +2197,8 @@ Obunani o'zgartirish uchun **Sozlamalar** → **Obuna** bo'limiga o'ting.`,
     executeAction,
     confirmAction,
     cancelAction,
-    canExecuteActions: isOwner() || isSiteAdmin(),
-  };
+    canExecuteActions,
+  }), [conversations, activeConversation, messages, isLoading, capabilities, isBackendConnected, aiLimitReached, pendingAction, aiUsageRemaining, aiUsagePercentage, aiRequestsLimit, aiPlan, createConversation, sendMessage, clearConversation, listConversations, deleteConversation, setActiveConversation, executeAction, confirmAction, cancelAction, canExecuteActions]);
 
   return <AIContext.Provider value={value}>{children}</AIContext.Provider>;
 }

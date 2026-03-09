@@ -843,7 +843,6 @@ export default function Customers() {
   };
 
   const handleOpportunityUpdate = (updatedOpportunity) => {
-    console.log('Opportunity updated:', updatedOpportunity);
     updateOpportunity(updatedOpportunity.id, updatedOpportunity);
   };
 

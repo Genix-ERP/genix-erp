@@ -807,7 +807,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           case 'daily_logs':
             try {
               const logsData = await constructionService.listDailyReports(project.id);
-              console.log('Daily logs loaded:', logsData);
               setDailyLogs(logsData || []);
             } catch (e) {
               console.error('Error loading daily logs:', e);
@@ -1127,7 +1126,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     // Refresh list separately
     try {
       const logsData = await constructionService.listDailyReports(project.id);
-      console.log('Daily logs refreshed:', logsData);
       setDailyLogs(logsData || []);
     } catch (error) {
       console.error('Error refreshing daily logs:', error);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +82,11 @@ export default function Discounts() {
   const [selectedDiscount, setSelectedDiscount] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(null);
+  const copyTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current); };
+  }, []);
 
   const [formData, setFormData] = useState({
     code: "",
@@ -210,7 +215,8 @@ export default function Discounts() {
   const handleCopyCode = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopiedCode(null), 2000);
   };
 
   const handleTestDiscount = () => {

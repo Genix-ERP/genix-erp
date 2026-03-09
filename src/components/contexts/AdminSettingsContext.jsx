@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { adminSettingsService } from '@/api/services/adminSettings';
 import { useCompany } from './CompanyContext';
 import { useAuth } from './AuthContext';
@@ -258,7 +258,7 @@ export function AdminSettingsProvider({ children }) {
     }
   }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     settings,
     isLoading,
@@ -286,7 +286,7 @@ export function AdminSettingsProvider({ children }) {
 
     // Default settings reference
     DEFAULT_SETTINGS: DEFAULT_ADMIN_SETTINGS
-  };
+  }), [settings, isLoading, isSaving, error, lastSaved, backendAvailable, canManageSettings, hasUnsavedChanges, getSetting, updateSetting, updateSection, saveSettings, saveSection, resetSection, resetAllSettings, discardChanges, loadSettings, exportSettings, importSettings]);
 
   return (
     <AdminSettingsContext.Provider value={value}>

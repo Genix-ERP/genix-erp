@@ -51,7 +51,7 @@ import {
 import LanguageSelector from "@/components/ui/language-selector";
 import CompanySwitcher from "@/components/ui/company-switcher";
 import AIChatBox from "@/components/ai/AIChatBox";
-import { LanguageProvider, useLanguage } from "@/components/contexts/LanguageContext";
+import { useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { CustomersProvider } from "@/components/contexts/CustomersContext";
 import { VendorsProvider } from "@/components/contexts/VendorsContext";
@@ -408,7 +408,7 @@ function LayoutContent({ children, currentPageName }) {
           `}
         </style>
         
-        <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
+        <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
           <SidebarHeader className="border-b border-slate-100 px-4 py-5">
             <div className="flex items-center justify-center h-10 overflow-hidden">
               <img
@@ -451,8 +451,8 @@ function LayoutContent({ children, currentPageName }) {
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col min-w-0">
-          <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm">
+        <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
+          <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <SidebarTrigger className="md:hidden hover:bg-slate-100 p-2 rounded-lg transition-colors duration-200" />
@@ -517,45 +517,43 @@ function LayoutContent({ children, currentPageName }) {
 
 export default function Layout({ children, currentPageName }) {
   return (
-    <LanguageProvider>
-      <SubscriptionProvider>
-        <CompanyProvider>
-          <AdminSettingsProvider>
-            <RolesProvider>
-              <InstalledAppsProvider>
-                <CustomersProvider>
-                  <VendorsProvider>
-                    <InventoryProvider>
-                    <FinancialsProvider>
-                      <ModulesProvider>
-                        <ProcurementProvider>
-                          <SalesProvider>
-                            <ManufacturingProvider>
-                              <HRProvider>
-                                <ProjectsProvider>
-                                  <CargoProvider>
-                                    <ConstructionProvider>
-                                      <AIProvider>
-                                        <LayoutContent children={children} currentPageName={currentPageName} />
-                                      </AIProvider>
-                                    </ConstructionProvider>
-                                  </CargoProvider>
-                                </ProjectsProvider>
-                              </HRProvider>
-                            </ManufacturingProvider>
-                          </SalesProvider>
-                        </ProcurementProvider>
-                      </ModulesProvider>
-                    </FinancialsProvider>
-                  </InventoryProvider>
-                  </VendorsProvider>
-                </CustomersProvider>
-              </InstalledAppsProvider>
-            </RolesProvider>
-          </AdminSettingsProvider>
-        </CompanyProvider>
-      </SubscriptionProvider>
-    </LanguageProvider>
+    <SubscriptionProvider>
+      <CompanyProvider>
+        <AdminSettingsProvider>
+          <RolesProvider>
+            <InstalledAppsProvider>
+              <CustomersProvider>
+                <VendorsProvider>
+                  <InventoryProvider>
+                  <FinancialsProvider>
+                    <ModulesProvider>
+                      <ProcurementProvider>
+                        <SalesProvider>
+                          <ManufacturingProvider>
+                            <HRProvider>
+                              <ProjectsProvider>
+                                <CargoProvider>
+                                  <ConstructionProvider>
+                                    <AIProvider>
+                                      <LayoutContent children={children} currentPageName={currentPageName} />
+                                    </AIProvider>
+                                  </ConstructionProvider>
+                                </CargoProvider>
+                              </ProjectsProvider>
+                            </HRProvider>
+                          </ManufacturingProvider>
+                        </SalesProvider>
+                      </ProcurementProvider>
+                    </ModulesProvider>
+                  </FinancialsProvider>
+                </InventoryProvider>
+                </VendorsProvider>
+              </CustomersProvider>
+            </InstalledAppsProvider>
+          </RolesProvider>
+        </AdminSettingsProvider>
+      </CompanyProvider>
+    </SubscriptionProvider>
   );
 }
 

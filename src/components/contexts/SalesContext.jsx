@@ -446,7 +446,7 @@ export function SalesProvider({ children }) {
     await loadData();
   }, [activeCompany]);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     quotations,
     salesOrders,
@@ -511,7 +511,7 @@ export function SalesProvider({ children }) {
     needsDiscountApproval: (discountPercent) => discountPercent > salesSettings.discountApprovalThreshold,
     needsApproval: (amount) => salesSettings.requireApproval && amount >= salesSettings.approvalThreshold,
     isCreditLimitEnabled: () => salesSettings.enableCreditLimit
-  };
+  }), [quotations, salesOrders, invoices, returns, discounts, isLoading, error, createQuotation, updateQuotation, deleteQuotation, convertQuotationToOrder, getOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, confirmSalesOrder, cancelSalesOrder, createInvoiceFromOrder, getInvoice, createInvoice, updateInvoice, deleteInvoice, recordPayment, createReturn, updateReturn, deleteReturn, approveReturn, rejectReturn, processRefund, createDiscount, updateDiscount, deleteDiscount, applyDiscount, validateDiscountCode, useDiscountCode, getSalesAnalytics, getAIInsights, refreshData, salesSettings]);
 
   return (
     <SalesContext.Provider value={value}>
