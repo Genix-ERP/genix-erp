@@ -72,6 +72,7 @@ export default function InventoryManagement() {
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedABCCategory, setSelectedABCCategory] = useState(null);
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -146,6 +147,32 @@ export default function InventoryManagement() {
       netValue: calculateTotalValue(inbound) - calculateTotalValue(outbound)
     };
   }, [stockMovements]);
+
+  // ABC Analysis - calculated from inventory value
+  const abcData = useMemo(() => {
+    const productValues = products
+      .filter(p => p.is_stockable !== false)
+      .map(p => {
+        const totalQty = inventory
+          .filter(i => i.product_id === p.id)
+          .reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
+        const unitCost = p.cost_price || p.list_price || 0;
+        return { id: p.id, name: p.name, sku: p.sku, value: totalQty * unitCost, quantity: totalQty, unitCost };
+      })
+      .sort((a, b) => b.value - a.value);
+
+    const totalValue = productValues.reduce((sum, p) => sum + p.value, 0);
+    let cumulative = 0;
+    const categorized = { A: [], B: [], C: [] };
+    productValues.forEach(p => {
+      cumulative += p.value;
+      const pct = totalValue > 0 ? (cumulative / totalValue) * 100 : 100;
+      const cat = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
+      categorized[cat].push(p);
+    });
+
+    return categorized;
+  }, [products, inventory]);
 
   // Filter inventory items - only show items with valid products and warehouses
   const filteredInventory = inventory.filter(item => {
@@ -596,60 +623,57 @@ export default function InventoryManagement() {
                 </Card>
               </div>
 
-              {/* ABC Analysis - calculated dynamically from inventory value */}
-              {(() => {
-                // Calculate total inventory value per product
-                const productValues = products
-                  .filter(p => p.is_stockable !== false)
-                  .map(p => {
-                    const totalQty = inventory
-                      .filter(i => i.product_id === p.id)
-                      .reduce((sum, i) => sum + (i.quantity_on_hand || 0), 0);
-                    const unitCost = p.cost_price || p.list_price || 0;
-                    return { id: p.id, value: totalQty * unitCost };
-                  })
-                  .sort((a, b) => b.value - a.value);
-
-                const totalValue = productValues.reduce((sum, p) => sum + p.value, 0);
-                let cumulative = 0;
-                const abcMap = {};
-                productValues.forEach(p => {
-                  cumulative += p.value;
-                  const pct = totalValue > 0 ? (cumulative / totalValue) * 100 : 100;
-                  abcMap[p.id] = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
-                });
-
-                const aCount = Object.values(abcMap).filter(v => v === 'A').length;
-                const bCount = Object.values(abcMap).filter(v => v === 'B').length;
-                const cCount = Object.values(abcMap).filter(v => v === 'C').length;
-
-                return (
-                  <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg">{t('abc_analysis')}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center p-4 bg-green-50 rounded-lg">
-                          <div className="text-2xl font-bold text-green-600">{aCount}</div>
-                          <div className="text-sm text-slate-600">{t('a_items')}</div>
-                          <div className="text-xs text-slate-500">{t('high')}</div>
-                        </div>
-                        <div className="text-center p-4 bg-blue-50 rounded-lg">
-                          <div className="text-2xl font-bold text-blue-600">{bCount}</div>
-                          <div className="text-sm text-slate-600">{t('b_items')}</div>
-                          <div className="text-xs text-slate-500">{t('medium')}</div>
-                        </div>
-                        <div className="text-center p-4 bg-slate-50 rounded-lg">
-                          <div className="text-2xl font-bold text-slate-600">{cCount}</div>
-                          <div className="text-sm text-slate-600">{t('c_items')}</div>
-                          <div className="text-xs text-slate-500">{t('low')}</div>
-                        </div>
+              {/* ABC Analysis */}
+              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg">{t('abc_analysis')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { cat: 'A', bg: 'bg-green-50', hover: 'hover:bg-green-100', ring: 'ring-green-500', text: 'text-green-600', label: t('a_items'), sub: t('high') },
+                      { cat: 'B', bg: 'bg-blue-50', hover: 'hover:bg-blue-100', ring: 'ring-blue-500', text: 'text-blue-600', label: t('b_items'), sub: t('medium') },
+                      { cat: 'C', bg: 'bg-slate-50', hover: 'hover:bg-slate-100', ring: 'ring-slate-500', text: 'text-slate-600', label: t('c_items'), sub: t('low') },
+                    ].map(({ cat, bg, hover, ring, text, label, sub }) => (
+                      <div
+                        key={cat}
+                        className={`text-center p-4 ${bg} rounded-lg cursor-pointer ${hover} transition-colors ring-offset-2 ${selectedABCCategory === cat ? `ring-2 ${ring}` : ''}`}
+                        onClick={() => setSelectedABCCategory(selectedABCCategory === cat ? null : cat)}
+                      >
+                        <div className={`text-2xl font-bold ${text}`}>{abcData[cat].length}</div>
+                        <div className="text-sm text-slate-600">{label}</div>
+                        <div className="text-xs text-slate-500">{sub}</div>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })()}
+                    ))}
+                  </div>
+
+                  {/* Product list for selected category */}
+                  {selectedABCCategory && abcData[selectedABCCategory].length > 0 && (
+                    <div className="mt-4 border-t border-slate-200 pt-4">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                        {t(selectedABCCategory === 'A' ? 'a_items' : selectedABCCategory === 'B' ? 'b_items' : 'c_items')} ({abcData[selectedABCCategory].length})
+                      </h4>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {abcData[selectedABCCategory].map((product, idx) => (
+                          <div key={product.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-slate-400 w-5 text-right flex-shrink-0">{idx + 1}.</span>
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-700 truncate">{product.name}</div>
+                                {product.sku && <div className="text-xs text-slate-400">{product.sku}</div>}
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0 ml-2">
+                              <div className="font-medium text-slate-700">{formatCurrency(product.value)}</div>
+                              <div className="text-xs text-slate-400">{product.quantity} × {formatCurrency(product.unitCost)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </CardContent>
           </TabsContent>
 
