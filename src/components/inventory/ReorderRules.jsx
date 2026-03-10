@@ -160,7 +160,6 @@ export default function ReorderRules() {
     warehouse_id: "",
     min_qty: '',
     max_qty: '',
-    reorder_qty: '',
     trigger_type: "min_qty",
     lead_time_days: '',
     is_active: true,
@@ -229,7 +228,6 @@ export default function ReorderRules() {
       warehouse_id: "",
       min_qty: '',
       max_qty: '',
-      reorder_qty: '',
       trigger_type: "min_qty",
       lead_time_days: '',
       is_active: true,
@@ -287,7 +285,6 @@ export default function ReorderRules() {
       ...formData,
       min_qty: parseFloat(formData.min_qty) || 0,
       max_qty: parseFloat(formData.max_qty) || 0,
-      reorder_qty: parseFloat(formData.reorder_qty) || 0,
       lead_time_days: parseInt(formData.lead_time_days) || 0,
       safety_stock: parseFloat(formData.safety_stock) || 0,
       safety_stock_percentage: parseFloat(formData.safety_stock_percentage) || 0,
@@ -531,7 +528,6 @@ export default function ReorderRules() {
                     <TableHead>{t('warehouse') || 'Warehouse'}</TableHead>
                     <TableHead className="text-right">{t('min_qty') || 'Min Qty'}</TableHead>
                     <TableHead className="text-right">{t('max_qty') || 'Max Qty'}</TableHead>
-                    <TableHead className="text-right">{t('reorder_qty') || 'Reorder Qty'}</TableHead>
                     <TableHead className="text-right">{t('current_stock') || 'Current Stock'}</TableHead>
                     <TableHead>{t('lead_time') || 'Lead Time'}</TableHead>
                     <TableHead>{t('status') || 'Status'}</TableHead>
@@ -541,7 +537,7 @@ export default function ReorderRules() {
                 <TableBody>
                   {filteredRules.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-slate-500">
+                      <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                         {t('no_reorder_rules') || 'No reorder rules found'}
                       </TableCell>
                     </TableRow>
@@ -557,7 +553,6 @@ export default function ReorderRules() {
                           <TableCell>{getWarehouseName(rule.warehouse_id, rule)}</TableCell>
                           <TableCell className="text-right">{rule.min_qty}</TableCell>
                           <TableCell className="text-right">{rule.max_qty}</TableCell>
-                          <TableCell className="text-right">{rule.reorder_qty}</TableCell>
                           <TableCell className="text-right">
                             <span className={isLow ? 'text-red-600 font-bold' : ''}>
                               {currentStock}
@@ -774,10 +769,10 @@ export default function ReorderRules() {
             </div>
 
             {/* Quantities */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <LabelWithHelp
-                  label={t('min_qty') || 'Min Qty'}
+                  label={t('min_qty') || 'Min miqdor'}
                   helpText={t('help_min_qty') || "Minimal zaxira darajasi. Bu miqdordan kam bo'lganda buyurtma tavsiya etiladi."}
                 />
                 <Input
@@ -789,8 +784,8 @@ export default function ReorderRules() {
               </div>
               <div className="space-y-2">
                 <LabelWithHelp
-                  label={t('max_qty') || 'Max Qty'}
-                  helpText={t('help_max_qty') || "Maksimal zaxira darajasi. Buyurtma bu miqdorga yetguncha beriladi."}
+                  label={t('max_qty') || 'Maks miqdor'}
+                  helpText={t('help_max_qty') || "Maksimal zaxira darajasi. Buyurtma bu miqdorga yetguncha beriladi. Buyurtma miqdori = maks miqdor - joriy zaxira."}
                 />
                 <Input
                   type="number"
@@ -801,19 +796,7 @@ export default function ReorderRules() {
               </div>
               <div className="space-y-2">
                 <LabelWithHelp
-                  label={t('reorder_qty') || 'Reorder Qty'}
-                  helpText={t('help_reorder_qty') || "Tavsiya etiladigan buyurtma miqdori. Yetkazib beruvchi bilan kelishilgan optimal miqdor."}
-                />
-                <Input
-                  type="number"
-                  min="1"
-                  value={formData.reorder_qty}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reorder_qty: parseInt(e.target.value) || 1 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <LabelWithHelp
-                  label={t('lead_time_days') || 'Lead Time'}
+                  label={t('lead_time_days') || 'Yetkazish muddati (Kun)'}
                   helpText={t('help_lead_time') || "Yetkazib berish muddati (kunlarda). Buyurtmadan qabul qilishgacha o'rtacha vaqt."}
                 />
                 <Input

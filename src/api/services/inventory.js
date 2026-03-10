@@ -494,6 +494,34 @@ export const inventoryService = {
     const response = await apiClient.get('/reorder-rules/alerts', { params });
     return response.data.data;
   },
+
+  // =====================================================
+  // INVENTORY LOTS (Partiyalar)
+  // =====================================================
+
+  async listLots(params = {}) {
+    const response = await apiClient.get('/inventory/lots', { params });
+    return response.data;
+  },
+
+  async getLot(id) {
+    const response = await apiClient.get(`/inventory/lots/${id}`);
+    return response.data.data;
+  },
+
+  async createLot(data) {
+    const response = await apiClient.post('/inventory/lots', data);
+    return response.data.data;
+  },
+
+  async updateLot(id, data) {
+    const response = await apiClient.put(`/inventory/lots/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteLot(id) {
+    await apiClient.delete(`/inventory/lots/${id}`);
+  },
 };
 
 export default inventoryService;
