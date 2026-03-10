@@ -13,6 +13,7 @@ import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Downloa
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzePayroll } from '@/api/services/aiAnalytics';
+import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -36,6 +37,9 @@ export default function Payroll() {
   const [editPayroll, setEditPayroll] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState(null);
+  const [pendingDeductions, setPendingDeductions] = useState([]);
+  const [totalPendingDeduction, setTotalPendingDeduction] = useState(0);
+  const [deductionPercent, setDeductionPercent] = useState(0);
 
   const [newPayroll, setNewPayroll] = useState({
     payroll_number: '',
@@ -46,6 +50,7 @@ export default function Payroll() {
     payment_date: '',
     basic_salary: 0,
     overtime_hours: 0,
+    monthly_hours: 208,
     bonuses: 0,
     allowances: 0
   });
@@ -73,10 +78,35 @@ export default function Payroll() {
     setFilteredPayrolls(filtered);
   }, [payrolls, searchQuery, statusFilter, employeeFilter]);
 
-  const calculatePayroll = (data) => {
+  // Fetch pending deductions when employee is selected
+  const fetchPendingDeductions = async (employeeId) => {
+    if (!employeeId) {
+      setPendingDeductions([]);
+      setTotalPendingDeduction(0);
+      setDeductionPercent(0);
+      return;
+    }
+    try {
+      const res = await apiClient.get(`/employees/${employeeId}/deductions`, { params: { status: 'pending' } });
+      const deductions = res.data?.data || res.data || [];
+      setPendingDeductions(deductions);
+      const total = deductions.reduce((sum, d) => sum + (d.amount || 0), 0);
+      setTotalPendingDeduction(total);
+      setDeductionPercent(total > 0 ? 30 : 0);
+    } catch {
+      setPendingDeductions([]);
+      setTotalPendingDeduction(0);
+      setDeductionPercent(0);
+    }
+  };
+
+  const shortageDeductionAmount = Math.round(totalPendingDeduction * deductionPercent / 100);
+
+  const calculatePayroll = (data, shortageAmount = 0) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
-    const overtimePay = overtimeHours * (basicSalary / 160);
+    const monthlyHours = parseFloat(data.monthly_hours) || 208;
+    const overtimePay = overtimeHours * (basicSalary / monthlyHours);
     const bonuses = parseFloat(data.bonuses) || 0;
     const allowances = parseFloat(data.allowances) || 0;
 
@@ -87,7 +117,7 @@ export default function Payroll() {
 
     const socialSecurity = grossPay * 0.062;
     const healthInsurance = 200;
-    const otherDeductions = 0;
+    const otherDeductions = shortageAmount;
 
     const totalDeductions = taxDeduction + socialSecurity + healthInsurance + otherDeductions;
     const netPay = grossPay - totalDeductions;
@@ -105,7 +135,7 @@ export default function Payroll() {
   };
 
   const handleCreatePayroll = () => {
-    const calculated = calculatePayroll(newPayroll);
+    const calculated = calculatePayroll(newPayroll, shortageDeductionAmount);
 
     const payrollData = {
       ...newPayroll,
@@ -115,6 +145,7 @@ export default function Payroll() {
       bonuses: parseFloat(newPayroll.bonuses),
       allowances: parseFloat(newPayroll.allowances),
       ...calculated,
+      deduction_percent: deductionPercent,
       status: 'calculated',
       payment_method: 'bank_transfer'
     };
@@ -131,9 +162,13 @@ export default function Payroll() {
       payment_date: '',
       basic_salary: 0,
       overtime_hours: 0,
+      monthly_hours: 208,
       bonuses: 0,
       allowances: 0
     });
+    setPendingDeductions([]);
+    setTotalPendingDeduction(0);
+    setDeductionPercent(0);
   };
 
   const updatePayrollStatus = (payrollId, newStatus) => {
@@ -145,6 +180,7 @@ export default function Payroll() {
       ...payroll,
       basic_salary: payroll.basic_salary || 0,
       overtime_hours: payroll.overtime_hours || 0,
+      monthly_hours: payroll.monthly_hours || 208,
       bonuses: payroll.bonuses || 0,
       allowances: payroll.allowances || 0
     });
@@ -604,6 +640,7 @@ export default function Payroll() {
                       employee_name: value,
                       basic_salary: selectedEmployee?.salary || selectedEmployee?.base_salary || 0
                     });
+                    if (selectedEmployee?.id) fetchPendingDeductions(selectedEmployee.id);
                   }}>
                     <SelectTrigger>
                       <SelectValue placeholder={t('select_employee')} />
@@ -670,6 +707,17 @@ export default function Payroll() {
                       onChange={(e) => setNewPayroll({...newPayroll, overtime_hours: e.target.value})}
                     />
                   </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">{t('monthly_working_hours')}</label>
+                    <Input
+                      type="number"
+                      placeholder="208"
+                      value={newPayroll.monthly_hours}
+                      onChange={(e) => setNewPayroll({...newPayroll, monthly_hours: e.target.value})}
+                    />
+                  </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('bonuses')}</label>
                     <Input
@@ -693,25 +741,70 @@ export default function Payroll() {
                 </div>
               </div>
 
-              {newPayroll.basic_salary > 0 && (
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>{t('gross_pay')}:</span>
-                      <span className="font-semibold">{formatCurrency(calculatePayroll(newPayroll).gross_pay)}</span>
+              {totalPendingDeduction > 0 && (
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    <h4 className="font-semibold text-amber-800">{t('shortage_warning')}</h4>
+                  </div>
+                  <div className="space-y-2 text-sm text-amber-900">
+                    {pendingDeductions.map((d, i) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="truncate mr-2">{d.reason}</span>
+                        <span className="font-semibold whitespace-nowrap">{formatCurrency(d.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-2 border-t border-amber-300 font-bold">
+                      <span>{t('total_shortage')}:</span>
+                      <span>{formatCurrency(totalPendingDeduction)}</span>
                     </div>
-                    <div className="flex justify-between text-red-600">
-                      <span>{t('total_deductions')}:</span>
-                      <span className="font-semibold">-{formatCurrency(calculatePayroll(newPayroll).total_deductions)}</span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t text-lg">
-                      <span className="font-bold">{t('net_pay')}:</span>
-                      <span className="font-bold text-green-600">{formatCurrency(calculatePayroll(newPayroll).net_pay)}</span>
-                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <label className="text-sm font-medium text-amber-800 whitespace-nowrap">{t('deduction_percent')}:</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={deductionPercent}
+                      onChange={(e) => setDeductionPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                      className="w-24 bg-white"
+                    />
+                    <span className="text-sm text-amber-800">%</span>
+                    <span className="text-sm font-bold text-red-600 ml-auto">
+                      -{formatCurrency(shortageDeductionAmount)}
+                    </span>
                   </div>
                 </div>
               )}
+
+              {newPayroll.basic_salary > 0 && (() => {
+                const calc = calculatePayroll(newPayroll, shortageDeductionAmount);
+                return (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <h4 className="font-semibold mb-3">{t('payroll_summary')}</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>{t('gross_pay')}:</span>
+                        <span className="font-semibold">{formatCurrency(calc.gross_pay)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>{t('total_deductions')}:</span>
+                        <span className="font-semibold">-{formatCurrency(calc.total_deductions)}</span>
+                      </div>
+                      {shortageDeductionAmount > 0 && (
+                        <div className="flex justify-between text-amber-700">
+                          <span>{t('shortage_deduction')} ({deductionPercent}%):</span>
+                          <span className="font-semibold">-{formatCurrency(shortageDeductionAmount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-2 border-t text-lg">
+                        <span className="font-bold">{t('net_pay')}:</span>
+                        <span className="font-bold text-green-600">{formatCurrency(calc.net_pay)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
@@ -813,6 +906,14 @@ export default function Payroll() {
                         type="number"
                         value={editPayroll.overtime_hours}
                         onChange={(e) => setEditPayroll({...editPayroll, overtime_hours: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">{t('monthly_working_hours')}</label>
+                      <Input
+                        type="number"
+                        value={editPayroll.monthly_hours}
+                        onChange={(e) => setEditPayroll({...editPayroll, monthly_hours: e.target.value})}
                       />
                     </div>
                     <div>

@@ -513,6 +513,7 @@ export function ModulesProvider({ children }) {
             social_security: data.social_security || 0,
             pension: 0,
             other_deductions: data.other_deductions || 0,
+            deduction_percent: data.deduction_percent || 0,
             total_deductions: data.total_deductions || 0,
             net_salary: data.net_pay || 0,
             payment_method: data.payment_method || 'bank_transfer',
