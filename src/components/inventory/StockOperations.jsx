@@ -1246,7 +1246,7 @@ export default function StockOperations() {
 
         {/* Backorder Dialog */}
         <Dialog open={showBackorderDialog} onOpenChange={setShowBackorderDialog}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{t('partial_completion') || 'Partial Completion'}</DialogTitle>
               <DialogDescription>
@@ -1265,7 +1265,7 @@ export default function StockOperations() {
                 ))}
               </div>
             </div>
-            <DialogFooter className="flex gap-2">
+            <DialogFooter className="flex flex-wrap gap-2 sm:justify-end">
               <Button variant="outline" onClick={() => setShowBackorderDialog(false)}>
                 {t('cancel') || 'Cancel'}
               </Button>

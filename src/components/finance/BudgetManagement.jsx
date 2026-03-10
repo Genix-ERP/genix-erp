@@ -309,7 +309,7 @@ export default function BudgetManagement() {
       }
       const budgetId = saved?.id || selectedBudget?.id;
       for (const line of wizardLines) {
-        if (!line.account_id) continue;
+        if (!line.account_id || parseFloat(line.budgeted_amount || 0) <= 0) continue;
         const lp = {
           budget_id: budgetId, account_id: line.account_id,
           budgeted_amount: parseFloat(line.budgeted_amount || 0),
@@ -847,10 +847,10 @@ export default function BudgetManagement() {
               {[
                 [t('name') || 'Name', wizardData.name],
                 [t('code') || 'Code', wizardData.code],
-                [t('type') || 'Type', wizardData.budget_type],
-                [t('approach') || 'Approach', wizardData.approach],
+                [t('type') || 'Type', t(`budget_type_${wizardData.budget_type}_title`) || t(`budget_type_${wizardData.budget_type}`) || wizardData.budget_type],
+                [t('approach') || 'Approach', t(`approach_${wizardData.approach}_title`) || wizardData.approach],
                 [t('period') || 'Period', wizardData.start_date && wizardData.end_date ? `${wizardData.start_date} – ${wizardData.end_date}` : '—'],
-                [t('overspend_policy') || 'Policy', wizardData.overspend_policy],
+                [t('overspend_policy') || 'Policy', t(`policy_${wizardData.overspend_policy}`) || wizardData.overspend_policy],
               ].map(([k, v]) => (
                 <div key={k}><p className="text-xs text-slate-500">{k}</p><p className="font-medium">{v}</p></div>
               ))}
@@ -859,12 +859,12 @@ export default function BudgetManagement() {
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
                 <p className="text-xs text-green-600">{t('total_revenue') || 'Revenue'}</p>
                 <p className="font-bold text-green-800">{formatCurrency(totalRevenue)}</p>
-                <p className="text-xs text-green-600">{wizardLines.filter(l=>l.line_type==='revenue').length} lines</p>
+                <p className="text-xs text-green-600">{wizardLines.filter(l=>l.line_type==='revenue').length} {t('lines') || 'lines'}</p>
               </div>
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-center">
                 <p className="text-xs text-red-600">{t('total_expenses') || 'Expenses'}</p>
                 <p className="font-bold text-red-800">{formatCurrency(totalExpense)}</p>
-                <p className="text-xs text-red-600">{wizardLines.filter(l=>l.line_type!=='revenue').length} lines</p>
+                <p className="text-xs text-red-600">{wizardLines.filter(l=>l.line_type!=='revenue').length} {t('lines') || 'lines'}</p>
               </div>
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
                 <p className="text-xs text-blue-600">{t('planned_profit') || 'Profit'}</p>

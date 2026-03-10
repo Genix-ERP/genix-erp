@@ -336,7 +336,7 @@ export function FinancialsProvider({ children }) {
       if (isAvailable) {
         try {
           const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData] = await Promise.all([
-            financeService.listJournalEntries().catch(() => []),
+            financeService.listJournalEntries({ limit: 1000 }).catch(() => []),
             salesService.listInvoices().catch(() => []),
             financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
             financeService.listPayments({ limit: 100 }).catch(() => []),
@@ -988,7 +988,7 @@ export function FinancialsProvider({ children }) {
       try {
         const result = await financeService.reverseJournalEntry(id, data);
         // Reload entries list
-        const entries = await financeService.listJournalEntries();
+        const entries = await financeService.listJournalEntries({ limit: 1000 });
         setJournalEntries(entries || []);
         return result;
       } catch (err) {
