@@ -29,7 +29,7 @@ export default function StockReport() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { stockMovements, products, warehouses, inventory, stockCounts } = useInventory();
+  const { stockMovements, products, warehouses, inventory } = useInventory();
 
   const [activeTab, setActiveTab] = useState("movements");
   const [searchQuery, setSearchQuery] = useState("");
@@ -188,100 +188,53 @@ export default function StockReport() {
     let totalProfit = 0;
     let totalLoss = 0;
 
-    // From stock movements (adjustments, stock_in, stock_out)
-    const pnlTypes = new Set(["adjustment", "stock_in", "stock_out"]);
+    // From inventory transactions (adjustments from stock counts, manual adjustments, etc.)
+    const pnlTypes = new Set(["adjustment", "count", "stock_in", "stock_out"]);
     (stockMovements || []).forEach((m) => {
       const type = m.movement_type || m.transaction_type;
       if (!pnlTypes.has(type)) return;
 
-      const date = m.created_at || m.transaction_date;
+      const date = m.transaction_date || m.created_at;
       const dateStr = date ? new Date(date).toISOString().split("T")[0] : "";
       if (dateFrom && dateStr < dateFrom) return;
       if (dateTo && dateStr > dateTo) return;
+
+      // Filter by warehouse if not "all"
+      if (warehouseFilter && warehouseFilter !== "all") {
+        const whMatch = m.from_warehouse_id === warehouseFilter || m.to_warehouse_id === warehouseFilter;
+        if (!whMatch) return;
+      }
 
       const prod = products.find((p) => p.id === m.product_id);
       const qty = m.quantity || 0;
-      const unitCost = m.unit_cost || prod?.cost_price || 0;
+      const unitCost = m.unit_cost || m.total_cost ? Math.abs((m.total_cost || 0) / (qty || 1)) : (prod?.cost_price || 0);
       const value = Math.abs(qty) * unitCost;
+
+      if (value === 0) return; // Skip zero-value entries
+
+      const entry = {
+        date: date,
+        product_name: m.product_name || prod?.name || "-",
+        product_code: m.product_code || prod?.code || "-",
+        quantity: qty,
+        unit_cost: unitCost,
+        value: value,
+        reference: m.reason || m.reference_type || "-",
+        notes: m.notes || "",
+      };
 
       if (qty > 0) {
         totalProfit += value;
-        items.push({
-          date: date,
-          product_name: m.product_name || prod?.name || "-",
-          product_code: m.product_code || prod?.code || "-",
-          quantity: qty,
-          unit_cost: unitCost,
-          value: value,
-          type: "profit",
-          reference: m.reference || "-",
-          notes: m.notes || m.reason || "",
-        });
+        items.push({ ...entry, type: "profit" });
       } else if (qty < 0) {
         totalLoss += value;
-        items.push({
-          date: date,
-          product_name: m.product_name || prod?.name || "-",
-          product_code: m.product_code || prod?.code || "-",
-          quantity: qty,
-          unit_cost: unitCost,
-          value: value,
-          type: "loss",
-          reference: m.reference || "-",
-          notes: m.notes || m.reason || "",
-        });
+        items.push({ ...entry, type: "loss" });
       }
-    });
-
-    // From stock counts (inventarizatsiya)
-    (stockCounts || []).forEach((sc) => {
-      if (sc.status !== "completed") return;
-      const date = sc.completed_at || sc.updated_at || sc.created_at;
-      const dateStr = date ? new Date(date).toISOString().split("T")[0] : "";
-      if (dateFrom && dateStr < dateFrom) return;
-      if (dateTo && dateStr > dateTo) return;
-
-      (sc.lines || []).forEach((line) => {
-        const diff = (line.actual_quantity || 0) - (line.expected_quantity || line.system_quantity || 0);
-        if (diff === 0) return;
-
-        const prod = products.find((p) => p.id === line.product_id);
-        const unitCost = line.unit_cost || prod?.cost_price || 0;
-        const value = Math.abs(diff) * unitCost;
-
-        if (diff > 0) {
-          totalProfit += value;
-          items.push({
-            date: date,
-            product_name: prod?.name || line.product_name || "-",
-            product_code: prod?.code || line.product_code || "-",
-            quantity: diff,
-            unit_cost: unitCost,
-            value: value,
-            type: "profit",
-            reference: sc.count_number || sc.reference || `SC-${sc.id?.slice(0, 6)}`,
-            notes: language === "uz" ? "Inventarizatsiya natijasi" : "Stock count result",
-          });
-        } else {
-          totalLoss += value;
-          items.push({
-            date: date,
-            product_name: prod?.name || line.product_name || "-",
-            product_code: prod?.code || line.product_code || "-",
-            quantity: diff,
-            unit_cost: unitCost,
-            value: value,
-            type: "loss",
-            reference: sc.count_number || sc.reference || `SC-${sc.id?.slice(0, 6)}`,
-            notes: language === "uz" ? "Inventarizatsiya natijasi" : "Stock count result",
-          });
-        }
-      });
     });
 
     items.sort((a, b) => new Date(b.date) - new Date(a.date));
     return { items, totalProfit, totalLoss, netResult: totalProfit - totalLoss };
-  }, [stockMovements, stockCounts, products, dateFrom, dateTo, language]);
+  }, [stockMovements, products, dateFrom, dateTo, warehouseFilter]);
 
   const formatDate = (date) => {
     if (!date) return "-";

@@ -251,16 +251,22 @@ export default function DeliveryOrders() {
     }
   };
 
-  const handleForceValidateDO = async () => {
+  const handlePartialDelivery = async () => {
     if (!selectedDO) return;
     try {
-      await salesService.validateDeliveryOrder(selectedDO.id, { force: true });
+      const result = await salesService.validateDeliveryOrder(selectedDO.id, { partial: true });
       await fetchDeliveryOrders();
       setShowStockWarningModal(false);
       setStockWarningItems([]);
       setSelectedDO(null);
+      if (result?.backorder_number) {
+        toast.success(
+          `${t('partial_delivery_success') || 'Mavjud mahsulotlar yuborildi'}. ${t('backorder_created') || "Qoldiq uchun yangi yetkazma yaratildi"}: ${result.backorder_number}`,
+          { duration: 6000 }
+        );
+      }
     } catch (error) {
-      console.error('Failed to force validate delivery order:', error);
+      console.error('Failed to partial validate delivery order:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
       toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
     }
@@ -681,17 +687,27 @@ export default function DeliveryOrders() {
             <p className="text-sm text-slate-600">
               {t('stock_warning_delivery_desc') || "Quyidagi mahsulotlar uchun skladda yetarli zaxira mavjud emas:"}
             </p>
-            <div className="bg-red-50 border border-red-200 rounded-lg divide-y divide-red-200">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-100 text-xs font-medium text-amber-800">
+                <div className="col-span-5">{t('product') || 'Mahsulot'}</div>
+                <div className="col-span-2 text-center">{t('requested') || "So'ralgan"}</div>
+                <div className="col-span-2 text-center">{t('available') || 'Mavjud'}</div>
+                <div className="col-span-3 text-center">{t('waiting') || 'Kutadi'}</div>
+              </div>
               {stockWarningItems.map((item, i) => (
-                <div key={i} className="p-3 flex items-center justify-between">
-                  <span className="font-medium text-sm">{item.product_name}</span>
-                  <div className="text-sm text-right">
-                    <span className="text-red-600 font-medium">{t('available') || 'Mavjud'}: {item.available}</span>
-                    <span className="mx-2 text-slate-400">|</span>
-                    <span className="text-slate-600">{t('requested') || "So'ralgan"}: {item.requested}</span>
-                  </div>
+                <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2.5 border-t border-amber-200 items-center">
+                  <div className="col-span-5 font-medium text-sm">{item.product_name}</div>
+                  <div className="col-span-2 text-center text-sm">{item.requested}</div>
+                  <div className="col-span-2 text-center text-sm text-green-600 font-medium">{item.available}</div>
+                  <div className="col-span-3 text-center text-sm text-red-600 font-medium">{item.requested - item.available}</div>
                 </div>
               ))}
+            </div>
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{t('partial_delivery_explanation') || "Mavjudini yuborish"}:</strong>{' '}
+                {t('partial_delivery_desc') || "Skladda bor mahsulotlar hozir yuboriladi, qolgan mahsulotlar uchun yangi yetkazma buyurtmasi yaratiladi va mahsulot kelguncha kutadi."}
+              </p>
             </div>
             <div className="flex gap-3 pt-2">
               <Button
@@ -702,11 +718,11 @@ export default function DeliveryOrders() {
                 {t('cancel') || 'Bekor qilish'}
               </Button>
               <Button
-                onClick={handleForceValidateDO}
-                className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                onClick={handlePartialDelivery}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
-                <AlertTriangle className="w-4 h-4 mr-2" />
-                {t('proceed_anyway') || "Baribir davom etish"}
+                <Truck className="w-4 h-4 mr-2" />
+                {t('deliver_available') || "Mavjudini yuborish"}
               </Button>
             </div>
           </div>

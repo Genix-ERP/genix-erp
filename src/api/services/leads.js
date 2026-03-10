@@ -161,6 +161,12 @@ export const leadsService = {
     return updates;
   },
 
+  // Get audit logs for a lead
+  async getAuditLogs(leadId) {
+    const response = await apiClient.get(`/leads/${leadId}/audit-logs`);
+    return response.data.data || [];
+  },
+
   // Convert lead to contact/customer
   async convertToCustomer(leadId, companyId) {
     try {

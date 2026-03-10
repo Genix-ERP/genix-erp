@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { X } from "lucide-react";
+import { X, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import apiClient from "@/api/client";
+import { leadsService } from "@/api/services/leads";
 
 export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -19,6 +20,8 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const canChangeAssignment = canDelete(MODULES.CUSTOMERS);
 
   const [users, setUsers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [formData, setFormData] = useState({
     contact_name: lead?.contact_name || "",
@@ -43,6 +46,31 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     };
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    if (lead?.id) {
+      leadsService.getAuditLogs(lead.id).then(setAuditLogs).catch(() => {});
+    }
+  }, [lead?.id]);
+
+  const fieldLabels = {
+    contact_name: t('contact_name'),
+    company_name: t('company_name'),
+    email: t('email'),
+    phone: t('phone'),
+    status: t('status'),
+    source: t('source'),
+    notes: t('notes'),
+    assigned_to: t('sales_person'),
+    expected_value: t('expected_value'),
+  };
+
+  const formatFieldValue = (field, value) => {
+    if (!value && value !== 0) return '—';
+    if (field === 'status') return t(value) || value;
+    if (field === 'source') return t(value) || value;
+    return String(value);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -218,6 +246,53 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                 rows={3}
               />
             </div>
+
+            {/* Change History */}
+            {lead && auditLogs.length > 0 && (
+              <div className="border-t pt-4">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 w-full"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  <Clock className="w-4 h-4" />
+                  {t('change_history') || "O'zgarishlar tarixi"} ({auditLogs.length})
+                  {showHistory ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                </button>
+                {showHistory && (
+                  <div className="mt-3 space-y-3 max-h-60 overflow-y-auto">
+                    {auditLogs.map((log) => {
+                      const oldVals = typeof log.old_values === 'string' ? JSON.parse(log.old_values || '{}') : (log.old_values || {});
+                      const newVals = typeof log.new_values === 'string' ? JSON.parse(log.new_values || '{}') : (log.new_values || {});
+                      const changedFields = Object.keys(newVals).filter(
+                        k => !['updated_at', 'id', 'company_id', 'tenant_id', 'created_at'].includes(k) && JSON.stringify(oldVals[k]) !== JSON.stringify(newVals[k])
+                      );
+                      if (changedFields.length === 0) return null;
+                      return (
+                        <div key={log.id} className="border rounded-lg p-3 bg-slate-50 text-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-slate-800">{log.user_name || log.user_email}</span>
+                            <span className="text-xs text-slate-500">
+                              {new Date(log.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {changedFields.map(field => (
+                              <div key={field} className="flex flex-wrap gap-1 text-xs">
+                                <span className="font-medium text-slate-600">{fieldLabels[field] || field}:</span>
+                                <span className="text-red-600 line-through">{formatFieldValue(field, oldVals[field])}</span>
+                                <span className="text-slate-400">&rarr;</span>
+                                <span className="text-green-600">{formatFieldValue(field, newVals[field])}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={onCancel}>
