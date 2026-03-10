@@ -471,6 +471,7 @@ export default function PurchaseOrders() {
         expected_delivery_date: new Date().toISOString().split('T')[0],
         total_amount: 0,
         tax_percent: defaultTaxPercent,
+        shipping_cost: 0,
         payment_terms: 'net_30',
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
@@ -793,6 +794,7 @@ export default function PurchaseOrders() {
             expected_delivery_date: new Date().toISOString().split('T')[0],
             total_amount: 0,
             tax_percent: defaultTaxPercent || 0,
+            shipping_cost: 0,
             payment_terms: 'net_30',
             lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
           });
@@ -1040,7 +1042,7 @@ export default function PurchaseOrders() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">{t('tax')} (%)</label>
                 <Popover>
@@ -1090,29 +1092,6 @@ export default function PurchaseOrders() {
                 </Popover>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">{t('total_amount') || 'Total Amount'}</label>
-                {(() => {
-                  const rawSubtotal = calculateOrderTotal(newPO.lines);
-                  const taxPercent = parseFloat(newPO.tax_percent) || 0;
-                  const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
-                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
-                  const total = taxCalc.subtotal + taxCalc.taxAmount;
-                  return (
-                    <>
-                      <Input
-                        type="text"
-                        value={formatPriceInput(Math.round(total))}
-                        disabled
-                        className="bg-slate-100"
-                      />
-                      {taxCalc.isInclusive && taxCalc.taxAmount > 0 && (
-                        <p className="text-xs text-amber-600 mt-1">{t('tax')} ({t('incl') || 'incl.'}): {formatPriceInput(Math.round(taxCalc.taxAmount))}</p>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-              <div>
                 <label className="text-sm font-medium mb-1 block">{t('payment_terms') || 'Payment Terms'}</label>
                 <Select value={newPO.payment_terms} onValueChange={(value) => setNewPO({...newPO, payment_terms: value})}>
                   <SelectTrigger>
@@ -1126,6 +1105,39 @@ export default function PurchaseOrders() {
                     <SelectItem value="due_on_receipt">{t('due_on_receipt') || 'Due on Receipt'}</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Totals Breakdown */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <div className="space-y-2">
+                {(() => {
+                  const rawSubtotal = calculateOrderTotal(newPO.lines);
+                  const taxPercent = parseFloat(newPO.tax_percent) || 0;
+                  const selectedTax = newPO.tax_rate_id ? taxRates.find(tr => String(tr.id) === String(newPO.tax_rate_id)) : defaultPurchaseTax;
+                  const taxCalc = calculateTaxFromRate(rawSubtotal, taxPercent, selectedTax);
+                  const subtotal = taxCalc.subtotal;
+                  const taxAmount = taxCalc.taxAmount;
+                  const total = subtotal + taxAmount;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{t('subtotal')}:</span>
+                        <span className="font-medium">{formatCurrency(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{t('tax')}{taxCalc.isInclusive ? ` (${t('incl') || 'incl.'})` : ''}:</span>
+                        <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-blue-300">
+                        <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                        <span className="text-2xl font-bold text-indigo-600">
+                          {formatCurrency(total)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

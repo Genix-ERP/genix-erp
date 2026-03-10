@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -443,7 +444,7 @@ export default function ScrapManagement() {
                         <TableCell className="text-right text-red-600">
                           {formatCurrency(order.total_cost || order.cost_impact || 0)}
                         </TableCell>
-                        <TableCell>{order.scrap_date}</TableCell>
+                        <TableCell>{order.scrap_date ? format(new Date(order.scrap_date), 'dd.MM.yyyy') : '-'}</TableCell>
                         <TableCell>{getStatusBadge(order.status)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -770,7 +771,7 @@ export default function ScrapManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs text-slate-500">{t('scrap_date') || 'Scrap Date'}</Label>
-                  <p className="font-medium">{viewingScrap.scrap_date}</p>
+                  <p className="font-medium">{viewingScrap.scrap_date ? format(new Date(viewingScrap.scrap_date), 'dd.MM.yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500">{t('scrapped_by') || 'Scrapped By'}</Label>
