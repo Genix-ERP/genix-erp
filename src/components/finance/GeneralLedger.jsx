@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -401,9 +402,9 @@ export default function GeneralLedger() {
   const endIndex = Math.min(currentPage * pageSize, filteredEntries.length);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div>
       {/* Journal Entries List */}
-      <div className="lg:col-span-2">
+      <div>
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
           <CardHeader className="border-b border-slate-100 pb-6">
             <div className="flex flex-col gap-4">
@@ -580,19 +581,20 @@ export default function GeneralLedger() {
         </Card>
       </div>
 
-      {/* Journal Details Panel */}
-      <div className="lg:col-span-1">
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg sticky top-6">
-          <CardHeader className="border-b border-slate-100">
+      {/* Journal Details Sheet (Slide-over drawer) */}
+      <Sheet open={!!selectedEntry} onOpenChange={(open) => { if (!open) { setSelectedEntry(null); setSelectedJournalLines([]); } }}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-[var(--genix-purple)]" />
-              <CardTitle className="text-lg font-bold">
+              <SheetTitle className="text-lg font-bold">
                 {t('journal_details')}
-              </CardTitle>
+              </SheetTitle>
             </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            {selectedEntry ? (
+            <SheetDescription className="sr-only">{t('journal_details')}</SheetDescription>
+          </SheetHeader>
+          <div className="p-6">
+            {selectedEntry && (
               <div className="space-y-6">
                 {/* Entry Header */}
                 <div className="pb-4 border-b border-slate-100">
@@ -670,7 +672,7 @@ export default function GeneralLedger() {
                     <DollarSign className="w-4 h-4 text-[var(--genix-blue)]" />
                     {t('journal_lines')}
                   </h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {isLoadingLines ? (
                       <div className="flex items-center justify-center py-6">
                         <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
@@ -796,22 +798,10 @@ export default function GeneralLedger() {
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center py-16">
-                <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FileText className="w-8 h-8 text-slate-400" />
-                </div>
-                <h3 className="font-semibold text-slate-900 mb-2">
-                  {t('select_entry_details')}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  {t('click_entry_from_list')}
-                </p>
-              </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Create/Edit Journal Entry Modal */}
       <Dialog open={showCreateModal} onOpenChange={(open) => { if (!open) { resetForm(); } setShowCreateModal(open); }}>
