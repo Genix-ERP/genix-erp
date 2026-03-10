@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, Package, ArrowRightLeft, TrendingUp, TrendingDown,
   Warehouse, RotateCcw, Filter, Calendar, AlertCircle, CheckCircle,
-  ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle, BarChart3, Activity
+  ArrowUpRight, ArrowDownLeft, History, DollarSign, HelpCircle, BarChart3, Activity,
+  ChevronDown, ChevronRight
 } from "lucide-react";
 import {
   Tooltip,
@@ -73,6 +74,7 @@ export default function InventoryManagement() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedABCCategory, setSelectedABCCategory] = useState(null);
+  const [expandedProducts, setExpandedProducts] = useState(new Set());
 
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
@@ -186,6 +188,53 @@ export default function InventoryManagement() {
     const matchesWarehouse = warehouseFilter === "all" || item.warehouse_id === warehouseFilter;
     return matchesSearch && matchesWarehouse;
   });
+
+  // Group inventory by product - aggregate across warehouses
+  const groupedInventory = useMemo(() => {
+    const grouped = {};
+    filteredInventory.forEach(item => {
+      const productId = item.product_id;
+      if (!grouped[productId]) {
+        const product = products.find(p => p.id === productId);
+        grouped[productId] = {
+          productId,
+          productName: product?.name || 'Unknown',
+          productCode: product?.code || product?.sku || '',
+          minStockLevel: product?.min_stock_level || 0,
+          totalQuantity: 0,
+          totalReserved: 0,
+          totalAvailable: 0,
+          warehouses: []
+        };
+      }
+      const qty = item.quantity_on_hand ?? item.quantity ?? 0;
+      const reserved = item.quantity_reserved ?? item.reserved_quantity ?? 0;
+      const available = item.quantity_available ?? item.available_quantity ?? qty;
+      const warehouse = warehouses.find(w => w.id === item.warehouse_id);
+      grouped[productId].totalQuantity += qty;
+      grouped[productId].totalReserved += reserved;
+      grouped[productId].totalAvailable += available;
+      grouped[productId].warehouses.push({
+        id: item.id,
+        warehouseId: item.warehouse_id,
+        warehouseName: warehouse?.name || 'Unknown',
+        quantity: qty,
+        reserved,
+        available,
+        lotNumber: item.lot_number
+      });
+    });
+    return Object.values(grouped).sort((a, b) => a.productName.localeCompare(b.productName));
+  }, [filteredInventory, products, warehouses]);
+
+  const toggleProductExpand = useCallback((productId) => {
+    setExpandedProducts(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }, []);
 
   // Filter movements - handle both backend format and localStorage format
   const filteredMovements = stockMovements.filter(movement => {
@@ -489,7 +538,7 @@ export default function InventoryManagement() {
                 <div className="flex items-center justify-center py-16">
                   <div className="w-8 h-8 border-4 border-[var(--genix-blue)] border-t-transparent rounded-full animate-spin"></div>
                 </div>
-              ) : filteredInventory.length === 0 ? (
+              ) : groupedInventory.length === 0 ? (
                 <div className="text-center py-16 px-6">
                   <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('no_inventory_found')}</h3>
@@ -499,65 +548,105 @@ export default function InventoryManagement() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-[700px]">
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableHead className="font-semibold text-slate-700 w-8"></TableHead>
                         <TableHead className="font-semibold text-slate-700">{t('product')}</TableHead>
-                        <TableHead className="font-semibold text-slate-700">{t('warehouse')}</TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">{t('quantity')}</TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">{t('reserved')}</TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">{t('available')}</TableHead>
-                        <TableHead className="font-semibold text-slate-700">{t('lot_number')}</TableHead>
                         <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredInventory.map(item => {
-                        const product = products.find(p => p.id === item.product_id);
-                        const warehouse = warehouses.find(w => w.id === item.warehouse_id);
-                        // Backend returns quantity_on_hand, quantity_reserved, quantity_available
-                        const quantity = item.quantity_on_hand ?? item.quantity ?? 0;
-                        const reserved = item.quantity_reserved ?? item.reserved_quantity ?? 0;
-                        const available = item.quantity_available ?? item.available_quantity ?? quantity;
-                        const isOutOfStock = quantity <= 0;
-                        const isLowStock = !isOutOfStock && product?.min_stock_level && quantity <= product.min_stock_level;
+                      {groupedInventory.map(group => {
+                        const isExpanded = expandedProducts.has(group.productId);
+                        const isOutOfStock = group.totalQuantity <= 0;
+                        const isLowStock = !isOutOfStock && group.minStockLevel && group.totalQuantity <= group.minStockLevel;
+                        const hasMultipleWarehouses = group.warehouses.length > 1;
 
                         return (
-                          <TableRow key={item.id} className="hover:bg-blue-50/50">
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-slate-900">{getProductName(item.product_id)}</p>
-                                <p className="text-xs text-slate-500">{getProductCode(item.product_id)}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Warehouse className="w-4 h-4 text-slate-400" />
-                                <span className="text-slate-700">{warehouse?.name || 'Unknown'}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
-                              {quantity.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-600 tabular-nums">
-                              {reserved.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-right font-medium text-green-600 tabular-nums">
-                              {available.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="font-mono text-sm text-slate-600">
-                              {item.lot_number || '-'}
-                            </TableCell>
-                            <TableCell>
-                              {isOutOfStock ? (
-                                <Badge className="bg-red-100 text-red-800 border-red-200">{t('out_of_stock')}</Badge>
-                              ) : isLowStock ? (
-                                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{t('low_stock')}</Badge>
-                              ) : (
-                                <Badge className="bg-green-100 text-green-800 border-green-200">{t('in_stock')}</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
+                          <React.Fragment key={group.productId}>
+                            <TableRow
+                              className={`hover:bg-blue-50/50 ${hasMultipleWarehouses ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-blue-50/30' : ''}`}
+                              onClick={() => hasMultipleWarehouses && toggleProductExpand(group.productId)}
+                            >
+                              <TableCell className="w-8 px-2">
+                                {hasMultipleWarehouses ? (
+                                  isExpanded
+                                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                                    : <ChevronRight className="w-4 h-4 text-slate-400" />
+                                ) : null}
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium text-slate-900">{group.productName}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {group.productCode && <span className="text-xs text-slate-500">{group.productCode}</span>}
+                                    {hasMultipleWarehouses && (
+                                      <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                        {group.warehouses.length} {t('warehouse').toLowerCase()}
+                                      </span>
+                                    )}
+                                    {!hasMultipleWarehouses && group.warehouses[0] && (
+                                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                                        <Warehouse className="w-3 h-3" />
+                                        {group.warehouses[0].warehouseName}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-slate-900 tabular-nums">
+                                {group.totalQuantity.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-600 tabular-nums">
+                                {group.totalReserved.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right font-medium text-green-600 tabular-nums">
+                                {group.totalAvailable.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                {isOutOfStock ? (
+                                  <Badge className="bg-red-100 text-red-800 border-red-200">{t('out_of_stock')}</Badge>
+                                ) : isLowStock ? (
+                                  <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{t('low_stock')}</Badge>
+                                ) : (
+                                  <Badge className="bg-green-100 text-green-800 border-green-200">{t('in_stock')}</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                            {/* Per-warehouse breakdown rows */}
+                            {isExpanded && group.warehouses.map(wh => (
+                              <TableRow key={wh.id} className="bg-slate-50/50 hover:bg-slate-100/50">
+                                <TableCell></TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2 pl-4">
+                                    <Warehouse className="w-3.5 h-3.5 text-blue-500" />
+                                    <span className="text-sm text-slate-700">{wh.warehouseName}</span>
+                                    {wh.lotNumber && <span className="text-xs text-slate-400 font-mono">LOT: {wh.lotNumber}</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right text-sm font-medium text-slate-700 tabular-nums">
+                                  {wh.quantity.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right text-sm text-slate-500 tabular-nums">
+                                  {wh.reserved.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="text-right text-sm text-green-600 tabular-nums">
+                                  {wh.available.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  {wh.quantity <= 0 ? (
+                                    <Badge variant="outline" className="text-xs text-red-600 border-red-200">{t('out_of_stock')}</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs text-green-600 border-green-200">{wh.quantity.toLocaleString()}</Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </React.Fragment>
                         );
                       })}
                     </TableBody>

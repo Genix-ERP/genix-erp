@@ -1942,7 +1942,7 @@ export default function Products() {
             {/* Pricing */}
             <div>
               <h4 className="font-semibold text-slate-900 mb-3">{t('pricing')}</h4>
-              <div className={`grid ${formData.can_be_sold ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <LabelWithHelp
                     label={t('cost_price')}
@@ -1960,7 +1960,6 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
-                {formData.can_be_sold && (
                 <div>
                   <LabelWithHelp
                     label={t('list_price')}
@@ -1980,7 +1979,6 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
-                )}
               </div>
             </div>
 
