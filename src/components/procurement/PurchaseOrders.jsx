@@ -1300,32 +1300,54 @@ export default function PurchaseOrders() {
                 ) : detailPOLines.length === 0 ? (
                   <p className="text-slate-500 text-sm py-4 text-center">{t('no_items') || 'No items'}</p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50">
-                          <TableHead>{t('product') || 'Product'}</TableHead>
-                          <TableHead className="text-right">{t('quantity') || 'Quantity'}</TableHead>
-                          <TableHead>{t('uom') || 'UOM'}</TableHead>
-                          <TableHead className="text-right">{t('unit_price') || 'Unit Price'}</TableHead>
-                          <TableHead className="text-right">{t('total') || 'Total'}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {detailPOLines.map((line, idx) => (
-                          <TableRow key={line.id || idx}>
-                            <TableCell className="font-medium">{line.product_name || line.description}</TableCell>
-                            <TableCell className="text-right">{line.quantity}</TableCell>
-                            <TableCell className="text-slate-500 text-sm">{line.unit_name || '-'}</TableCell>
-                            <TableCell className="text-right">{(line.unit_price || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-right font-semibold">{((line.quantity || 0) * (line.unit_price || 0)).toLocaleString()}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+                    {detailPOLines.map((line, idx) => (
+                      <div key={line.id || idx} className="flex justify-between items-center border-b border-slate-200 pb-2 last:border-0 last:pb-0">
+                        <div>
+                          <span className="font-medium">{line.product_name || line.description}</span>
+                          <p className="text-xs text-slate-500">{t('quantity')}: {line.quantity}{line.unit_name ? ` ${line.unit_name}` : ''}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-medium">{formatCurrency((line.quantity || 0) * (line.unit_price || 0))}</span>
+                          <p className="text-xs text-slate-500">{formatCurrency(line.unit_price || 0)} x {line.quantity}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
+
+              {/* Totals Summary */}
+              {detailPOLines.length > 0 && (() => {
+                const subtotal = detailPOLines.reduce((sum, l) => sum + (l.quantity || 0) * (l.unit_price || 0), 0);
+                const taxAmount = (detailPO.tax_amount != null) ? detailPO.tax_amount : subtotal * 0.12;
+                const shippingCost = detailPO.shipping_cost || detailPO.shipping_amount || 0;
+                const totalAmount = detailPO.total_amount || (subtotal + taxAmount + shippingCost);
+                return (
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{t('subtotal')}:</span>
+                        <span className="font-medium">{formatCurrency(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{t('tax')}:</span>
+                        <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                      </div>
+                      {shippingCost > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">{t('shipping')}:</span>
+                          <span className="font-medium">{formatCurrency(shippingCost)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center pt-2 border-t border-indigo-300">
+                        <span className="font-semibold text-lg">{t('total_amount')}:</span>
+                        <span className="text-2xl font-bold text-indigo-600">{formatCurrency(totalAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Returns Section */}
               {orderReturns.length > 0 && (

@@ -483,25 +483,25 @@ export default function GeneralLedger() {
             ) : (
               <>
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="min-w-[800px]">
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="font-semibold text-slate-700">
+                      <TableHead className="font-semibold text-slate-700 w-[110px]">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
                           {t('date')}
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('number')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700 w-[140px]">{t('number')}</TableHead>
                       <TableHead className="font-semibold text-slate-700">{t('description')}</TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('journal')}</TableHead>
-                      <TableHead className="font-semibold text-slate-700 text-right">
+                      <TableHead className="font-semibold text-slate-700 w-[150px]">{t('journal')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-right w-[130px]">
                         <div className="flex items-center justify-end gap-2">
                           <DollarSign className="w-4 h-4" />
                           {t('total')}
                         </div>
                       </TableHead>
-                      <TableHead className="font-semibold text-slate-700">{t('status')}</TableHead>
+                      <TableHead className="font-semibold text-slate-700 w-[120px]">{t('status')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -517,7 +517,7 @@ export default function GeneralLedger() {
                           {entry.entry_date ? format(new Date(entry.entry_date), 'dd.MM.yyyy') : '-'}
                         </TableCell>
                         <TableCell className="font-mono text-sm text-slate-600 whitespace-nowrap">{entry.entry_number}</TableCell>
-                        <TableCell className="text-slate-700 max-w-[250px] truncate">
+                        <TableCell className="text-slate-700 whitespace-nowrap">
                           {entry.description || entry.reference || '-'}
                         </TableCell>
                         <TableCell className="text-slate-600 whitespace-nowrap">
@@ -526,7 +526,7 @@ export default function GeneralLedger() {
                         <TableCell className="text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
                           {formatCurrency(entry.total_debit || 0)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             <Badge className={`${getStatusColor(entry.reversed_entry_id ? 'reversed' : entry.status)} flex items-center gap-1 w-fit`}>
                               {getStatusIcon(entry.reversed_entry_id ? 'reversed' : entry.status)}
@@ -583,7 +583,7 @@ export default function GeneralLedger() {
 
       {/* Journal Details Sheet (Slide-over drawer) */}
       <Sheet open={!!selectedEntry} onOpenChange={(open) => { if (!open) { setSelectedEntry(null); setSelectedJournalLines([]); } }}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-0">
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0">
           <SheetHeader className="px-6 pt-6 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-[var(--genix-purple)]" />
@@ -600,7 +600,7 @@ export default function GeneralLedger() {
                 <div className="pb-4 border-b border-slate-100">
                   <div className="flex items-start justify-between mb-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-lg text-slate-900 truncate">{selectedEntry.description}</h3>
+                      <h3 className="font-semibold text-lg text-slate-900 break-words">{selectedEntry.description}</h3>
                       <p className="text-sm text-slate-500 font-mono mt-1">#{selectedEntry.entry_number}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
