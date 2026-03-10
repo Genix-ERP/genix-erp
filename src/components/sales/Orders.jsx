@@ -255,16 +255,6 @@ export default function Orders({
                                   <CheckCircle className="w-4 h-4" />
                                 </Button>
                               )}
-                              {canUpdate(MODULES.SALES) && order.status === 'confirmed' && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'processing')} title={t('to_processing') || 'To Processing'}>
-                                  <Package className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {canUpdate(MODULES.SALES) && order.status === 'processing' && onUpdateStatus && (
-                                <Button size="sm" variant="ghost" onClick={() => onUpdateStatus(order.id, 'shipped')} title={t('ship') || 'Ship'}>
-                                  <Truck className="w-4 h-4" />
-                                </Button>
-                              )}
                               {canCreate(MODULES.SALES) && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) && !orderHasInvoice(order) && onCreateInvoice && (
                                 <Button size="sm" variant="ghost" onClick={() => onCreateInvoice(order.id)} title={t('create_invoice') || 'Create Invoice'}>
                                   <Receipt className="w-4 h-4 text-green-600" />
