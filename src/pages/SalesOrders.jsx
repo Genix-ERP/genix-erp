@@ -94,6 +94,11 @@ export default function SalesOrders() {
     useDiscountCode,
   } = useSales();
 
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshSalesData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const location = useLocation();
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });

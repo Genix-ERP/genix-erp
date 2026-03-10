@@ -3101,6 +3101,11 @@ export default function Construction() {
     getProjectStats
   } = useConstructionContext();
 
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    loadProjects();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeTab = searchParams.get("tab") || "projects";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
   const [searchQuery, setSearchQuery] = useState('');
