@@ -215,6 +215,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async getJournalEntryAuditLogs(id) {
+    const response = await apiClient.get(`/journal-entries/${id}/audit-logs`);
+    return response.data.data;
+  },
+
   async updateJournalEntry(id, data) {
     const response = await apiClient.put(`/journal-entries/${id}`, data);
     return response.data.data;

@@ -53,6 +53,7 @@ export default function GeneralLedger() {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
 
   // Format number with space thousand separators inline
   const formatNumberInline = (value) => {
@@ -110,9 +111,13 @@ export default function GeneralLedger() {
   const handleSelectEntry = async (entry) => {
     setSelectedEntry(entry);
     setSelectedJournalLines([]);
+    setAuditLogs([]);
     setIsLoadingLines(true);
     try {
-      const fullEntry = await financeService.getJournalEntry(entry.id);
+      const [fullEntry, logs] = await Promise.all([
+        financeService.getJournalEntry(entry.id),
+        financeService.getJournalEntryAuditLogs(entry.id).catch(() => []),
+      ]);
       if (fullEntry) {
         setSelectedEntry(fullEntry);
         setSelectedJournalLines(fullEntry.lines || []);
@@ -120,6 +125,7 @@ export default function GeneralLedger() {
         const lines = getJournalLines(entry.id);
         setSelectedJournalLines(lines);
       }
+      setAuditLogs(logs || []);
     } catch (err) {
       console.error('Failed to fetch journal entry lines:', err);
       const lines = getJournalLines(entry.id);
@@ -303,7 +309,7 @@ export default function GeneralLedger() {
   };
 
   const handleDeleteEntry = async () => {
-    if (!selectedEntry || selectedEntry.status !== 'draft') return;
+    if (!selectedEntry || selectedEntry.status !== 'cancelled') return;
     setIsActionLoading(true);
     try {
       await deleteJournalEntry(selectedEntry.id);
@@ -771,27 +777,28 @@ export default function GeneralLedger() {
                           {t('edit')}
                         </Button>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-sm text-orange-600 border-orange-200 hover:bg-orange-50"
-                          onClick={handleCancelEntry}
-                          disabled={isActionLoading}
-                        >
-                          <XCircle className="w-3.5 h-3.5 mr-1.5" />
-                          {t('cancel_entry') || 'Bekor qilish'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-sm text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={handleDeleteEntry}
-                          disabled={isActionLoading}
-                        >
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                          {t('delete')}
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full text-sm text-orange-600 border-orange-200 hover:bg-orange-50"
+                        onClick={handleCancelEntry}
+                        disabled={isActionLoading}
+                      >
+                        <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                        {t('cancel_entry')}
+                      </Button>
                     </>
+                  )}
+                  {/* Cancelled actions */}
+                  {selectedEntry.status === 'cancelled' && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-sm text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={handleDeleteEntry}
+                      disabled={isActionLoading}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      {t('delete')}
+                    </Button>
                   )}
                   {/* Posted actions */}
                   {selectedEntry.status === 'posted' && !selectedEntry.reversed_entry_id && (
@@ -815,6 +822,41 @@ export default function GeneralLedger() {
                     <Download className="w-3.5 h-3.5 mr-1.5" />
                     {t('view')} PDF
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Audit Logs */}
+            {auditLogs.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  {t('activity_log') || 'Activity Log'}
+                </h3>
+                <div className="space-y-2">
+                  {auditLogs.map((log) => {
+                    const actionLabels = {
+                      post: { label: t('posted') || 'Posted', color: 'text-green-600 bg-green-50' },
+                      cancel: { label: t('cancelled') || 'Cancelled', color: 'text-orange-600 bg-orange-50' },
+                      delete: { label: t('deleted') || 'Deleted', color: 'text-red-600 bg-red-50' },
+                      create: { label: t('created') || 'Created', color: 'text-blue-600 bg-blue-50' },
+                      update: { label: t('updated') || 'Updated', color: 'text-purple-600 bg-purple-50' },
+                    };
+                    const actionInfo = actionLabels[log.action] || { label: log.action, color: 'text-gray-600 bg-gray-50' };
+                    return (
+                      <div key={log.id} className="flex items-start gap-3 text-xs p-2 rounded-lg bg-slate-50">
+                        <Badge variant="outline" className={`${actionInfo.color} text-xs shrink-0`}>
+                          {actionInfo.label}
+                        </Badge>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{log.user_name}</span>
+                          <div className="text-muted-foreground mt-0.5">
+                            {format(new Date(log.created_at), 'dd.MM.yyyy HH:mm')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

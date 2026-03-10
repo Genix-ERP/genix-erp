@@ -99,6 +99,16 @@ export default function AgedPayables() {
 
   const pct = (val) => totals.total > 0 ? ((val / totals.total) * 100).toFixed(1) : '0.0';
 
+  // Payables are liabilities — display as negative amounts
+  const formatPayableAmount = (amount) => {
+    if (amount === 0 || amount === undefined || amount === null) return '-';
+    return `-${formatCurrency(amount)}`;
+  };
+  const formatPayableAmountCompact = (amount) => {
+    if (amount === 0 || amount === undefined || amount === null) return '-';
+    return `-${formatCurrencyCompact(amount)}`;
+  };
+
   const SortHeader = ({ field, children, className = '' }) => (
     <TableHead
       className={`cursor-pointer select-none hover:bg-slate-50 ${className}`}
@@ -157,42 +167,42 @@ export default function AgedPayables() {
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t('total') || 'Total'}</p>
-              <p className="text-lg font-bold text-slate-900 mt-1">{formatCurrencyCompact(totals.total)}</p>
+              <p className="text-lg font-bold text-red-700 mt-1">{formatPayableAmountCompact(totals.total)}</p>
               <p className="text-xs text-slate-400 mt-0.5">{filteredContacts.length} {t('vendors') || 'vendors'}</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-green-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-green-600 uppercase tracking-wide">{t('not_due') || 'Not Due'}</p>
-              <p className="text-lg font-bold text-green-700 mt-1">{formatCurrencyCompact(totals.current)}</p>
+              <p className="text-lg font-bold text-green-700 mt-1">{formatPayableAmountCompact(totals.current)}</p>
               <p className="text-xs text-green-500 mt-0.5">{pct(totals.current)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-yellow-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-yellow-600 uppercase tracking-wide">1-30 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-yellow-700 mt-1">{formatCurrencyCompact(totals.days1to30)}</p>
+              <p className="text-lg font-bold text-yellow-700 mt-1">{formatPayableAmountCompact(totals.days1to30)}</p>
               <p className="text-xs text-yellow-500 mt-0.5">{pct(totals.days1to30)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-orange-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-orange-600 uppercase tracking-wide">31-60 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-orange-700 mt-1">{formatCurrencyCompact(totals.days31to60)}</p>
+              <p className="text-lg font-bold text-orange-700 mt-1">{formatPayableAmountCompact(totals.days31to60)}</p>
               <p className="text-xs text-orange-500 mt-0.5">{pct(totals.days31to60)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-200/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-600 uppercase tracking-wide">61-90 {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-700 mt-1">{formatCurrencyCompact(totals.days61to90)}</p>
+              <p className="text-lg font-bold text-red-700 mt-1">{formatPayableAmountCompact(totals.days61to90)}</p>
               <p className="text-xs text-red-500 mt-0.5">{pct(totals.days61to90)}%</p>
             </CardContent>
           </Card>
           <Card className="bg-white/80 backdrop-blur-sm border-red-300/60">
             <CardContent className="p-4">
               <p className="text-xs font-medium text-red-700 uppercase tracking-wide">90+ {t('days') || 'days'}</p>
-              <p className="text-lg font-bold text-red-800 mt-1">{formatCurrencyCompact(totals.over90)}</p>
+              <p className="text-lg font-bold text-red-800 mt-1">{formatPayableAmountCompact(totals.over90)}</p>
               <p className="text-xs text-red-600 mt-0.5">{pct(totals.over90)}%</p>
             </CardContent>
           </Card>
@@ -236,22 +246,22 @@ export default function AgedPayables() {
                         </TableCell>
                         <TableCell className="font-medium text-slate-900">{contact.contact_name}</TableCell>
                         <TableCell className="text-right font-mono text-sm text-green-600">
-                          {contact.current > 0 ? formatCurrency(contact.current) : '-'}
+                          {contact.current > 0 ? formatPayableAmount(contact.current) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm text-yellow-600">
-                          {contact.days_1_to_30 > 0 ? formatCurrency(contact.days_1_to_30) : '-'}
+                          {contact.days_1_to_30 > 0 ? formatPayableAmount(contact.days_1_to_30) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm text-orange-600">
-                          {contact.days_31_to_60 > 0 ? formatCurrency(contact.days_31_to_60) : '-'}
+                          {contact.days_31_to_60 > 0 ? formatPayableAmount(contact.days_31_to_60) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm text-red-600">
-                          {contact.days_61_to_90 > 0 ? formatCurrency(contact.days_61_to_90) : '-'}
+                          {contact.days_61_to_90 > 0 ? formatPayableAmount(contact.days_61_to_90) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm text-red-800">
-                          {contact.over_90_days > 0 ? formatCurrency(contact.over_90_days) : '-'}
+                          {contact.over_90_days > 0 ? formatPayableAmount(contact.over_90_days) : '-'}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm font-bold text-slate-900">
-                          {formatCurrency(contact.total_amount)}
+                        <TableCell className="text-right font-mono text-sm font-bold text-red-700">
+                          {formatPayableAmount(contact.total_amount)}
                         </TableCell>
                       </TableRow>
 
@@ -259,8 +269,8 @@ export default function AgedPayables() {
                         const isPayment = inv.amount_due < 0;
                         const formatAmt = (amt) => {
                           if (amt === 0 || amt === undefined || amt === null) return '-';
-                          if (amt < 0) return `-${formatCurrency(Math.abs(amt))}`;
-                          return formatCurrency(amt);
+                          if (amt < 0) return formatCurrency(Math.abs(amt));
+                          return `-${formatCurrency(amt)}`;
                         };
                         return (
                         <TableRow key={inv.invoice_id} className={isPayment ? "bg-blue-50/40" : "bg-slate-50/60"}>
@@ -316,22 +326,22 @@ export default function AgedPayables() {
                     <TableCell></TableCell>
                     <TableCell className="font-bold text-slate-900">{t('total') || 'Total'}</TableCell>
                     <TableCell className="text-right font-mono font-bold text-green-700">
-                      {totals.current > 0 ? formatCurrency(totals.current) : '-'}
+                      {totals.current > 0 ? formatPayableAmount(totals.current) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono font-bold text-yellow-700">
-                      {totals.days1to30 > 0 ? formatCurrency(totals.days1to30) : '-'}
+                      {totals.days1to30 > 0 ? formatPayableAmount(totals.days1to30) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono font-bold text-orange-700">
-                      {totals.days31to60 > 0 ? formatCurrency(totals.days31to60) : '-'}
+                      {totals.days31to60 > 0 ? formatPayableAmount(totals.days31to60) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono font-bold text-red-700">
-                      {totals.days61to90 > 0 ? formatCurrency(totals.days61to90) : '-'}
+                      {totals.days61to90 > 0 ? formatPayableAmount(totals.days61to90) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono font-bold text-red-800">
-                      {totals.over90 > 0 ? formatCurrency(totals.over90) : '-'}
+                      {totals.over90 > 0 ? formatPayableAmount(totals.over90) : '-'}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(totals.total)}
+                    <TableCell className="text-right font-mono font-bold text-red-700">
+                      {formatPayableAmount(totals.total)}
                     </TableCell>
                   </TableRow>
                 </TableBody>

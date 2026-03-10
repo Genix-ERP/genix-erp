@@ -331,7 +331,8 @@ export default function WarehouseLocations() {
                     className={isSomeSelected ? "data-[state=checked]:bg-slate-400" : ""}
                   />
                 </TableHead>
-                <TableHead>{t('location') || 'Lokatsiya'}</TableHead>
+                <TableHead>{t('location_code') || 'Code'}</TableHead>
+                <TableHead>{t('location_name') || 'Name'}</TableHead>
                 <TableHead>{t('location_type') || 'Turi'}</TableHead>
                 <TableHead>{t('is_empty') || "Bo'shmi"}</TableHead>
                 <TableHead>{t('storage_category') || 'Kategoriya'}</TableHead>
@@ -342,7 +343,7 @@ export default function WarehouseLocations() {
             <TableBody>
               {filteredLocations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={8} className="text-center py-12">
                     <MapPin className="w-12 h-12 mx-auto text-slate-300 mb-4" />
                     <h3 className="text-lg font-medium text-slate-600 mb-2">
                       {t('no_locations') || "Lokatsiyalar topilmadi"}
@@ -366,11 +367,11 @@ export default function WarehouseLocations() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-slate-400" />
-                          <div>
-                            <div className="font-medium">{loc.code}</div>
-                            <div className="text-xs text-slate-500">{loc.name}</div>
-                          </div>
+                          <span className="font-medium">{loc.code}</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-slate-600">{loc.name}</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={typeInfo.color}>
