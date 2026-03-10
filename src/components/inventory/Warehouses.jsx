@@ -882,9 +882,80 @@ export default function Warehouses() {
                   </Select>
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                {t('warehouse_operations_desc') || 'Configure multi-step operations for receiving, shipping, and manufacturing. More steps provide better tracking.'}
-              </p>
+              {/* Dynamic preview of operation types that will be created */}
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-xs font-medium text-slate-600 mb-2">
+                  {t('auto_created_operation_types') || "Avtomatik yaratiladigan operatsiya turlari:"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {/* Reception chain */}
+                  {formData.reception_steps >= 1 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700">
+                      {formData.code || '?'}/IN — {t('receipt') || "Qabul qilish"}
+                    </span>
+                  )}
+                  {formData.reception_steps >= 2 && (
+                    <>
+                      <span className="text-slate-400 text-xs">→</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-cyan-100 text-cyan-700">
+                        {formData.code || '?'}/INPUT — {t('input_to_stock') || "Kirish → Ombor"}
+                      </span>
+                    </>
+                  )}
+                  {formData.reception_steps >= 3 && (
+                    <>
+                      <span className="text-slate-400 text-xs">→</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-700">
+                        {formData.code || '?'}/QC — {t('quality_control') || "Sifat nazorati"}
+                      </span>
+                    </>
+                  )}
+
+                  {/* Separator */}
+                  <span className="text-slate-300 text-xs px-1">|</span>
+
+                  {/* Internal transfer (always) */}
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700">
+                    {formData.code || '?'}/INT — {t('internal_transfers') || "Ichki o'tkazmalar"}
+                  </span>
+
+                  {/* Separator */}
+                  <span className="text-slate-300 text-xs px-1">|</span>
+
+                  {/* Delivery chain */}
+                  {formData.delivery_steps >= 3 && (
+                    <>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-700">
+                        {formData.code || '?'}/PICK — {t('picking') || "Yig'ish"}
+                      </span>
+                      <span className="text-slate-400 text-xs">→</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-pink-100 text-pink-700">
+                        {formData.code || '?'}/PACK — {t('packing') || "Qadoqlash"}
+                      </span>
+                      <span className="text-slate-400 text-xs">→</span>
+                    </>
+                  )}
+                  {formData.delivery_steps === 2 && (
+                    <>
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-700">
+                        {formData.code || '?'}/PICK — {t('picking') || "Yig'ish"}
+                      </span>
+                      <span className="text-slate-400 text-xs">→</span>
+                    </>
+                  )}
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-orange-100 text-orange-700">
+                    {formData.code || '?'}/OUT — {t('delivery') || "Yetkazib berish"}
+                  </span>
+
+                  {/* Separator */}
+                  <span className="text-slate-300 text-xs px-1">|</span>
+
+                  {/* POS (always) */}
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-violet-100 text-violet-700">
+                    {formData.code || '?'}/POS — {t('pos_orders') || "Savdo nuqtasi"}
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4">

@@ -144,9 +144,9 @@ export const salesService = {
   },
 
   async validateDeliveryOrder(id, options = {}) {
-    const params = options.force ? '?force=true' : '';
+    const params = options.partial ? '?partial=true' : '';
     const response = await apiClient.post(`/sales/delivery-orders/${id}/validate${params}`);
-    return response.data.data;
+    return response.data;
   },
 
   async cancelDeliveryOrder(id) {
