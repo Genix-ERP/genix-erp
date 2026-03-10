@@ -454,12 +454,12 @@ export default function SalesOrders() {
   const getAvailableStock = useCallback((productId, warehouseId) => {
     if (!productId) return null;
     const stockRecords = getProductStock(productId);
-    if (!stockRecords || stockRecords.length === 0) return 0;
+    if (!stockRecords || stockRecords.length === 0) return null;
     if (warehouseId) {
       const record = stockRecords.find(s => s.warehouse_id === warehouseId);
-      return record ? (record.available_quantity ?? record.quantity ?? 0) : 0;
+      return record ? (record.quantity_available ?? record.available_quantity ?? record.quantity_on_hand ?? record.quantity ?? 0) : null;
     }
-    return stockRecords.reduce((sum, s) => sum + (s.available_quantity ?? s.quantity ?? 0), 0);
+    return stockRecords.reduce((sum, s) => sum + (s.quantity_available ?? s.available_quantity ?? s.quantity_on_hand ?? s.quantity ?? 0), 0);
   }, [getProductStock]);
 
   // Check stock warning for a line item
@@ -877,7 +877,7 @@ export default function SalesOrders() {
           inv.product_id === line.product_id &&
           (!fullOrder.warehouse_id || inv.warehouse_id === fullOrder.warehouse_id)
         );
-        available = stockRecords.reduce((sum, s) => sum + (s.available_quantity ?? s.quantity ?? 0), 0);
+        available = stockRecords.reduce((sum, s) => sum + (s.quantity_available ?? s.available_quantity ?? s.quantity_on_hand ?? s.quantity ?? 0), 0);
       } else {
         available = getAvailableStock(line.product_id, fullOrder.warehouse_id);
       }
