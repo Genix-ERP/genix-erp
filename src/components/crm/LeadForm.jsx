@@ -24,7 +24,7 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     contact_name: lead?.contact_name || "",
     company_name: lead?.company_name || "",
     email: lead?.email || "",
-    phone: lead?.phone || "",
+    phone: lead?.phone || "+998",
     status: lead?.status || "new",
     source: lead?.source || "website",
     notes: lead?.notes || "",
