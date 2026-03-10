@@ -67,7 +67,8 @@ export default function Inventory() {
     isLoading,
     createItem,
     updateItem,
-    getInventorySummary
+    getInventorySummary,
+    refreshData,
   } = useInventory();
 
   const [filteredItems, setFilteredItems] = useState([]);
@@ -80,6 +81,11 @@ export default function Inventory() {
   const [compliance, setCompliance] = useState(null);
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount to prevent blocking navigation
   useEffect(() => {

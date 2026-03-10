@@ -72,7 +72,13 @@ export default function Procurement() {
     getSupplierById,
     getSupplierStats,
     isLoading,
+    refreshData,
   } = useProcurement();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
