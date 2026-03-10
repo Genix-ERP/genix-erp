@@ -905,40 +905,13 @@ export default function SalesOrders() {
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      // Stock check for both confirmed and processing transitions
-      if (newStatus === 'confirmed' || newStatus === 'processing') {
-        const { fullOrder, inStock, outOfStock } = await checkOrderStock(orderId);
-
-        if (outOfStock.length > 0) {
-          const issues = outOfStock.map(line => ({
-            product_name: line.product_name,
-            requested: line.requested,
-            available: line.available,
-            type: line.available <= 0 ? 'error' : 'warning',
-          }));
-
-          setStockWarningDetails(issues);
-          setStockWarningOrderId(orderId);
-          setStockWarningFullOrder(fullOrder);
-          setStockWarningTargetStatus(newStatus);
-          setHasPartialStock(inStock.length > 0);
-          setShowStockWarningModal(true);
-          return;
-        }
-
-        // All stock available — proceed
-        if (newStatus === 'confirmed') {
-          await confirmSalesOrder(orderId);
-        } else {
-          await updateSalesOrder(orderId, { status: newStatus });
-        }
-        if (refreshSalesData) refreshSalesData();
-        if (refreshModulesData) refreshModulesData();
+      if (newStatus === 'confirmed') {
+        await confirmSalesOrder(orderId);
       } else {
         await updateSalesOrder(orderId, { status: newStatus });
-        if (refreshSalesData) refreshSalesData();
-        if (refreshModulesData) refreshModulesData();
       }
+      if (refreshSalesData) refreshSalesData();
+      if (refreshModulesData) refreshModulesData();
     } catch (error) {
       console.error('Failed to update status:', error);
     }

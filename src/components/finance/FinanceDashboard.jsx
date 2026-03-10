@@ -54,8 +54,8 @@ export default function FinanceDashboard() {
           const cogsTotal = cogsItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const opexTotal = opexItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const otherExpTotal = otherExpItems.reduce((s, a) => s + Math.abs(a.amount || 0), 0);
-          const totalExpenses = cogsTotal + opexTotal + otherExpTotal;
-          const netProfit = data.net_income ?? (totalIncome - totalExpenses);
+          const totalExpenses = opexTotal + otherExpTotal;
+          const netProfit = data.net_income ?? (totalIncome - cogsTotal - totalExpenses);
           const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
           setMetrics({ totalIncome, totalExpenses, netProfit, profitMargin });
 
@@ -80,10 +80,15 @@ export default function FinanceDashboard() {
             return name;
           };
 
-          // Build expense breakdown by individual accounts (exclude COGS — it's cost of sales, not expense)
+          // Build expense breakdown by individual accounts (exclude COGS and stock adjustments)
+          const cogsAccountNames = new Set(cogsItems.map(i => (i.account_name || i.name || '').toLowerCase()));
           const categoryBreakdown = [];
           [...opexItems, ...otherExpItems].forEach(item => {
             const amount = Math.abs(item.amount || 0);
+            const name = (item.account_name || item.name || '').toLowerCase();
+            const code = item.account_code || '';
+            // Skip COGS-like accounts (code 5xxx) and stock adjustments
+            if (code.startsWith('5') || cogsAccountNames.has(name) || name.includes('stock adjustment') || name.includes('cost of goods') || name.includes('sotilgan tovarlar')) return;
             if (amount > 0) {
               categoryBreakdown.push({
                 category: translateAccountName(item.account_name || item.name) || t('other'),
@@ -125,10 +130,9 @@ export default function FinanceDashboard() {
         const flowData = monthlyData.map((m, i) => {
           const d = results[i];
           const income = d?.total_revenue || 0;
-          const cogs = (d?.cost_of_sales || []).reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const opex = (d?.operating_expenses || []).reduce((s, a) => s + Math.abs(a.amount || 0), 0);
           const other = (d?.other_expenses || []).reduce((s, a) => s + Math.abs(a.amount || 0), 0);
-          return { month: m.month, income, expenses: cogs + opex + other };
+          return { month: m.month, income, expenses: opex + other };
         });
         setMonthlyFlowData(flowData);
       } catch (err) {

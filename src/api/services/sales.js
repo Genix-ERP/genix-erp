@@ -143,8 +143,9 @@ export const salesService = {
     return response.data.data;
   },
 
-  async validateDeliveryOrder(id) {
-    const response = await apiClient.post(`/sales/delivery-orders/${id}/validate`);
+  async validateDeliveryOrder(id, options = {}) {
+    const params = options.force ? '?force=true' : '';
+    const response = await apiClient.post(`/sales/delivery-orders/${id}/validate${params}`);
     return response.data.data;
   },
 

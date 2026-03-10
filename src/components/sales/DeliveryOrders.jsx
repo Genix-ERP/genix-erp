@@ -50,6 +50,8 @@ export default function DeliveryOrders() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showValidateModal, setShowValidateModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showStockWarningModal, setShowStockWarningModal] = useState(false);
+  const [stockWarningItems, setStockWarningItems] = useState([]);
   const [selectedDO, setSelectedDO] = useState(null);
   const [loading, setLoading] = useState(false);
   const [carriers, setCarriers] = useState([]);
@@ -239,12 +241,28 @@ export default function DeliveryOrders() {
       console.error('Failed to validate delivery order:', error);
       if (error.response?.status === 422 && error.response?.data?.errors) {
         const items = error.response.data.errors;
-        const details = items.map(i => `${i.product_name}: ${t('available') || 'available'} ${i.available}, ${t('requested') || 'requested'} ${i.requested}`).join('; ');
-        toast.error(`${error.response.data.message || t('insufficient_stock') || 'Insufficient stock'}: ${details}`, { duration: 8000 });
+        setStockWarningItems(items);
+        setShowValidateModal(false);
+        setShowStockWarningModal(true);
       } else {
         const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
         toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
       }
+    }
+  };
+
+  const handleForceValidateDO = async () => {
+    if (!selectedDO) return;
+    try {
+      await salesService.validateDeliveryOrder(selectedDO.id, { force: true });
+      await fetchDeliveryOrders();
+      setShowStockWarningModal(false);
+      setStockWarningItems([]);
+      setSelectedDO(null);
+    } catch (error) {
+      console.error('Failed to force validate delivery order:', error);
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+      toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
     }
   };
 
@@ -647,6 +665,51 @@ export default function DeliveryOrders() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Stock Warning Modal */}
+      <Dialog open={showStockWarningModal} onOpenChange={setShowStockWarningModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="w-5 h-5" />
+              {t('insufficient_stock') || "Zaxira yetarli emas"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-600">
+              {t('stock_warning_delivery_desc') || "Quyidagi mahsulotlar uchun skladda yetarli zaxira mavjud emas:"}
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg divide-y divide-red-200">
+              {stockWarningItems.map((item, i) => (
+                <div key={i} className="p-3 flex items-center justify-between">
+                  <span className="font-medium text-sm">{item.product_name}</span>
+                  <div className="text-sm text-right">
+                    <span className="text-red-600 font-medium">{t('available') || 'Mavjud'}: {item.available}</span>
+                    <span className="mx-2 text-slate-400">|</span>
+                    <span className="text-slate-600">{t('requested') || "So'ralgan"}: {item.requested}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => { setShowStockWarningModal(false); setStockWarningItems([]); }}
+                className="flex-1"
+              >
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button
+                onClick={handleForceValidateDO}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {t('proceed_anyway') || "Baribir davom etish"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
