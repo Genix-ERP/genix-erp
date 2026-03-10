@@ -21,8 +21,13 @@ import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 export default function Payroll() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { payrolls, employees, createPayroll, updatePayroll, isLoading } = useModules();
+  const { payrolls, employees, createPayroll, updatePayroll, isLoading, refreshData } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis

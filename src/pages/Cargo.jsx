@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCargoContext } from '@/components/contexts/CargoContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,8 +33,14 @@ export default function Cargo() {
     shipments,
     cargoCash,
     companyAccounts,
-    SHIPMENT_STATUS
+    SHIPMENT_STATUS,
+    loadShipments
   } = useCargoContext();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    loadShipments();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = searchParams.get("tab") || "shipments";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });

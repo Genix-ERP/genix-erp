@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -38,6 +38,7 @@ import FinanceVendorBills from "@/components/finance/FinanceVendorBills";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useFinancials } from "@/components/contexts/FinancialsContext";
 
 const tabTriggerClass = "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100 data-[state=inactive]:hover:text-slate-900";
 
@@ -45,9 +46,15 @@ export default function Financials() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { refreshData } = useFinancials();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const activeTab = searchParams.get("tab") || "dashboard";
+
+  // Refresh financial data when navigating to Financials page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange = (value) => {
     setSearchParams({ tab: value }, { replace: true });

@@ -48,17 +48,22 @@ export default function Dashboard() {
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
-  const { items: inventory, stockMovements } = useInventory();
-  const { financialTransactions, customerInvoices, vendorBills } = useFinancials();
-  const { customers, leads, opportunities } = useCustomers();
-  const { employees, salesOrders, projects, expenses, payrolls } = useModules();
+  const { items: inventory, stockMovements, refreshData: refreshInventory } = useInventory();
+  const { financialTransactions, customerInvoices, vendorBills, refreshData: refreshFinancials } = useFinancials();
+  const { customers, leads, opportunities, refreshData: refreshCustomers } = useCustomers();
+  const { employees, salesOrders, projects, expenses, payrolls, refreshData: refreshModules } = useModules();
 
   const [isLoading, setIsLoading] = useState(true);
 
+  // Refresh all data when navigating to dashboard
   useEffect(() => {
+    refreshInventory();
+    refreshFinancials();
+    refreshCustomers();
+    refreshModules();
     const timer = setTimeout(() => setIsLoading(false), 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const salesAnalysis = useMemo(() => analyzeSales(salesOrders, customers, language), [salesOrders, customers, language]);
   const inventoryAnalysis = useMemo(() => analyzeInventory(inventory, stockMovements, language), [inventory, stockMovements, language]);

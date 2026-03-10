@@ -34,7 +34,13 @@ export default function Projects() {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { projects, createProject, updateProject, isLoading } = useModules();
+  const { projects, createProject, updateProject, isLoading, refreshData } = useModules();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
