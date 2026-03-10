@@ -237,8 +237,14 @@ export default function DeliveryOrders() {
       setSelectedDO(null);
     } catch (error) {
       console.error('Failed to validate delivery order:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
-      toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
+      if (error.response?.status === 422 && error.response?.data?.errors) {
+        const items = error.response.data.errors;
+        const details = items.map(i => `${i.product_name}: ${t('available') || 'available'} ${i.available}, ${t('requested') || 'requested'} ${i.requested}`).join('; ');
+        toast.error(`${error.response.data.message || t('insufficient_stock') || 'Insufficient stock'}: ${details}`, { duration: 8000 });
+      } else {
+        const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+        toast.error((t('error_validating_delivery') || 'Failed to validate delivery order') + ': ' + errorMsg);
+      }
     }
   };
 
