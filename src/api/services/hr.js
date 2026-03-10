@@ -105,8 +105,8 @@ export const hrService = {
   },
 
   // Confirm salary payment (marks deductions as deducted)
-  async confirmSalaryPayment(periodId, entryId) {
-    const response = await apiClient.post(`/payroll-periods/${periodId}/entries/${entryId}/confirm`);
+  async confirmSalaryPayment(periodId, entryId, data = {}) {
+    const response = await apiClient.post(`/payroll-periods/${periodId}/entries/${entryId}/confirm`, data);
     return response.data.data;
   },
 };
