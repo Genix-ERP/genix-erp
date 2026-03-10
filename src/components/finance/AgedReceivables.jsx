@@ -290,20 +290,30 @@ export default function AgedReceivables() {
                       </TableRow>
 
                       {/* Expanded invoice rows */}
-                      {expandedRows[contact.contact_id] && contact.invoices?.map((inv) => (
-                        <TableRow key={inv.invoice_id} className="bg-slate-50/60">
+                      {expandedRows[contact.contact_id] && contact.invoices?.map((inv) => {
+                        const isPayment = inv.amount_due < 0;
+                        return (
+                        <TableRow key={inv.invoice_id} className={isPayment ? "bg-blue-50/40" : "bg-slate-50/60"}>
                           <TableCell></TableCell>
                           <TableCell className="pl-8">
                             <div className="flex items-center gap-2">
-                              <FileText className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-sm text-slate-700">{inv.invoice_number}</span>
-                              <span className="text-xs text-slate-400">
-                                {t('due') || 'Due'}: {inv.due_date}
-                              </span>
-                              {inv.days_overdue > 0 && (
-                                <Badge variant="outline" className="text-xs px-1.5 py-0 text-red-600 border-red-200">
-                                  {inv.days_overdue}d
+                              <FileText className={`w-3.5 h-3.5 ${isPayment ? 'text-blue-400' : 'text-slate-400'}`} />
+                              <span className={`text-sm ${isPayment ? 'text-blue-700' : 'text-slate-700'}`}>{inv.invoice_number}</span>
+                              {isPayment ? (
+                                <Badge variant="outline" className="text-xs px-1.5 py-0 text-blue-600 border-blue-200">
+                                  {t('payment') || 'To\'lov'}
                                 </Badge>
+                              ) : (
+                                <>
+                                  <span className="text-xs text-slate-400">
+                                    {t('due') || 'Due'}: {inv.due_date}
+                                  </span>
+                                  {inv.days_overdue > 0 && (
+                                    <Badge variant="outline" className="text-xs px-1.5 py-0 text-red-600 border-red-200">
+                                      {inv.days_overdue}d
+                                    </Badge>
+                                  )}
+                                </>
                               )}
                             </div>
                           </TableCell>
@@ -327,7 +337,8 @@ export default function AgedReceivables() {
                             {formatAmount(inv.amount_due)}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </React.Fragment>
                   ))}
 
