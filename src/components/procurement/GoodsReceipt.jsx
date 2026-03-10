@@ -28,6 +28,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { procurementService } from "@/api/services/procurement";
+import { useInventory } from "@/components/contexts/InventoryContext";
 import { toast } from 'sonner';
 
 const statusColors = {
@@ -50,6 +51,8 @@ export default function GoodsReceipt() {
   const { t } = useTranslation(language);
   const { purchaseOrders = [] } = useProcurement();
   const { canCreate } = usePermissions();
+  const { isLotTrackingEnabled } = useInventory();
+  const lotTrackingOn = isLotTrackingEnabled();
 
   const [receipts, setReceipts] = useState([]);
   const [filteredReceipts, setFilteredReceipts] = useState([]);
@@ -599,19 +602,26 @@ export default function GoodsReceipt() {
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="text-xs text-slate-500">{t('batch_number') || 'Batch #'}</label>
+                          <label className="text-xs text-slate-500">
+                            {t('batch_number') || 'Batch #'}
+                            {lotTrackingOn && <span className="text-green-600 ml-1">(auto)</span>}
+                          </label>
                           <Input
                             value={line.batch_number}
                             onChange={(e) => updateLine(index, 'batch_number', e.target.value)}
-                            placeholder="LOT-XXX"
+                            placeholder={lotTrackingOn ? t('auto_generated') || 'Avtomatik' : 'LOT-XXX'}
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="text-xs text-slate-500">{t('expiry_date') || 'Expiry'}</label>
+                          <label className="text-xs text-slate-500">
+                            {t('expiry_date') || 'Expiry'}
+                            {lotTrackingOn && <span className="text-red-500 ml-1">*</span>}
+                          </label>
                           <Input
                             type="date"
                             value={line.expiry_date}
                             onChange={(e) => updateLine(index, 'expiry_date', e.target.value)}
+                            className={lotTrackingOn && !line.expiry_date ? 'border-orange-300' : ''}
                           />
                         </div>
                         <div className="col-span-2">

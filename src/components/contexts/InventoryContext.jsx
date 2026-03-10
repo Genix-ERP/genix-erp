@@ -18,6 +18,14 @@ const SCRAP_ORDERS_STORAGE_KEY = 'genix_scrap_orders';
 
 const InventoryContext = createContext();
 
+// Map backend lot fields to frontend field names used by LotTracking.jsx
+const mapLotFromBackend = (lot) => ({
+  ...lot,
+  quantity: lot.remaining_quantity ?? lot.quantity,
+  original_quantity: lot.initial_quantity ?? lot.original_quantity,
+  status: lot.status === 'available' ? 'active' : lot.status,
+});
+
 // Helper to get company-specific storage key
 const getStorageKey = (baseKey, companyId) => {
   const prefix = isDemoMode() ? 'demo_' : '';
@@ -612,7 +620,7 @@ export function InventoryProvider({ children }) {
             inventoryService.listProducts(),
             inventoryService.listCategories(),
             inventoryService.listWarehouses(),
-            inventoryService.listInventory(),
+            inventoryService.listInventory({ limit: 10000 }),
             inventoryService.listInventoryMovements({ limit: 1000 })
           ]);
 
@@ -649,7 +657,15 @@ export function InventoryProvider({ children }) {
             return demoMode ? sampleData : [];
           };
 
-          setLots(getLocalData(LOTS_STORAGE_KEY, sampleLots));
+          // Load lots from backend
+          try {
+            const lotsResponse = await inventoryService.listLots({ limit: 1000 });
+            const lotsData = (lotsResponse?.data || []).map(lot => mapLotFromBackend(lot));
+            setLots(lotsData);
+          } catch (lotsErr) {
+            console.warn('[InventoryContext] Lots API not available, using localStorage:', lotsErr.message);
+            setLots(getLocalData(LOTS_STORAGE_KEY, sampleLots));
+          }
 
           // Load stock counts from backend
           try {
@@ -1105,7 +1121,7 @@ export function InventoryProvider({ children }) {
       try {
         const result = await inventoryService.adjustInventory(adjustmentData);
         // Refresh inventory data from backend after successful adjustment
-        const inventoryData = await inventoryService.listInventory();
+        const inventoryData = await inventoryService.listInventory({ limit: 10000 });
         setInventory(inventoryData || []);
         const movementsData = await inventoryService.listInventoryMovements();
         setStockMovements(movementsData || []);
@@ -1173,7 +1189,7 @@ export function InventoryProvider({ children }) {
       try {
         const result = await inventoryService.transferInventory(transferData);
         // Refresh inventory data from backend after successful transfer
-        const inventoryData = await inventoryService.listInventory();
+        const inventoryData = await inventoryService.listInventory({ limit: 10000 });
         setInventory(inventoryData || []);
         const movementsData = await inventoryService.listInventoryMovements();
         setStockMovements(movementsData || []);
@@ -1303,10 +1319,50 @@ export function InventoryProvider({ children }) {
   }, [inventory, products]);
 
   // ================== LOT/BATCH TRACKING ==================
-  const createLot = useCallback(async (lotData) => {
+  const fetchLots = useCallback(async () => {
+    if (backendAvailable) {
+      try {
+        const lotsResponse = await inventoryService.listLots({ limit: 1000 });
+        const lotsData = (lotsResponse?.data || []).map(lot => mapLotFromBackend(lot));
+        setLots(lotsData);
+        return;
+      } catch (err) {
+        console.warn('[InventoryContext] Failed to fetch lots from API:', err.message);
+      }
+    }
+    // Fallback to localStorage
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
+    const stored = localStorage.getItem(storageKey);
+    if (stored) setLots(JSON.parse(stored));
+  }, [backendAvailable, activeCompany]);
 
+  const createLot = useCallback(async (lotData) => {
+    if (backendAvailable) {
+      try {
+        const newLot = await inventoryService.createLot({
+          product_id: lotData.product_id,
+          warehouse_id: lotData.warehouse_id,
+          lot_number: lotData.lot_number || '', // empty = auto-generate on backend
+          received_date: lotData.received_date || new Date().toISOString().split('T')[0],
+          expiry_date: lotData.expiry_date || '',
+          manufacture_date: lotData.manufacture_date || '',
+          quantity: lotData.quantity,
+          unit_cost: lotData.unit_cost || 0,
+          vendor_id: lotData.vendor_id || '',
+          notes: lotData.notes || '',
+        });
+        await fetchLots();
+        return newLot;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to create lot via API:', err);
+        throw err;
+      }
+    }
+
+    // Fallback: localStorage-only mode
+    const companyId = activeCompany?.id;
+    const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
     const newLot = {
       id: `lot_${Date.now()}`,
       lot_number: lotData.lot_number || `LOT-${new Date().getFullYear()}-${String(lots.length + 1).padStart(3, '0')}`,
@@ -1319,25 +1375,64 @@ export function InventoryProvider({ children }) {
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setLots(updated);
     return newLot;
-  }, [lots, activeCompany]);
+  }, [lots, activeCompany, backendAvailable, fetchLots]);
 
   const updateLot = useCallback(async (id, lotData) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.updateLot(id, lotData);
+        await fetchLots();
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to update lot via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
     const updated = lots.map(l => l.id === id ? { ...l, ...lotData } : l);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setLots(updated);
-  }, [lots, activeCompany]);
+  }, [lots, activeCompany, backendAvailable, fetchLots]);
 
   const deleteLot = useCallback(async (id) => {
+    if (backendAvailable) {
+      try {
+        await inventoryService.deleteLot(id);
+        await fetchLots();
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to delete lot via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
     const updated = lots.filter(l => l.id !== id);
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setLots(updated);
-  }, [lots, activeCompany]);
+  }, [lots, activeCompany, backendAvailable, fetchLots]);
 
   const consumeLot = useCallback(async (lotId, quantity) => {
+    if (backendAvailable) {
+      try {
+        const lot = lots.find(l => l.id === lotId);
+        if (lot) {
+          const newQty = lot.remaining_quantity - quantity;
+          await inventoryService.updateLot(lotId, {
+            status: newQty <= 0 ? 'depleted' : 'available',
+          });
+          await fetchLots();
+        }
+        return;
+      } catch (err) {
+        console.error('[InventoryContext] Failed to consume lot via API:', err);
+        throw err;
+      }
+    }
+
     const companyId = activeCompany?.id;
     const storageKey = getStorageKey(LOTS_STORAGE_KEY, companyId);
     const updated = lots.map(l => {
@@ -1349,7 +1444,7 @@ export function InventoryProvider({ children }) {
     });
     localStorage.setItem(storageKey, JSON.stringify(updated));
     setLots(updated);
-  }, [lots, activeCompany]);
+  }, [lots, activeCompany, backendAvailable, fetchLots]);
 
   const getProductLots = useCallback((productId) => {
     return lots
@@ -1488,7 +1583,7 @@ export function InventoryProvider({ children }) {
         // Refresh all data from backend
         const [stockCountsData, inventoryData, movementsData] = await Promise.all([
           inventoryService.listStockCounts(),
-          inventoryService.listInventory(),
+          inventoryService.listInventory({ limit: 10000 }),
           inventoryService.listInventoryMovements(),
         ]);
         setStockCounts(stockCountsData || []);
@@ -1840,7 +1935,7 @@ export function InventoryProvider({ children }) {
         // Refresh scrap orders, inventory, and movements
         const [scrapList, inventoryData, movementsData] = await Promise.all([
           inventoryService.listScrapOrders(),
-          inventoryService.listInventory(),
+          inventoryService.listInventory({ limit: 10000 }),
           inventoryService.listInventoryMovements(),
         ]);
         setScrapOrders(scrapList || []);
@@ -1986,6 +2081,7 @@ export function InventoryProvider({ children }) {
 
     // Lot/Batch Tracking
     lots,
+    fetchLots,
     createLot,
     updateLot,
     deleteLot,
