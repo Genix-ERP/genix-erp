@@ -910,6 +910,7 @@ export const translations = {
     "approved_by": "Approved By",
     "completing": "Completing...",
     "confirm": "Confirm",
+    "discrepancy": "Discrepancy",
     "draft": "Draft",
 
     // Stock Counting - ERP Enhanced
@@ -7018,6 +7019,7 @@ export const translations = {
     "approved_by": "Tasdiqlagan xodim",
     "completing": "Yakunlanmoqda...",
     "confirm": "Tasdiqlash",
+    "discrepancy": "Solishtirishda xatolik",
     "draft": "Qoralama",
 
     // Stock Counting - ERP Enhanced
@@ -14096,6 +14098,7 @@ export const translations = {
     "approved_by": "Утвердил",
     "completing": "Завершение...",
     "confirm": "Подтвердить",
+    "discrepancy": "Расхождение",
     "draft": "Черновик",
     "calculated": "Рассчитано",
     "approved": "Утверждено",
