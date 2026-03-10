@@ -2682,7 +2682,7 @@ export default function SalesOrders() {
                 <div>
                   <Label>{t('phone') || 'Phone'}</Label>
                   <Input
-                    placeholder="+1 234 567 890"
+                    placeholder="+998 90 123 45 67"
                     value={editingCarrier ? (editingCarrier.phone || '') : newCarrier.phone}
                     onChange={(e) => editingCarrier
                       ? setEditingCarrier({...editingCarrier, phone: e.target.value})
