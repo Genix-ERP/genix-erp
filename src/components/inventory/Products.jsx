@@ -93,7 +93,8 @@ export default function Products() {
     createCategory,
     updateCategory,
     deleteCategory,
-    isLoading
+    isLoading,
+    isLotTrackingEnabled
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
@@ -1020,6 +1021,15 @@ export default function Products() {
             <Tag className="w-4 h-4" />
             {t('categories')}
           </TabsTrigger>
+          {isLotTrackingEnabled() && (
+            <TabsTrigger
+              value="lots"
+              className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
+              <Archive className="w-4 h-4" />
+              {t('lots')}
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="labels"
             className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"

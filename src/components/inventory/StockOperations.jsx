@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { inventoryService, contactsService } from '@/api/services';
+import { useInventory } from "@/components/contexts/InventoryContext";
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -96,6 +97,8 @@ export default function StockOperations() {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, MODULES: MOD } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
+  const { isLotTrackingEnabled } = useInventory();
+  const lotTrackingOn = isLotTrackingEnabled();
 
   const [view, setView] = useState('list');
   const [activeDirection, setActiveDirection] = useState('receipt');
@@ -264,7 +267,7 @@ export default function StockOperations() {
     if (error.response?.status === 422 && error.response?.data?.errors) {
       const items = error.response.data.errors;
       const details = items.map(i => `${i.product_name}: ${t('available') || 'available'} ${i.available}, ${t('requested') || 'requested'} ${i.requested}`).join('; ');
-      toast.error(`${error.response.data.message || t('insufficient_stock') || 'Insufficient stock'}: ${details}`, { duration: 8000 });
+      toast.error(`${t('insufficient_stock') || error.response.data.message || 'Insufficient stock'}: ${details}`, { duration: 8000 });
     } else {
       const msg = error.response?.data?.message || error.response?.data?.error || error.message;
       toast.error(msg);
@@ -768,8 +771,8 @@ export default function StockOperations() {
                         <Input
                           value={line.lot_number || ''}
                           onChange={e => updateLine(idx, 'lot_number', e.target.value)}
-                          placeholder={t('lot') || 'Lot'}
-                          className="text-sm"
+                          placeholder={lotTrackingOn ? (t('auto_generated') || 'Avtomatik') : (t('lot') || 'Lot')}
+                          className={`text-sm ${lotTrackingOn ? 'border-green-200' : ''}`}
                         />
                       </div>
                       <div className="col-span-3">
