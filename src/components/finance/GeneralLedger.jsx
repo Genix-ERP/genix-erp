@@ -54,6 +54,17 @@ export default function GeneralLedger() {
   const [isSaving, setIsSaving] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
+  // Format number with space thousand separators inline
+  const formatNumberInline = (value) => {
+    if (!value && value !== 0) return '';
+    const str = String(value).replace(/[^0-9.]/g, '');
+    if (!str) return '';
+    const parts = str.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.length > 1 ? `${parts[0]}.${parts[1]}` : parts[0];
+  };
+  const parseFormattedNumber = (value) => String(value).replace(/\s/g, '');
+
   // Reverse modal state
   const [reverseDate, setReverseDate] = useState(new Date().toISOString().split('T')[0]);
   const [reverseReason, setReverseReason] = useState('');
@@ -261,7 +272,15 @@ export default function GeneralLedger() {
       setSelectedEntry(prev => prev ? { ...prev, status: 'posted' } : prev);
       showSuccess(t('entry_posted_successfully') || 'Journal entry posted successfully');
     } catch (error) {
-      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to post entry';
+      let msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Failed to post entry';
+      // Translate insufficient balance error from backend
+      const balanceMatch = msg.match(/^(.+?)\s*\((\d+)\)\s*hisobida mablag[''] yetarli emas\.\s*Joriy balans:\s*(.+?)\s*so'm$/);
+      if (balanceMatch) {
+        const [, name, code, balance] = balanceMatch;
+        msg = t('insufficient_account_balance')
+          ? t('insufficient_account_balance').replace('{name}', name).replace('{code}', code).replace('{balance}', balance)
+          : `Insufficient funds in ${name} (${code}). Current balance: ${balance} so'm`;
+      }
       showError(msg);
     } finally {
       setIsActionLoading(false);
@@ -958,12 +977,11 @@ export default function GeneralLedger() {
                             className="h-9 text-right"
                             inputMode="decimal"
                             placeholder="0"
-                            value={line.debit_amount || ''}
-                            onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                            value={formatNumberInline(line.debit_amount)}
                             onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                updateLine(index, 'debit_amount', val);
+                              const raw = parseFormattedNumber(e.target.value);
+                              if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                                updateLine(index, 'debit_amount', raw);
                               }
                             }}
                           />
@@ -973,12 +991,11 @@ export default function GeneralLedger() {
                             className="h-9 text-right"
                             inputMode="decimal"
                             placeholder="0"
-                            value={line.credit_amount || ''}
-                            onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; }}
+                            value={formatNumberInline(line.credit_amount)}
                             onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                updateLine(index, 'credit_amount', val);
+                              const raw = parseFormattedNumber(e.target.value);
+                              if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                                updateLine(index, 'credit_amount', raw);
                               }
                             }}
                           />

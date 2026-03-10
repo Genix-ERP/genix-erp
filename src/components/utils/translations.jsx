@@ -2876,7 +2876,13 @@ export const translations = {
     "enter_journal_description": "Enter journal entry description",
     "debits_must_equal_credits": "Debits must equal credits",
     "add_detailed_lines_later": "You can add detailed journal lines after creating the entry",
-    
+    "cancel_entry": "Cancel Entry",
+    "cannot_edit_posted_entry": "Only draft entries can be edited.",
+    "description_required": "Description is required",
+    "edit_journal_entry_description": "Edit a draft journal entry",
+    "entry_posted_successfully": "Journal entry posted successfully",
+    "insufficient_account_balance": "Insufficient funds in {name} ({code}). Current balance: {balance} so'm",
+
     // HR
     "hr_title": "Human Resources",
     "hr_subtitle": "Workforce intelligence by Genix HR AI Agent",
@@ -4921,6 +4927,7 @@ export const translations = {
     "repair": "Repair",
     "inspection": "Inspection",
     "add_maintenance": "Add Maintenance",
+    "total_maintenance_cost": "Total Maintenance Cost",
 
     // Expenses Module
     "expense_management": "Expense Management",
@@ -8938,6 +8945,7 @@ export const translations = {
     "description_required": "Tavsif kiritish shart",
     "edit_journal_entry_description": "Qoralama jurnal yozuvini tahrirlash",
     "entry_posted_successfully": "Jurnal yozuvi muvaffaqiyatli tasdiqlandi",
+    "insufficient_account_balance": "{name} ({code}) hisobida mablag' yetarli emas. Joriy balans: {balance} so'm",
     "entry_cancelled_successfully": "Jurnal yozuvi bekor qilindi",
     "entry_deleted_successfully": "Jurnal yozuvi o'chirildi",
     "original_entry": "Asl yozuv",
@@ -9299,6 +9307,7 @@ export const translations = {
     "repair": "Ta'mirlash",
     "inspection": "Tekshiruv",
     "add_maintenance": "Ta'mirlash qo'shish",
+    "total_maintenance_cost": "Jami xarajatlar",
 
     // HR
     "hr_title": "Kadrlar bo'limi",
@@ -15282,6 +15291,12 @@ export const translations = {
     "enter_journal_description": "Введите описание проводки",
     "debits_must_equal_credits": "Дебет должен равняться кредиту",
     "add_detailed_lines_later": "Вы можете добавить детальные строки проводки после создания",
+    "cancel_entry": "Отменить запись",
+    "cannot_edit_posted_entry": "Можно редактировать только черновые записи.",
+    "description_required": "Описание обязательно",
+    "edit_journal_entry_description": "Редактирование черновой проводки",
+    "entry_posted_successfully": "Проводка успешно проведена",
+    "insufficient_account_balance": "Недостаточно средств на счёте {name} ({code}). Текущий баланс: {balance} сум",
 
     // Tax Rates
     "rate": "Ставка",
@@ -17199,6 +17214,7 @@ export const translations = {
     "repair": "Ремонт",
     "inspection": "Проверка",
     "add_maintenance": "Добавить обслуживание",
+    "total_maintenance_cost": "Общие затраты на обслуживание",
 
     // Warehouse Management (Russian)
     "edit_warehouse": "Редактировать склад",
