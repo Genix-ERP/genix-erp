@@ -14,6 +14,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { inventoryService } from "@/api/services/inventory";
+import { toast } from 'sonner';
 
 export default function Packages() {
   const { language } = useLanguage();
@@ -126,7 +127,7 @@ export default function Packages() {
       fetchPackages();
     } catch (error) {
       console.error('Failed to create package:', error);
-      alert(t('error_creating') || 'Failed to create package');
+      toast.error(t('error_creating') || 'Failed to create package');
     }
   };
 
@@ -151,13 +152,13 @@ export default function Packages() {
       fetchPackages();
     } catch (error) {
       console.error('Failed to delete package:', error);
-      alert(t('error_deleting') || 'Failed to delete package');
+      toast.error(t('error_deleting') || 'Failed to delete package');
     }
   };
 
   const handleAddContent = async () => {
     if (!selectedPackage || !contentFormData.product_id || !contentFormData.quantity) {
-      alert(t('fill_required_fields') || 'Please fill in all required fields');
+      toast.error(t('fill_required_fields') || 'Please fill in all required fields');
       return;
     }
 
@@ -174,7 +175,7 @@ export default function Packages() {
       setContentFormData({ product_id: '', quantity: '' });
     } catch (error) {
       console.error('Failed to add content:', error);
-      alert(t('error_adding_content') || 'Failed to add content to package');
+      toast.error(t('error_adding_content') || 'Failed to add content to package');
     }
   };
 
@@ -186,7 +187,7 @@ export default function Packages() {
       setSelectedPackage(fullPackage);
     } catch (error) {
       console.error('Failed to remove content:', error);
-      alert(t('error_removing_content') || 'Failed to remove content from package');
+      toast.error(t('error_removing_content') || 'Failed to remove content from package');
     }
   };
 

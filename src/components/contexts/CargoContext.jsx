@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 import { cargoService } from '@/api/services/cargo';
 
@@ -225,8 +225,6 @@ export const CargoProvider = ({ children }) => {
 
   // Update shipment
   const updateShipment = useCallback(async (shipmentId, updates) => {
-    console.log('Updating shipment:', shipmentId, 'useBackend:', useBackend);
-
     if (!useBackend) {
       // Update locally
       const updatedShipments = shipments.map(s =>
@@ -234,16 +232,13 @@ export const CargoProvider = ({ children }) => {
       );
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-      console.log('Shipment updated locally');
       return;
     }
 
     // Update via backend
     try {
-      console.log('Attempting backend update...', updates);
       await cargoService.updateShipment(shipmentId, updates);
       await loadShipments(); // Reload to get updated data
-      console.log('Shipment updated from backend');
     } catch (error) {
       console.error('Error updating shipment from backend:', error);
       // Fallback to local update if backend fails
@@ -252,36 +247,29 @@ export const CargoProvider = ({ children }) => {
       );
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-      console.log('Fell back to local update');
     }
   }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 
   // Delete shipment
   const deleteShipment = useCallback(async (shipmentId) => {
-    console.log('Deleting shipment:', shipmentId, 'useBackend:', useBackend);
-
     if (!useBackend) {
       // Delete locally
       const updatedShipments = shipments.filter(s => s.id !== shipmentId);
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-      console.log('Shipment deleted locally');
       return;
     }
 
     // Delete via backend
     try {
-      console.log('Attempting backend delete...');
       await cargoService.deleteShipment(shipmentId);
       await loadShipments();
-      console.log('Shipment deleted from backend');
     } catch (error) {
       console.error('Error deleting shipment from backend:', error);
       // Fallback to local delete if backend fails
       const updatedShipments = shipments.filter(s => s.id !== shipmentId);
       setShipments(updatedShipments);
       saveToStorage(STORAGE_KEYS.shipments, updatedShipments);
-      console.log('Fell back to local delete');
     }
   }, [shipments, useBackend, saveToStorage, STORAGE_KEYS.shipments, loadShipments]);
 
@@ -446,7 +434,7 @@ export const CargoProvider = ({ children }) => {
     return (totalCosts / totalGoods);
   }, [calculateShipmentCosts]);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     shipments,
     loading,
@@ -475,7 +463,7 @@ export const CargoProvider = ({ children }) => {
 
     // Helpers
     setLoading
-  };
+  }), [shipments, loading, cargoCash, companyAccounts, createShipment, updateShipment, deleteShipment, updateShipmentStatus, distributeGoods, addCashTransaction, getShipmentsByStatus, calculateShipmentCosts, calculateCostCoefficient, loadShipments, loadCashSummary]);
 
   return (
     <CargoContext.Provider value={value}>

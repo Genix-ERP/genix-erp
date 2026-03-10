@@ -27,6 +27,7 @@ import { MODULES } from "@/config/permissions";
 import { format } from "date-fns";
 import financeService from '@/api/services/finance';
 import AccountCombobox from '@/components/shared/AccountCombobox';
+import { toast } from 'sonner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -974,11 +975,11 @@ export default function BudgetManagement() {
           <div className="flex gap-2 flex-wrap">
             {selectedBudget.status === 'draft' && selectedBudget.approval_status !== 'pending' && canUpdate(MODULES.FINANCIALS) && (
               <>
-                <Button variant="outline" size="sm" onClick={async () => { try { await financeService.submitBudgetForApproval(selectedBudget.id); setView('list'); } catch(e) {} }}>
+                <Button variant="outline" size="sm" onClick={async () => { try { await financeService.submitBudgetForApproval(selectedBudget.id); setView('list'); } catch(e) { console.error('Failed to submit budget for approval:', e); toast.error(t('error_submitting_budget') || 'Failed to submit budget for approval. Please try again.'); } }}>
                   <Send className="w-4 h-4 mr-1" />{t('send_for_approval') || 'Send for Approval'}
                 </Button>
                 <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => activateBudget(selectedBudget.id).then(() => setView('list')).catch(()=>{})}>
+                  onClick={() => activateBudget(selectedBudget.id).then(() => setView('list')).catch((e) => { console.error('Failed to activate budget:', e); toast.error(t('error_activating_budget') || 'Failed to activate budget. Please try again.'); })}>
                   <CheckCircle2 className="w-4 h-4 mr-1" />{t('activate') || 'Activate'}
                 </Button>
               </>

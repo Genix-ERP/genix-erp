@@ -37,6 +37,7 @@ import {
 import { format } from "date-fns";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { toast } from 'sonner';
 
 // File type icons mapping
 const FILE_ICONS = {
@@ -189,11 +190,11 @@ export function AttachmentsPanel({
   const handleFileSelect = async (files) => {
     for (const file of files) {
       if (attachments.length >= maxFiles) {
-        alert(`Maksimum ${maxFiles} ta fayl yuklash mumkin`);
+        toast.error(`Maksimum ${maxFiles} ta fayl yuklash mumkin`);
         break;
       }
       if (file.size > maxFileSize) {
-        alert(`Fayl hajmi ${formatFileSize(maxFileSize)} dan oshmasligi kerak`);
+        toast.error(`Fayl hajmi ${formatFileSize(maxFileSize)} dan oshmasligi kerak`);
         continue;
       }
       if (onAdd) {

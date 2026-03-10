@@ -563,7 +563,7 @@ export function HRProvider({ children }) {
     await loadData();
   }, [loadData]);
 
-  const value = {
+  const value = useMemo(() => ({
     // State
     employees,
     payrolls: payrollEntries, // backward compatibility
@@ -630,7 +630,7 @@ export function HRProvider({ children }) {
     isGeolocationRequired: () => hrSettings.geolocationRequired,
     getPayPeriod: () => hrSettings.payPeriod,
     getPayrollCurrency: () => hrSettings.payrollCurrency
-  };
+  }), [employees, payrollEntries, payrollPeriods, attendance, leaveRequests, isLoading, error, backendAvailable, createEmployee, updateEmployee, deleteEmployee, getEmployeeById, createPayrollPeriod, updatePayrollPeriod, deletePayrollPeriod, processPayroll, loadPayrollEntries, createPayrollEntry, createPayroll, updatePayroll, deletePayroll, approvePayroll, createLeaveRequest, updateLeaveRequest, approveLeaveRequest, rejectLeaveRequest, recordAttendance, getHRAnalytics, refreshData, hrSettings]);
 
   return (
     <HRContext.Provider value={value}>

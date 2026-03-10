@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 import { installedAppsService } from '@/api/services/installedApps';
 import { checkBackendHealth } from '@/config/dataMode';
@@ -172,16 +172,18 @@ export function InstalledAppsProvider({ children }) {
     return installedApps.some(app => app.app_id === appId);
   }, [installedApps]);
 
+  const value = useMemo(() => ({
+    installedApps,
+    isLoading,
+    backendAvailable,
+    refreshInstalledApps,
+    isAppInstalled,
+    installApp,
+    uninstallApp
+  }), [installedApps, isLoading, backendAvailable, refreshInstalledApps, isAppInstalled, installApp, uninstallApp]);
+
   return (
-    <InstalledAppsContext.Provider value={{
-      installedApps,
-      isLoading,
-      backendAvailable,
-      refreshInstalledApps,
-      isAppInstalled,
-      installApp,
-      uninstallApp
-    }}>
+    <InstalledAppsContext.Provider value={value}>
       {children}
     </InstalledAppsContext.Provider>
   );

@@ -23,6 +23,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { toast } from 'sonner';
 
 // Field Help Component
 const FieldHelp = ({ text }) => (
@@ -186,7 +187,7 @@ export default function StockTransfers() {
       });
     } catch (error) {
       console.error('Transfer error:', error);
-      alert(error.response?.data?.error?.message || error.message || 'Transfer failed');
+      toast.error(error.response?.data?.error?.message || error.message || 'Transfer failed');
     } finally {
       setIsSaving(false);
     }

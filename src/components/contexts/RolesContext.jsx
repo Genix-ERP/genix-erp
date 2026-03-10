@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCompany } from './CompanyContext';
 
 const ROLES_KEY = 'genix_roles';
@@ -382,38 +382,40 @@ export function RolesProvider({ children }) {
     return roles.find(r => r.id === idOrCode || r.code === idOrCode);
   }, [roles]);
 
+  const value = useMemo(() => ({
+    // Data
+    roles,
+    userRoles,
+    isLoading,
+    systemRoles: SYSTEM_ROLES,
+
+    // Role CRUD
+    getAllRoles,
+    getCustomRoles,
+    getSystemRoles,
+    getRoleByIdOrCode,
+    createRole,
+    updateRole,
+    deleteRole,
+
+    // User-Role assignments
+    getUserRoles,
+    assignRoleToUser,
+    removeRoleFromUser,
+    setUserRolesList,
+    userHasRole,
+
+    // Permission checks
+    userHasPermission,
+    isSiteAdmin,
+    isCompanyOwner,
+
+    // Refresh
+    refreshRoles: loadRoles
+  }), [roles, userRoles, isLoading, getAllRoles, getCustomRoles, getSystemRoles, getRoleByIdOrCode, createRole, updateRole, deleteRole, getUserRoles, assignRoleToUser, removeRoleFromUser, setUserRolesList, userHasRole, userHasPermission, isSiteAdmin, isCompanyOwner, loadRoles]);
+
   return (
-    <RolesContext.Provider value={{
-      // Data
-      roles,
-      userRoles,
-      isLoading,
-      systemRoles: SYSTEM_ROLES,
-
-      // Role CRUD
-      getAllRoles,
-      getCustomRoles,
-      getSystemRoles,
-      getRoleByIdOrCode,
-      createRole,
-      updateRole,
-      deleteRole,
-
-      // User-Role assignments
-      getUserRoles,
-      assignRoleToUser,
-      removeRoleFromUser,
-      setUserRolesList,
-      userHasRole,
-
-      // Permission checks
-      userHasPermission,
-      isSiteAdmin,
-      isCompanyOwner,
-
-      // Refresh
-      refreshRoles: loadRoles
-    }}>
+    <RolesContext.Provider value={value}>
       {children}
     </RolesContext.Provider>
   );

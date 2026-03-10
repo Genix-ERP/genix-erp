@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
 import { useToast } from "@/components/ui/use-toast";
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,17 +198,23 @@ export default function HR() {
     const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
     const digits = '23456789';
     const all = letters + digits;
+    // Use crypto.getRandomValues() for cryptographically secure randomness
+    const secureRandom = (max) => {
+      const array = new Uint32Array(1);
+      crypto.getRandomValues(array);
+      return array[0] % max;
+    };
     // Ensure at least 1 letter and 1 digit
     let chars = [
-      letters.charAt(Math.floor(Math.random() * letters.length)),
-      digits.charAt(Math.floor(Math.random() * digits.length)),
+      letters.charAt(secureRandom(letters.length)),
+      digits.charAt(secureRandom(digits.length)),
     ];
     for (let i = 2; i < 8; i++) {
-      chars.push(all.charAt(Math.floor(Math.random() * all.length)));
+      chars.push(all.charAt(secureRandom(all.length)));
     }
-    // Shuffle
+    // Shuffle (Fisher-Yates with secure random)
     for (let i = chars.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = secureRandom(i + 1);
       [chars[i], chars[j]] = [chars[j], chars[i]];
     }
     return chars.join('');
@@ -283,7 +290,7 @@ Only return the JSON, no other text.`;
             }
           }
         } catch (e) {
-          console.log("Could not parse AI risk assessment response");
+          // Could not parse AI risk assessment response
         }
       }
 
@@ -363,7 +370,7 @@ Only return the JSON, no other text.`;
             setInsights(parsed.insights);
           }
         } catch {
-          console.log("Could not parse AI response as JSON");
+          // Could not parse AI response as JSON
         }
       }
     } catch (error) {
@@ -599,7 +606,7 @@ Only return the JSON, no other text.`;
       await loadEmployees();
     } catch (error) {
       console.error("Error updating employee:", error);
-      alert("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
+      toast.error("Failed to update employee: " + (error.response?.data?.error?.message || error.message || "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -614,6 +621,11 @@ Only return the JSON, no other text.`;
   // Local state for editing permissions before saving
   const [editingPermissions, setEditingPermissions] = useState({});
   const [permissionsSaved, setPermissionsSaved] = useState(false);
+  const permSavedTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (permSavedTimeoutRef.current) clearTimeout(permSavedTimeoutRef.current); };
+  }, []);
 
   // Get default permissions based on employee permission level
   const getDefaultPermissionsForLevel = useCallback((permissionLevel) => {
@@ -753,7 +765,8 @@ Only return the JSON, no other text.`;
       const success = await updateEmployeePermissions(selectedEmployee.id, editingPermissions);
       if (success) {
         setPermissionsSaved(true);
-        setTimeout(() => setPermissionsSaved(false), 2000);
+        if (permSavedTimeoutRef.current) clearTimeout(permSavedTimeoutRef.current);
+        permSavedTimeoutRef.current = setTimeout(() => setPermissionsSaved(false), 2000);
         toast({
           title: t('success') || 'Success',
           description: t('permissions_saved') || 'Permissions saved successfully',
@@ -813,7 +826,7 @@ Only return the JSON, no other text.`;
             await apiClient.delete(`/users/${user.id}`);
           }
         } catch (userError) {
-          console.log('Could not delete associated user:', userError.message);
+          console.warn('Could not delete associated user:', userError.message);
         }
       }
 

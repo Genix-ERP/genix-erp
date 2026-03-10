@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2 } from "lucide-react";
+import { toast } from 'sonner';
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 
@@ -62,7 +63,7 @@ export default function ProfileSettings() {
     // For demo purposes, just show success message
     // In production, this would update the user data
     await new Promise(resolve => setTimeout(resolve, 500));
-    alert('Profile updated successfully! (Demo mode)');
+    toast.success('Profile updated successfully! (Demo mode)');
     setIsSaving(false);
   };
 

@@ -279,7 +279,7 @@ export function POSProvider({ children }) {
     }
   }, [session, searchProducts, loadSessionOrders]);
 
-  const value = {
+  const value = useMemo(() => ({
     // Session
     session,
     sessionLoading,
@@ -313,7 +313,7 @@ export function POSProvider({ children }) {
     orders,
     loadSessionOrders,
     completeOrder,
-  };
+  }), [session, sessionLoading, openSession, closeSession, loadCurrentSession, cart, addToCart, removeFromCart, updateCartItem, updateQuantity, clearCart, cartTotals, customer, products, productsLoading, searchProducts, configs, loadConfigs, orders, loadSessionOrders, completeOrder]);
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
 }

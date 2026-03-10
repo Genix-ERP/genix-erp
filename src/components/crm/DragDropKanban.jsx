@@ -100,7 +100,6 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
   });
 
   useEffect(() => {
-    console.log('📥 Received opportunities from parent:', opportunities.length);
     if (Array.isArray(opportunities) && opportunities.length > 0) {
       // Remove duplicates based on ID
       const uniqueOpportunities = Array.from(
@@ -137,33 +136,25 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
   );
 
   const handleDragStart = useCallback(() => {
-    console.log('🎯 Drag started');
     setKanbanState(prev => ({ ...prev, isDragging: true, error: null }));
   }, []);
 
   const handleDragEnd = useCallback(async (result) => {
-    console.log('🎯 Drag ended', result);
-    
     setKanbanState(prev => ({ ...prev, isDragging: false }));
 
     if (!result.destination) {
-      console.log('❌ No destination - drag cancelled');
       return;
     }
 
     const { draggableId, source, destination } = result;
 
     if (source.droppableId === destination.droppableId && source.index === destination.index) {
-      console.log('❌ Same position - no change needed');
       return;
     }
 
     if (source.droppableId === destination.droppableId) {
-      console.log('ℹ️ Same column - reorder not implemented');
       return;
     }
-
-    console.log(`🔄 Moving opportunity ${draggableId} from ${source.droppableId} to ${destination.droppableId}`);
 
     const opportunity = kanbanState.opportunities.find(opp => String(opp.id) === String(draggableId));
     
@@ -177,7 +168,6 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
     }
 
     const newStage = destination.droppableId;
-    console.log(`📝 Updating ${opportunity.name} to stage: ${newStage}`);
 
     setKanbanState(prev => ({
       ...prev,
@@ -212,7 +202,6 @@ export default function DragDropKanban({ opportunities = [], leads = [], onUpdat
       };
     });
 
-    console.log('✅ Update successful');
   }, [kanbanState.opportunities, onUpdateOpportunity]);
 
   const OpportunityCard = useCallback(({ opportunity, stage, isUpdating }) => (

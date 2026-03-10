@@ -68,6 +68,7 @@ import { useInventory } from "@/components/contexts/InventoryContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/components/ui/use-toast";
 import apiClient from "@/api/client";
+import { toast } from 'sonner';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -278,7 +279,7 @@ export default function ReorderRules() {
 
   const handleSave = async () => {
     if (!formData.product_id) {
-      alert(t('select_product') || 'Please select a product');
+      toast.error(t('select_product') || 'Please select a product');
       return;
     }
 

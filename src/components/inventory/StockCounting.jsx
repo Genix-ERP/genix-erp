@@ -30,6 +30,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { toast } from 'sonner';
 
 // Field Help Component - Odoo-style tooltip for field explanations
 const FieldHelp = ({ text }) => (
@@ -290,7 +291,7 @@ export default function StockCounting() {
       setAssignForm({ employee_id: '', resolution: 'employee', note: '' });
     } catch (err) {
       console.error('Error assigning responsible:', err);
-      alert(err.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(err.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setAssignLoading(false);
     }

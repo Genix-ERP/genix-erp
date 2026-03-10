@@ -67,7 +67,8 @@ export default function Inventory() {
     isLoading,
     createItem,
     updateItem,
-    getInventorySummary
+    getInventorySummary,
+    refreshData,
   } = useInventory();
 
   const [filteredItems, setFilteredItems] = useState([]);
@@ -80,6 +81,11 @@ export default function Inventory() {
   const [compliance, setCompliance] = useState(null);
   const activeTab = searchParams.get("tab") || "dashboard";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount to prevent blocking navigation
   useEffect(() => {
@@ -246,15 +252,15 @@ export default function Inventory() {
   const metrics = calculateMetrics();
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
-      <div className="space-y-6 md:space-y-8">
+    <div className="p-4 md:p-6 lg:p-8 bg-slate-50 min-h-screen">
+      <div className="space-y-6">
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+          <TabsList className="w-full bg-white p-1.5 rounded-xl border border-slate-200 flex flex-wrap justify-start gap-1 h-auto">
             <TabsTrigger
               value="dashboard"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <LayoutDashboard className="w-4 h-4" />
               <span className="hidden sm:inline">{t('dashboard')}</span>
@@ -262,7 +268,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="products"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <Package className="w-4 h-4" />
               <span className="hidden sm:inline">{t('products')}</span>
@@ -270,7 +276,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="warehouses"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <Warehouse className="w-4 h-4" />
               <span className="hidden sm:inline">{t('warehouses')}</span>
@@ -286,7 +292,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="stock-ops"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <ClipboardList className="w-4 h-4" />
               <span className="hidden sm:inline">{t('stock_operations') || "Operations"}</span>
@@ -294,7 +300,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="locations"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <MapPin className="w-4 h-4" />
               <span className="hidden sm:inline">{t('locations') || "Lokatsiyalar"}</span>
@@ -302,7 +308,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="valuation"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <DollarSign className="w-4 h-4" />
               <span className="hidden sm:inline">{t('valuation') || 'Valuation'}</span>
@@ -310,7 +316,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="planning"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <CalendarClock className="w-4 h-4" />
               <span className="hidden sm:inline">{t('planning') || 'Planning'}</span>
@@ -318,7 +324,7 @@ export default function Inventory() {
 
             <TabsTrigger
               value="reports"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">{t('reports') || 'Reports'}</span>
@@ -326,65 +332,53 @@ export default function Inventory() {
           </TabsList>
 
           {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="mt-6 space-y-6">
+          <TabsContent value="dashboard" className="mt-6 space-y-5">
             {/* Metrics Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
-                <CardContent className="p-5 md:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500 mb-1">{t('total_value')}</p>
-                      <p className="text-2xl md:text-3xl font-bold text-slate-900">{formatCurrencyCompact(metrics.totalValue)}</p>
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6 text-green-600" />
-                    </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-emerald-600" />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                <p className="text-xs font-medium text-slate-500 mb-1">{t('total_value')}</p>
+                <p className="text-xl font-bold text-slate-900">{formatCurrency(metrics.totalValue)}</p>
+              </div>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
-                <CardContent className="p-5 md:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500 mb-1">{t('low_stock')}</p>
-                      <p className="text-2xl md:text-3xl font-bold text-orange-600">{metrics.lowStockCount}</p>
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
-                      <AlertTriangle className="w-6 h-6 text-orange-600" />
-                    </div>
+              <div className={`bg-white rounded-2xl border p-5 ${metrics.lowStockCount > 0 ? 'border-amber-200' : 'border-slate-100'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${metrics.lowStockCount > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                    <AlertTriangle className={`w-5 h-5 ${metrics.lowStockCount > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
                   </div>
-                </CardContent>
-              </Card>
+                  {metrics.lowStockCount > 0 && (
+                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                      {t('action_needed')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-medium text-slate-500 mb-1">{t('low_stock')}</p>
+                <p className={`text-xl font-bold ${metrics.lowStockCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{metrics.lowStockCount}</p>
+              </div>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
-                <CardContent className="p-5 md:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500 mb-1">{t('products')}</p>
-                      <p className="text-2xl md:text-3xl font-bold text-blue-600">{products?.length || 0}</p>
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <Package className="w-6 h-6 text-blue-600" />
-                    </div>
+              <div className="bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-blue-600" />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                <p className="text-xs font-medium text-slate-500 mb-1">{t('products')}</p>
+                <p className="text-xl font-bold text-slate-900">{products?.length || 0}</p>
+              </div>
 
-              <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-xl transition-shadow">
-                <CardContent className="p-5 md:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-slate-500 mb-1">{t('warehouses')}</p>
-                      <p className="text-2xl md:text-3xl font-bold text-purple-600">{warehouses?.length || 0}</p>
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <Warehouse className="w-6 h-6 text-purple-600" />
-                    </div>
+              <div className="bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+                    <Warehouse className="w-5 h-5 text-violet-600" />
                   </div>
-                </CardContent>
-              </Card>
-
+                </div>
+                <p className="text-xs font-medium text-slate-500 mb-1">{t('warehouses')}</p>
+                <p className="text-xl font-bold text-slate-900">{warehouses?.length || 0}</p>
+              </div>
             </div>
 
             {/* Compliance Panel */}

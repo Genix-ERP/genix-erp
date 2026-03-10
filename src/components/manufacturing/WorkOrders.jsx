@@ -19,6 +19,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { workOrdersService, manufacturingTransfersService, productionOrdersService } from '@/api/services';
+import { toast } from 'sonner';
 
 export default function WorkOrders() {
   const { language } = useLanguage();
@@ -150,7 +151,7 @@ export default function WorkOrders() {
       loadData();
     } catch (error) {
       console.error('Failed to start work order:', error);
-      alert(t('error_starting_work_order') || 'Failed to start work order');
+      toast.error(t('error_starting_work_order') || 'Failed to start work order');
     }
   };
 
@@ -160,7 +161,7 @@ export default function WorkOrders() {
       loadData();
     } catch (error) {
       console.error('Failed to pause work order:', error);
-      alert(t('error_pausing_work_order') || 'Failed to pause work order');
+      toast.error(t('error_pausing_work_order') || 'Failed to pause work order');
     }
   };
 
@@ -178,7 +179,7 @@ export default function WorkOrders() {
       loadData();
     } catch (error) {
       console.error('Failed to complete work order:', error);
-      alert(t('error_completing_work_order') || 'Failed to complete work order');
+      toast.error(t('error_completing_work_order') || 'Failed to complete work order');
     }
   };
 
@@ -190,7 +191,7 @@ export default function WorkOrders() {
       loadData();
     } catch (error) {
       console.error('Failed to validate transfer:', error);
-      alert(t('error_validating_transfer') || 'Failed to validate transfer');
+      toast.error(t('error_validating_transfer') || 'Failed to validate transfer');
     }
   };
 

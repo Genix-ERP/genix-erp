@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 export default function ReorderOptimizer({ items, movements }) {
   const { language } = useLanguage();
@@ -295,7 +296,7 @@ export default function ReorderOptimizer({ items, movements }) {
                           className={item.riskLevel === 'high' ? 'bg-red-600 hover:bg-red-700' : ''}
                           onClick={() => {
                             // For now, show an alert - in production this would create a purchase order
-                            alert(`${t('schedule_order')}: ${item.name}\n${t('quantity')}: ${item.optimalOrderQty} ${t('units')}\n${t('value')}: ${formatCurrency((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0))}`);
+                            toast.info(`${t('schedule_order')}: ${item.name}, ${t('quantity')}: ${item.optimalOrderQty} ${t('units')}, ${t('value')}: ${formatCurrency((item.optimalOrderQty || 0) * (item.unit_cost || item.cost_price || 0))}`);
                           }}
                         >
                           {item.riskLevel === 'high' ? t('order_now') : t('schedule_order')}

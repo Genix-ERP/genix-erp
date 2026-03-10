@@ -22,6 +22,7 @@ import { MODULES } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { inventoryService, contactsService } from '@/api/services';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -252,8 +253,21 @@ export default function StockOperations() {
       await refreshDetail();
       setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
       loadData();
+    } catch (error) {
+      handleStockError(error);
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  const handleStockError = (error) => {
+    if (error.response?.status === 422 && error.response?.data?.errors) {
+      const items = error.response.data.errors;
+      const details = items.map(i => `${i.product_name}: ${t('available') || 'available'} ${i.available}, ${t('requested') || 'requested'} ${i.requested}`).join('; ');
+      toast.error(`${error.response.data.message || t('insufficient_stock') || 'Insufficient stock'}: ${details}`, { duration: 8000 });
+    } else {
+      const msg = error.response?.data?.message || error.response?.data?.error || error.message;
+      toast.error(msg);
     }
   };
 
@@ -268,9 +282,9 @@ export default function StockOperations() {
       await refreshDetail();
       loadData();
       // Show confirmation
-      alert(`${t('backorder_created') || 'Backorder created'}: ${backorder.name}`);
-    } catch (e) {
-      console.error('Failed to create backorder', e);
+      toast.success(`${t('backorder_created') || 'Backorder created'}: ${backorder.name}`);
+    } catch (error) {
+      handleStockError(error);
     } finally {
       setIsActionLoading(false);
     }
@@ -284,6 +298,8 @@ export default function StockOperations() {
       await refreshDetail();
       setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
       loadData();
+    } catch (error) {
+      handleStockError(error);
     } finally {
       setIsActionLoading(false);
     }

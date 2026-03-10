@@ -29,6 +29,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { procurementService } from "@/api/services/procurement";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { toast } from 'sonner';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -187,7 +188,7 @@ export default function PurchaseReturns() {
 
     const validLines = newReturn.lines.filter(l => l.return_quantity > 0);
     if (validLines.length === 0) {
-      alert(t('select_items_to_return') || 'Please select at least one item to return');
+      toast.error(t('select_items_to_return') || 'Please select at least one item to return');
       return;
     }
 
@@ -220,7 +221,7 @@ export default function PurchaseReturns() {
       });
     } catch (error) {
       console.error('Failed to create purchase return:', error);
-      alert(t('failed_to_create_return') || 'Failed to create return: ' + (error.response?.data?.message || error.message));
+      toast.error(t('failed_to_create_return') || 'Failed to create return: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -230,7 +231,7 @@ export default function PurchaseReturns() {
       setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
     } catch (error) {
       console.error('Failed to submit return:', error);
-      alert(t('failed_to_submit') || 'Failed to submit return');
+      toast.error(t('failed_to_submit') || 'Failed to submit return');
     }
   };
 
@@ -240,7 +241,7 @@ export default function PurchaseReturns() {
       setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
     } catch (error) {
       console.error('Failed to approve return:', error);
-      alert(t('failed_to_approve') || 'Failed to approve return');
+      toast.error(t('failed_to_approve') || 'Failed to approve return');
     }
   };
 
@@ -252,7 +253,7 @@ export default function PurchaseReturns() {
         setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
       } catch (error) {
         console.error('Failed to reject return:', error);
-        alert(t('failed_to_reject') || 'Failed to reject return');
+        toast.error(t('failed_to_reject') || 'Failed to reject return');
       }
     }
   };
@@ -276,7 +277,7 @@ export default function PurchaseReturns() {
       });
     } catch (error) {
       console.error('Failed to ship return:', error);
-      alert(t('failed_to_ship') || 'Failed to ship return: ' + (error.response?.data?.message || error.message));
+      toast.error(t('failed_to_ship') || 'Failed to ship return: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -286,7 +287,7 @@ export default function PurchaseReturns() {
       setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
     } catch (error) {
       console.error('Failed to receive return:', error);
-      alert(t('failed_to_receive') || 'Failed to mark return as received');
+      toast.error(t('failed_to_receive') || 'Failed to mark return as received');
     }
   };
 
@@ -309,7 +310,7 @@ export default function PurchaseReturns() {
       });
     } catch (error) {
       console.error('Failed to apply credit:', error);
-      alert(t('failed_to_apply_credit') || 'Failed to apply credit note');
+      toast.error(t('failed_to_apply_credit') || 'Failed to apply credit note');
     }
   };
 
@@ -320,7 +321,7 @@ export default function PurchaseReturns() {
         setReturns(prev => prev.map(r => r.id === ret.id ? updated : r));
       } catch (error) {
         console.error('Failed to cancel return:', error);
-        alert(t('failed_to_cancel') || 'Failed to cancel return');
+        toast.error(t('failed_to_cancel') || 'Failed to cancel return');
       }
     }
   };
@@ -332,7 +333,7 @@ export default function PurchaseReturns() {
         setReturns(prev => prev.filter(r => r.id !== ret.id));
       } catch (error) {
         console.error('Failed to delete return:', error);
-        alert(t('failed_to_delete') || 'Failed to delete return');
+        toast.error(t('failed_to_delete') || 'Failed to delete return');
       }
     }
   };

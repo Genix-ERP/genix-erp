@@ -52,6 +52,7 @@ import { MODULES } from "@/config/permissions";
 import { useProcurement } from '@/components/contexts/ProcurementContext';
 import { inventoryService } from '@/api/services/inventory';
 import { procurementService } from '@/api/services/procurement';
+import { toast } from 'sonner';
 
 export default function VendorPricelist() {
   const { language } = useLanguage();
@@ -165,7 +166,7 @@ export default function VendorPricelist() {
       resetForm();
     } catch (error) {
       console.error('Failed to create vendor price:', error);
-      alert(t('failed_to_create') || 'Failed to create vendor price');
+      toast.error(t('failed_to_create') || 'Failed to create vendor price');
     }
   };
 
@@ -192,7 +193,7 @@ export default function VendorPricelist() {
       resetForm();
     } catch (error) {
       console.error('Failed to update vendor price:', error);
-      alert(t('failed_to_update') || 'Failed to update vendor price');
+      toast.error(t('failed_to_update') || 'Failed to update vendor price');
     }
   };
 
@@ -206,7 +207,7 @@ export default function VendorPricelist() {
       setPriceToDelete(null);
     } catch (error) {
       console.error('Failed to delete vendor price:', error);
-      alert(t('failed_to_delete') || 'Failed to delete vendor price');
+      toast.error(t('failed_to_delete') || 'Failed to delete vendor price');
     }
   };
 

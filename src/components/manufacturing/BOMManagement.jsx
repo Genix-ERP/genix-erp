@@ -15,6 +15,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService, bomsService, workCentersService } from '@/api/services';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { toast } from 'sonner';
 
 export default function BOMManagement() {
   const { language } = useLanguage();
@@ -142,7 +143,7 @@ export default function BOMManagement() {
     } catch (error) {
       console.error('Error creating BOM:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to create BOM: ${errorMsg}`);
+      toast.error(`Failed to create BOM: ${errorMsg}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -266,7 +267,7 @@ export default function BOMManagement() {
       await deleteBOM(bom.id);
     } catch (error) {
       console.error('Error deleting BOM:', error);
-      alert(t('failed_to_delete_bom') || 'Failed to delete BOM');
+      toast.error(t('failed_to_delete_bom') || 'Failed to delete BOM');
     } finally {
       setIsDeleting(false);
     }
@@ -352,7 +353,7 @@ export default function BOMManagement() {
       setEditBom(null);
     } catch (error) {
       console.error('Error updating BOM:', error);
-      alert('Failed to update BOM: ' + (error.message || 'Unknown error'));
+      toast.error('Failed to update BOM: ' + (error.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }

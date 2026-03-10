@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useModules } from '@/components/contexts/ModulesContext';
 import { useCustomers } from '@/components/contexts/CustomersContext';
 import { useSales } from '@/components/contexts/SalesContext';
@@ -39,6 +40,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
+import { useInventory } from '@/components/contexts/InventoryContext';
 
 // Import sales components
 import QuotationsSection from '@/components/sales/QuotationsSection';
@@ -71,6 +73,7 @@ export default function SalesOrders() {
   const { customers = [] } = useCustomers();
   const { getSetting } = useAdminSettings();
   const { taxRates = [] } = useFinancials();
+  const { getProductStock } = useInventory();
 
   // Get default tax from settings
   const defaultSalesTaxId = getSetting('sales.tax.default_tax_id', '');
@@ -87,11 +90,17 @@ export default function SalesOrders() {
     discounts = [],
     isLoading: salesLoading,
     confirmSalesOrder,
+    getOrder,
     createInvoiceFromOrder,
     refreshData: refreshSalesData,
     applyDiscount,
     useDiscountCode,
   } = useSales();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshSalesData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const location = useLocation();
   const activeTab = searchParams.get("tab") || "dashboard";
@@ -273,6 +282,15 @@ export default function SalesOrders() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
+  // Stock warning modal for warehouse processing
+  const [showStockWarningModal, setShowStockWarningModal] = useState(false);
+  const [stockWarningDetails, setStockWarningDetails] = useState([]);
+  const [stockWarningOrderId, setStockWarningOrderId] = useState(null);
+  const [stockWarningFullOrder, setStockWarningFullOrder] = useState(null);
+  const [stockWarningInventory, setStockWarningInventory] = useState(null);
+  const [stockWarningTargetStatus, setStockWarningTargetStatus] = useState(null);
+  const [hasPartialStock, setHasPartialStock] = useState(false);
+
   // Products list for selection
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -431,6 +449,29 @@ export default function SalesOrders() {
       console.error('Failed to fetch packagings:', error);
     }
   }, [productPackagings]);
+
+  // Get total available stock for a product across all warehouses (or specific warehouse)
+  const getAvailableStock = useCallback((productId, warehouseId) => {
+    if (!productId) return null;
+    const stockRecords = getProductStock(productId);
+    if (!stockRecords || stockRecords.length === 0) return 0;
+    if (warehouseId) {
+      const record = stockRecords.find(s => s.warehouse_id === warehouseId);
+      return record ? (record.available_quantity ?? record.quantity ?? 0) : 0;
+    }
+    return stockRecords.reduce((sum, s) => sum + (s.available_quantity ?? s.quantity ?? 0), 0);
+  }, [getProductStock]);
+
+  // Check stock warning for a line item
+  const getStockWarning = useCallback((line, warehouseId) => {
+    if (!line.product_id) return null;
+    const available = getAvailableStock(line.product_id, warehouseId);
+    if (available === null) return null;
+    const qty = parseFloat(line.quantity) || 0;
+    if (available <= 0) return { type: 'error', message: t('stock_not_available'), available: 0 };
+    if (qty > available) return { type: 'warning', message: t('stock_exceeded').replace('{qty}', available), available };
+    return null;
+  }, [getAvailableStock, t]);
 
   const handleLineChange = (order, setOrder, index, field, value, isManualDelivery) => {
     const newLines = [...order.lines];
@@ -672,8 +713,6 @@ export default function SalesOrders() {
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
 
-    console.log('Creating sales order with data:', orderData);
-
     try {
       const createdOrder = await createSalesOrder(orderData);
 
@@ -806,19 +845,192 @@ export default function SalesOrders() {
     setIsDeliveryDateManual(false);
   };
 
+  // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
+  const checkOrderStock = async (orderId) => {
+    let fullOrder;
+    try {
+      fullOrder = await getOrder(orderId);
+    } catch {
+      fullOrder = salesOrders.find(o => o.id === orderId);
+    }
+
+    const orderLines = fullOrder?.lines || fullOrder?.order_lines || [];
+
+    // Fetch fresh inventory data
+    let inventoryData = null;
+    try {
+      inventoryData = await inventoryService.listInventory() || [];
+    } catch {
+      inventoryData = null;
+    }
+
+    const inStock = [];
+    const outOfStock = [];
+
+    for (const line of orderLines) {
+      if (!line.product_id) continue;
+      const qty = parseFloat(line.quantity) || 0;
+
+      let available = 0;
+      if (inventoryData) {
+        const stockRecords = inventoryData.filter(inv =>
+          inv.product_id === line.product_id &&
+          (!fullOrder.warehouse_id || inv.warehouse_id === fullOrder.warehouse_id)
+        );
+        available = stockRecords.reduce((sum, s) => sum + (s.available_quantity ?? s.quantity ?? 0), 0);
+      } else {
+        available = getAvailableStock(line.product_id, fullOrder.warehouse_id);
+      }
+
+      const product = products.find(p => p.id === line.product_id);
+      const lineInfo = {
+        ...line,
+        product_name: product?.name || line.product_name || line.description || line.product_id,
+        requested: qty,
+        available: Math.max(0, available),
+      };
+
+      if (qty > available) {
+        outOfStock.push(lineInfo);
+      } else {
+        inStock.push(lineInfo);
+      }
+    }
+
+    return { fullOrder, inventoryData, inStock, outOfStock };
+  };
+
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      if (newStatus === 'confirmed') {
-        // Use the confirm endpoint which creates delivery order
-        await confirmSalesOrder(orderId);
-        // Refresh to get updated data
+      // Stock check for both confirmed and processing transitions
+      if (newStatus === 'confirmed' || newStatus === 'processing') {
+        const { fullOrder, inStock, outOfStock } = await checkOrderStock(orderId);
+
+        if (outOfStock.length > 0) {
+          const issues = outOfStock.map(line => ({
+            product_name: line.product_name,
+            requested: line.requested,
+            available: line.available,
+            type: line.available <= 0 ? 'error' : 'warning',
+          }));
+
+          setStockWarningDetails(issues);
+          setStockWarningOrderId(orderId);
+          setStockWarningFullOrder(fullOrder);
+          setStockWarningTargetStatus(newStatus);
+          setHasPartialStock(inStock.length > 0);
+          setShowStockWarningModal(true);
+          return;
+        }
+
+        // All stock available — proceed
+        if (newStatus === 'confirmed') {
+          await confirmSalesOrder(orderId);
+        } else {
+          await updateSalesOrder(orderId, { status: newStatus });
+        }
         if (refreshSalesData) refreshSalesData();
         if (refreshModulesData) refreshModulesData();
       } else {
         await updateSalesOrder(orderId, { status: newStatus });
+        if (refreshSalesData) refreshSalesData();
+        if (refreshModulesData) refreshModulesData();
       }
     } catch (error) {
       console.error('Failed to update status:', error);
+    }
+  };
+
+  // Handle partial fulfillment: process available items, create backorder for the rest
+  const handlePartialFulfillment = async () => {
+    if (!stockWarningOrderId || !stockWarningFullOrder) return;
+    try {
+      const fullOrder = stockWarningFullOrder;
+      const orderLines = fullOrder?.lines || fullOrder?.order_lines || [];
+      const outOfStockProductIds = new Set(stockWarningDetails.map(d => {
+        // Find the product_id from the original line
+        const line = orderLines.find(l =>
+          (products.find(p => p.id === l.product_id)?.name || l.product_name || l.description) === d.product_name
+        );
+        return line?.product_id;
+      }).filter(Boolean));
+
+      // Lines that can be fulfilled
+      const fulfillableLines = orderLines.filter(l => l.product_id && !outOfStockProductIds.has(l.product_id));
+      // Lines that need a backorder
+      const backorderLines = orderLines.filter(l => l.product_id && outOfStockProductIds.has(l.product_id));
+
+      if (fulfillableLines.length > 0) {
+        // Update the current order to only include fulfillable lines, then confirm/process
+        const fulfillableFormatted = fulfillableLines.map(line => ({
+          product_id: line.product_id,
+          description: line.description || line.product_name || '',
+          quantity: parseFloat(line.quantity) || 1,
+          unit_price: parseFloat(line.unit_price) || 0,
+          packaging_id: line.packaging_id || undefined,
+          packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
+        }));
+
+        const newSubtotal = fulfillableFormatted.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
+
+        // First update lines, then apply the target status
+        await updateSalesOrder(stockWarningOrderId, {
+          lines: fulfillableFormatted,
+          subtotal: newSubtotal,
+          total_amount: newSubtotal + (parseFloat(fullOrder.tax_amount) || 0) + (parseFloat(fullOrder.shipping_cost || fullOrder.shipping_amount) || 0),
+        });
+
+        // Now apply the target status transition
+        if (stockWarningTargetStatus === 'confirmed') {
+          await confirmSalesOrder(stockWarningOrderId);
+        } else {
+          await updateSalesOrder(stockWarningOrderId, { status: stockWarningTargetStatus || 'processing' });
+        }
+      }
+
+      // Create a new backorder for out-of-stock items
+      if (backorderLines.length > 0) {
+        const backorderFormatted = backorderLines.map(line => ({
+          product_id: line.product_id,
+          description: line.description || line.product_name || '',
+          quantity: parseFloat(line.quantity) || 1,
+          unit_price: parseFloat(line.unit_price) || 0,
+          packaging_id: line.packaging_id || undefined,
+          packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
+        }));
+
+        const backorderSubtotal = backorderFormatted.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
+        await createSalesOrder({
+          order_number: `${fullOrder.order_number || ''}-BO`,
+          organization_id: fullOrder.organization_id || activeCompany?.id,
+          customer_name: fullOrder.customer_name,
+          customer_id: fullOrder.customer_id || undefined,
+          order_date: new Date().toISOString().split('T')[0],
+          delivery_date: fullOrder.delivery_date || fullOrder.expected_date,
+          warehouse_id: fullOrder.warehouse_id || undefined,
+          subtotal: backorderSubtotal,
+          tax_amount: 0,
+          shipping_cost: 0,
+          total_amount: backorderSubtotal,
+          status: 'draft',
+          payment_status: 'unpaid',
+          lines: backorderFormatted,
+        });
+
+        toast.success(t('backorder_created') || 'Yangi buyurtma yaratildi');
+      }
+
+      setShowStockWarningModal(false);
+      setStockWarningOrderId(null);
+      setStockWarningFullOrder(null);
+      setStockWarningDetails([]);
+      setStockWarningTargetStatus(null);
+      setHasPartialStock(false);
+      if (refreshSalesData) refreshSalesData();
+      if (refreshModulesData) refreshModulesData();
+    } catch (error) {
+      console.error('Partial fulfillment error:', error);
+      toast.error(t('error') || 'Xatolik yuz berdi');
     }
   };
 
@@ -842,7 +1054,7 @@ export default function SalesOrders() {
         if (refreshModulesData) refreshModulesData();
         setActiveTab('invoices');
       } else {
-        alert(t('error_creating_invoice') || 'Failed to create invoice');
+        toast.error(t('error_creating_invoice') || 'Failed to create invoice');
       }
     }
   };
@@ -874,7 +1086,7 @@ export default function SalesOrders() {
       resetCarrierForm();
     } catch (error) {
       console.error('Failed to create carrier:', error);
-      alert(t('error_creating_carrier') || 'Failed to create carrier');
+      toast.error(t('error_creating_carrier') || 'Failed to create carrier');
     }
   };
 
@@ -887,7 +1099,7 @@ export default function SalesOrders() {
       setEditingCarrier(null);
     } catch (error) {
       console.error('Failed to update carrier:', error);
-      alert(t('error_updating_carrier') || 'Failed to update carrier');
+      toast.error(t('error_updating_carrier') || 'Failed to update carrier');
     }
   };
 
@@ -912,7 +1124,7 @@ export default function SalesOrders() {
       setCarriers(prev => prev.filter(c => c.id !== carrier.id));
     } catch (error) {
       console.error('Failed to delete carrier:', error);
-      alert(t('error_deleting_carrier') || 'Failed to delete carrier');
+      toast.error(t('error_deleting_carrier') || 'Failed to delete carrier');
     }
   };
 
@@ -1557,6 +1769,20 @@ export default function SalesOrders() {
                           {t('variant')}: {line.variant_name}
                         </div>
                       )}
+                      {(() => {
+                        const warning = getStockWarning(line, newOrder.warehouse_id);
+                        if (!warning) return null;
+                        return (
+                          <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 ${
+                            warning.type === 'error'
+                              ? 'bg-red-50 text-red-600 border border-red-200'
+                              : 'bg-amber-50 text-amber-600 border border-amber-200'
+                          }`}>
+                            <MessageSquareWarning className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>{warning.message}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     );
                   })}
@@ -2207,6 +2433,20 @@ export default function SalesOrders() {
                             {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
                           </div>
                         )}
+                        {(() => {
+                          const warning = getStockWarning(line, editingOrder.warehouse_id);
+                          if (!warning) return null;
+                          return (
+                            <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 ${
+                              warning.type === 'error'
+                                ? 'bg-red-50 text-red-600 border border-red-200'
+                                : 'bg-amber-50 text-amber-600 border border-amber-200'
+                            }`}>
+                              <MessageSquareWarning className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span>{warning.message}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       );
                     })}
@@ -2338,6 +2578,70 @@ export default function SalesOrders() {
               >
                 {t('delete')}
               </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Stock Warning Modal */}
+        <AlertDialog open={showStockWarningModal} onOpenChange={(open) => {
+          if (!open) {
+            setShowStockWarningModal(false);
+            setStockWarningOrderId(null);
+            setStockWarningFullOrder(null);
+            setStockWarningDetails([]);
+            setStockWarningTargetStatus(null);
+            setHasPartialStock(false);
+          }
+        }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+                <MessageSquareWarning className="w-5 h-5" />
+                {t('insufficient_stock')}
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600">
+                    {hasPartialStock
+                      ? (t('partial_stock_message') || "Ba'zi mahsulotlar omborda mavjud emas. Mavjud mahsulotlarni tasdiqlab, qolganlar uchun yangi buyurtma yaratilsinmi?")
+                      : (t('cannot_confirm_order_stock'))
+                    }
+                  </p>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                    {stockWarningDetails.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-slate-800">{item.product_name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-500">{t('qty')}: {item.requested}</span>
+                          <span className={item.available <= 0 ? 'text-red-600 font-medium' : 'text-amber-600 font-medium'}>
+                            {t('available_stock')}: {item.available}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex gap-2">
+              <AlertDialogCancel onClick={() => {
+                setShowStockWarningModal(false);
+                setStockWarningOrderId(null);
+                setStockWarningFullOrder(null);
+                setStockWarningDetails([]);
+                setStockWarningTargetStatus(null);
+                setHasPartialStock(false);
+              }}>
+                {t('cancel')}
+              </AlertDialogCancel>
+              {hasPartialStock && (
+                <AlertDialogAction
+                  onClick={handlePartialFulfillment}
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                >
+                  {t('confirm_available_create_backorder') || "Mavjudlarini tasdiqlash"}
+                </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

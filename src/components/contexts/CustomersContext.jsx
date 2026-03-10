@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { contactsService, leadsService, opportunitiesService, activitiesService, tasksService, leadConversionService, pipelineStagesService } from '@/api/services';
 import { useCompany } from './CompanyContext';
 import { isDemoMode, checkBackendHealth } from '@/config/dataMode';
@@ -682,44 +682,46 @@ export function CustomersProvider({ children }) {
     }
   }, [activeCompany, loadData]);
 
+  const value = useMemo(() => ({
+    // State
+    customers,
+    leads,
+    opportunities,
+    activities,
+    tasks,
+    pipelineStages,
+    isLoading,
+    backendAvailable,
+    error,
+    // Customer CRUD
+    createCustomer,
+    updateCustomer,
+    deleteCustomer,
+    // Lead CRUD
+    createLead,
+    updateLead,
+    deleteLead,
+    convertLead,
+    // Opportunity CRUD
+    createOpportunity,
+    updateOpportunity,
+    deleteOpportunity,
+    // Activity CRUD
+    createActivity,
+    updateActivity,
+    deleteActivity,
+    completeActivity,
+    // Task CRUD
+    createTask,
+    updateTask,
+    deleteTask,
+    completeTask,
+    // Refresh
+    refreshData: loadData
+  }), [customers, leads, opportunities, activities, tasks, pipelineStages, isLoading, backendAvailable, error, createCustomer, updateCustomer, deleteCustomer, createLead, updateLead, deleteLead, convertLead, createOpportunity, updateOpportunity, deleteOpportunity, createActivity, updateActivity, deleteActivity, completeActivity, createTask, updateTask, deleteTask, completeTask, loadData]);
+
   return (
-    <CustomersContext.Provider value={{
-      // State
-      customers,
-      leads,
-      opportunities,
-      activities,
-      tasks,
-      pipelineStages,
-      isLoading,
-      backendAvailable,
-      error,
-      // Customer CRUD
-      createCustomer,
-      updateCustomer,
-      deleteCustomer,
-      // Lead CRUD
-      createLead,
-      updateLead,
-      deleteLead,
-      convertLead,
-      // Opportunity CRUD
-      createOpportunity,
-      updateOpportunity,
-      deleteOpportunity,
-      // Activity CRUD
-      createActivity,
-      updateActivity,
-      deleteActivity,
-      completeActivity,
-      // Task CRUD
-      createTask,
-      updateTask,
-      deleteTask,
-      completeTask,
-      // Refresh
-      refreshData: loadData
-    }}>
+    <CustomersContext.Provider value={value}>
       {children}
     </CustomersContext.Provider>
   );
