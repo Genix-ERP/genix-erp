@@ -28,6 +28,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { inventoryService } from "@/api/services/inventory";
 import { procurementService } from "@/api/services/procurement";
+import { toast } from 'sonner';
 
 const statusColors = {
   draft: 'bg-gray-100 text-gray-800',
@@ -216,7 +217,7 @@ export default function GoodsReceipt() {
       }));
 
     if (validLines.length === 0) {
-      alert(t('no_items_to_receive') || 'Please enter received quantities for at least one item');
+      toast.error(t('no_items_to_receive') || 'Please enter received quantities for at least one item');
       return;
     }
 
@@ -229,7 +230,6 @@ export default function GoodsReceipt() {
         notes: newGR.notes || '',
         lines: validLines,
       };
-      console.log('Creating GR with payload:', JSON.stringify(payload, null, 2));
       await procurementService.createGoodsReceipt(payload);
 
       // Refresh the list
@@ -244,7 +244,7 @@ export default function GoodsReceipt() {
       });
     } catch (error) {
       console.error('Failed to create goods receipt:', error);
-      alert(t('error_creating_receipt') || 'Failed to create goods receipt');
+      toast.error(t('error_creating_receipt') || 'Failed to create goods receipt');
     }
   };
 
@@ -269,7 +269,7 @@ export default function GoodsReceipt() {
       setShowInspectModal(true);
     } catch (error) {
       console.error('Failed to fetch GR details:', error);
-      alert(t('error_fetching_details') || 'Failed to fetch goods receipt details');
+      toast.error(t('error_fetching_details') || 'Failed to fetch goods receipt details');
     }
   };
 
@@ -294,7 +294,7 @@ export default function GoodsReceipt() {
       setSelectedGR(null);
     } catch (error) {
       console.error('Failed to save inspection:', error);
-      alert(t('error_saving_inspection') || 'Failed to save inspection');
+      toast.error(t('error_saving_inspection') || 'Failed to save inspection');
     }
   };
 
@@ -305,7 +305,7 @@ export default function GoodsReceipt() {
       await fetchReceipts();
     } catch (error) {
       console.error('Failed to complete goods receipt:', error);
-      alert(t('error_completing_receipt') || 'Failed to complete goods receipt. Make sure inspection is done first.');
+      toast.error(t('error_completing_receipt') || 'Failed to complete goods receipt. Make sure inspection is done first.');
     }
   };
 
@@ -323,7 +323,7 @@ export default function GoodsReceipt() {
       setSelectedGR(null);
     } catch (error) {
       console.error('Failed to cancel goods receipt:', error);
-      alert(t('error_cancelling_receipt') || 'Failed to cancel goods receipt');
+      toast.error(t('error_cancelling_receipt') || 'Failed to cancel goods receipt');
     }
   };
 
@@ -341,7 +341,7 @@ export default function GoodsReceipt() {
       setSelectedGR(null);
     } catch (error) {
       console.error('Failed to delete goods receipt:', error);
-      alert(t('error_deleting_receipt') || 'Failed to delete goods receipt. Only draft receipts can be deleted.');
+      toast.error(t('error_deleting_receipt') || 'Failed to delete goods receipt. Only draft receipts can be deleted.');
     }
   };
 

@@ -204,6 +204,7 @@ export default function PriceLabelPrinting() {
     const { product } = printDialog;
     const template = LABEL_TEMPLATES[printTemplate];
     const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
     const barcode = product.barcode || product.sku || `P${product.id}`;
 
     let labelsHTML = "";

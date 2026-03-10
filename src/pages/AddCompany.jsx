@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCompany } from "@/components/contexts/CompanyContext";
 import { useSubscription } from "@/components/contexts/SubscriptionContext";
@@ -35,6 +35,11 @@ export default function AddCompany() {
     is_active: true
   });
 
+  const navigateTimeoutRef = useRef(null);
+  useEffect(() => {
+    return () => { if (navigateTimeoutRef.current) clearTimeout(navigateTimeoutRef.current); };
+  }, []);
+
   const limits = getPlanLimits();
   const maxCompanies = limits.maxCompanies || 1;
   const companyCount = getCompanyCount();
@@ -45,7 +50,6 @@ export default function AddCompany() {
 
     // Prevent double submission
     if (isSubmitting) {
-      console.log('Already submitting, skipping...');
       return;
     }
 
@@ -59,17 +63,14 @@ export default function AddCompany() {
     }
 
     try {
-      console.log('Calling addCompany...');
       const result = await addCompany(formData, maxCompanies);
-      console.log('addCompany result:', result);
       if (!result || !result.success) {
-        console.log('addCompany failed with:', result);
         setError(result?.message || 'Xatolik yuz berdi');
         setIsSubmitting(false);
         return;
       }
       setSuccess(true);
-      setTimeout(() => {
+      navigateTimeoutRef.current = setTimeout(() => {
         navigate('/settings?tab=companies');
       }, 1500);
     } catch (err) {

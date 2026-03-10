@@ -24,8 +24,13 @@ const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 export default function Assets() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { assets: rawAssets, createAsset, updateAsset, isLoading } = useModules();
+  const { assets: rawAssets, createAsset, updateAsset, isLoading, refreshData } = useModules();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
 
   // AI Analysis

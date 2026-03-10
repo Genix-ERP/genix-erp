@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 
 const SUBSCRIPTION_KEY = 'genix_company_subscription';
@@ -534,39 +534,44 @@ export function SubscriptionProvider({ children }) {
     return updateUser(userId, { role: newRole });
   }, [updateUser]);
 
+  const isSystemAdminVal = isSystemAdmin();
+  const isOwnerVal = isOwner();
+
+  const value = useMemo(() => ({
+    subscription,
+    aiUsage,
+    companyUsers,
+    isLoading,
+    planLimits: PLAN_LIMITS,
+    featureDescriptions: FEATURE_DESCRIPTIONS,
+    isSystemAdmin: isSystemAdminVal,
+    isOwner: isOwnerVal,
+    // Methods
+    getPlanLimits,
+    hasFeature,
+    canAddUser,
+    canAddCompany,
+    canMakeAIRequest,
+    getRemainingAIRequests,
+    incrementAIUsage,
+    updateSubscription,
+    upgradePlan,
+    isTrialExpired,
+    getTrialDaysRemaining,
+    getAIUsagePercentage,
+    getUpgradeRecommendation,
+    refreshSubscription: loadSubscription,
+    // User Management
+    addUser,
+    updateUser,
+    deleteUser,
+    getUser,
+    toggleUserStatus,
+    changeUserRole
+  }), [subscription, aiUsage, companyUsers, isLoading, isSystemAdminVal, isOwnerVal, getPlanLimits, hasFeature, canAddUser, canAddCompany, canMakeAIRequest, getRemainingAIRequests, incrementAIUsage, updateSubscription, upgradePlan, isTrialExpired, getTrialDaysRemaining, getAIUsagePercentage, getUpgradeRecommendation, loadSubscription, addUser, updateUser, deleteUser, getUser, toggleUserStatus, changeUserRole]);
+
   return (
-    <SubscriptionContext.Provider value={{
-      subscription,
-      aiUsage,
-      companyUsers,
-      isLoading,
-      planLimits: PLAN_LIMITS,
-      featureDescriptions: FEATURE_DESCRIPTIONS,
-      isSystemAdmin: isSystemAdmin(), // Expose site admin status
-      isOwner: isOwner(), // Expose owner status
-      // Methods
-      getPlanLimits,
-      hasFeature,
-      canAddUser,
-      canAddCompany,
-      canMakeAIRequest,
-      getRemainingAIRequests,
-      incrementAIUsage,
-      updateSubscription,
-      upgradePlan,
-      isTrialExpired,
-      getTrialDaysRemaining,
-      getAIUsagePercentage,
-      getUpgradeRecommendation,
-      refreshSubscription: loadSubscription,
-      // User Management
-      addUser,
-      updateUser,
-      deleteUser,
-      getUser,
-      toggleUserStatus,
-      changeUserRole
-    }}>
+    <SubscriptionContext.Provider value={value}>
       {children}
     </SubscriptionContext.Provider>
   );

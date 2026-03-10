@@ -735,11 +735,6 @@ export default function PurchaseOrders() {
                                   {t('confirm') || 'Confirm'}
                                 </Button>
                               )}
-                              {canUpdate(MODULES.PURCHASES) && po.status === 'confirmed' && (
-                                <Button size="sm" variant="ghost" onClick={() => receivePurchaseOrder(po.id, {}).then(() => refreshInventory())}>
-                                  <Truck className="w-4 h-4" />
-                                </Button>
-                              )}
                               {['confirmed', 'received', 'partial'].includes(po.status) && !poHasBill(po.id) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleCreateBill(po.id)} title={t('create_bill') || 'Create Bill'}>
                                   <Receipt className="w-4 h-4 text-green-600" />

@@ -1669,67 +1669,55 @@ export function FinancialsProvider({ children }) {
     return { message: 'Backend not available' };
   }, [backendAvailable]);
 
-  return (
-    <FinancialsContext.Provider value={{
-      journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
-      accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
-      payments, createPayment, confirmPayment,
-      taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
-      journals, createJournal, updateJournal, deleteJournal,
-      // Bank Accounts & Transactions
-      bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
-      bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
-      // Cash Transactions (Kassa)
-      cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance,
-      // Currencies & Exchange Rates
-      currencies, createCurrency, updateCurrency, deleteCurrency,
-      exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency,
-      // Invoices & Bills
-      vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill,
-      customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices,
-      financialTransactions, listFinancialTransactions,
-      // Fiscal Years & Periods
-      fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear,
-      fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear,
-      // Budgets & Budget Lines
-      budgets, createBudget, updateBudget, deleteBudget, activateBudget,
-      budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance,
-      // Fixed Assets & Depreciation
-      fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset,
-      depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
-      // Cash Registers & Orders (Kassa PKO/RKO)
-      cashRegisters, createCashRegister,
-      cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
-      // Reconciliation Acts (Akt sverka)
-      reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct,
-      // Exchange Diffs (Kurs farqi)
-      exchangeDiffs, syncExchangeRates, revalueCurrency,
-      // Reports
-      getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
-      isLoading, backendAvailable, error, refreshData: loadData,
+  const value = useMemo(() => ({
+    journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine,
+    accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
+    payments, createPayment, confirmPayment,
+    taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
+    journals, createJournal, updateJournal, deleteJournal,
+    bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
+    bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
+    cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance,
+    currencies, createCurrency, updateCurrency, deleteCurrency,
+    exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency,
+    vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill,
+    customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices,
+    financialTransactions, listFinancialTransactions,
+    fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear,
+    fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear,
+    budgets, createBudget, updateBudget, deleteBudget, activateBudget,
+    budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance,
+    fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset,
+    depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod,
+    cashRegisters, createCashRegister,
+    cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook,
+    reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct,
+    exchangeDiffs, syncExchangeRates, revalueCurrency,
+    getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables,
+    isLoading, backendAvailable, error, refreshData: loadData,
+    settings: financeSettings,
+    getFiscalYearStart: () => ({ month: financeSettings.fiscalYearStartMonth, day: financeSettings.fiscalYearStartDay }),
+    getDefaultSalesTax: () => financeSettings.defaultSalesTax,
+    getDefaultPurchaseTax: () => financeSettings.defaultPurchaseTax,
+    getTaxRounding: () => financeSettings.taxRounding,
+    isPriceIncludesTax: () => financeSettings.priceIncludesTax,
+    isMultiCurrencyEnabled: () => financeSettings.multiCurrencyEnabled,
+    getBaseCurrency: () => financeSettings.baseCurrency,
+    getReconciliationTolerance: () => financeSettings.reconciliationTolerance,
+    isAutoMatchEnabled: () => financeSettings.autoMatchTransactions,
+    isAutoPostEnabled: () => financeSettings.autoPostEntries,
+    isJournalApprovalRequired: () => financeSettings.requireApproval,
+    getDefaultAccounts: () => ({
+      sales: financeSettings.defaultSalesAccount,
+      purchase: financeSettings.defaultPurchaseAccount,
+      inventory: financeSettings.defaultInventoryAccount,
+      receivables: financeSettings.defaultReceivablesAccount,
+      payables: financeSettings.defaultPayablesAccount
+    })
+  }), [journalEntries, journalLines, createJournalEntry, updateJournalEntry, deleteJournalEntry, cancelJournalEntry, postJournalEntry, reverseJournalEntry, listJournalEntries, getJournalLines, createJournalLine, accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions, payments, createPayment, confirmPayment, taxRates, createTaxRate, updateTaxRate, deleteTaxRate, journals, createJournal, updateJournal, deleteJournal, bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount, bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction, cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance, currencies, createCurrency, updateCurrency, deleteCurrency, exchangeRates, setExchangeRate, getLatestExchangeRate, convertCurrency, vendorBills, createVendorBill, updateVendorBill, listVendorBills, postVendorBill, payVendorBill, customerInvoices, createCustomerInvoice, updateCustomerInvoice, listCustomerInvoices, financialTransactions, listFinancialTransactions, fiscalYears, createFiscalYear, updateFiscalYear, closeFiscalYear, deleteFiscalYear, fiscalPeriods, createFiscalPeriod, createFiscalPeriods, closeFiscalPeriod, reopenFiscalPeriod, getFiscalPeriodsByYear, budgets, createBudget, updateBudget, deleteBudget, activateBudget, budgetLines, createBudgetLine, updateBudgetLine, deleteBudgetLine, getBudgetLinesByBudget, getBudgetVariance, fixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, disposeFixedAsset, depreciationEntries, createDepreciationEntry, getDepreciationEntriesByAsset, calculateMonthlyDepreciation, runDepreciationForPeriod, cashRegisters, createCashRegister, cashOrders, createCashOrder, confirmCashOrder, deleteCashOrder, getCashBook, reconciliationActs, createReconciliationAct, updateReconciliationAct, deleteReconciliationAct, bulkGenerateReconciliation, refreshReconciliationAct, exportReconciliationAct, exchangeDiffs, syncExchangeRates, revalueCurrency, getBalanceSheet, getIncomeStatement, getCashFlow, getTrialBalance, getGeneralLedger, getAgingReceivables, getAgingPayables, isLoading, backendAvailable, error, loadData, financeSettings]);
 
-      // Admin Settings (from Admin Settings page)
-      settings: financeSettings,
-      // Helper functions for settings
-      getFiscalYearStart: () => ({ month: financeSettings.fiscalYearStartMonth, day: financeSettings.fiscalYearStartDay }),
-      getDefaultSalesTax: () => financeSettings.defaultSalesTax,
-      getDefaultPurchaseTax: () => financeSettings.defaultPurchaseTax,
-      getTaxRounding: () => financeSettings.taxRounding,
-      isPriceIncludesTax: () => financeSettings.priceIncludesTax,
-      isMultiCurrencyEnabled: () => financeSettings.multiCurrencyEnabled,
-      getBaseCurrency: () => financeSettings.baseCurrency,
-      getReconciliationTolerance: () => financeSettings.reconciliationTolerance,
-      isAutoMatchEnabled: () => financeSettings.autoMatchTransactions,
-      isAutoPostEnabled: () => financeSettings.autoPostEntries,
-      isJournalApprovalRequired: () => financeSettings.requireApproval,
-      getDefaultAccounts: () => ({
-        sales: financeSettings.defaultSalesAccount,
-        purchase: financeSettings.defaultPurchaseAccount,
-        inventory: financeSettings.defaultInventoryAccount,
-        receivables: financeSettings.defaultReceivablesAccount,
-        payables: financeSettings.defaultPayablesAccount
-      })
-    }}>
+  return (
+    <FinancialsContext.Provider value={value}>
       {children}
     </FinancialsContext.Provider>
   );

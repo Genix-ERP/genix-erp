@@ -15,6 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { toast } from 'sonner';
 
 const ENTITY_KEYS = [
   'Customer', 'Lead', 'Opportunity', 'InventoryItem', 'StockMovement',
@@ -187,10 +188,10 @@ export default function PermissionsManagement() {
       }
 
       await loadPermissions();
-      alert(`${PERMISSION_TEMPLATES[templateName].name} template applied successfully!`);
+      toast.success(`${PERMISSION_TEMPLATES[templateName].name} template applied successfully!`);
     } catch (error) {
       console.error('Error applying template:', error);
-      alert('Failed to apply template');
+      toast.error('Failed to apply template');
     }
 
     setIsSaving(false);
@@ -266,10 +267,10 @@ export default function PermissionsManagement() {
       }
 
       await loadPermissions();
-      alert('Permissions copied successfully!');
+      toast.success('Permissions copied successfully!');
     } catch (error) {
       console.error('Error copying permissions:', error);
-      alert('Failed to copy permissions');
+      toast.error('Failed to copy permissions');
     }
     setIsSaving(false);
   };

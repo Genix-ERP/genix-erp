@@ -74,6 +74,11 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
   const [playingAudio, setPlayingAudio] = useState(null);
   const audioRef = useRef(null);
   const timerRef = useRef(null);
+  const connectTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current); };
+  }, []);
 
   // Load PBX config on mount
   useEffect(() => {
@@ -221,7 +226,8 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
         companyId
       });
       setActiveCall({ id: result.callId, number: dialNumber, status: 'connecting' });
-      setTimeout(() => {
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = setTimeout(() => {
         setActiveCall(prev => prev ? { ...prev, status: 'connected' } : null);
       }, 2000);
     } catch (error) {

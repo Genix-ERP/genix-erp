@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import apiClient from '@/api/client';
 import { useEmployeePermissions } from './EmployeePermissionsContext';
 
@@ -165,7 +165,7 @@ export function CompanyProvider({ children }) {
     };
 
     window.addEventListener('storage', checkUserChange);
-    const interval = setInterval(checkUserChange, 1000);
+    const interval = setInterval(checkUserChange, 30000);
 
     return () => {
       window.removeEventListener('storage', checkUserChange);
@@ -190,12 +190,8 @@ export function CompanyProvider({ children }) {
   const addCompany = async (companyData, maxCompanies = -1) => {
     // Use ref to get latest companies to avoid stale closure issues
     const currentCompanies = companiesRef.current;
-    console.log('addCompany called with:', companyData, 'maxCompanies:', maxCompanies);
-    console.log('Current companies count:', currentCompanies.length);
-
     // Check limit
     if (maxCompanies !== -1 && currentCompanies.length >= maxCompanies) {
-      console.log('Limit reached - returning error');
       return {
         success: false,
         error: 'limit_reached',
@@ -280,9 +276,7 @@ export function CompanyProvider({ children }) {
         return updated;
       });
 
-      console.log('Company created successfully, returning success');
       const result = { success: true, company: newCompany };
-      console.log('Returning result:', result);
       return result;
     } catch (error) {
       console.error('Error creating company (catch block):', error);
@@ -485,23 +479,25 @@ export function CompanyProvider({ children }) {
     }));
   }, [companies]);
 
+  const value = useMemo(() => ({
+    companies,
+    activeCompany,
+    isLoading,
+    // Methods
+    setActiveCompany,
+    addCompany,
+    updateCompany,
+    deleteCompany,
+    getCompany,
+    getCompanyCount,
+    toggleCompanyStatus,
+    importCompanies,
+    exportCompanies,
+    refreshCompanies: loadCompanies
+  }), [companies, activeCompany, isLoading, setActiveCompany, addCompany, updateCompany, deleteCompany, getCompany, getCompanyCount, toggleCompanyStatus, importCompanies, exportCompanies, loadCompanies]);
+
   return (
-    <CompanyContext.Provider value={{
-      companies,
-      activeCompany,
-      isLoading,
-      // Methods
-      setActiveCompany,
-      addCompany,
-      updateCompany,
-      deleteCompany,
-      getCompany,
-      getCompanyCount,
-      toggleCompanyStatus,
-      importCompanies,
-      exportCompanies,
-      refreshCompanies: loadCompanies
-    }}>
+    <CompanyContext.Provider value={value}>
       {children}
     </CompanyContext.Provider>
   );

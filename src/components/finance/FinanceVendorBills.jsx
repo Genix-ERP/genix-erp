@@ -254,7 +254,7 @@ export default function FinanceVendorBills() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">{t('total_amount') || 'Jami summa'}</p>
-                <p className="text-2xl font-bold text-slate-900">{formatCurrencyCompact(summaryStats.totalAmount)}</p>
+                <p className="text-2xl font-bold text-slate-900">{formatCurrency(summaryStats.totalAmount)}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <FileText className="w-6 h-6 text-green-600" />

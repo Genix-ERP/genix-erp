@@ -606,11 +606,8 @@ export function InventoryProvider({ children }) {
     try {
       const isAvailable = await checkBackendHealth();
       setBackendAvailable(isAvailable);
-      console.log('[InventoryContext] Backend available:', isAvailable);
-
       if (isAvailable) {
         try {
-          console.log('[InventoryContext] Fetching data from backend API...');
           const [productsData, categoriesData, warehousesData, inventoryData, movementsData] = await Promise.all([
             inventoryService.listProducts(),
             inventoryService.listCategories(),
@@ -618,17 +615,6 @@ export function InventoryProvider({ children }) {
             inventoryService.listInventory(),
             inventoryService.listInventoryMovements({ limit: 1000 })
           ]);
-
-          console.log('[InventoryContext] API Response:', {
-            products: productsData?.length || 0,
-            categories: categoriesData?.length || 0,
-            warehouses: warehousesData?.length || 0,
-            inventory: inventoryData?.length || 0,
-            movements: movementsData?.length || 0
-          });
-
-          // Debug: Log raw warehouse data with locations
-          console.log('[InventoryContext] Raw warehousesData:', JSON.stringify(warehousesData, null, 2));
 
           // Transform warehouse data from backend format to frontend format
           const transformedWarehouses = (warehousesData || []).map(w => ({
@@ -642,8 +628,6 @@ export function InventoryProvider({ children }) {
             // Keep locations as-is (they come from backend now)
             locations: w.locations || []
           }));
-
-          console.log('[InventoryContext] Transformed warehouses:', transformedWarehouses);
 
           // When backend is available, use backend data directly (even if empty)
           // This ensures data is consistent across all devices
@@ -703,7 +687,7 @@ export function InventoryProvider({ children }) {
           loadFromLocalStorage();
         }
       } else {
-        console.log('[InventoryContext] Backend not available, using localStorage');
+        // Backend not available, using localStorage
         loadFromLocalStorage();
       }
     } catch (err) {
@@ -1968,113 +1952,113 @@ export function InventoryProvider({ children }) {
     };
   });
 
+  const value = useMemo(() => ({
+    // Products
+    products,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+
+    // Categories
+    categories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+
+    // Warehouses
+    warehouses,
+    createWarehouse,
+    updateWarehouse,
+    deleteWarehouse,
+    createWarehouseLocation,
+    updateWarehouseLocation,
+    deleteWarehouseLocation,
+
+    // Inventory
+    inventory,
+    stockMovements,
+    adjustInventory,
+    transferInventory,
+    getInventoryValuation,
+    getInventorySummary,
+    getProductStock,
+    getWarehouseInventory,
+
+    // Lot/Batch Tracking
+    lots,
+    createLot,
+    updateLot,
+    deleteLot,
+    consumeLot,
+    getProductLots,
+    getExpiringLots,
+
+    // Stock Counting (Inventarizatsiya)
+    stockCounts,
+    createStockCount,
+    updateStockCountLine,
+    completeStockCount,
+    cancelStockCount,
+
+    // Bill of Materials (BOM)
+    boms,
+    bomLines,
+    createBOM,
+    updateBOM,
+    deleteBOM,
+    createBOMLine,
+    updateBOMLine,
+    deleteBOMLine,
+    getBOMLinesByBOM,
+    calculateBOMCost,
+
+    // Reorder Rules
+    reorderRules,
+    createReorderRule,
+    updateReorderRule,
+    deleteReorderRule,
+    getReorderRulesByProduct,
+    checkReorderNeeded,
+
+    // Scrap Management
+    scrapOrders,
+    createScrapOrder,
+    updateScrapOrder,
+    confirmScrapOrder,
+    cancelScrapOrder,
+    getScrapSummary,
+
+    // Legacy compatibility
+    items,
+    createItem: createProduct,
+    updateItem: updateProduct,
+    deleteItem: deleteProduct,
+    createStockMovement: adjustInventory,
+    listItems: () => items,
+    listMovements: () => stockMovements,
+
+    // State
+    isLoading,
+    backendAvailable,
+    error,
+    refreshData: loadData,
+
+    // Admin Settings
+    settings: inventorySettings,
+    isCostingMethod: (method) => inventorySettings.costingMethod === method,
+    isLotTrackingEnabled: () => inventorySettings.lotTrackingEnabled,
+    isSerialTrackingEnabled: () => inventorySettings.serialTrackingEnabled,
+    isExpiryTrackingEnabled: () => inventorySettings.expiryTrackingEnabled,
+    canHaveNegativeStock: () => inventorySettings.allowNegativeStock,
+    requiresLocation: () => inventorySettings.requireLocation,
+    isMultiLocationEnabled: () => inventorySettings.multiLocationEnabled,
+    isAutoReorderEnabled: () => inventorySettings.autoReorderEnabled,
+    getDefaultUnit: () => inventorySettings.defaultUnit,
+    getUnitsOfMeasure: () => inventorySettings.unitsOfMeasure
+  }), [products, createProduct, updateProduct, deleteProduct, categories, createCategory, updateCategory, deleteCategory, warehouses, createWarehouse, updateWarehouse, deleteWarehouse, createWarehouseLocation, updateWarehouseLocation, deleteWarehouseLocation, inventory, stockMovements, adjustInventory, transferInventory, getInventoryValuation, getInventorySummary, getProductStock, getWarehouseInventory, lots, createLot, updateLot, deleteLot, consumeLot, getProductLots, getExpiringLots, stockCounts, createStockCount, updateStockCountLine, completeStockCount, cancelStockCount, boms, bomLines, createBOM, updateBOM, deleteBOM, createBOMLine, updateBOMLine, deleteBOMLine, getBOMLinesByBOM, calculateBOMCost, reorderRules, createReorderRule, updateReorderRule, deleteReorderRule, getReorderRulesByProduct, checkReorderNeeded, scrapOrders, createScrapOrder, updateScrapOrder, confirmScrapOrder, cancelScrapOrder, getScrapSummary, items, isLoading, backendAvailable, error, loadData, inventorySettings]);
+
   return (
-    <InventoryContext.Provider value={{
-      // Products
-      products,
-      createProduct,
-      updateProduct,
-      deleteProduct,
-
-      // Categories
-      categories,
-      createCategory,
-      updateCategory,
-      deleteCategory,
-
-      // Warehouses
-      warehouses,
-      createWarehouse,
-      updateWarehouse,
-      deleteWarehouse,
-      createWarehouseLocation,
-      updateWarehouseLocation,
-      deleteWarehouseLocation,
-
-      // Inventory
-      inventory,
-      stockMovements,
-      adjustInventory,
-      transferInventory,
-      getInventoryValuation,
-      getInventorySummary,
-      getProductStock,
-      getWarehouseInventory,
-
-      // Lot/Batch Tracking
-      lots,
-      createLot,
-      updateLot,
-      deleteLot,
-      consumeLot,
-      getProductLots,
-      getExpiringLots,
-
-      // Stock Counting (Inventarizatsiya)
-      stockCounts,
-      createStockCount,
-      updateStockCountLine,
-      completeStockCount,
-      cancelStockCount,
-
-      // Bill of Materials (BOM)
-      boms,
-      bomLines,
-      createBOM,
-      updateBOM,
-      deleteBOM,
-      createBOMLine,
-      updateBOMLine,
-      deleteBOMLine,
-      getBOMLinesByBOM,
-      calculateBOMCost,
-
-      // Reorder Rules
-      reorderRules,
-      createReorderRule,
-      updateReorderRule,
-      deleteReorderRule,
-      getReorderRulesByProduct,
-      checkReorderNeeded,
-
-      // Scrap Management
-      scrapOrders,
-      createScrapOrder,
-      updateScrapOrder,
-      confirmScrapOrder,
-      cancelScrapOrder,
-      getScrapSummary,
-
-      // Legacy compatibility
-      items,
-      createItem: createProduct,
-      updateItem: updateProduct,
-      deleteItem: deleteProduct,
-      createStockMovement: adjustInventory,
-      listItems: () => items,
-      listMovements: () => stockMovements,
-
-      // State
-      isLoading,
-      backendAvailable,
-      error,
-      refreshData: loadData,
-
-      // Admin Settings (from Admin Settings page)
-      // These settings affect how the inventory module behaves
-      settings: inventorySettings,
-      // Helper functions to check settings
-      isCostingMethod: (method) => inventorySettings.costingMethod === method,
-      isLotTrackingEnabled: () => inventorySettings.lotTrackingEnabled,
-      isSerialTrackingEnabled: () => inventorySettings.serialTrackingEnabled,
-      isExpiryTrackingEnabled: () => inventorySettings.expiryTrackingEnabled,
-      canHaveNegativeStock: () => inventorySettings.allowNegativeStock,
-      requiresLocation: () => inventorySettings.requireLocation,
-      isMultiLocationEnabled: () => inventorySettings.multiLocationEnabled,
-      isAutoReorderEnabled: () => inventorySettings.autoReorderEnabled,
-      getDefaultUnit: () => inventorySettings.defaultUnit,
-      getUnitsOfMeasure: () => inventorySettings.unitsOfMeasure
-    }}>
+    <InventoryContext.Provider value={value}>
       {children}
     </InventoryContext.Provider>
   );

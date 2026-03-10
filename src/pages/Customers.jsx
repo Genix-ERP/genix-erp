@@ -755,8 +755,14 @@ export default function Customers() {
     deleteLead,
     createOpportunity,
     updateOpportunity,
-    deleteOpportunity
+    deleteOpportunity,
+    refreshData,
   } = useCustomers();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -843,7 +849,6 @@ export default function Customers() {
   };
 
   const handleOpportunityUpdate = (updatedOpportunity) => {
-    console.log('Opportunity updated:', updatedOpportunity);
     updateOpportunity(updatedOpportunity.id, updatedOpportunity);
   };
 

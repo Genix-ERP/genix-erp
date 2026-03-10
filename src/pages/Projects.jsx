@@ -16,6 +16,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { toast } from 'sonner';
 
 // Default status IDs for Kanban
 const DEFAULT_STATUS_IDS = ['planning', 'active', 'on_hold', 'completed', 'cancelled'];
@@ -33,7 +34,13 @@ export default function Projects() {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { projects, createProject, updateProject, isLoading } = useModules();
+  const { projects, createProject, updateProject, isLoading, refreshData } = useModules();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    refreshData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -230,7 +237,7 @@ export default function Projects() {
       return pStatus === statusId;
     });
     if (hasProjects) {
-      alert(t('cannot_remove_status'));
+      toast.error(t('cannot_remove_status'));
       return;
     }
     setCustomStatuses(customStatuses.filter(s => s.id !== statusId));

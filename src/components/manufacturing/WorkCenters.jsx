@@ -18,6 +18,7 @@ import { useCompany } from '@/components/contexts/CompanyContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { equipmentService } from '@/api/services/manufacturing';
+import { toast } from 'sonner';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
 
@@ -160,7 +161,7 @@ export default function WorkCenters() {
     } catch (error) {
       console.error('Error creating work center:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to create work center: ${errorMsg}`);
+      toast.error(`Failed to create work center: ${errorMsg}`);
     }
   };
 
@@ -257,7 +258,7 @@ export default function WorkCenters() {
     } catch (error) {
       console.error('Error updating work center:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to update work center: ${errorMsg}`);
+      toast.error(`Failed to update work center: ${errorMsg}`);
     }
   };
 
@@ -270,7 +271,7 @@ export default function WorkCenters() {
     } catch (error) {
       console.error('Error deleting work center:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
-      alert(`Failed to delete work center: ${errorMsg}`);
+      toast.error(`Failed to delete work center: ${errorMsg}`);
     }
   };
 

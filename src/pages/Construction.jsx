@@ -69,6 +69,7 @@ import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import { ActivityLogPanel } from '@/components/shared/ActivityLog';
 import { WBSTree } from '@/components/construction/WBSTree';
 import ActivityTab from '@/components/construction/tabs/ActivityTab';
@@ -807,7 +808,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           case 'daily_logs':
             try {
               const logsData = await constructionService.listDailyReports(project.id);
-              console.log('Daily logs loaded:', logsData);
               setDailyLogs(logsData || []);
             } catch (e) {
               console.error('Error loading daily logs:', e);
@@ -1105,7 +1105,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       }
     } catch (error) {
       console.error('Error saving daily log:', error);
-      alert(error?.response?.data?.message || 'Failed to save daily log');
+      toast.error(error?.response?.data?.message || 'Failed to save daily log');
       setUploadingDailyLog(false);
       return;
     }
@@ -1127,7 +1127,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     // Refresh list separately
     try {
       const logsData = await constructionService.listDailyReports(project.id);
-      console.log('Daily logs refreshed:', logsData);
       setDailyLogs(logsData || []);
     } catch (error) {
       console.error('Error refreshing daily logs:', error);
@@ -3101,6 +3100,11 @@ export default function Construction() {
     PROJECT_TYPES,
     getProjectStats
   } = useConstructionContext();
+
+  // Refresh data when navigating to this page
+  useEffect(() => {
+    loadProjects();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTab = searchParams.get("tab") || "projects";
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
