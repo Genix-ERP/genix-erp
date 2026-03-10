@@ -60,8 +60,12 @@ export default function Assets() {
   const [transferData, setTransferData] = useState({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] });
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [assetForMaintenance, setAssetForMaintenance] = useState(null);
-  const [maintenanceData, setMaintenanceData] = useState({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
+  const [maintenanceData, setMaintenanceData] = useState({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: '' });
   const [maintenanceHistory, setMaintenanceHistory] = useState({});
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [assetForHistory, setAssetForHistory] = useState(null);
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
 
   const generateAssetCode = () => `AST-${String((rawAssets?.length || 0) + 1).padStart(3, '0')}`;
@@ -184,18 +188,22 @@ export default function Assets() {
     }
   };
 
-  const handleTransferAsset = () => {
+  const handleTransferAsset = async () => {
     if (assetToTransfer) {
-      updateAsset(assetToTransfer.id, {
-        location: transferData.location,
-        transfer_history: [...(assetToTransfer.transfer_history || []), {
-          date: transferData.transfer_date,
-          from: assetToTransfer.location || 'N/A',
-          to: transferData.location,
-          notes: transferData.notes
-        }]
-      });
-      addAuditLog('transfer', assetToTransfer.id, `${assetToTransfer.asset_code} to ${transferData.location}`);
+      try {
+        await updateAsset(assetToTransfer.id, { location: transferData.location });
+        const fromLocation = assetToTransfer.location || 'N/A';
+        const description = `${fromLocation} → ${transferData.location}${transferData.notes ? '. ' + transferData.notes : ''}`;
+        await financeService.recordMaintenance(assetToTransfer.id, {
+          maintenance_type: 'transfer',
+          service_date: transferData.transfer_date,
+          description,
+          cost: 0
+        });
+        addAuditLog('transfer', assetToTransfer.id, `${assetToTransfer.asset_code} to ${transferData.location}`);
+      } catch (err) {
+        console.error('Failed to transfer asset:', err);
+      }
       setShowTransferModal(false);
       setAssetToTransfer(null);
       setTransferData({ location: '', notes: '', transfer_date: new Date().toISOString().split('T')[0] });
@@ -219,7 +227,7 @@ export default function Assets() {
         addAuditLog('maintenance', assetForMaintenance.id, `${assetForMaintenance.asset_code} - ${maintenanceData.type}`);
         setShowMaintenanceModal(false);
         setAssetForMaintenance(null);
-        setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 });
+        setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: '' });
       } catch (err) {
         console.error('Failed to record maintenance:', err);
       }
@@ -236,6 +244,21 @@ export default function Assets() {
       user: 'Current User'
     };
     setAuditLog([logEntry, ...auditLog]);
+  };
+
+  const openHistoryModal = async (asset) => {
+    setAssetForHistory(asset);
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const records = await financeService.listMaintenance(asset.id);
+      setHistoryRecords(records || []);
+    } catch (e) {
+      console.error('Failed to load history:', e);
+      setHistoryRecords([]);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -581,6 +604,9 @@ export default function Assets() {
                                 <Wrench className="w-4 h-4" />
                               </Button>
                             )}
+                            <Button size="sm" variant="ghost" onClick={() => openHistoryModal(asset)} title={t('history') || 'Tarix'}>
+                              <History className="w-4 h-4 text-purple-500" />
+                            </Button>
                             {asset.status !== 'disposed' && canDelete(MODULES.ASSETS) && (
                               <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => { setAssetToDelete(asset); setShowDeleteDialog(true); }} title={t('dispose')}>
                                 <Trash2 className="w-4 h-4" />
@@ -990,7 +1016,7 @@ export default function Assets() {
                   </div>
                   <div className="divide-y max-h-48 overflow-y-auto">
                     {maintenanceHistory[assetForMaintenance.id].map((record, idx) => {
-                      const typeLabels = { regular_to: 'Oddiy TO', capital_repair: 'Kapital', modernization: 'Modernizatsiya', minor_repair: 'Joriy' };
+                      const typeLabels = { regular_to: 'Oddiy TO', capital_repair: 'Kapital', modernization: 'Modernizatsiya', minor_repair: 'Joriy', transfer: "Ko'chirish" };
                       return (
                         <div key={record.id || idx} className="px-3 py-2 text-sm flex items-center justify-between">
                           <div>
@@ -1006,7 +1032,7 @@ export default function Assets() {
                 </div>
               )}
               <div className="flex gap-3 pt-4">
-                <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: 0 }); }} className="flex-1">
+                <Button variant="outline" onClick={() => { setShowMaintenanceModal(false); setAssetForMaintenance(null); setMaintenanceData({ date: new Date().toISOString().split('T')[0], type: 'regular_to', description: '', cost: '' }); }} className="flex-1">
                   {t('cancel')}
                 </Button>
                 <Button
@@ -1017,6 +1043,99 @@ export default function Assets() {
                   {t('add_record')}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Asset History Modal */}
+        <Dialog open={showHistoryModal} onOpenChange={(open) => { if (!open) { setShowHistoryModal(false); setAssetForHistory(null); setHistoryRecords([]); } }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <History className="w-5 h-5 text-purple-500" />
+                {assetForHistory?.asset_name} — {t('history') || 'Tarix'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              {/* Asset Summary */}
+              {assetForHistory && (
+                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <p className="text-xs text-slate-500">{t('asset_code') || 'Kod'}</p>
+                    <p className="font-medium">{assetForHistory.asset_code}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('acquisition_cost') || 'Xarid tannarxi'}</p>
+                    <p className="font-medium">{formatCurrency(assetForHistory.acquisition_cost || assetForHistory.purchase_cost || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">{t('current_value') || 'Joriy qiymat'}</p>
+                    <p className="font-medium text-blue-600">{formatCurrency(assetForHistory.current_value || assetForHistory.book_value || 0)}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* History Records */}
+              {historyLoading ? (
+                <div className="text-center py-8 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
+              ) : historyRecords.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>{t('no_history') || "Hozircha tarix mavjud emas"}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="divide-y max-h-96 overflow-y-auto">
+                      {historyRecords.map((record, idx) => {
+                        const typeLabels = {
+                          regular_to: 'Oddiy TO',
+                          capital_repair: 'Kapital ta\'mirlash',
+                          modernization: 'Modernizatsiya',
+                          minor_repair: 'Joriy ta\'mirlash',
+                          transfer: 'Ko\'chirish'
+                        };
+                        const typeColors = {
+                          regular_to: 'bg-blue-100 text-blue-700',
+                          capital_repair: 'bg-red-100 text-red-700',
+                          modernization: 'bg-purple-100 text-purple-700',
+                          minor_repair: 'bg-yellow-100 text-yellow-700',
+                          transfer: 'bg-green-100 text-green-700'
+                        };
+                        const mainType = record.maintenance_type || record.type;
+                        return (
+                          <div key={record.id || idx} className="px-4 py-3 hover:bg-slate-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="text-sm text-slate-500 w-24">
+                                  {record.service_date ? format(new Date(record.service_date), 'dd.MM.yyyy') : record.date}
+                                </div>
+                                <Badge className={`text-xs ${typeColors[mainType] || 'bg-gray-100 text-gray-700'}`}>
+                                  {typeLabels[mainType] || mainType}
+                                </Badge>
+                              </div>
+                              {record.cost > 0 && (
+                                <span className="font-semibold text-slate-800">{formatCurrency(record.cost)}</span>
+                              )}
+                            </div>
+                            {record.description && (
+                              <p className="text-sm text-slate-600 mt-1 ml-27">{record.description}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Total Cost */}
+                  <div className="mt-3 flex justify-between items-center px-4 py-2 bg-slate-50 rounded-lg">
+                    <span className="text-sm font-medium text-slate-600">{t('total_maintenance_cost') || "Jami xarajatlar"}</span>
+                    <span className="text-lg font-bold text-slate-800">
+                      {formatCurrency(historyRecords.reduce((sum, r) => sum + (r.cost || 0), 0))}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
