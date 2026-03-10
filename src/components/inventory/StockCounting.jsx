@@ -84,7 +84,7 @@ export default function StockCounting() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { formatCurrencyCompact } = useCurrencyFormatter();
+  const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
   const {
     stockCounts,
     products,
@@ -492,7 +492,7 @@ export default function StockCounting() {
                         <TableCell>
                           {count.status === 'completed' ? (
                             <Badge variant={totalVariance > 0 ? 'destructive' : 'secondary'}>
-                              {totalVariance > 0 ? `±${totalVariance}` : t('matched')}
+                              {totalVariance > 0 ? formatCurrency(totalVariance) : t('matched')}
                             </Badge>
                           ) : (
                             <span className="text-slate-400">-</span>

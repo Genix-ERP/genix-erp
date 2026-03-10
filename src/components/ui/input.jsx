@@ -2,7 +2,15 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef(({ className, type, ...props }, ref) => {
+const Input = React.forwardRef(({ className, type, onFocus, ...props }, ref) => {
+  const handleFocus = (e) => {
+    // Auto-select content on focus for numeric inputs so user can type immediately
+    if (type === 'number' || props.inputMode === 'decimal' || props.inputMode === 'numeric') {
+      e.target.select();
+    }
+    onFocus?.(e);
+  };
+
   return (
     (<input
       type={type}
@@ -11,6 +19,7 @@ const Input = React.forwardRef(({ className, type, ...props }, ref) => {
         className
       )}
       ref={ref}
+      onFocus={handleFocus}
       {...props} />)
   );
 })

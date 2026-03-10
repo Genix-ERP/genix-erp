@@ -133,7 +133,8 @@ export default function ReorderRules() {
     deleteReorderRule,
     checkReorderNeeded,
     inventory = [],
-    isLoading
+    isLoading,
+    refreshData: refreshInventoryData,
   } = useInventory();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
 
@@ -342,14 +343,16 @@ export default function ReorderRules() {
       const response = await apiClient.post("/replenishment/run", {
         rule_ids: [item.id],
       });
-      const data = response.data.data;
+      const data = response.data.data || response.data;
       if (data?.orders_created > 0) {
         toast({
           title: t('success'),
           description: `${t('created') || 'Created'} ${data.orders_created} ${t('purchase_order') || 'purchase order(s)'}`,
         });
+        // Refresh data to update stock levels and alerts
+        if (refreshInventoryData) refreshInventoryData();
       } else {
-        const reason = data?.skipped_items?.[0]?.reason || t('no_vendor_set') || 'No preferred vendor set in reorder rule';
+        const reason = data?.skipped_items?.[0]?.reason || data?.message || t('no_vendor_set') || 'No preferred vendor set in reorder rule';
         toast({
           variant: "destructive",
           title: t('error'),
@@ -528,6 +531,7 @@ export default function ReorderRules() {
                     <TableHead>{t('warehouse') || 'Warehouse'}</TableHead>
                     <TableHead className="text-right">{t('min_qty') || 'Min Qty'}</TableHead>
                     <TableHead className="text-right">{t('max_qty') || 'Max Qty'}</TableHead>
+                    <TableHead className="text-right">{t('reorder_qty') || 'Reorder Qty'}</TableHead>
                     <TableHead className="text-right">{t('current_stock') || 'Current Stock'}</TableHead>
                     <TableHead>{t('lead_time') || 'Lead Time'}</TableHead>
                     <TableHead>{t('status') || 'Status'}</TableHead>
@@ -537,7 +541,7 @@ export default function ReorderRules() {
                 <TableBody>
                   {filteredRules.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                      <TableCell colSpan={9} className="text-center py-8 text-slate-500">
                         {t('no_reorder_rules') || 'No reorder rules found'}
                       </TableCell>
                     </TableRow>
@@ -553,6 +557,7 @@ export default function ReorderRules() {
                           <TableCell>{getWarehouseName(rule.warehouse_id, rule)}</TableCell>
                           <TableCell className="text-right">{rule.min_qty}</TableCell>
                           <TableCell className="text-right">{rule.max_qty}</TableCell>
+                          <TableCell className="text-right">{rule.reorder_qty}</TableCell>
                           <TableCell className="text-right">
                             <span className={isLow ? 'text-red-600 font-bold' : ''}>
                               {currentStock}
