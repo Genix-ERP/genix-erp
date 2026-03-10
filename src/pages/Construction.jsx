@@ -1804,22 +1804,24 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                                 )}
                               </div>
                             )}
+                            {req.delivery_name && (
+                              <div className="mt-2 flex items-center gap-2 text-xs">
+                                <Truck className="w-3 h-3 text-slate-400" />
+                                <span className="text-slate-500">{t('delivery') || 'Yetkazib berish'}:</span>
+                                <span className="font-medium">{req.delivery_name}</span>
+                                <Badge className={
+                                  req.delivery_state === 'done' ? 'bg-green-100 text-green-700 text-xs' :
+                                  req.delivery_state === 'in_progress' ? 'bg-blue-100 text-blue-700 text-xs' :
+                                  req.delivery_state === 'cancelled' ? 'bg-red-100 text-red-700 text-xs' :
+                                  'bg-slate-100 text-slate-700 text-xs'
+                                }>{t(req.delivery_state) || req.delivery_state}</Badge>
+                              </div>
+                            )}
                             {req.notes && (
                               <p className="text-sm text-slate-600 mt-2">{req.notes}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-1 ml-2">
-                            {req.status === 'draft' && items.length > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-green-600 border-green-300 hover:bg-green-50 h-8 px-2 text-xs"
-                                onClick={() => handleApproveMaterialRequest(req.id)}
-                              >
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                {t('confirm') || 'Tasdiqlash'}
-                              </Button>
-                            )}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -1882,10 +1884,40 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 <CardTitle>{t('deliveries') || 'Yetkazib berishlar'}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 text-sm">{t('no_deliveries') || 'Yetkazib berishlar mavjud emas'}</p>
-                </div>
+                {(() => {
+                  const deliveries = materialRequests.filter(mr => mr.stock_operation_id && mr.delivery_name);
+                  if (deliveries.length === 0) {
+                    return (
+                      <div className="text-center py-8">
+                        <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-500 text-sm">{t('no_deliveries') || 'Yetkazib berishlar mavjud emas'}</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {deliveries.map(mr => (
+                        <div key={mr.stock_operation_id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium text-sm">{mr.delivery_name}</span>
+                              <span className="text-xs text-slate-500 ml-2">← {mr.request_number}</span>
+                            </div>
+                            <Badge className={
+                              mr.delivery_state === 'done' ? 'bg-green-100 text-green-700' :
+                              mr.delivery_state === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              mr.delivery_state === 'cancelled' ? 'bg-red-100 text-red-700' :
+                              'bg-slate-100 text-slate-700'
+                            }>{t(mr.delivery_state) || mr.delivery_state}</Badge>
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {t('confirm_in_stock_ops') || 'Confirmation is done through Stock Operations'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
