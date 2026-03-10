@@ -211,6 +211,7 @@ export default function SalesOrders() {
       headerFields: [
         { label: t('customer'), value: order.customer_name },
         { label: t('delivery_date'), value: order.delivery_date || order.expected_date ? format(new Date(order.delivery_date || order.expected_date), 'dd.MM.yyyy') : '-' },
+        ...(order.vehicle_number ? [{ label: t('vehicle_number') || 'Moshina raqami', value: order.vehicle_number }] : []),
         { label: t('status'), value: t(order.status) },
         { label: t('payment_status'), value: t(order.payment_status) },
       ],
@@ -239,6 +240,7 @@ export default function SalesOrders() {
     delivery_date: new Date().toISOString().split('T')[0], // Default to today
     warehouse_id: '',
     carrier: '',
+    vehicle_number: '',
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
@@ -701,6 +703,7 @@ export default function SalesOrders() {
       expected_date: newOrder.delivery_date, // Backend uses expected_date
       warehouse_id: newOrder.warehouse_id || undefined,
       carrier: newOrder.carrier || undefined,
+      vehicle_number: newOrder.vehicle_number || undefined,
       subtotal,
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
@@ -1608,6 +1611,14 @@ export default function SalesOrders() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>{t('vehicle_number') || 'Moshina raqami'}</Label>
+                  <Input
+                    placeholder="01 A 123 AA"
+                    value={newOrder.vehicle_number || ''}
+                    onChange={(e) => setNewOrder({...newOrder, vehicle_number: e.target.value})}
+                  />
                 </div>
               </div>
 
