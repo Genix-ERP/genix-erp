@@ -975,6 +975,7 @@ export default function StockOperations() {
                 <>
                   {[
                     [t('document') || 'Document', op.name],
+                    [t('warehouse') || 'Ombor', op.warehouse_name || '—'],
                     [t('direction') || 'Direction', (() => {
                       const d = DIRECTIONS.find(x => x.value === op.direction);
                       return d ? (t(d.labelKey) || op.direction) : op.direction;

@@ -104,6 +104,7 @@ export default function Warehouses() {
     city: '',
     state: '',
     country: '',
+    warehouse_type: 'regular', // regular or scrap
     reception_steps: 1,  // 1=Direct, 2=Input+Stock, 3=Input+QC+Stock
     delivery_steps: 1,   // 1=Direct, 2=Pick+Ship, 3=Pick+Pack+Ship
     manufacturing_steps: 1  // 1=Simple, 2=Pick+Produce, 3=Pick+Produce+Store
@@ -177,6 +178,7 @@ export default function Warehouses() {
       city: '',
       state: '',
       country: '',
+      warehouse_type: 'regular',
       reception_steps: 1,
       delivery_steps: 1,
       manufacturing_steps: 1
@@ -226,6 +228,7 @@ export default function Warehouses() {
       city: warehouse.city || '',
       state: warehouse.state || '',
       country: warehouse.country || '',
+      warehouse_type: warehouse.warehouse_type || 'regular',
       reception_steps: warehouse.reception_steps || 1,
       delivery_steps: warehouse.delivery_steps || 1,
       manufacturing_steps: warehouse.manufacturing_steps || 1
@@ -531,6 +534,9 @@ export default function Warehouses() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-slate-900">{warehouse.name}</h3>
+                            {warehouse.warehouse_type === 'scrap' && (
+                              <Badge variant="destructive" className="text-xs">{t('scrap')}</Badge>
+                            )}
                           </div>
                           {warehouse.city && (
                             <div className="flex items-center gap-4 mt-1">
@@ -697,7 +703,7 @@ export default function Warehouses() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <LabelWithHelp
                   label={t('code')}
@@ -722,6 +728,34 @@ export default function Warehouses() {
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   required
                 />
+              </div>
+              <div>
+                <LabelWithHelp
+                  label={t('warehouse_type')}
+                  helpText={t('help_warehouse_type') || "Ombor turi: oddiy ombor yoki yaroqsiz mahsulotlar uchun ombor"}
+                />
+                <Select
+                  value={formData.warehouse_type}
+                  onValueChange={(value) => setFormData({...formData, warehouse_type: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="regular">
+                      <div className="flex items-center gap-2">
+                        <Warehouse className="w-4 h-4" />
+                        {t('regular')}
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="scrap">
+                      <div className="flex items-center gap-2">
+                        <Trash className="w-4 h-4" />
+                        {t('scrap')}
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
