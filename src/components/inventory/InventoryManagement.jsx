@@ -834,8 +834,14 @@ export default function InventoryManagement() {
                         const movementDate = movement.transaction_date || movement.created_at;
                         const productName = movement.product_name || getProductName(movement.product_id);
                         const productCode = movement.product_code || getProductCode(movement.product_id);
-                        const fromWarehouse = movement.from_warehouse_name || getWarehouseName(movement.from_warehouse_id || movement.warehouse_id);
-                        const toWarehouse = movement.to_warehouse_name || (movement.to_warehouse_id ? getWarehouseName(movement.to_warehouse_id) : null);
+                        const isReceipt = movementType === 'receipt' || movementType === 'kirim';
+                        const isDelivery = movementType === 'delivery' || movementType === 'chiqim';
+                        const fromWarehouse = isReceipt && !movement.from_warehouse_id
+                          ? (t('supplier') || 'Yetkazib beruvchi')
+                          : (movement.from_warehouse_name || getWarehouseName(movement.from_warehouse_id || movement.warehouse_id));
+                        const toWarehouse = isDelivery && !movement.to_warehouse_id
+                          ? (t('customer') || 'Mijoz')
+                          : (movement.to_warehouse_name || (movement.to_warehouse_id ? getWarehouseName(movement.to_warehouse_id) : getWarehouseName(movement.warehouse_id)));
 
                         return (
                           <TableRow key={movement.id} className="hover:bg-blue-50/50">

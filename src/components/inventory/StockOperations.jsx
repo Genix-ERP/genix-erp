@@ -156,7 +156,7 @@ export default function StockOperations() {
       setOperationTypes((opTypes || []).filter(ot => {
         const dir = ot.operation_type;
         if (activeDirection === 'receipt') return dir === 'incoming';
-        if (activeDirection === 'delivery') return dir === 'outgoing';
+        if (activeDirection === 'delivery') return dir === 'outgoing' || ot.type === 'pick' || ot.type === 'pack';
         if (activeDirection === 'internal') return dir === 'internal';
         return true;
       }));
@@ -603,7 +603,12 @@ export default function StockOperations() {
                   {filteredOps.map(op => (
                     <TableRow key={op.id} className="cursor-pointer hover:bg-slate-50" onClick={() => openDetail(op)}>
                       <TableCell className="font-mono font-semibold text-sm">{op.name}</TableCell>
-                      <TableCell><DirectionBadge direction={op.direction} t={t} /></TableCell>
+                      <TableCell>
+                        {op.operation_type_name && (op.direction === 'internal' && activeDirection === 'delivery')
+                          ? <Badge className="bg-amber-100 text-amber-700 gap-1 text-xs">{op.operation_type_name}</Badge>
+                          : <DirectionBadge direction={op.direction} t={t} />
+                        }
+                      </TableCell>
                       <TableCell className="text-sm text-slate-600">{op.partner_name || '—'}</TableCell>
                       <TableCell className="text-sm text-slate-500">
                         {op.date ? format(new Date(op.date), 'dd.MM.yyyy') : '—'}
