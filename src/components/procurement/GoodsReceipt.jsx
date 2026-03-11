@@ -224,6 +224,15 @@ export default function GoodsReceipt() {
       return;
     }
 
+    // Validate lot numbers are provided when lot tracking is enabled
+    if (lotTrackingOn) {
+      const missingLotLines = validLines.filter(line => !line.batch_number);
+      if (missingLotLines.length > 0) {
+        toast.error(t('lot_number_required') || 'Partiya raqamini kiritish majburiy. Har bir mahsulot uchun partiya raqamini kiriting.');
+        return;
+      }
+    }
+
     try {
       const payload = {
         purchase_order_id: newGR.po_id,
@@ -603,25 +612,24 @@ export default function GoodsReceipt() {
                         </div>
                         <div className="col-span-2">
                           <label className="text-xs text-slate-500">
-                            {t('batch_number') || 'Batch #'}
-                            {lotTrackingOn && <span className="text-green-600 ml-1">(auto)</span>}
+                            {t('lot_number') || 'Partiya №'}
+                            {lotTrackingOn && <span className="text-red-500 ml-1">*</span>}
                           </label>
                           <Input
                             value={line.batch_number}
                             onChange={(e) => updateLine(index, 'batch_number', e.target.value)}
-                            placeholder={lotTrackingOn ? t('auto_generated') || 'Avtomatik' : 'LOT-XXX'}
+                            placeholder="LOT-2026-001"
+                            className={lotTrackingOn && !line.batch_number ? 'border-red-300' : ''}
                           />
                         </div>
                         <div className="col-span-2">
                           <label className="text-xs text-slate-500">
-                            {t('expiry_date') || 'Expiry'}
-                            {lotTrackingOn && <span className="text-red-500 ml-1">*</span>}
+                            {t('expiry_date') || 'Srok'}
                           </label>
                           <Input
                             type="date"
                             value={line.expiry_date}
                             onChange={(e) => updateLine(index, 'expiry_date', e.target.value)}
-                            className={lotTrackingOn && !line.expiry_date ? 'border-orange-300' : ''}
                           />
                         </div>
                         <div className="col-span-2">

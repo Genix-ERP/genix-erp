@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Search, Package, Calendar, AlertTriangle, Clock, CheckCircle,
-  Warehouse, Tag, Hash, Layers, TrendingDown, ChevronDown, ChevronRight,
-  FileText, Barcode, Eye, Edit, Trash2, MoreHorizontal, Shield, Globe,
-  Award, FileCheck, ClipboardCheck, QrCode, Beaker, HelpCircle
+  Search, Package, AlertTriangle,
+  Warehouse, Layers, TrendingDown, ChevronDown, ChevronRight,
+  Barcode, Eye, Edit, Trash2, MoreHorizontal, Award, HelpCircle, Info
 } from "lucide-react";
 import {
   Tooltip,
@@ -54,39 +53,21 @@ const LabelWithHelp = ({ label, helpText, required }) => (
   </label>
 );
 
-// SAP Quality Status options (colors only, labels use t())
-const qualityStatusColors = {
-  released: 'bg-green-100 text-green-700 border-green-200',
-  blocked: 'bg-red-100 text-red-700 border-red-200',
-  in_qc: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-  quarantine: 'bg-orange-100 text-orange-700 border-orange-200',
-  rejected: 'bg-gray-100 text-gray-700 border-gray-200',
-};
 
 export default function LotTracking() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
-  const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
+  const { canUpdate, canDelete, MODULES } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
   const {
     lots,
     products,
     warehouses,
-    createLot,
     updateLot,
     deleteLot,
-    getProductLots,
-    getExpiringLots,
-    isLoading
+    getExpiringLots
   } = useInventory();
 
-  const qualityStatuses = [
-    { value: 'released', label: t('released'), color: qualityStatusColors.released },
-    { value: 'blocked', label: t('blocked'), color: qualityStatusColors.blocked },
-    { value: 'in_qc', label: t('in_qc'), color: qualityStatusColors.in_qc },
-    { value: 'quarantine', label: t('quarantine'), color: qualityStatusColors.quarantine },
-    { value: 'rejected', label: t('rejected'), color: qualityStatusColors.rejected },
-  ];
 
   const lotGrades = [
     { value: 'A', label: `A (${t('premium')})` },
@@ -95,7 +76,7 @@ export default function LotTracking() {
     { value: 'X', label: `X (${t('defective')})` },
   ];
 
-  // Dynamic product attributes from variant system
+  // Dynamic product attributes from variant system (used in edit modal)
   const [productAttributes, setProductAttributes] = useState([]);
   const [lotAttributeValues, setLotAttributeValues] = useState({});
 
@@ -115,11 +96,25 @@ export default function LotTracking() {
     }
   }, []);
 
+  const [newLot, setNewLot] = useState({
+    lot_number: '',
+    product_id: '',
+    warehouse_id: '',
+    quantity: '',
+    unit_cost: '',
+    manufacture_date: '',
+    expiry_date: '',
+    supplier: '',
+    received_date: '',
+    serial_numbers: '',
+    lot_grade: '',
+    country_of_origin: ''
+  });
+
   const [filteredLots, setFilteredLots] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -130,39 +125,12 @@ export default function LotTracking() {
   // Cleanup modals on unmount to prevent navigation blocking
   useEffect(() => {
     return () => {
-      setShowCreateModal(false);
       setShowViewModal(false);
       setShowEditModal(false);
       setShowDeleteModal(false);
     };
   }, []);
 
-  const [newLot, setNewLot] = useState({
-    lot_number: '',
-    product_id: '',
-    warehouse_id: '',
-    quantity: '',
-    unit_cost: '',
-    manufacture_date: '',
-    expiry_date: '',
-    supplier: '',
-    received_date: new Date().toISOString().split('T')[0],
-    serial_numbers: '',
-    // SAP/Odoo Quality Management
-    quality_status: 'released', // released, blocked, in_qc, quarantine, rejected
-    // GS1 Standards
-    gtin: '', // Global Trade Item Number
-    gs1_batch: '', // GS1-128 batch code
-    // Lot Attributes (SAP)
-    lot_grade: '', // A, B, C grades
-    // Certificate tracking (SAP QM)
-    certificate_of_analysis: '', // COA document URL
-    test_results: '',
-    inspection_date: '',
-    inspector_name: '',
-    // Country of origin (important for compliance)
-    country_of_origin: ''
-  });
 
   // Calculate summaries
   const summary = {
@@ -194,42 +162,6 @@ export default function LotTracking() {
     setFilteredLots(filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
   }, [lots, searchQuery, statusFilter, productFilter, products]);
 
-  const handleCreateLot = async () => {
-    setIsSaving(true);
-    try {
-      const serialNumbers = newLot.serial_numbers
-        ? newLot.serial_numbers.split(',').map(s => s.trim()).filter(s => s)
-        : [];
-
-      await createLot({
-        ...newLot,
-        quantity: parseInt(newLot.quantity) || 0,
-        unit_cost: parseFloat(newLot.unit_cost) || 0,
-        serial_numbers: serialNumbers,
-        variant_attributes: lotAttributeValues
-      });
-
-      setNewLot({
-        lot_number: '',
-        product_id: '',
-        warehouse_id: '',
-        quantity: '',
-        unit_cost: '',
-        manufacture_date: '',
-        expiry_date: '',
-        supplier: '',
-        received_date: new Date().toISOString().split('T')[0],
-        serial_numbers: ''
-      });
-      setLotAttributeValues({});
-      setProductAttributes([]);
-      setShowCreateModal(false);
-    } catch (err) {
-      console.error('Error creating lot:', err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const getExpiryStatus = (expiryDate) => {
     if (!expiryDate) return null;
@@ -322,6 +254,12 @@ export default function LotTracking() {
   return (
     <TooltipProvider delayDuration={200}>
     <div className="space-y-6">
+      {/* Info Banner - lots are created during goods receipt */}
+      <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+        <Info className="w-5 h-5 flex-shrink-0" />
+        <p>{t('lots_created_during_receipt') || "Partiyalar mahsulotlarni qabul qilish jarayonida avtomatik yaratiladi. Yangi partiya yaratish uchun Ombor operatsiyalari → Qabul qilish bo'limiga o'ting."}</p>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
@@ -448,15 +386,7 @@ export default function LotTracking() {
           </Select>
         </div>
 
-        {canCreate(MODULES.INVENTORY) && (
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {t('new_lot')}
-          </Button>
-        )}
+{/* Lots are created automatically during Goods Receipt (qabul qilish) process */}
       </div>
 
       {/* Lots Table */}
@@ -591,366 +521,6 @@ export default function LotTracking() {
         </CardContent>
       </Card>
 
-      {/* Create Lot Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t('create_new_lot')}</DialogTitle>
-            <DialogDescription>{t('enter_lot_details')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4 max-h-[70vh] overflow-y-auto">
-            {/* Basic Information */}
-            <div className="p-3 bg-slate-50 rounded-lg border">
-              <p className="text-xs font-medium text-slate-600 mb-3 flex items-center gap-1">
-                <Package className="w-3 h-3" /> {t('basic_information')}
-              </p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('lot_number')}
-                    required
-                    helpText={t('help_lot_number')}
-                  />
-                  <Input
-                    value={newLot.lot_number}
-                    onChange={(e) => setNewLot({ ...newLot, lot_number: e.target.value })}
-                    placeholder="LOT-2025-001"
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('received_date')}
-                    helpText={t('help_received_date')}
-                  />
-                  <Input
-                    type="date"
-                    value={newLot.received_date}
-                    onChange={(e) => setNewLot({ ...newLot, received_date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('quality_status')}
-                    helpText={t('help_quality_status')}
-                  />
-                  <Select
-                    value={newLot.quality_status}
-                    onValueChange={(v) => setNewLot({ ...newLot, quality_status: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {qualityStatuses.map(qs => (
-                        <SelectItem key={qs.value} value={qs.value}>
-                          <Badge className={qs.color}>{qs.label}</Badge>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('product')}
-                    required
-                    helpText={t('help_lot_product')}
-                  />
-                  <Select
-                    value={newLot.product_id}
-                    onValueChange={(v) => {
-                      setNewLot({ ...newLot, product_id: v });
-                      setLotAttributeValues({});
-                      fetchProductAttributes(v);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_product')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.filter(p => p.is_stockable).map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('warehouse')}
-                    required
-                    helpText={t('help_lot_warehouse')}
-                  />
-                  <Select
-                    value={newLot.warehouse_id}
-                    onValueChange={(v) => setNewLot({ ...newLot, warehouse_id: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_warehouse')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map(w => (
-                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('quantity')}
-                    required
-                    helpText={t('help_lot_quantity')}
-                  />
-                  <Input
-                    type="number"
-                    value={newLot.quantity}
-                    onChange={(e) => setNewLot({ ...newLot, quantity: e.target.value })}
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('unit_cost')}
-                    helpText={t('help_lot_unit_cost')}
-                  />
-                  <Input
-                    type="number"
-                    value={newLot.unit_cost}
-                    onChange={(e) => setNewLot({ ...newLot, unit_cost: e.target.value })}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* GS1 Standards Section */}
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-xs font-medium text-blue-700 mb-3 flex items-center gap-1">
-                <QrCode className="w-3 h-3" /> {t('gs1_standards')}
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('gtin')}
-                    helpText={t('help_gtin')}
-                  />
-                  <Input
-                    value={newLot.gtin}
-                    onChange={(e) => setNewLot({ ...newLot, gtin: e.target.value })}
-                    placeholder="e.g., 01234567890123"
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('gs1_batch')}
-                    helpText={t('help_gs1_batch')}
-                  />
-                  <Input
-                    value={newLot.gs1_batch}
-                    onChange={(e) => setNewLot({ ...newLot, gs1_batch: e.target.value })}
-                    placeholder="e.g., 10ABC123"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Lot Attributes (SAP) */}
-            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-xs font-medium text-purple-700 mb-3 flex items-center gap-1">
-                <Award className="w-3 h-3" /> {t('lot_attributes')}
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('lot_grade')}
-                    helpText={t('help_lot_grade')}
-                  />
-                  <Select
-                    value={newLot.lot_grade || '__none__'}
-                    onValueChange={(v) => setNewLot({ ...newLot, lot_grade: v === '__none__' ? '' : v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t('none')}</SelectItem>
-                      {lotGrades.map(g => (
-                        <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('country_of_origin')}
-                    helpText={t('help_country_of_origin')}
-                  />
-                  <Input
-                    value={newLot.country_of_origin}
-                    onChange={(e) => setNewLot({ ...newLot, country_of_origin: e.target.value })}
-                    placeholder="e.g., Uzbekistan"
-                  />
-                </div>
-                {productAttributes.map(attr => (
-                  <div key={attr.attribute_id}>
-                    <label className="text-sm font-medium text-slate-700 mb-1 flex items-center">
-                      {attr.attribute_name}
-                    </label>
-                    <Select
-                      value={lotAttributeValues[attr.attribute_id] || '__none__'}
-                      onValueChange={(v) => setLotAttributeValues(prev => ({
-                        ...prev,
-                        [attr.attribute_id]: v === '__none__' ? '' : v
-                      }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('select')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t('none')}</SelectItem>
-                        {(attr.values || []).filter(v => v.is_active).map(val => (
-                          <SelectItem key={val.value_id} value={val.value_name}>
-                            {val.html_color && (
-                              <span
-                                className="inline-block w-3 h-3 rounded-full mr-2 border"
-                                style={{ backgroundColor: val.html_color }}
-                              />
-                            )}
-                            {val.value_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-              {productAttributes.length === 0 && newLot.product_id && (
-                <p className="text-xs text-purple-500 mt-2">{t('no_variant_attributes')}</p>
-              )}
-            </div>
-
-            {/* Dates Section */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <LabelWithHelp
-                  label={t('manufacture_date')}
-                  helpText={t('help_manufacture_date')}
-                />
-                <Input
-                  type="date"
-                  value={newLot.manufacture_date}
-                  onChange={(e) => setNewLot({ ...newLot, manufacture_date: e.target.value })}
-                />
-              </div>
-              <div>
-                <LabelWithHelp
-                  label={t('expiry_date')}
-                  helpText={t('help_expiry_date')}
-                />
-                <Input
-                  type="date"
-                  value={newLot.expiry_date}
-                  onChange={(e) => setNewLot({ ...newLot, expiry_date: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Certificate Tracking (SAP QM) */}
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-xs font-medium text-green-700 mb-3 flex items-center gap-1">
-                <FileCheck className="w-3 h-3" /> {t('certificate_tracking')}
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('coa_url')}
-                    helpText={t('help_coa_url')}
-                  />
-                  <Input
-                    value={newLot.certificate_of_analysis}
-                    onChange={(e) => setNewLot({ ...newLot, certificate_of_analysis: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('test_results')}
-                    helpText={t('help_test_results')}
-                  />
-                  <Input
-                    value={newLot.test_results}
-                    onChange={(e) => setNewLot({ ...newLot, test_results: e.target.value })}
-                    placeholder={t('test_results_placeholder')}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div>
-                  <LabelWithHelp
-                    label={t('inspection_date')}
-                    helpText={t('help_inspection_date')}
-                  />
-                  <Input
-                    type="date"
-                    value={newLot.inspection_date}
-                    onChange={(e) => setNewLot({ ...newLot, inspection_date: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <LabelWithHelp
-                    label={t('inspector_name')}
-                    helpText={t('help_inspector_name')}
-                  />
-                  <Input
-                    value={newLot.inspector_name}
-                    onChange={(e) => setNewLot({ ...newLot, inspector_name: e.target.value })}
-                    placeholder={t('inspector_name_placeholder')}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <LabelWithHelp
-                label={t('supplier')}
-                helpText={t('help_lot_supplier')}
-              />
-              <Input
-                value={newLot.supplier}
-                onChange={(e) => setNewLot({ ...newLot, supplier: e.target.value })}
-                placeholder={t('supplier_name_placeholder')}
-              />
-            </div>
-
-            <div>
-              <LabelWithHelp
-                label={t('serial_numbers_comma_separated')}
-                helpText={t('help_serial_numbers')}
-              />
-              <Input
-                value={newLot.serial_numbers}
-                onChange={(e) => setNewLot({ ...newLot, serial_numbers: e.target.value })}
-                placeholder="SN-001, SN-002, SN-003"
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel')}</Button>
-              <Button
-                onClick={handleCreateLot}
-                disabled={isSaving || !newLot.product_id || !newLot.warehouse_id || !newLot.quantity}
-                className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white"
-              >
-                {isSaving ? t('saving') : t('save')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* View Lot Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
