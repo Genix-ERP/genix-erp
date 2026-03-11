@@ -708,7 +708,7 @@ export default function Payroll() {
                     <Input
                       type="number"
                       placeholder="0"
-                      value={newPayroll.overtime_hours}
+                      value={newPayroll.overtime_hours || ''}
                       onChange={(e) => setNewPayroll({...newPayroll, overtime_hours: e.target.value})}
                     />
                   </div>
@@ -719,7 +719,7 @@ export default function Payroll() {
                     <Input
                       type="number"
                       placeholder="208"
-                      value={newPayroll.monthly_hours}
+                      value={newPayroll.monthly_hours || ''}
                       onChange={(e) => setNewPayroll({...newPayroll, monthly_hours: e.target.value})}
                     />
                   </div>
@@ -770,8 +770,11 @@ export default function Payroll() {
                       type="number"
                       min="0"
                       max="100"
-                      value={deductionPercent}
-                      onChange={(e) => setDeductionPercent(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                      value={deductionPercent || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDeductionPercent(val === '' ? 0 : Math.min(100, Math.max(0, parseFloat(val) || 0)));
+                      }}
                       className="w-24 bg-white"
                     />
                     <span className="text-sm text-amber-800">%</span>
@@ -909,7 +912,7 @@ export default function Payroll() {
                       <label className="text-sm font-medium mb-1 block">{t('overtime_hours')}</label>
                       <Input
                         type="number"
-                        value={editPayroll.overtime_hours}
+                        value={editPayroll.overtime_hours || ''}
                         onChange={(e) => setEditPayroll({...editPayroll, overtime_hours: e.target.value})}
                       />
                     </div>
@@ -917,7 +920,7 @@ export default function Payroll() {
                       <label className="text-sm font-medium mb-1 block">{t('monthly_working_hours')}</label>
                       <Input
                         type="number"
-                        value={editPayroll.monthly_hours}
+                        value={editPayroll.monthly_hours || ''}
                         onChange={(e) => setEditPayroll({...editPayroll, monthly_hours: e.target.value})}
                       />
                     </div>

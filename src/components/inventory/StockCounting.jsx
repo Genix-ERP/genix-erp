@@ -563,7 +563,7 @@ export default function StockCounting() {
                             size="sm"
                             onClick={() => setShowCompleteModal(true)}
                             className="bg-green-600 hover:bg-green-700 text-white"
-                            disabled={selectedCount.lines?.some(l => (l.counted_quantity ?? l.counted_qty) === null)}
+                            disabled={!selectedCount.lines?.length || selectedCount.lines.some(l => l.counted_quantity == null)}
                           >
                             <Check className="w-4 h-4 mr-1" />
                             {t('complete')}

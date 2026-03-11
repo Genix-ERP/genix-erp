@@ -154,7 +154,7 @@ export default function ChartOfAccounts() {
     }
 
     if (typeFilter !== 'all') {
-      filtered = filtered.filter(acc => acc.type === typeFilter);
+      filtered = filtered.filter(acc => (acc.category || acc.type) === typeFilter);
     }
 
     return filtered;
