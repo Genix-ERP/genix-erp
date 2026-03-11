@@ -54,6 +54,77 @@ import {
   useAuditTrail,
 } from '@/components/shared';
 
+// ── EAN-13 Barcode Utilities ──────────────────────────────────────────────────
+const EAN13_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const EAN13_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const EAN13_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+const EAN13_PARITY = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+
+const calculateEAN13CheckDigit = (digits12) => {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(digits12[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  return (10 - (sum % 10)) % 10;
+};
+
+const generateEAN13 = () => {
+  // Prefix 200-299 is reserved for internal/in-store use
+  let digits = '200';
+  for (let i = 0; i < 9; i++) {
+    digits += Math.floor(Math.random() * 10);
+  }
+  return digits + calculateEAN13CheckDigit(digits);
+};
+
+const isValidEAN13 = (code) => {
+  if (!/^\d{13}$/.test(code)) return false;
+  return calculateEAN13CheckDigit(code.substring(0, 12)) === parseInt(code[12]);
+};
+
+const EAN13Barcode = ({ code, width = 200, height = 60 }) => {
+  if (!code || !/^\d{13}$/.test(code)) return null;
+  const d = code.split('').map(Number);
+  const parity = EAN13_PARITY[d[0]];
+
+  let bin = '101';
+  for (let i = 0; i < 6; i++) bin += parity[i] === 'L' ? EAN13_L[d[i+1]] : EAN13_G[d[i+1]];
+  bin += '01010';
+  for (let i = 0; i < 6; i++) bin += EAN13_R[d[i+7]];
+  bin += '101';
+
+  const bw = width / (bin.length + 14);
+  const qz = bw * 7;
+  const gh = height;
+  const nh = height - 6;
+  const fs = Math.max(9, Math.min(13, bw * 6));
+  const bars = [];
+  let x = qz;
+  for (let i = 0; i < bin.length; i++) {
+    const isG = i < 3 || (i >= 45 && i <= 49) || i >= bin.length - 3;
+    if (bin[i] === '1') bars.push(<rect key={i} x={x} y={0} width={bw} height={isG ? gh : nh} fill="black" />);
+    x += bw;
+  }
+  const tw = x + qz;
+  const lgx = qz + 3 * bw;
+  const rgx = qz + 50 * bw;
+  const dw = 7 * bw;
+
+  return (
+    <svg width={tw} height={gh + 16} viewBox={`0 0 ${tw} ${gh + 16}`} className="bg-white">
+      {bars}
+      <text x={qz - 2} y={gh + 12} textAnchor="end" fontSize={fs} fontFamily="monospace">{d[0]}</text>
+      {[1,2,3,4,5,6].map(i => (
+        <text key={`l${i}`} x={lgx + (i-1)*dw + dw/2} y={gh + 12} textAnchor="middle" fontSize={fs} fontFamily="monospace">{d[i]}</text>
+      ))}
+      {[7,8,9,10,11,12].map(i => (
+        <text key={`r${i}`} x={rgx + (i-7)*dw + dw/2} y={gh + 12} textAnchor="middle" fontSize={fs} fontFamily="monospace">{d[i]}</text>
+      ))}
+    </svg>
+  );
+};
+// ── End EAN-13 ────────────────────────────────────────────────────────────────
+
 // Field Help Component - Odoo-style tooltip for field explanations
 // Note: TooltipProvider should be at a higher level, not per-component
 const FieldHelp = ({ text }) => (
@@ -651,10 +722,13 @@ export default function Products() {
   const handleCreate = async () => {
     setIsSaving(true);
     try {
+      // Auto-generate EAN-13 barcode if not provided
+      const barcode = formData.barcode || generateEAN13();
       // Generate code from barcode or name (backend requires 'code' field)
-      const generatedCode = formData.barcode || formData.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+      const generatedCode = barcode || formData.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
       const productData = {
         ...formData,
+        barcode,
         code: generatedCode,
         inventory_type: formData.inventory_type,
         cost_price: parseFloat(formData.cost_price) || 0,
@@ -1683,11 +1757,32 @@ export default function Products() {
                     label={t('barcode')}
                     helpText={t('help_barcode') || "Mahsulotning shtrix-kodi. Skaner yordamida tez qidirish uchun ishlatiladi"}
                   />
-                  <Input
-                    placeholder={t('barcode')}
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({...formData, barcode: e.target.value})}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="EAN-13"
+                      value={formData.barcode}
+                      onChange={(e) => setFormData({...formData, barcode: e.target.value})}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title="EAN-13 avtomatik yaratish"
+                      onClick={() => setFormData({...formData, barcode: generateEAN13()})}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.barcode && isValidEAN13(formData.barcode) && (
+                    <div className="mt-2 p-3 bg-white border rounded-lg flex flex-col items-center">
+                      <EAN13Barcode code={formData.barcode} width={220} height={55} />
+                      <span className="text-[10px] text-slate-400 mt-1">EAN-13</span>
+                    </div>
+                  )}
+                  {formData.barcode && formData.barcode.length > 0 && !isValidEAN13(formData.barcode) && (
+                    <p className="text-xs text-amber-500 mt-1">EAN-13 formatida emas (13 ta raqam kerak)</p>
+                  )}
                 </div>
                 <div>
                   <LabelWithHelp
@@ -3167,7 +3262,13 @@ export default function Products() {
                 </div>
                 <div className="p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 mb-1">{t('barcode') || 'Barcode'}</p>
-                  <p className="text-sm font-semibold text-slate-900">{selectedProduct.barcode || '-'}</p>
+                  {selectedProduct.barcode && isValidEAN13(selectedProduct.barcode) ? (
+                    <div className="flex flex-col items-center mt-1">
+                      <EAN13Barcode code={selectedProduct.barcode} width={180} height={50} />
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-900">{selectedProduct.barcode || '-'}</p>
+                  )}
                 </div>
               </div>
 
