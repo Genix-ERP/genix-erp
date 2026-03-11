@@ -732,7 +732,18 @@ export default function PurchaseOrders() {
                                 </Button>
                               )}
                               {canUpdate(MODULES.PURCHASES) && po.status === 'sent' && (
-                                <Button size="sm" variant="ghost" onClick={() => approvePurchaseOrder(po.id)}>
+                                <Button size="sm" variant="ghost" onClick={async () => {
+                                  try {
+                                    await approvePurchaseOrder(po.id);
+                                  } catch (err) {
+                                    const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || '';
+                                    if (msg.includes('NO_RECEIPT_WAREHOUSE')) {
+                                      toast({ title: t('no_receipt_warehouse'), variant: 'destructive' });
+                                    } else {
+                                      toast({ title: msg || t('error'), variant: 'destructive' });
+                                    }
+                                  }
+                                }}>
                                   {t('confirm') || 'Confirm'}
                                 </Button>
                               )}
