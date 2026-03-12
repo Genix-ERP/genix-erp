@@ -79,6 +79,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   const [exportData, setExportData] = useState([]);
 
   const exportColumns = [
+    { key: 'estimate_name', label: t('estimate') || 'Smeta' },
     { key: 'name', label: t('name') || 'Nomi' },
     { key: 'uom', label: t('unit') || "O'lchov birligi" },
     { key: 'quantity', label: t('quantity') || 'Miqdor' },
@@ -90,6 +91,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   ];
 
   const importColumns = [
+    { key: 'estimate_name', label: t('estimate') || 'Smeta', required: true },
     { key: 'name', label: t('name') || 'Nomi', required: true },
     { key: 'uom', label: t('unit') || "O'lchov birligi" },
     { key: 'quantity', label: t('quantity') || 'Miqdor' },
@@ -99,46 +101,92 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   ];
 
   const handleImport = async (data) => {
-    if (!expandedEstimate) return;
-    const est = estimates.find(e => e.id === expandedEstimate);
-    if (!est || est.state !== 'draft') return;
+    if (!selectedBuilding) return;
+    const buildingId = selectedBuilding === 'project' ? 0 : selectedBuilding.id;
     try {
+      // Group rows by estimate_name
+      const grouped = {};
       for (const row of data) {
-        await constructionService.createEstimateLine(expandedEstimate, {
-          name: row.name,
-          uom: row.uom || 'шт',
-          quantity: row.quantity ? parseFloat(row.quantity) : 0,
-          material_rate: row.material_rate ? parseFloat(row.material_rate) : 0,
-          labor_rate: row.labor_rate ? parseFloat(row.labor_rate) : 0,
-          equipment_rate: row.equipment_rate ? parseFloat(row.equipment_rate) : 0,
-          sort_order: 0,
-        });
+        const estName = row.estimate_name || 'Imported';
+        if (!grouped[estName]) grouped[estName] = [];
+        grouped[estName].push(row);
       }
-      await loadEstimateLines(expandedEstimate);
+
+      for (const [estName, rows] of Object.entries(grouped)) {
+        // Find existing draft estimate with same name for this building, or create new
+        let est = estimates.find(e =>
+          e.name === estName &&
+          e.state === 'draft' &&
+          (selectedBuilding === 'project' ? !e.building_id : e.building_id === buildingId)
+        );
+        let estId;
+        if (est) {
+          estId = est.id;
+        } else {
+          const created = await constructionService.createEstimate(project.id, {
+            name: estName,
+            building_id: buildingId,
+            overhead_pct: 0,
+            profit_pct: 0,
+            vat_pct: 12,
+          });
+          estId = created.id;
+        }
+
+        for (const row of rows) {
+          await constructionService.createEstimateLine(estId, {
+            name: row.name,
+            uom: row.uom || 'шт',
+            quantity: row.quantity ? parseFloat(row.quantity) : 0,
+            material_rate: row.material_rate ? parseFloat(row.material_rate) : 0,
+            labor_rate: row.labor_rate ? parseFloat(row.labor_rate) : 0,
+            equipment_rate: row.equipment_rate ? parseFloat(row.equipment_rate) : 0,
+            sort_order: 0,
+          });
+        }
+      }
+
       await loadEstimates();
       setShowImportModal(false);
     } catch (error) {
-      console.error('Error importing estimate lines:', error);
+      console.error('Error importing estimates:', error);
     }
   };
 
   const expandedLines = expandedEstimate ? (estimateLines[expandedEstimate] || []) : [];
 
-  useEffect(() => {
-    if (showExportModal && expandedLines.length > 0) {
-      setExportData(expandedLines.map(line => ({
-        wbs_code: line.wbs_code || '',
-        name: line.name,
-        uom: line.uom,
-        quantity: line.quantity,
-        material_rate: line.material_rate,
-        labor_rate: line.labor_rate,
-        equipment_rate: line.equipment_rate,
-        unit_rate: line.unit_rate || ((line.material_rate || 0) + (line.labor_rate || 0) + (line.equipment_rate || 0)),
-        total_amount: line.total_amount || 0,
-      })));
+  // Prepare export data: all lines from all filtered estimates
+  const handlePrepareExport = async () => {
+    const ests = getFilteredEstimates();
+    const allRows = [];
+    for (const est of ests) {
+      let lines = estimateLines[est.id];
+      if (!lines) {
+        try {
+          const data = await constructionService.getEstimate(est.id);
+          lines = data?.lines || [];
+          setEstimateLines(prev => ({ ...prev, [est.id]: lines }));
+        } catch {
+          lines = [];
+        }
+      }
+      for (const line of lines) {
+        allRows.push({
+          estimate_name: `${est.name} (v${est.version})`,
+          name: line.name,
+          uom: line.uom,
+          quantity: line.quantity,
+          material_rate: line.material_rate,
+          labor_rate: line.labor_rate,
+          equipment_rate: line.equipment_rate,
+          unit_rate: line.unit_rate || ((line.material_rate || 0) + (line.labor_rate || 0) + (line.equipment_rate || 0)),
+          total_amount: line.total_amount || 0,
+        });
+      }
     }
-  }, [showExportModal, expandedLines]);
+    setExportData(allRows);
+    setShowExportModal(true);
+  };
 
   // Load estimates
   const loadEstimates = useCallback(async () => {
@@ -377,9 +425,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       <div className="flex items-center justify-end">
         <ImportExportButtons
           onImport={() => setShowImportModal(true)}
-          onExport={() => setShowExportModal(true)}
-          importDisabled={!expandedEstimate || estimates.find(e => e.id === expandedEstimate)?.state !== 'draft'}
-          exportDisabled={!expandedEstimate || expandedLines.length === 0}
+          onExport={handlePrepareExport}
+          importDisabled={!selectedBuilding}
+          exportDisabled={!selectedBuilding || filteredEstimates.length === 0}
         />
       </div>
 
@@ -940,7 +988,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
         columns={importColumns}
-        entityName={t('estimate_lines') || 'Smeta qatorlari'}
+        entityName={t('estimates') || 'Smetalar'}
         templateColumns={importColumns}
       />
 
@@ -950,8 +998,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
         onClose={() => setShowExportModal(false)}
         data={exportData}
         columns={exportColumns}
-        entityName={t('estimate_lines') || 'Smeta qatorlari'}
-        title={expandedEstimate ? `${estimates.find(e => e.id === expandedEstimate)?.name || ''} (v${estimates.find(e => e.id === expandedEstimate)?.version || ''})` : ''}
+        entityName={t('estimates') || 'Smetalar'}
+        title={selectedBuilding === 'project' ? (t('entire_project') || 'Butun loyiha') : (selectedBuilding?.name || '')}
       />
     </div>
   );

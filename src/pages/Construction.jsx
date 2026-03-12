@@ -78,6 +78,11 @@ import DailyJournalTab from '@/components/construction/tabs/DailyJournalTab';
 import StagesTab from '@/components/construction/tabs/StagesTab';
 import ExpensesTab from '@/components/construction/tabs/ExpensesTab';
 import BudgetTab from '@/components/construction/tabs/BudgetTab';
+import MaterialUsageTab from '@/components/construction/tabs/MaterialUsageTab';
+import ProgressTab from '@/components/construction/tabs/ProgressTab';
+import SubcontractorsTab from '@/components/construction/tabs/SubcontractorsTab';
+import ActsTab from '@/components/construction/tabs/ActsTab';
+import FinancialTab from '@/components/construction/tabs/FinancialTab';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -1399,8 +1404,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             {t('daily_logs') || 'Kunlik jurnal'}
           </TabsTrigger>
           <TabsTrigger value="progress" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            {t('progress') || 'Jarayon'}
+            <Layers className="w-4 h-4 mr-2" />
+            {t('progress_visualization') || 'Jarayon'}
           </TabsTrigger>
           <TabsTrigger value="activity" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Clock className="w-4 h-4 mr-2" />
@@ -1417,6 +1422,22 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <TabsTrigger value="budget" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <TrendingUp className="w-4 h-4 mr-2" />
             {t('budget_plan_actual') || 'Byudjet (reja/fakt)'}
+          </TabsTrigger>
+          <TabsTrigger value="material_usage" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Package className="w-4 h-4 mr-2" />
+            {t('material_usage') || 'Material sarfi'}
+          </TabsTrigger>
+<TabsTrigger value="subcontractors" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <HardHat className="w-4 h-4 mr-2" />
+            {t('subcontractors') || 'Pudratchilar'}
+          </TabsTrigger>
+          <TabsTrigger value="acts" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <FileText className="w-4 h-4 mr-2" />
+            {t('acts') || 'Aktlar'}
+          </TabsTrigger>
+          <TabsTrigger value="financial" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <DollarSign className="w-4 h-4 mr-2" />
+            {t('financial_analysis') || 'Moliyaviy tahlil'}
           </TabsTrigger>
         </TabsList>
 
@@ -2135,16 +2156,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Progress Tab */}
         <TabsContent value="progress" className="mt-6">
-          <ProgressTrackingTab
-            project={project}
-            sections={sections}
-            t={t}
-            formatCurrency={formatCurrency}
-            onRefresh={async () => {
-              const sectionsData = await constructionService.listSections(project.id);
-              setSections(sectionsData || []);
-            }}
-          />
+          <ProgressTab project={project} />
         </TabsContent>
 
         {/* Activity Log Tab */}
@@ -2169,6 +2181,26 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         {/* Budget Plan vs Actual Tab */}
         <TabsContent value="budget" className="mt-6">
           <BudgetTab project={project} />
+        </TabsContent>
+
+        {/* Material Usage Tab */}
+        <TabsContent value="material_usage" className="mt-6">
+          <MaterialUsageTab project={project} />
+        </TabsContent>
+
+{/* Subcontractors Tab */}
+        <TabsContent value="subcontractors" className="mt-6">
+          <SubcontractorsTab project={project} />
+        </TabsContent>
+
+        {/* Acts (KS-2/KS-3) Tab */}
+        <TabsContent value="acts" className="mt-6">
+          <ActsTab project={project} />
+        </TabsContent>
+
+        {/* Financial Analysis Tab */}
+        <TabsContent value="financial" className="mt-6">
+          <FinancialTab project={project} />
         </TabsContent>
       </Tabs>
 

@@ -9,12 +9,14 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Plus, PackagePlus, Truck, ArrowRightLeft, Trash2, ChevronRight,
   CheckCircle2, Clock, XCircle, Search, RefreshCw,
   ArrowLeft, Eye, Play, AlertTriangle, FileText, Loader2,
-  ClipboardList, Package, Pencil, Save, Copy, Calendar
+  ClipboardList, Package, Pencil, Save, Copy, Calendar, Printer
 } from "lucide-react";
+import { PickingListPrint, PackingSlipPrint, DeliveryNotePrint, printDocument } from './StockOperationPrint';
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -34,16 +36,17 @@ const DIRECTIONS = [
   { value: 'write_off', icon: Trash2,         color: 'red',    labelKey: 'write_offs' },
 ];
 
-const WRITE_OFF_REASONS = [
+const WRITE_OFF_REASONS_FALLBACK = [
   'damage', 'expired', 'lost', 'sample', 'donation', 'inventory_diff', 'other'
 ];
 
 const STATE_CONFIG = {
-  draft:       { label: 'Draft',       color: 'bg-slate-100 text-slate-600',   icon: Clock },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700',     icon: Play },
-  waiting:     { label: 'Waiting',     color: 'bg-amber-100 text-amber-700',   icon: Clock },
-  done:        { label: 'Done',        color: 'bg-green-100 text-green-700',   icon: CheckCircle2 },
-  cancelled:   { label: 'Cancelled',   color: 'bg-red-100 text-red-600',       icon: XCircle },
+  draft:              { label: 'Draft',              color: 'bg-slate-100 text-slate-600',    icon: Clock },
+  in_progress:        { label: 'In Progress',        color: 'bg-blue-100 text-blue-700',      icon: Play },
+  waiting:            { label: 'Waiting',            color: 'bg-amber-100 text-amber-700',    icon: Clock },
+  awaiting_approval:  { label: 'Awaiting Approval',  color: 'bg-orange-100 text-orange-700',  icon: AlertTriangle },
+  done:               { label: 'Done',               color: 'bg-green-100 text-green-700',    icon: CheckCircle2 },
+  cancelled:          { label: 'Cancelled',          color: 'bg-red-100 text-red-600',        icon: XCircle },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,6 +130,33 @@ export default function StockOperations() {
   // Backorder dialog
   const [showBackorderDialog, setShowBackorderDialog] = useState(false);
 
+  // Over-receipt confirmation dialog
+  const [showOverReceiptDialog, setShowOverReceiptDialog] = useState(false);
+  const [overReceiptData, setOverReceiptData] = useState(null);
+
+  // Step approval/rejection dialog
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // Carriers for delivery operations
+  const [carriers, setCarriers] = useState([]);
+  useEffect(() => {
+    inventoryService.listCarriers().then(data => {
+      if (data && data.length > 0) setCarriers(data);
+    }).catch(() => {});
+  }, []);
+
+  // Scrap/write-off reasons from API
+  const [scrapReasons, setScrapReasons] = useState([]);
+  useEffect(() => {
+    inventoryService.listScrapReasons().then(data => {
+      if (data && data.length > 0) setScrapReasons(data);
+    }).catch(() => {});
+  }, []);
+  const writeOffReasons = scrapReasons.length > 0
+    ? scrapReasons.map(r => ({ value: r.code, label: r.name }))
+    : WRITE_OFF_REASONS_FALLBACK.map(r => ({ value: r, label: r }));
+
   // Create form state
   const [form, setForm] = useState({
     operation_type_id: '',
@@ -137,6 +167,9 @@ export default function StockOperations() {
     priority: 'normal',
     note: '',
     write_off_reason: '',
+    carrier_id: '',
+    delivery_address: '',
+    tracking_number: '',
     lines: [],
   });
 
@@ -264,13 +297,70 @@ export default function StockOperations() {
   };
 
   const handleStockError = (error) => {
-    if (error.response?.status === 422 && error.response?.data?.errors) {
+    if (error.response?.status === 422 && error.response?.data?.over_receipt_warning) {
+      // Over-receipt detected — show confirmation dialog
+      setOverReceiptData(error.response.data);
+      setShowOverReceiptDialog(true);
+    } else if (error.response?.status === 422 && error.response?.data?.missing_documents) {
+      const docs = error.response.data.missing_documents.join(', ');
+      toast.error(`${t('missing_documents') || 'Missing required documents'}: ${docs}`, { duration: 8000 });
+    } else if (error.response?.status === 422 && error.response?.data?.errors) {
       const items = error.response.data.errors;
       const details = items.map(i => `${i.product_name}: ${t('available') || 'available'} ${i.available}, ${t('requested') || 'requested'} ${i.requested}`).join('; ');
       toast.error(`${t('insufficient_stock') || error.response.data.message || 'Insufficient stock'}: ${details}`, { duration: 8000 });
     } else {
       const msg = error.response?.data?.message || error.response?.data?.error || error.message;
       toast.error(msg);
+    }
+  };
+
+  const handleForceAdvance = async () => {
+    setShowOverReceiptDialog(false);
+    setOverReceiptData(null);
+    setIsActionLoading(true);
+    try {
+      const result = await inventoryService.advanceStockOperationStep(selectedOp.id, { force: true });
+      await refreshDetail();
+      setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
+      loadData();
+    } catch (error) {
+      handleStockError(error);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!selectedOp) return;
+    setIsActionLoading(true);
+    try {
+      const result = await inventoryService.approveStockOperationStep(selectedOp.id);
+      await refreshDetail();
+      setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
+      loadData();
+      toast.success(t('step_approved') || 'Step approved');
+    } catch (error) {
+      handleStockError(error);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedOp || !rejectReason.trim()) return;
+    setIsActionLoading(true);
+    try {
+      const result = await inventoryService.rejectStockOperationStep(selectedOp.id, rejectReason.trim());
+      setShowRejectDialog(false);
+      setRejectReason('');
+      await refreshDetail();
+      setSelectedOp(prev => ({ ...prev, state: result.state, current_step: result.current_step }));
+      loadData();
+      toast.success(t('step_rejected') || 'Step rejected — returned for re-work');
+    } catch (error) {
+      handleStockError(error);
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -730,11 +820,48 @@ export default function StockOperations() {
                       <SelectValue placeholder={t('select_reason') || 'Select reason'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {WRITE_OFF_REASONS.map(r => (
-                        <SelectItem key={r} value={r}>{t(`writeoff_${r}`) || r}</SelectItem>
+                      {writeOffReasons.map(r => (
+                        <SelectItem key={r.value} value={r.value}>{t(`writeoff_${r.value}`) || r.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {/* Delivery-specific fields: carrier, address, tracking */}
+              {form.direction === 'delivery' && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label>{t('carrier') || 'Carrier'}</Label>
+                    <Select value={form.carrier_id} onValueChange={v => setForm(f => ({ ...f, carrier_id: v }))}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder={t('select_carrier') || 'Select carrier'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {carriers.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>{t('delivery_address') || 'Delivery Address'}</Label>
+                    <Input
+                      className="mt-1"
+                      value={form.delivery_address}
+                      onChange={e => setForm(f => ({ ...f, delivery_address: e.target.value }))}
+                      placeholder={t('enter_address') || 'Enter address'}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('tracking_number') || 'Tracking Number'}</Label>
+                    <Input
+                      className="mt-1"
+                      value={form.tracking_number}
+                      onChange={e => setForm(f => ({ ...f, tracking_number: e.target.value }))}
+                      placeholder="TRACK-001"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -840,6 +967,7 @@ export default function StockOperations() {
     const isLastStep = op.current_step >= op.total_steps;
     const isDraft = op.state === 'draft';
     const isActive = op.state === 'in_progress' || op.state === 'waiting';
+    const isAwaitingApproval = op.state === 'awaiting_approval';
 
     return (
       <div className="space-y-5">
@@ -877,11 +1005,54 @@ export default function StockOperations() {
                 {isLastStep ? (t('complete') || 'Complete') : (t('next_step') || 'Next Step')}
               </Button>
             )}
+            {canAct && isAwaitingApproval && (
+              <>
+                <Button
+                  onClick={handleApprove}
+                  disabled={isActionLoading}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+                  {t('approve') || 'Approve'}
+                </Button>
+                <Button
+                  onClick={() => setShowRejectDialog(true)}
+                  disabled={isActionLoading}
+                  variant="outline"
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  {t('reject') || 'Reject'}
+                </Button>
+              </>
+            )}
             {canAct && !editingHeader && (
               <Button variant="outline" onClick={handleCancel} disabled={isActionLoading} className="text-red-600 border-red-300 hover:bg-red-50">
                 <XCircle className="w-4 h-4 mr-1" />{t('cancel') || 'Cancel'}
               </Button>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Printer className="w-4 h-4 mr-1" />{t('print') || 'Print'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => printDocument(<PickingListPrint operation={op} />)}>
+                  <ClipboardList className="w-4 h-4 mr-2" />{t('picking_list') || 'Picking List'}
+                </DropdownMenuItem>
+                {op.direction === 'delivery' && (
+                  <>
+                    <DropdownMenuItem onClick={() => printDocument(<PackingSlipPrint operation={op} />)}>
+                      <Package className="w-4 h-4 mr-2" />{t('packing_slip') || 'Packing Slip'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => printDocument(<DeliveryNotePrint operation={op} />)}>
+                      <FileText className="w-4 h-4 mr-2" />{t('delivery_note') || 'Delivery Note (TTN)'}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -1016,6 +1187,29 @@ export default function StockOperations() {
                       <p className="text-slate-700">{op.note}</p>
                     </div>
                   )}
+                  {op.direction === 'delivery' && (op.carrier_name || op.delivery_address || op.tracking_number) && (
+                    <div className="pt-2 border-t space-y-2">
+                      <p className="text-slate-500 text-xs font-medium">{t('delivery_info') || 'Delivery Info'}</p>
+                      {op.carrier_name && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">{t('carrier') || 'Carrier'}</span>
+                          <span className="font-medium">{op.carrier_name}</span>
+                        </div>
+                      )}
+                      {op.delivery_address && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">{t('delivery_address') || 'Address'}</span>
+                          <span className="font-medium text-right">{op.delivery_address}</span>
+                        </div>
+                      )}
+                      {op.tracking_number && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">{t('tracking_number') || 'Tracking'}</span>
+                          <Badge variant="outline" className="font-mono text-xs">{op.tracking_number}</Badge>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </CardContent>
@@ -1047,6 +1241,13 @@ export default function StockOperations() {
                         <TableHead className="text-right">{t('done') || 'Done'}</TableHead>
                         <TableHead>{t('lot') || 'Lot'}</TableHead>
                         <TableHead>{t('quality') || 'Quality'}</TableHead>
+                        {op.direction === 'delivery' && (
+                          <>
+                            <TableHead>{t('tracking') || 'Tracking'}</TableHead>
+                            <TableHead className="text-right">{t('weight_kg') || 'Weight (kg)'}</TableHead>
+                            <TableHead>{t('dimensions') || 'Dimensions'}</TableHead>
+                          </>
+                        )}
                         {editingLines && <TableHead className="text-right">{t('unit_price') || 'Price'}</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -1057,7 +1258,15 @@ export default function StockOperations() {
                             <p className="font-medium text-sm">{line.product_name}</p>
                             {line.product_code && <p className="text-xs text-slate-400">{line.product_code}</p>}
                           </TableCell>
-                          <TableCell className="text-right">{line.expected_qty} {line.uom}</TableCell>
+                          <TableCell className="text-right">
+                            <span>{line.expected_qty} {line.uom}</span>
+                            {line.expected_qty > 0 && line.done_qty > line.expected_qty && (
+                              <p className="text-xs text-red-500 font-medium">+{line.done_qty - line.expected_qty} {t('extra') || 'extra'}</p>
+                            )}
+                            {line.expected_qty > 0 && line.done_qty > 0 && line.done_qty < line.expected_qty && (
+                              <p className="text-xs text-amber-500 font-medium">{line.expected_qty - line.done_qty} {t('remaining') || 'remaining'}</p>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {canAct ? (
                               <div className="flex items-center justify-end gap-1">
@@ -1120,6 +1329,58 @@ export default function StockOperations() {
                               </>
                             )}
                           </TableCell>
+                          {op.direction === 'delivery' && (
+                            <>
+                              <TableCell>
+                                {editingLines ? (
+                                  <Input
+                                    className="w-28 text-sm"
+                                    value={lineEdits[line.id]?.tracking_number ?? line.tracking_number ?? ''}
+                                    onChange={e => setLineEdits(prev => ({
+                                      ...prev,
+                                      [line.id]: { ...prev[line.id], tracking_number: e.target.value }
+                                    }))}
+                                    placeholder="TRACK-001"
+                                  />
+                                ) : (
+                                  <span className="text-sm text-slate-500 font-mono">{line.tracking_number || '—'}</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {editingLines ? (
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    className="w-20 text-right text-sm"
+                                    value={lineEdits[line.id]?.package_weight ?? line.package_weight ?? ''}
+                                    onChange={e => setLineEdits(prev => ({
+                                      ...prev,
+                                      [line.id]: { ...prev[line.id], package_weight: e.target.value }
+                                    }))}
+                                    placeholder="0.000"
+                                  />
+                                ) : (
+                                  <span className="text-sm text-slate-500">{line.package_weight ? `${line.package_weight} kg` : '—'}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingLines ? (
+                                  <Input
+                                    className="w-28 text-sm"
+                                    value={lineEdits[line.id]?.package_dimensions ?? line.package_dimensions ?? ''}
+                                    onChange={e => setLineEdits(prev => ({
+                                      ...prev,
+                                      [line.id]: { ...prev[line.id], package_dimensions: e.target.value }
+                                    }))}
+                                    placeholder="30x20x15"
+                                  />
+                                ) : (
+                                  <span className="text-sm text-slate-500">{line.package_dimensions || '—'}</span>
+                                )}
+                              </TableCell>
+                            </>
+                          )}
                           {editingLines && (
                             <TableCell className="text-right">
                               <Input
@@ -1283,6 +1544,96 @@ export default function StockOperations() {
               >
                 {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
                 {t('create_backorder') || 'Create Backorder'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Over-receipt Confirmation Dialog */}
+        <Dialog open={showOverReceiptDialog} onOpenChange={setShowOverReceiptDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle className="w-5 h-5" />
+                {t('over_receipt_detected') || 'Over-receipt Detected'}
+              </DialogTitle>
+              <DialogDescription>
+                {t('over_receipt_desc') || 'The received quantity exceeds the expected quantity for some items. Do you want to proceed?'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2 space-y-2">
+              {overReceiptData?.over_receipt_items?.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                  <p className="text-xs font-medium text-red-700 mb-1">{t('over_received') || 'Over-received'}</p>
+                  {overReceiptData.over_receipt_items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-slate-700">{item.product_name}</span>
+                      <span className="text-red-600 font-medium">
+                        {item.done_qty}/{item.expected_qty} (+{item.difference})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {overReceiptData?.under_receipt_items?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                  <p className="text-xs font-medium text-amber-700 mb-1">{t('under_received') || 'Under-received'}</p>
+                  {overReceiptData.under_receipt_items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-slate-700">{item.product_name}</span>
+                      <span className="text-amber-600 font-medium">
+                        {item.done_qty}/{item.expected_qty} (-{item.difference})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter className="flex flex-wrap gap-2 sm:justify-end">
+              <Button variant="outline" onClick={() => { setShowOverReceiptDialog(false); setOverReceiptData(null); }}>
+                {t('cancel') || 'Cancel'}
+              </Button>
+              <Button onClick={handleForceAdvance} disabled={isActionLoading}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white"
+              >
+                {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+                {t('confirm_and_proceed') || 'Confirm & Proceed'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rejection Dialog */}
+        <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-700">
+                <XCircle className="w-5 h-5" />
+                {t('reject_step') || 'Reject Step'}
+              </DialogTitle>
+              <DialogDescription>
+                {t('reject_step_desc') || 'Please provide a reason for rejecting this step. The operation will be returned for re-work.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              <Label>{t('rejection_reason') || 'Reason'}</Label>
+              <Textarea
+                className="mt-1"
+                rows={3}
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder={t('enter_rejection_reason') || 'Enter rejection reason...'}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowRejectDialog(false); setRejectReason(''); }}>
+                {t('cancel') || 'Cancel'}
+              </Button>
+              <Button onClick={handleReject} disabled={isActionLoading || !rejectReason.trim()}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                {t('reject') || 'Reject'}
               </Button>
             </DialogFooter>
           </DialogContent>
