@@ -330,6 +330,11 @@ export const constructionService = {
     await apiClient.delete(`/construction/projects/${projectId}/team/${memberId}`);
   },
 
+  async updateTeamMember(projectId, memberId, data) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/team/${memberId}`, data);
+    return response.data.data;
+  },
+
   // =====================================================
   // VENDOR PAYMENTS (Future)
   // =====================================================
@@ -601,6 +606,153 @@ export const constructionService = {
 
   async commissionProject(projectId, data = {}) {
     const response = await apiClient.put(`/construction/projects/${projectId}/commission`, data);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // MATERIAL USAGE
+  // =====================================================
+
+  async listMaterialUsage(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/material-usage`, { params });
+    return response.data.data;
+  },
+
+  async createMaterialUsage(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/material-usage`, data);
+    return response.data.data;
+  },
+
+  async updateMaterialUsage(id, data) {
+    const response = await apiClient.put(`/construction/material-usage/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteMaterialUsage(id) {
+    await apiClient.delete(`/construction/material-usage/${id}`);
+  },
+
+  async getMaterialSummary(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/material-summary`);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // PROGRESS & GANTT
+  // =====================================================
+
+  async getProgressSummary(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/progress-summary`);
+    return response.data.data;
+  },
+
+  async getGanttData(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/gantt`);
+    return response.data.data;
+  },
+
+  async getDailyLogSummary(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/daily-logs/summary`, { params });
+    return response.data.data;
+  },
+
+  // =====================================================
+  // SUBCONTRACTS (Pudratchilar)
+  // =====================================================
+
+  async listSubcontracts(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/subcontracts`);
+    return response.data.data;
+  },
+
+  async createSubcontract(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/subcontracts`, data);
+    return response.data.data;
+  },
+
+  async getSubcontract(id) {
+    const response = await apiClient.get(`/construction/subcontracts/${id}`);
+    return response.data.data;
+  },
+
+  async updateSubcontract(id, data) {
+    const response = await apiClient.put(`/construction/subcontracts/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteSubcontract(id) {
+    await apiClient.delete(`/construction/subcontracts/${id}`);
+  },
+
+  async updateSubcontractState(id, data) {
+    const response = await apiClient.put(`/construction/subcontracts/${id}/state`, data);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // CONSTRUCTION ACTS (KS-2 / KS-3)
+  // =====================================================
+
+  async listActs(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/acts`, { params });
+    return response.data.data;
+  },
+
+  async createAct(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/acts`, data);
+    return response.data.data;
+  },
+
+  async getAct(id) {
+    const response = await apiClient.get(`/construction/acts/${id}`);
+    return response.data.data;
+  },
+
+  async deleteAct(id) {
+    await apiClient.delete(`/construction/acts/${id}`);
+  },
+
+  async autoGenerateKS2(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks2`, data);
+    return response.data.data;
+  },
+
+  async approveAct(id) {
+    const response = await apiClient.put(`/construction/acts/${id}/approve`);
+    return response.data.data;
+  },
+
+  async rejectAct(id, data) {
+    const response = await apiClient.put(`/construction/acts/${id}/reject`, data);
+    return response.data.data;
+  },
+
+  async generateKS3FromKS2(id) {
+    const response = await apiClient.post(`/construction/acts/${id}/generate-ks3`);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // FINANCIAL ANALYSIS (Moliyaviy tahlil)
+  // =====================================================
+
+  async getProjectPnL(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/financial/pnl`);
+    return response.data.data;
+  },
+
+  async getBudgetVsActual(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/financial/budget-actual`);
+    return response.data.data;
+  },
+
+  async getCostTrend(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/financial/cost-trend`);
+    return response.data.data;
+  },
+
+  async getPaymentSchedule(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/financial/payment-schedule`);
     return response.data.data;
   },
 
