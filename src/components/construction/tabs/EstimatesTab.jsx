@@ -32,9 +32,12 @@ import {
   MoreHorizontal,
   FileSpreadsheet,
   Edit,
-  Archive,
   Layers,
   X,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -42,16 +45,17 @@ import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 
-const EstimatesTab = ({ project, wbsItems = [] }) => {
+const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const [estimates, setEstimates] = useState([]);
-  const [selectedEstimate, setSelectedEstimate] = useState(null);
-  const [lines, setLines] = useState([]);
+  const [selectedBuilding, setSelectedBuilding] = useState(null); // building object or 'project' for unassigned
+  const [expandedEstimate, setExpandedEstimate] = useState(null); // estimate id
+  const [estimateLines, setEstimateLines] = useState({}); // { [estimateId]: lines[] }
   const [loading, setLoading] = useState(true);
-  const [linesLoading, setLinesLoading] = useState(false);
+  const [linesLoading, setLinesLoading] = useState(null); // estimate id being loaded
   const [products, setProducts] = useState([]);
 
   // Modals
@@ -60,10 +64,10 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
-    name: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+    name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12'
   });
   const [lineForm, setLineForm] = useState({
-    id: null, product_id: '', name: '', uom: '', quantity: '',
+    id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '',
     material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0'
   });
   const [addLines, setAddLines] = useState([{ product_id: '', quantity: '' }]);
@@ -95,10 +99,12 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   ];
 
   const handleImport = async (data) => {
-    if (!selectedEstimate?.id || selectedEstimate.state !== 'draft') return;
+    if (!expandedEstimate) return;
+    const est = estimates.find(e => e.id === expandedEstimate);
+    if (!est || est.state !== 'draft') return;
     try {
       for (const row of data) {
-        await constructionService.createEstimateLine(selectedEstimate.id, {
+        await constructionService.createEstimateLine(expandedEstimate, {
           name: row.name,
           uom: row.uom || 'шт',
           quantity: row.quantity ? parseFloat(row.quantity) : 0,
@@ -108,8 +114,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           sort_order: 0,
         });
       }
-      const estData = await constructionService.getEstimate(selectedEstimate.id);
-      setLines(estData?.lines || []);
+      await loadEstimateLines(expandedEstimate);
       await loadEstimates();
       setShowImportModal(false);
     } catch (error) {
@@ -117,9 +122,11 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     }
   };
 
+  const expandedLines = expandedEstimate ? (estimateLines[expandedEstimate] || []) : [];
+
   useEffect(() => {
-    if (showExportModal && lines.length > 0) {
-      setExportData(lines.map(line => ({
+    if (showExportModal && expandedLines.length > 0) {
+      setExportData(expandedLines.map(line => ({
         wbs_code: line.wbs_code || '',
         name: line.name,
         uom: line.uom,
@@ -131,7 +138,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         total_amount: line.total_amount || 0,
       })));
     }
-  }, [showExportModal, lines]);
+  }, [showExportModal, expandedLines]);
 
   // Load estimates
   const loadEstimates = useCallback(async () => {
@@ -140,14 +147,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     try {
       const data = await constructionService.listEstimates(project.id);
       setEstimates(data || []);
-      // Auto-select current estimate or refresh selected
-      if (selectedEstimate) {
-        const updated = (data || []).find(e => e.id === selectedEstimate.id);
-        if (updated) setSelectedEstimate(updated);
-      } else {
-        const current = (data || []).find(e => e.is_current);
-        if (current) setSelectedEstimate(current);
-      }
     } catch (error) {
       console.error('Error loading estimates:', error);
     } finally {
@@ -159,6 +158,13 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     loadEstimates();
   }, [loadEstimates]);
 
+  // Auto-select first building
+  useEffect(() => {
+    if (!selectedBuilding && buildings.length > 0) {
+      setSelectedBuilding(buildings[0]);
+    }
+  }, [buildings]);
+
   useEffect(() => {
     if (!project?.id) return;
     constructionService.listProjectMaterials(project.id)
@@ -166,39 +172,46 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
       .catch(() => setProducts([]));
   }, [project?.id]);
 
-  // Load lines when estimate is selected
-  useEffect(() => {
-    if (!selectedEstimate?.id) {
-      setLines([]);
-      return;
+  // Load lines for an estimate
+  const loadEstimateLines = async (estimateId) => {
+    setLinesLoading(estimateId);
+    try {
+      const data = await constructionService.getEstimate(estimateId);
+      setEstimateLines(prev => ({ ...prev, [estimateId]: data?.lines || [] }));
+    } catch (error) {
+      console.error('Error loading estimate lines:', error);
+      setEstimateLines(prev => ({ ...prev, [estimateId]: [] }));
+    } finally {
+      setLinesLoading(null);
     }
-    const loadLines = async () => {
-      setLinesLoading(true);
-      try {
-        const data = await constructionService.getEstimate(selectedEstimate.id);
-        setLines(data?.lines || []);
-      } catch (error) {
-        console.error('Error loading estimate lines:', error);
-        setLines([]);
-      } finally {
-        setLinesLoading(false);
+  };
+
+  // Toggle estimate expansion
+  const handleToggleEstimate = (estId) => {
+    if (expandedEstimate === estId) {
+      setExpandedEstimate(null);
+    } else {
+      setExpandedEstimate(estId);
+      if (!estimateLines[estId]) {
+        loadEstimateLines(estId);
       }
-    };
-    loadLines();
-  }, [selectedEstimate?.id]);
+    }
+  };
 
   // Create estimate
   const handleCreateEstimate = async (e) => {
     e.preventDefault();
     try {
+      const buildingId = estimateForm.building_id ? parseInt(estimateForm.building_id) : 0;
       await constructionService.createEstimate(project.id, {
         name: estimateForm.name,
+        building_id: buildingId,
         overhead_pct: parseFloat(estimateForm.overhead_pct) || 0,
         profit_pct: parseFloat(estimateForm.profit_pct) || 0,
         vat_pct: parseFloat(estimateForm.vat_pct) || 0,
       });
       setShowEstimateModal(false);
-      setEstimateForm({ name: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12' });
+      setEstimateForm({ name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12' });
       await loadEstimates();
     } catch (error) {
       console.error('Error creating estimate:', error);
@@ -216,7 +229,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         try {
           await constructionService.approveEstimate(est.id);
           await loadEstimates();
-          setSelectedEstimate(prev => prev?.id === est.id ? { ...prev, state: 'approved', is_current: true } : prev);
         } catch (error) {
           console.error('Error approving estimate:', error);
         }
@@ -245,9 +257,8 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
       onConfirm: async () => {
         try {
           await constructionService.deleteEstimate(est.id);
-          if (selectedEstimate?.id === est.id) {
-            setSelectedEstimate(null);
-            setLines([]);
+          if (expandedEstimate === est.id) {
+            setExpandedEstimate(null);
           }
           await loadEstimates();
         } catch (error) {
@@ -260,10 +271,10 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   // Create/update line
   const handleSaveLine = async (e) => {
     e.preventDefault();
-    if (!selectedEstimate?.id) return;
+    const estId = lineForm.estimate_id;
+    if (!estId) return;
     try {
       if (lineForm.id) {
-        // Edit mode — single line update
         const data = {
           name: lineForm.name,
           uom: lineForm.uom || 'шт',
@@ -273,12 +284,12 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           equipment_rate: parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0,
           sort_order: parseInt(lineForm.sort_order) || 0,
         };
-        await constructionService.updateEstimateLine(selectedEstimate.id, lineForm.id, data);
+        await constructionService.updateEstimateLine(estId, lineForm.id, data);
       } else {
-        // Create mode — batch create all lines
         const baseLaborRate = parseFloat(parsePriceInput(lineForm.labor_rate)) || 0;
         const baseEquipmentRate = parseFloat(parsePriceInput(lineForm.equipment_rate)) || 0;
-        const baseSortOrder = lines.length;
+        const currentLines = estimateLines[estId] || [];
+        const baseSortOrder = currentLines.length;
 
         for (let i = 0; i < addLines.length; i++) {
           const row = addLines[i];
@@ -287,7 +298,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           if (!mat) continue;
           const qty = parseFloat(row.quantity) || 0;
           if (qty <= 0) continue;
-          await constructionService.createEstimateLine(selectedEstimate.id, {
+          await constructionService.createEstimateLine(estId, {
             name: mat.product_name,
             uom: mat.uom || 'шт',
             quantity: qty,
@@ -299,11 +310,10 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         }
       }
 
-      const estData = await constructionService.getEstimate(selectedEstimate.id);
-      setLines(estData?.lines || []);
+      await loadEstimateLines(estId);
       await loadEstimates();
       setShowLineModal(false);
-      setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
+      setLineForm({ id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
       setAddLines([{ product_id: '', quantity: '' }]);
     } catch (error) {
       console.error('Error saving line:', error);
@@ -311,7 +321,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
   };
 
   // Delete line
-  const handleDeleteLine = (lineId) => {
+  const handleDeleteLine = (estId, lineId) => {
     setConfirmDialog({
       open: true,
       title: t('delete') || "O'chirish",
@@ -319,9 +329,8 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
       variant: 'destructive',
       onConfirm: async () => {
         try {
-          await constructionService.deleteEstimateLine(selectedEstimate.id, lineId);
-          const estData = await constructionService.getEstimate(selectedEstimate.id);
-          setLines(estData?.lines || []);
+          await constructionService.deleteEstimateLine(estId, lineId);
+          await loadEstimateLines(estId);
           await loadEstimates();
         } catch (error) {
           console.error('Error deleting line:', error);
@@ -346,6 +355,22 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
     }
   };
 
+  // Get estimates for current building selection
+  const getFilteredEstimates = () => {
+    if (selectedBuilding === 'project') {
+      return estimates.filter(e => !e.building_id);
+    }
+    if (selectedBuilding?.id) {
+      return estimates.filter(e => e.building_id === selectedBuilding.id);
+    }
+    return [];
+  };
+
+  const filteredEstimates = getFilteredEstimates();
+
+  // Build left sidebar items: buildings + "Butun loyiha" if there are unassigned estimates
+  const unassignedCount = estimates.filter(e => !e.building_id).length;
+
   return (
     <div className="space-y-4">
       {/* Import/Export Header */}
@@ -353,240 +378,327 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         <ImportExportButtons
           onImport={() => setShowImportModal(true)}
           onExport={() => setShowExportModal(true)}
-          importDisabled={!selectedEstimate || selectedEstimate.state !== 'draft'}
-          exportDisabled={!selectedEstimate || lines.length === 0}
+          importDisabled={!expandedEstimate || estimates.find(e => e.id === expandedEstimate)?.state !== 'draft'}
+          exportDisabled={!expandedEstimate || expandedLines.length === 0}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-      {/* Estimates List */}
+      {/* Left: Buildings List */}
       <Card className="lg:col-span-1">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">{t('estimates') || 'Smetalar'}</CardTitle>
-          <Button size="sm" onClick={() => setShowEstimateModal(true)}>
-            <Plus className="w-4 h-4" />
-          </Button>
+          <CardTitle className="text-base">{t('buildings_blocks') || 'Binolar / Bloklar'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[500px]">
-            {loading ? (
-              <div className="p-4 text-center text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
-            ) : estimates.length === 0 ? (
+            {buildings.length === 0 && unassignedCount === 0 ? (
               <div className="p-8 text-center">
-                <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">{t('no_estimates') || "Smetalar yo'q"}</p>
-                <Button size="sm" variant="outline" className="mt-3" onClick={() => setShowEstimateModal(true)}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t('create_estimate') || "Smeta yaratish"}
-                </Button>
+                <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">{t('no_buildings') || "Binolar yo'q"}</p>
               </div>
             ) : (
               <div className="divide-y">
-                {estimates.map((est) => (
-                  <div
-                    key={est.id}
-                    className={`p-4 cursor-pointer hover:bg-slate-50 group ${selectedEstimate?.id === est.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
-                    onClick={() => setSelectedEstimate(est)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs font-mono">v{est.version}</Badge>
-                          {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Current'}</Badge>}
-                        </div>
-                        <p className="font-medium text-sm mt-1 truncate">{est.name}</p>
+                {buildings.map((building) => {
+                  const buildingEstimates = estimates.filter(e => e.building_id === building.id);
+                  const totalAmount = buildingEstimates.reduce((sum, e) => sum + (e.amount_total || 0), 0);
+                  const isSelected = selectedBuilding?.id === building.id;
+                  return (
+                    <div
+                      key={building.id}
+                      className={`px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                      onClick={() => {
+                        setSelectedBuilding(building);
+                        setExpandedEstimate(null);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        <span className="text-sm font-medium truncate flex-1">
+                          {building.code ? `${building.code} - ${building.name}` : building.name}
+                        </span>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0">
-                            <MoreHorizontal className="w-3 h-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          {est.state === 'draft' && (
-                            <DropdownMenuItem onClick={() => handleApprove(est)}>
-                              <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                              {t('approve') || 'Tasdiqlash'}
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => handleDuplicate(est)}>
-                            <Copy className="w-4 h-4 mr-2" />
-                            {t('duplicate') || 'Nusxalash'}
-                          </DropdownMenuItem>
-                          {est.state === 'draft' && (
-                            <DropdownMenuItem onClick={() => handleDeleteEstimate(est)} className="text-red-600">
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              {t('delete') || "O'chirish"}
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-between mt-1 ml-6">
+                        <span className="text-xs text-slate-400">{buildingEstimates.length} {t('estimates_count') || 'smeta'}</span>
+                        {totalAmount > 0 && (
+                          <span className="text-xs font-medium text-slate-600">{formatCurrency(totalAmount)}</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-sm font-medium text-slate-700">{formatCurrency(est.amount_total || 0)}</p>
-                      <Badge className={`text-xs ${getStateColor(est.state)}`}>
-                        {getStateLabel(est.state)}
-                      </Badge>
+                  );
+                })}
+                {/* "Butun loyiha" for unassigned estimates */}
+                {unassignedCount > 0 && (
+                  <div
+                    className={`px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors ${selectedBuilding === 'project' ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
+                    onClick={() => {
+                      setSelectedBuilding('project');
+                      setExpandedEstimate(null);
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-sm font-medium truncate flex-1">{t('entire_project') || "Butun loyiha"}</span>
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      {est.lines_count || 0} {t('lines') || 'qator'}
+                    <div className="flex items-center justify-between mt-1 ml-6">
+                      <span className="text-xs text-slate-400">{unassignedCount} {t('estimates_count') || 'smeta'}</span>
+                      <span className="text-xs font-medium text-slate-600">
+                        {formatCurrency(estimates.filter(e => !e.building_id).reduce((s, e) => s + (e.amount_total || 0), 0))}
+                      </span>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </ScrollArea>
         </CardContent>
       </Card>
 
-      {/* Lines Table */}
+      {/* Right: Estimates with expandable lines */}
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
-            {selectedEstimate
-              ? `${selectedEstimate.name} (v${selectedEstimate.version})`
-              : (t('select_estimate') || "Smetani tanlang")}
+            {selectedBuilding === 'project'
+              ? (t('entire_project') || "Butun loyiha")
+              : selectedBuilding?.name
+                ? (selectedBuilding.code ? `${selectedBuilding.code} - ${selectedBuilding.name}` : selectedBuilding.name)
+                : (t('select_building_first') || "Avval bino tanlang")}
           </CardTitle>
-          {selectedEstimate && selectedEstimate.state === 'draft' && (
+          {selectedBuilding && (
             <Button size="sm" onClick={() => {
-              setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(lines.length) });
-              setAddLines([{ product_id: '', quantity: '' }]);
-              setShowLineModal(true);
+              setEstimateForm({
+                name: '',
+                building_id: selectedBuilding === 'project' ? '' : String(selectedBuilding.id),
+                overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+              });
+              setShowEstimateModal(true);
             }}>
               <Plus className="w-4 h-4 mr-1" />
-              {t('add_line') || "Qator qo'shish"}
+              {t('create_estimate') || "Smeta yaratish"}
             </Button>
           )}
         </CardHeader>
-        <CardContent>
-          {!selectedEstimate ? (
+        <CardContent className="p-0">
+          {!selectedBuilding ? (
             <div className="text-center py-12">
-              <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">{t('select_estimate_first') || "Avval smetani tanlang"}</p>
+              <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">{t('select_building_first') || "Avval bino tanlang"}</p>
             </div>
-          ) : linesLoading ? (
+          ) : loading ? (
             <div className="text-center py-12 text-slate-500">{t('loading') || 'Yuklanmoqda...'}</div>
-          ) : lines.length === 0 ? (
+          ) : filteredEstimates.length === 0 ? (
             <div className="text-center py-12">
               <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">{t('no_lines') || "Qatorlar yo'q"}</p>
-              {selectedEstimate.state === 'draft' && (
-                <Button size="sm" variant="outline" className="mt-3" onClick={() => {
-                  setLineForm({ id: null, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: '0' });
-                  setAddLines([{ product_id: '', quantity: '' }]);
-                  setShowLineModal(true);
-                }}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  {t('add_line') || "Qator qo'shish"}
-                </Button>
-              )}
+              <p className="text-slate-500">{t('no_estimates') || "Smetalar yo'q"}</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => {
+                setEstimateForm({
+                  name: '',
+                  building_id: selectedBuilding === 'project' ? '' : String(selectedBuilding.id),
+                  overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+                });
+                setShowEstimateModal(true);
+              }}>
+                <Plus className="w-4 h-4 mr-1" />
+                {t('create_estimate') || "Smeta yaratish"}
+              </Button>
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-2">{t('name') || 'Nomi'}</th>
-                      <th className="text-right py-3 px-2">{t('unit') || "O'lchov"}</th>
-                      <th className="text-right py-3 px-2">{t('quantity') || 'Miqdor'}</th>
-                      <th className="text-right py-3 px-2">{t('material') || 'Material'}</th>
-                      <th className="text-right py-3 px-2">{t('labor') || 'Ish haqi'}</th>
-                      <th className="text-right py-3 px-2">{t('equipment') || 'Jihozlar'}</th>
-                      <th className="text-right py-3 px-2">{t('unit_rate') || 'Birlik'}</th>
-                      <th className="text-right py-3 px-2">{t('total') || 'Jami'}</th>
-                      {selectedEstimate.state === 'draft' && <th className="text-center py-3 px-2 w-10"></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => (
-                      <tr key={line.id} className="border-b hover:bg-slate-50 group">
-                        <td className="py-3 px-2">{line.name}</td>
-                        <td className="py-3 px-2 text-right text-slate-600">{line.uom}</td>
-                        <td className="py-3 px-2 text-right">{line.quantity}</td>
-                        <td className="py-3 px-2 text-right">{formatCurrency(line.material_rate)}</td>
-                        <td className="py-3 px-2 text-right">{formatCurrency(line.labor_rate)}</td>
-                        <td className="py-3 px-2 text-right">{formatCurrency(line.equipment_rate)}</td>
-                        <td className="py-3 px-2 text-right font-medium">{formatCurrency(line.unit_rate)}</td>
-                        <td className="py-3 px-2 text-right font-medium">{formatCurrency(line.total_amount)}</td>
-                        {selectedEstimate.state === 'draft' && (
-                          <td className="py-3 px-2 text-center">
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                              <Button
-                                variant="ghost" size="sm"
-                                className="h-7 w-7 p-0"
-                                onClick={() => {
-                                  setLineForm({
-                                    id: line.id,
-                                    product_id: line.product_id ? String(line.product_id) : '',
-                                    name: line.name,
-                                    uom: line.uom,
-                                    quantity: String(line.quantity),
-                                    material_rate: formatPriceInput(String(line.material_rate)),
-                                    labor_rate: formatPriceInput(String(line.labor_rate)),
-                                    equipment_rate: formatPriceInput(String(line.equipment_rate)),
-                                    sort_order: String(line.sort_order),
-                                  });
-                                  setShowLineModal(true);
-                                }}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost" size="sm"
-                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => handleDeleteLine(line.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
+            <ScrollArea className="h-[600px]">
+              <div className="p-4 space-y-3">
+                {filteredEstimates.map((est) => {
+                  const isExpanded = expandedEstimate === est.id;
+                  const lines = estimateLines[est.id] || [];
+                  const isLoadingLines = linesLoading === est.id;
+
+                  return (
+                    <div key={est.id} className={`border rounded-lg overflow-hidden ${isExpanded ? 'border-blue-300 shadow-sm' : 'border-slate-200'}`}>
+                      {/* Estimate card header */}
+                      <div
+                        className={`px-4 py-3 cursor-pointer group transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                        onClick={() => handleToggleEstimate(est.id)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                            <Badge variant="outline" className="text-xs font-mono">v{est.version}</Badge>
+                            <span className="font-medium">{est.name}</span>
+                            {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Faol'}</Badge>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className={`text-xs ${getStateColor(est.state)}`}>
+                              {getStateLabel(est.state)}
+                            </Badge>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                {est.state === 'draft' && (
+                                  <DropdownMenuItem onClick={() => handleApprove(est)}>
+                                    <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                                    {t('approve') || 'Tasdiqlash'}
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => handleDuplicate(est)}>
+                                  <Copy className="w-4 h-4 mr-2" />
+                                  {t('duplicate') || 'Nusxalash'}
+                                </DropdownMenuItem>
+                                {est.state === 'draft' && (
+                                  <DropdownMenuItem onClick={() => handleDeleteEstimate(est)} className="text-red-600">
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    {t('delete') || "O'chirish"}
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between ml-6">
+                          <span className="text-sm text-slate-500">{est.lines_count || 0} {t('lines') || 'qator'}</span>
+                          <span className="text-base font-semibold">{formatCurrency(est.amount_total || 0)}</span>
+                        </div>
+                      </div>
+
+                      {/* Expanded: lines table */}
+                      {isExpanded && (
+                        <div className="border-t border-blue-200 bg-slate-50/70">
+                          {/* Add line button */}
+                          {est.state === 'draft' && (
+                            <div className="px-4 py-2 flex justify-end border-b border-slate-200">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                const currentLines = estimateLines[est.id] || [];
+                                setLineForm({ id: null, estimate_id: est.id, product_id: '', name: '', uom: '', quantity: '', material_rate: '', labor_rate: '', equipment_rate: '', sort_order: String(currentLines.length) });
+                                setAddLines([{ product_id: '', quantity: '' }]);
+                                setShowLineModal(true);
+                              }}>
+                                <Plus className="w-4 h-4 mr-1" />
+                                {t('add_line') || "Qator qo'shish"}
                               </Button>
                             </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="font-semibold bg-slate-50">
-                      <td colSpan={7} className="py-3 px-2 text-right">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
-                      <td className="py-3 px-2 text-right">{formatCurrency(selectedEstimate.amount_direct || 0)}</td>
-                      {selectedEstimate.state === 'draft' && <td></td>}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                          )}
 
-              {/* Summary Footer */}
-              <div className="mt-4 border-t pt-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}</span>
-                  <span className="font-medium">{formatCurrency(selectedEstimate.amount_direct || 0)}</span>
-                </div>
-                {selectedEstimate.overhead_pct > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">{t('overhead') || 'Qo\'shimcha xarajatlar'} ({selectedEstimate.overhead_pct}%)</span>
-                    <span>{formatCurrency((selectedEstimate.amount_direct || 0) * (selectedEstimate.overhead_pct / 100))}</span>
-                  </div>
-                )}
-                {selectedEstimate.profit_pct > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">{t('profit') || 'Foyda'} ({selectedEstimate.profit_pct}%)</span>
-                    <span>{formatCurrency((selectedEstimate.amount_direct || 0) * (1 + selectedEstimate.overhead_pct / 100) * (selectedEstimate.profit_pct / 100))}</span>
-                  </div>
-                )}
-                {selectedEstimate.vat_pct > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">QQS ({selectedEstimate.vat_pct}%)</span>
-                    <span>{formatCurrency(
-                      (selectedEstimate.amount_direct || 0) * (1 + selectedEstimate.overhead_pct / 100) * (1 + selectedEstimate.profit_pct / 100) * (selectedEstimate.vat_pct / 100)
-                    )}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-base border-t pt-2">
-                  <span>{t('total') || 'Jami'}</span>
-                  <span>{formatCurrency(selectedEstimate.amount_total || 0)}</span>
-                </div>
+                          {isLoadingLines ? (
+                            <div className="text-center py-6 text-slate-500 text-sm">{t('loading') || 'Yuklanmoqda...'}</div>
+                          ) : lines.length === 0 ? (
+                            <div className="text-center py-6">
+                              <p className="text-slate-400 text-sm">{t('no_lines') || "Qatorlar yo'q"}</p>
+                            </div>
+                          ) : (
+                            <div className="px-2 pb-2">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b">
+                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit') || "O'lchov"}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('quantity') || 'Miqdor'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('material') || 'Material'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('labor') || 'Ish haqi'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('equipment') || 'Jihozlar'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit_rate') || 'Birlik'}</th>
+                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('total') || 'Jami'}</th>
+                                      {est.state === 'draft' && <th className="w-16"></th>}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {lines.map((line) => (
+                                      <tr key={line.id} className="border-b border-slate-100 hover:bg-white group">
+                                        <td className="py-2 px-2 text-xs">{line.name}</td>
+                                        <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
+                                        <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
+                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
+                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
+                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
+                                        <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
+                                        <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
+                                        {est.state === 'draft' && (
+                                          <td className="py-2 px-2 text-center">
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                              <Button
+                                                variant="ghost" size="sm"
+                                                className="h-6 w-6 p-0"
+                                                onClick={() => {
+                                                  setLineForm({
+                                                    id: line.id,
+                                                    estimate_id: est.id,
+                                                    product_id: line.product_id ? String(line.product_id) : '',
+                                                    name: line.name,
+                                                    uom: line.uom,
+                                                    quantity: String(line.quantity),
+                                                    material_rate: formatPriceInput(String(line.material_rate)),
+                                                    labor_rate: formatPriceInput(String(line.labor_rate)),
+                                                    equipment_rate: formatPriceInput(String(line.equipment_rate)),
+                                                    sort_order: String(line.sort_order),
+                                                  });
+                                                  setShowLineModal(true);
+                                                }}
+                                              >
+                                                <Edit className="w-3 h-3" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost" size="sm"
+                                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                onClick={() => handleDeleteLine(est.id, line.id)}
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="font-semibold bg-white">
+                                      <td colSpan={7} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                                      <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
+                                      {est.state === 'draft' && <td></td>}
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+
+                              {/* Summary */}
+                              <div className="mt-2 mx-2 border-t pt-2 space-y-1 text-xs">
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}</span>
+                                  <span className="font-medium">{formatCurrency(est.amount_direct || 0)}</span>
+                                </div>
+                                {est.overhead_pct > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-600">{t('overhead') || "Qo'shimcha xarajatlar"} ({est.overhead_pct}%)</span>
+                                    <span>{formatCurrency((est.amount_direct || 0) * (est.overhead_pct / 100))}</span>
+                                  </div>
+                                )}
+                                {est.profit_pct > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-600">{t('profit') || 'Foyda'} ({est.profit_pct}%)</span>
+                                    <span>{formatCurrency((est.amount_direct || 0) * (1 + est.overhead_pct / 100) * (est.profit_pct / 100))}</span>
+                                  </div>
+                                )}
+                                {est.vat_pct > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-slate-600">QQS ({est.vat_pct}%)</span>
+                                    <span>{formatCurrency(
+                                      (est.amount_direct || 0) * (1 + est.overhead_pct / 100) * (1 + est.profit_pct / 100) * (est.vat_pct / 100)
+                                    )}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-bold text-sm border-t pt-1">
+                                  <span>{t('total') || 'Jami'}</span>
+                                  <span>{formatCurrency(est.amount_total || 0)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </>
+            </ScrollArea>
           )}
         </CardContent>
       </Card>
@@ -609,6 +721,27 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                   required
                 />
               </div>
+              {buildings.length > 0 && (
+                <div>
+                  <Label>{t('buildings_blocks') || 'Bino / Blok'}</Label>
+                  <Select
+                    value={estimateForm.building_id || "none"}
+                    onValueChange={(val) => setEstimateForm({ ...estimateForm, building_id: val === "none" ? '' : val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_building') || "Bino tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
+                      {buildings.map(b => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4 items-end">
                 <div>
                   <Label className="text-xs">{t('overhead') || "Qo'shimcha"}, %</Label>
@@ -654,7 +787,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
           </DialogHeader>
           <form onSubmit={handleSaveLine}>
             {lineForm.id ? (
-              /* ── Edit mode: single line ── */
               <div className="space-y-4">
                 <div>
                   <Label>{t('product') || 'Mahsulot'}</Label>
@@ -684,9 +816,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                 </div>
               </div>
             ) : (
-              /* ── Create mode: multiple lines like PO ── */
               <div className="space-y-4">
-                {/* Product lines */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-sm font-semibold">{t('products') || 'Mahsulotlar'}</Label>
@@ -752,7 +882,6 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
                   </div>
                 </div>
 
-                {/* Total summary */}
                 {(() => {
                   let grandTotal = 0;
                   for (const row of addLines) {
@@ -822,7 +951,7 @@ const EstimatesTab = ({ project, wbsItems = [] }) => {
         data={exportData}
         columns={exportColumns}
         entityName={t('estimate_lines') || 'Smeta qatorlari'}
-        title={selectedEstimate ? `${selectedEstimate.name} (v${selectedEstimate.version})` : ''}
+        title={expandedEstimate ? `${estimates.find(e => e.id === expandedEstimate)?.name || ''} (v${estimates.find(e => e.id === expandedEstimate)?.version || ''})` : ''}
       />
     </div>
   );

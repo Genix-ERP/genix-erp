@@ -52,6 +52,8 @@ import {
   FileText,
   RotateCcw,
   Globe,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
@@ -149,6 +151,7 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
   const [creditNoteReason, setCreditNoteReason] = useState("");
   const [creditNoteInvoice, setCreditNoteInvoice] = useState(null);
+  const [expandedDiffs, setExpandedDiffs] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
   const baseCurrency = currencies.find(c => c.is_base) || { code: 'UZS' };
@@ -359,6 +362,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
         customer_name: fullInvoice.customer_name || "",
         invoice_date: fullInvoice.invoice_date || "",
         due_date: fullInvoice.due_date || "",
+        currency_code: fullInvoice.currency_code || currencies.find(c => c.id === fullInvoice.currency_id)?.code || "UZS",
+        exchange_rate: fullInvoice.exchange_rate || 1,
         items: items.length > 0 ? items : [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: fullInvoice.discount_amount || 0,
         tax_percent: fullInvoice.tax_percent || defaultSalesTax?.rate || 0,
@@ -375,6 +380,8 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
         customer_name: invoice.customer_name || "",
         invoice_date: invoice.invoice_date || "",
         due_date: invoice.due_date || "",
+        currency_code: invoice.currency_code || currencies.find(c => c.id === invoice.currency_id)?.code || "UZS",
+        exchange_rate: invoice.exchange_rate || 1,
         items: [{ product_id: "", product_name: "", quantity: 1, unit_price: 0 }],
         discount_amount: invoice.discount_amount || 0,
         tax_percent: invoice.tax_percent || defaultSalesTax?.rate || 0,
@@ -859,7 +866,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                         min="0"
                         value={formData.exchange_rate}
                         onChange={(e) => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 0 })}
+                        disabled={editMode && selectedInvoice?.status !== 'draft'}
                       />
+                      {editMode && selectedInvoice?.status !== 'draft' && (
+                        <p className="text-xs text-amber-600">{t('rate_locked') || 'Kurs qotib qolgan'}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label>{baseCurrency.code} {t('equivalent') || 'ekvivalent'}</Label>
@@ -1359,20 +1370,62 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
                   </div>
                   <div className="divide-y">
                     {selectedInvoice.exchange_diffs.map((ed) => (
-                      <div key={ed.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
-                            className={ed.type === 'positive'
-                              ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                              : 'bg-red-100 text-red-700 hover:bg-red-100'
-                            }>
-                            {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
-                          </Badge>
-                          <span className="text-slate-600 text-xs">{ed.description}</span>
+                      <div key={ed.id} className="px-4 py-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
+                              className={ed.type === 'positive'
+                                ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                                : 'bg-red-100 text-red-700 hover:bg-red-100'
+                              }>
+                              {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
+                            </Badge>
+                            <span className="text-slate-600 text-xs">{ed.document_number || ed.description}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                              {ed.type === 'positive' ? '+' : '-'}{formatCurrency(ed.amount)}
+                            </span>
+                            {(ed.initial_rate || ed.final_rate) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                                onClick={() => setExpandedDiffs(prev => ({ ...prev, [ed.id]: !prev[ed.id] }))}
+                              >
+                                {expandedDiffs[ed.id] ? (
+                                  <>{t('hide') || 'Yopish'} <ChevronUp className="w-3 h-3 ml-1" /></>
+                                ) : (
+                                  <>{t('details') || 'Batafsil'} <ChevronDown className="w-3 h-3 ml-1" /></>
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <span className={`font-medium ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
-                          {ed.type === 'positive' ? '+' : '-'}{formatCurrency(ed.amount)}
-                        </span>
+                        {expandedDiffs[ed.id] && (ed.initial_rate || ed.final_rate) && (
+                          <div className="mt-2 grid grid-cols-4 gap-2 text-xs bg-slate-50 rounded p-2">
+                            <div>
+                              <span className="text-slate-500">{t('invoice_rate') || 'HF kursi'}:</span>
+                              <span className="ml-1 font-mono font-medium">{Number(ed.initial_rate).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">{t('payment_rate') || "To'lov kursi"}:</span>
+                              <span className="ml-1 font-mono font-medium">{Number(ed.final_rate).toLocaleString()}</span>
+                            </div>
+                            {ed.foreign_amount > 0 && (
+                              <div>
+                                <span className="text-slate-500">{t('foreign_amount') || 'Valyuta summa'}:</span>
+                                <span className="ml-1 font-mono font-medium">{Number(ed.foreign_amount).toLocaleString()}</span>
+                              </div>
+                            )}
+                            {ed.date && (
+                              <div>
+                                <span className="text-slate-500">{t('date') || 'Sana'}:</span>
+                                <span className="ml-1 font-mono font-medium">{format(new Date(ed.date), 'dd.MM.yyyy')}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -418,7 +418,7 @@ export function FinancialsProvider({ children }) {
             setCashOrders(localCashOrders);
           }
           setReconciliationActs(reconciliationActsData || []);
-          setExchangeDiffs(exchangeDiffsData || []);
+          setExchangeDiffs(Array.isArray(exchangeDiffsData) ? exchangeDiffsData : []);
 
           // Derive financialTransactions from real payments for dashboard metrics
           const derivedTransactions = mappedPayments.map(p => ({
