@@ -45,6 +45,8 @@ export default function CurrencyManagement() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRevaluing, setIsRevaluing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [syncError, setSyncError] = useState(null);
   const [showRevalueModal, setShowRevalueModal] = useState(false);
   const [revalueDate, setRevalueDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -161,10 +163,13 @@ export default function CurrencyManagement() {
   // Handle CBU sync
   const handleSyncRates = async () => {
     setIsSyncing(true);
+    setSyncError(null);
     try {
       await syncExchangeRates();
+      setLastSyncTime(new Date());
     } catch (err) {
       console.error('Error syncing rates:', err);
+      setSyncError(err.message || 'Sinxronlash xatosi');
     } finally {
       setIsSyncing(false);
     }
@@ -313,7 +318,20 @@ export default function CurrencyManagement() {
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* Sync status */}
+            {lastSyncTime && !syncError && (
+              <span className="text-xs text-green-600 flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                {t('synced') || 'Yangilandi'}: {format(lastSyncTime, 'dd.MM.yyyy, HH:mm')}
+              </span>
+            )}
+            {syncError && (
+              <span className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {syncError}
+              </span>
+            )}
             {canCreate(MODULES.FINANCIALS) && (
               <Button
                 onClick={handleSyncRates}
@@ -322,7 +340,7 @@ export default function CurrencyManagement() {
                 className="border-blue-300 text-blue-600 hover:bg-blue-50"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? (t('loading') || 'Syncing...') : (t('sync_from_cbu') || 'Sync from CBU')}
+                {isSyncing ? (t('loading') || 'Syncing...') : syncError ? (t('retry') || 'Qayta urinish') : (t('sync_from_cbu') || 'Sync from CBU')}
               </Button>
             )}
             {activeTab === 'currencies' && canCreate(MODULES.FINANCIALS) && (
@@ -498,36 +516,56 @@ export default function CurrencyManagement() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>{t('date') || 'Date'}</TableHead>
-                    <TableHead>{t('currency') || 'Currency'}</TableHead>
-                    <TableHead>{t('rate') || 'Rate'}</TableHead>
-                    <TableHead>{t('source') || 'Source'}</TableHead>
+                    <TableHead>{t('date') || 'Sana'}</TableHead>
+                    <TableHead>{t('currency') || 'Valyuta'}</TableHead>
+                    <TableHead className="text-right">{t('previous_rate') || 'Oldingi kurs'}</TableHead>
+                    <TableHead className="text-right">{t('rate') || 'Joriy kurs'}</TableHead>
+                    <TableHead className="text-right">{t('change') || "O'zgarish"}</TableHead>
+                    <TableHead>{t('source') || 'Manba'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {exchangeRates
                     .sort((a, b) => new Date(b.effective_date || b.date) - new Date(a.effective_date || a.date))
-                    .map((rate) => (
-                      <TableRow key={rate.id} className="hover:bg-slate-50">
-                        <TableCell>{format(new Date(rate.effective_date || rate.date), 'dd.MM.yyyy')}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{rate.from_currency}</Badge>
-                            <ArrowRightLeft className="w-4 h-4 text-slate-400" />
-                            <Badge variant="outline">{rate.to_currency}</Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {formatCurrency(rate.rate)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{rate.source}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    .map((rate) => {
+                      const change = rate.rate_change || 0;
+                      const changePct = rate.rate_change_percent || 0;
+                      const prevRate = rate.previous_rate || 0;
+                      return (
+                        <TableRow key={rate.id} className="hover:bg-slate-50">
+                          <TableCell>{format(new Date(rate.effective_date || rate.date), 'dd.MM.yyyy')}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{rate.from_currency}</Badge>
+                              <ArrowRightLeft className="w-4 h-4 text-slate-400" />
+                              <Badge variant="outline">{rate.to_currency}</Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-slate-500">
+                            {prevRate > 0 ? formatCurrency(prevRate) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold font-mono">
+                            {formatCurrency(rate.rate)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {prevRate > 0 ? (
+                              <span className={`text-sm font-medium ${change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                {change > 0 ? '+' : ''}{Math.round(change).toLocaleString()} so'm
+                                <span className="ml-1 text-xs">({change > 0 ? '+' : ''}{changePct.toFixed(1)}%)</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{rate.source === 'CBU' ? (t('source_cbu') || 'MB') : rate.source === 'manual' || rate.source === 'Manual' ? (t('source_manual') || "Qo'lda") : rate.source}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   {exchangeRates.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                      <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                         {t('no_rates_history') || 'No rate history'}
                       </TableCell>
                     </TableRow>
