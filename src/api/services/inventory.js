@@ -168,13 +168,34 @@ export const inventoryService = {
     return response.data.data;
   },
 
-  async advanceStockOperationStep(id) {
-    const response = await apiClient.post(`/stock-operations/${id}/advance`);
+  async advanceStockOperationStep(id, params = {}) {
+    const response = await apiClient.post(`/stock-operations/${id}/advance`, params);
     return response.data.data;
   },
 
   async cancelStockOperation(id) {
     const response = await apiClient.post(`/stock-operations/${id}/cancel`);
+    return response.data.data;
+  },
+
+  async approveStockOperationStep(id) {
+    const response = await apiClient.post(`/stock-operations/${id}/approve`);
+    return response.data.data;
+  },
+
+  async rejectStockOperationStep(id, reason) {
+    const response = await apiClient.post(`/stock-operations/${id}/reject`, { reason });
+    return response.data.data;
+  },
+
+  async addStepDocument(operationId, stepSequence, documentData) {
+    const response = await apiClient.post(`/stock-operations/${operationId}/steps/${stepSequence}/documents`, documentData);
+    return response.data.data;
+  },
+
+  // Warehouse Alerts
+  async getWarehouseAlerts() {
+    const response = await apiClient.get('/warehouse-alerts');
     return response.data.data;
   },
 
@@ -431,6 +452,12 @@ export const inventoryService = {
   // Employee Deductions
   async listAllDeductions(params = {}) {
     const response = await apiClient.get('/employee-deductions', { params });
+    return response.data.data;
+  },
+
+  // Scrap Reasons
+  async listScrapReasons() {
+    const response = await apiClient.get('/scrap/reasons');
     return response.data.data;
   },
 
