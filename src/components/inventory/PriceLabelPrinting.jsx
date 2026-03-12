@@ -34,6 +34,7 @@ import {
   QrCode,
 } from "lucide-react";
 
+import JsBarcode from "jsbarcode";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
@@ -49,29 +50,71 @@ const LABEL_TEMPLATE_KEYS = {
   custom: { nameKey: "label_custom", width: 0, height: 0, fontSize: 10, showBarcode: true, showQR: false, showPrice: true, showName: true, showSKU: true },
 };
 
-// Barcode generator (simplified SVG barcode)
-const generateBarcodeSVG = (code, width = 100, height = 30) => {
-  const bars = [];
-  let x = 0;
-  const barWidth = width / (code.length * 7 + 10);
+// Supported barcode formats
+const BARCODE_FORMAT_KEYS = ["auto", "CODE128", "EAN13", "EAN8", "UPC", "CODE39", "ITF14"];
+const BARCODE_FORMAT_LABELS = {
+  CODE128: "Code 128",
+  EAN13: "EAN-13",
+  EAN8: "EAN-8",
+  UPC: "UPC-A",
+  CODE39: "Code 39",
+  ITF14: "ITF-14",
+};
 
-  for (let i = 0; i < code.length; i++) {
-    const charCode = code.charCodeAt(i);
-    const pattern = (charCode % 2 === 0) ? "101101011" : "110100101";
-
-    for (let j = 0; j < pattern.length; j++) {
-      if (pattern[j] === "1") {
-        bars.push(`<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`);
-      }
-      x += barWidth;
-    }
-    x += barWidth;
+// Auto-detect barcode format from value
+const detectBarcodeFormat = (code) => {
+  if (!code) return "CODE128";
+  const digitsOnly = /^\d+$/.test(code);
+  if (digitsOnly) {
+    if (code.length === 13) return "EAN13";
+    if (code.length === 8) return "EAN8";
+    if (code.length === 12) return "UPC";
+    if (code.length === 14) return "ITF14";
   }
+  return "CODE128";
+};
 
-  return `<svg width="${width}" height="${height + 12}" xmlns="http://www.w3.org/2000/svg">
-    ${bars.join("")}
-    <text x="${width/2}" y="${height + 10}" text-anchor="middle" font-size="8" font-family="monospace">${code}</text>
-  </svg>`;
+// Generate real scannable barcode SVG using JsBarcode
+const generateBarcodeSVG = (code, width = 100, height = 30, format = "auto") => {
+  try {
+    const resolvedFormat = format === "auto" ? detectBarcodeFormat(code) : format;
+    const svgNS = "http://www.w3.org/2000/svg";
+    const doc = document.implementation.createDocument(svgNS, "svg", null);
+    const svgEl = doc.documentElement;
+    JsBarcode(svgEl, code, {
+      format: resolvedFormat,
+      width: Math.max(1, width / 80),
+      height: height,
+      displayValue: true,
+      fontSize: 8,
+      font: "monospace",
+      margin: 0,
+    });
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(svgEl);
+  } catch (e) {
+    // Fallback to CODE128 if chosen format fails
+    try {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const doc = document.implementation.createDocument(svgNS, "svg", null);
+      const svgEl = doc.documentElement;
+      JsBarcode(svgEl, code, {
+        format: "CODE128",
+        width: Math.max(1, width / 80),
+        height: height,
+        displayValue: true,
+        fontSize: 8,
+        font: "monospace",
+        margin: 0,
+      });
+      const serializer = new XMLSerializer();
+      return serializer.serializeToString(svgEl);
+    } catch (e2) {
+      return `<svg width="${width}" height="${height + 12}" xmlns="http://www.w3.org/2000/svg">
+        <text x="${width/2}" y="${height/2}" text-anchor="middle" font-size="8" font-family="monospace">${code}</text>
+      </svg>`;
+    }
+  }
 };
 
 const generateQRSVG = (data, size = 50) => {
@@ -109,6 +152,7 @@ export default function PriceLabelPrinting() {
   const [printDialog, setPrintDialog] = useState(null); // { product } or null
   const [printTemplate, setPrintTemplate] = useState("medium_58x40");
   const [printQuantity, setPrintQuantity] = useState(1);
+  const [barcodeFormat, setBarcodeFormat] = useState("auto");
 
   useEffect(() => {
     return () => {
@@ -197,6 +241,7 @@ export default function PriceLabelPrinting() {
   const openPrintDialog = (product) => {
     setPrintDialog({ product });
     setPrintQuantity(1);
+    setBarcodeFormat("auto");
   };
 
   const handlePrint = () => {
@@ -205,7 +250,8 @@ export default function PriceLabelPrinting() {
     const template = LABEL_TEMPLATES[printTemplate];
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const barcode = product.barcode || product.sku || `P${product.id}`;
+    const barcode = product.barcode || product.sku || null;
+    const hasBarcode = !!barcode;
 
     let labelsHTML = "";
     for (let i = 0; i < printQuantity; i++) {
@@ -224,11 +270,11 @@ export default function PriceLabelPrinting() {
           overflow: hidden;
         ">
           ${customSettings.showName ? `<div style="font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${product.name}</div>` : ""}
-          ${customSettings.showSKU ? `<div style="font-size: ${template.fontSize - 2}px; color: #666;">${barcode}</div>` : ""}
+          ${customSettings.showSKU && hasBarcode ? `<div style="font-size: ${template.fontSize - 2}px; color: #666;">${barcode}</div>` : ""}
           ${customSettings.showCategory && product.category ? `<div style="font-size: ${template.fontSize - 2}px; color: #888;">${product.category}</div>` : ""}
           ${customSettings.showPrice ? `<div style="font-size: ${template.fontSize + 4}px; font-weight: bold; color: #000; margin-top: 2mm;">${formatPrice(product.sale_price)} ${customSettings.currency}</div>` : ""}
-          ${customSettings.showBarcode ? `<div style="margin-top: 2mm;">${generateBarcodeSVG(barcode, template.width * 2.5, 20)}</div>` : ""}
-          ${customSettings.showQR && template.showQR ? `<div style="position: absolute; right: 2mm; top: 2mm;">${generateQRSVG(barcode, 15)}</div>` : ""}
+          ${customSettings.showBarcode && hasBarcode ? `<div style="margin-top: 2mm;">${generateBarcodeSVG(barcode, template.width * 2.5, 20, barcodeFormat)}</div>` : ""}
+          ${customSettings.showQR && template.showQR && hasBarcode ? `<div style="position: absolute; right: 2mm; top: 2mm;">${generateQRSVG(barcode, 15)}</div>` : ""}
         </div>
       `;
     }
@@ -333,7 +379,7 @@ export default function PriceLabelPrinting() {
                       </TableCell>
                       <TableCell>
                         <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                          {product.barcode || product.sku || `P${product.id}`}
+                          {product.barcode || product.sku || "—"}
                         </code>
                       </TableCell>
                       <TableCell className="text-right font-medium">
@@ -395,6 +441,26 @@ export default function PriceLabelPrinting() {
                 </Select>
               </div>
 
+              {(printDialog.product.barcode || printDialog.product.sku) && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">{t('barcode_format')}</Label>
+                  <Select value={barcodeFormat} onValueChange={setBarcodeFormat}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BARCODE_FORMAT_KEYS.map((key) => (
+                        <SelectItem key={key} value={key}>
+                          {key === "auto"
+                            ? `${t('auto_detect') || 'Avto-aniqlash'} (${detectBarcodeFormat(printDialog.product.barcode || printDialog.product.sku)})`
+                            : BARCODE_FORMAT_LABELS[key]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label className="text-sm font-medium">{t('quantity')}</Label>
                 <Input
@@ -420,7 +486,7 @@ export default function PriceLabelPrinting() {
                   )}
                   {customSettings.showSKU && (
                     <div className="text-[10px] text-slate-500">
-                      {printDialog.product.barcode || printDialog.product.sku || `P${printDialog.product.id}`}
+                      {printDialog.product.barcode || printDialog.product.sku || "—"}
                     </div>
                   )}
                   {customSettings.showPrice && (
