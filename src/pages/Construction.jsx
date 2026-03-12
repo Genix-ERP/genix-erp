@@ -1668,7 +1668,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Estimates Tab */}
         <TabsContent value="estimates" className="mt-6">
-          <EstimatesTab project={project} wbsItems={wbsTree} />
+          <EstimatesTab project={project} wbsItems={wbsTree} buildings={buildings} />
         </TabsContent>
 
         {/* Daily Journal Tab (WBS-linked progress) */}
