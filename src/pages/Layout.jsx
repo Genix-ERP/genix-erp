@@ -27,7 +27,8 @@ import {
   Cog,
   Ship,
   Building2,
-  Sparkles
+  Sparkles,
+  Phone
 } from "lucide-react";
 import UserMenu from "@/components/ui/user-menu";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ import {
 import LanguageSelector from "@/components/ui/language-selector";
 import CompanySwitcher from "@/components/ui/company-switcher";
 import AIChatBox from "@/components/ai/AIChatBox";
+import PhoneWidget from "@/components/crm/PhoneWidget";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { InstalledAppsProvider, useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { CustomersProvider } from "@/components/contexts/CustomersContext";
@@ -125,6 +127,7 @@ function LayoutContent({ children, currentPageName }) {
   const { installedApps, isAppInstalled } = useInstalledApps();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
+  const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
@@ -479,6 +482,15 @@ function LayoutContent({ children, currentPageName }) {
                 >
                   <Bot className="w-4 h-4 md:w-5 md:h-5" />
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsPhoneOpen(!isPhoneOpen)}
+                  className={`relative rounded-full transition-all duration-200 ${isPhoneOpen ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'hover:bg-emerald-50 hover:text-emerald-600'}`}
+                  title={t('phone') || 'Telefon'}
+                >
+                  <Phone className="w-4 h-4 md:w-5 md:h-5" />
+                </Button>
                 <Link to={createPageUrl("Notifications")}>
                   <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
@@ -501,6 +513,12 @@ function LayoutContent({ children, currentPageName }) {
           </div>
         </main>
       </div>
+
+      {/* Phone Widget */}
+      <PhoneWidget
+        isOpen={isPhoneOpen}
+        onClose={() => setIsPhoneOpen(false)}
+      />
 
       {/* AI ChatBox */}
       <AIChatBox
