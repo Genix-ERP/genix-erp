@@ -199,7 +199,10 @@ export default function OperationTypes() {
     barcode_enabled: true,
     create_backorder: true,
     reservation_method: 'at_confirm',
-    sequence: 10
+    sequence: 10,
+    approval_rule: 'never',
+    approval_amount_threshold: '',
+    approval_quantity_threshold: '',
   });
 
   // Fetch data
@@ -377,6 +380,9 @@ export default function OperationTypes() {
       debit_account_id: ot.debit_account_id || '',
       credit_account_id: ot.credit_account_id || '',
       auto_post_accounting: ot.auto_post_accounting || false,
+      approval_rule: ot.approval_rule || 'never',
+      approval_amount_threshold: ot.approval_amount_threshold || '',
+      approval_quantity_threshold: ot.approval_quantity_threshold || '',
     });
     setShowEditModal(true);
     loadEditData(ot);
@@ -782,6 +788,51 @@ export default function OperationTypes() {
                 onCheckedChange={(v) => setFormData({ ...formData, show_operations: v })}
               />
             </div>
+
+            {/* Write-off / Approval Rules */}
+            <div className="space-y-3 p-3 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-700">{t('approval_rules') || "Tasdiqlash qoidalari"}</p>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">{t('approval_rule') || "Tasdiqlash turi"}</label>
+                <Select value={formData.approval_rule} onValueChange={(v) => setFormData({ ...formData, approval_rule: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="never">{t('approval_never') || "Hech qachon"}</SelectItem>
+                    <SelectItem value="always">{t('approval_always') || "Doim"}</SelectItem>
+                    <SelectItem value="by_amount">{t('approval_by_amount') || "Summaga qarab"}</SelectItem>
+                    <SelectItem value="by_quantity">{t('approval_by_quantity') || "Miqdorga qarab"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formData.approval_rule === 'by_amount' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t('amount_threshold') || "Summa chegarasi"}</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="1000000"
+                    value={formData.approval_amount_threshold}
+                    onChange={(e) => setFormData({ ...formData, approval_amount_threshold: e.target.value })}
+                  />
+                </div>
+              )}
+              {formData.approval_rule === 'by_quantity' && (
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t('quantity_threshold') || "Miqdor chegarasi"}</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="100"
+                    value={formData.approval_quantity_threshold}
+                    onChange={(e) => setFormData({ ...formData, approval_quantity_threshold: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
@@ -901,6 +952,51 @@ export default function OperationTypes() {
                     onCheckedChange={(v) => setFormData({ ...formData, create_backorder: v })}
                   />
                 </div>
+              </div>
+
+              {/* Approval Rules */}
+              <div className="space-y-3 p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700">{t('approval_rules') || "Tasdiqlash qoidalari"}</p>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">{t('approval_rule') || "Tasdiqlash turi"}</label>
+                  <Select value={formData.approval_rule || 'never'} onValueChange={(v) => setFormData({ ...formData, approval_rule: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="never">{t('approval_never') || "Hech qachon"}</SelectItem>
+                      <SelectItem value="always">{t('approval_always') || "Doim"}</SelectItem>
+                      <SelectItem value="by_amount">{t('approval_by_amount') || "Summaga qarab"}</SelectItem>
+                      <SelectItem value="by_quantity">{t('approval_by_quantity') || "Miqdorga qarab"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.approval_rule === 'by_amount' && (
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">{t('amount_threshold') || "Summa chegarasi"}</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="1000000"
+                      value={formData.approval_amount_threshold || ''}
+                      onChange={(e) => setFormData({ ...formData, approval_amount_threshold: e.target.value })}
+                    />
+                  </div>
+                )}
+                {formData.approval_rule === 'by_quantity' && (
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">{t('quantity_threshold') || "Miqdor chegarasi"}</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="100"
+                      value={formData.approval_quantity_threshold || ''}
+                      onChange={(e) => setFormData({ ...formData, approval_quantity_threshold: e.target.value })}
+                    />
+                  </div>
+                )}
               </div>
             </TabsContent>
 
