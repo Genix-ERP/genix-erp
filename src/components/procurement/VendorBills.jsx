@@ -43,7 +43,9 @@ import {
   Trash2,
   Link as LinkIcon,
   Calculator,
-  Globe
+  Globe,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -83,6 +85,7 @@ export default function VendorBills() {
   const [billToDelete, setBillToDelete] = useState(null);
   const [selectedBill, setSelectedBill] = useState(null);
   const [editingBill, setEditingBill] = useState(null);
+  const [expandedDiffs, setExpandedDiffs] = useState({});
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -886,7 +889,11 @@ export default function VendorBills() {
                             setNewBill({ ...newBill, exchange_rate: rate });
                           }
                         }}
+                        disabled={editingBill && editingBill.status !== 'draft'}
                       />
+                      {editingBill && editingBill.status !== 'draft' && (
+                        <p className="text-xs text-amber-600">{t('rate_locked') || 'Kurs qulflangan'}</p>
+                      )}
                     </div>
                     <div>
                       <Label>{baseCurrency.code} {t('equivalent') || 'ekvivalent'}</Label>
@@ -1260,20 +1267,62 @@ export default function VendorBills() {
                   <Label className="text-muted-foreground">{t('exchange_difference') || 'Kurs farqi'}</Label>
                   <div className="mt-2 space-y-2">
                     {selectedBill.exchange_diffs.map((ed, idx) => (
-                      <div key={ed.id || idx} className="flex items-center justify-between border rounded-lg p-3">
-                        <div className="flex items-center gap-3">
-                          <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
-                            className={ed.type === 'positive'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                            }>
-                            {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">{ed.description}</span>
+                      <div key={ed.id || idx} className="border rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Badge variant={ed.type === 'positive' ? 'default' : 'destructive'}
+                              className={ed.type === 'positive'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
+                              }>
+                              {ed.type === 'positive' ? (t('exchange_profit') || 'Foyda') : (t('exchange_loss') || 'Zarar')}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">{ed.document_number || ed.description}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-semibold ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                              {ed.type === 'positive' ? '+' : '-'}{(ed.amount || 0).toLocaleString()} UZS
+                            </span>
+                            {(ed.initial_rate || ed.final_rate) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                                onClick={() => setExpandedDiffs(prev => ({ ...prev, [ed.id || idx]: !prev[ed.id || idx] }))}
+                              >
+                                {expandedDiffs[ed.id || idx] ? (
+                                  <>{t('hide') || 'Yopish'} <ChevronUp className="w-3 h-3 ml-1" /></>
+                                ) : (
+                                  <>{t('details') || 'Batafsil'} <ChevronDown className="w-3 h-3 ml-1" /></>
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <span className={`font-semibold ${ed.type === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
-                          {ed.type === 'positive' ? '+' : '-'}{(ed.amount || 0).toLocaleString()} UZS
-                        </span>
+                        {expandedDiffs[ed.id || idx] && (ed.initial_rate || ed.final_rate) && (
+                          <div className="mt-2 grid grid-cols-4 gap-2 text-xs bg-slate-50 rounded p-2">
+                            <div>
+                              <span className="text-slate-500">{t('invoice_rate') || 'HF kursi'}:</span>
+                              <span className="ml-1 font-mono font-medium">{Number(ed.initial_rate).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">{t('payment_rate') || "To'lov kursi"}:</span>
+                              <span className="ml-1 font-mono font-medium">{Number(ed.final_rate).toLocaleString()}</span>
+                            </div>
+                            {ed.foreign_amount > 0 && (
+                              <div>
+                                <span className="text-slate-500">{t('foreign_amount') || 'Valyuta summa'}:</span>
+                                <span className="ml-1 font-mono font-medium">{Number(ed.foreign_amount).toLocaleString()}</span>
+                              </div>
+                            )}
+                            {ed.date && (
+                              <div>
+                                <span className="text-slate-500">{t('date') || 'Sana'}:</span>
+                                <span className="ml-1 font-mono font-medium">{format(new Date(ed.date), 'dd.MM.yyyy')}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
