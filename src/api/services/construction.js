@@ -552,6 +552,29 @@ export const constructionService = {
   },
 
   // =====================================================
+  // SUB-STAGE MATERIALS
+  // =====================================================
+
+  async listSubStageMaterials(subStageId) {
+    const response = await apiClient.get(`/construction/sub-stages/${subStageId}/materials`);
+    return response.data.data;
+  },
+
+  async createSubStageMaterial(subStageId, data) {
+    const response = await apiClient.post(`/construction/sub-stages/${subStageId}/materials`, data);
+    return response.data.data;
+  },
+
+  async updateSubStageMaterial(id, data) {
+    const response = await apiClient.put(`/construction/sub-stage-materials/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteSubStageMaterial(id) {
+    await apiClient.delete(`/construction/sub-stage-materials/${id}`);
+  },
+
+  // =====================================================
   // COST CATEGORIES & ACCOUNT MAPPING
   // =====================================================
 
