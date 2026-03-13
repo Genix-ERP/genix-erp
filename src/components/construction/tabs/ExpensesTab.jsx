@@ -38,7 +38,7 @@ const EMPTY_FORM = {
   unit_price: '',
 };
 
-const ExpensesTab = ({ project }) => {
+const ExpensesTab = ({ project, scope }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
@@ -78,6 +78,7 @@ const ExpensesTab = ({ project }) => {
     setLoading(true);
     try {
       const params = {};
+      if (scope) params.scope = scope;
       if (filters.status) params.status = filters.status;
       if (filters.stage_id) params.stage_id = filters.stage_id;
       if (filters.category_id) params.category_id = filters.category_id;
@@ -94,7 +95,7 @@ const ExpensesTab = ({ project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?.id, filters]);
+  }, [project?.id, filters, scope]);
 
   useEffect(() => { load(); }, [load]);
 
