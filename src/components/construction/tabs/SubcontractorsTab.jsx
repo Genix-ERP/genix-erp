@@ -9,12 +9,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Users, Star, Play, CheckCircle, XCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Edit, Trash2, Users, Star, Play, CheckCircle, XCircle, FileSpreadsheet, Receipt } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
+import EstimatesTab from './EstimatesTab';
+import ExpensesTab from './ExpensesTab';
 
 const STATE_COLORS = {
   draft: 'bg-slate-100 text-slate-700',
@@ -34,10 +37,11 @@ const EMPTY_FORM = {
   contact_person: '',
   contact_phone: '',
   wbs_ids: [],
+  building_ids: [],
   notes: '',
 };
 
-const SubcontractorsTab = ({ project }) => {
+const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
@@ -49,6 +53,7 @@ const SubcontractorsTab = ({ project }) => {
     terminated: t('terminated') || 'Bekor qilingan',
   };
 
+  const [activeSubTab, setActiveSubTab] = useState('list');
   const [subcontracts, setSubcontracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
@@ -116,6 +121,7 @@ const SubcontractorsTab = ({ project }) => {
       contact_person: item.contact_person || '',
       contact_phone: item.contact_phone || '',
       wbs_ids: item.wbs_ids || [],
+      building_ids: item.building_ids || [],
       notes: item.notes || '',
     });
     setError(null);
@@ -132,13 +138,23 @@ const SubcontractorsTab = ({ project }) => {
     });
   };
 
+  const toggleBuilding = (bldId) => {
+    setForm(f => {
+      const ids = f.building_ids || [];
+      if (ids.includes(bldId)) {
+        return { ...f, building_ids: ids.filter(id => id !== bldId) };
+      }
+      return { ...f, building_ids: [...ids, bldId] };
+    });
+  };
+
   const handleSave = async () => {
     if (!form.partner_id) { setError(t('partner_required') || 'Tashkilotni tanlang'); return; }
     setSaving(true);
     setError(null);
     try {
       const payload = {
-        partner_id: Number(form.partner_id),
+        partner_id: form.partner_id,
         work_description: form.work_description || '',
         amount: form.amount ? parseFloat(parsePriceInput(form.amount)) : 0,
         currency: form.currency || 'UZS',
@@ -148,6 +164,7 @@ const SubcontractorsTab = ({ project }) => {
         contact_person: form.contact_person || '',
         contact_phone: form.contact_phone || '',
         wbs_ids: form.wbs_ids || [],
+        building_ids: form.building_ids || [],
         notes: form.notes || '',
       };
 
@@ -209,140 +226,179 @@ const SubcontractorsTab = ({ project }) => {
 
   return (
     <div className="space-y-4">
-      {/* Summary row */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card><CardContent className="p-4">
-          <p className="text-sm text-slate-500">{t('total_subcontracts') || 'Jami pudratchilar'}</p>
-          <p className="text-2xl font-bold">{subcontracts.length}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <p className="text-sm text-slate-500">{t('active_subcontracts') || 'Faol pudratlar'}</p>
-          <p className="text-2xl font-bold text-green-600">{activeCount}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <p className="text-sm text-slate-500">{t('total_contract_amount') || 'Jami shartnoma summasi'}</p>
-          <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalAmount)}</p>
-        </CardContent></Card>
-      </div>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5" />
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
+        <TabsList>
+          <TabsTrigger value="list" className="flex items-center gap-1.5">
+            <Users className="w-4 h-4" />
             {t('subcontractors') || 'Pudratchilar'}
-          </CardTitle>
-          <Button onClick={openCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t('add_subcontract') || 'Pudrat qo\'shish'}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-slate-400">{t('loading')}</div>
-          ) : subcontracts.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">{t('no_subcontracts') || 'Pudratchilar topilmadi'}</p>
-              <Button variant="outline" className="mt-4" onClick={openCreate}>
+          </TabsTrigger>
+          <TabsTrigger value="estimates" className="flex items-center gap-1.5">
+            <FileSpreadsheet className="w-4 h-4" />
+            {t('estimates') || 'Smetalar'}
+          </TabsTrigger>
+          <TabsTrigger value="expenses" className="flex items-center gap-1.5">
+            <Receipt className="w-4 h-4" />
+            {t('expenses') || 'Xarajatlar'}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Subcontracts List Sub-Tab */}
+        <TabsContent value="list" className="mt-4 space-y-4">
+          {/* Summary row */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card><CardContent className="p-4">
+              <p className="text-sm text-slate-500">{t('total_subcontracts') || 'Jami pudratchilar'}</p>
+              <p className="text-2xl font-bold">{subcontracts.length}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-sm text-slate-500">{t('active_subcontracts') || 'Faol pudratlar'}</p>
+              <p className="text-2xl font-bold text-green-600">{activeCount}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-sm text-slate-500">{t('total_contract_amount') || 'Jami shartnoma summasi'}</p>
+              <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalAmount)}</p>
+            </CardContent></Card>
+          </div>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                {t('subcontractors') || 'Pudratchilar'}
+              </CardTitle>
+              <Button onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-2" />
-                {t('add_first_subcontract') || 'Birinchi pudratni qo\'shing'}
+                {t('add_subcontract') || 'Pudrat qo\'shish'}
               </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subcontracts.map((item) => (
-                <Card key={item.id} className="border">
-                  <CardContent className="p-4 space-y-3">
-                    {/* Header */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm">{item.name}</p>
-                        <p className="text-xs text-slate-500">{item.partner_name}</p>
-                      </div>
-                      <Badge className={STATE_COLORS[item.state] || 'bg-slate-100 text-slate-700'}>
-                        {STATE_LABELS[item.state] || item.state}
-                      </Badge>
-                    </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-slate-400">{t('loading')}</div>
+              ) : subcontracts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500">{t('no_subcontracts') || 'Pudratchilar topilmadi'}</p>
+                  <Button variant="outline" className="mt-4" onClick={openCreate}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t('add_first_subcontract') || 'Birinchi pudratni qo\'shing'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {subcontracts.map((item) => (
+                    <Card key={item.id} className="border">
+                      <CardContent className="p-4 space-y-3">
+                        {/* Header */}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="font-semibold text-sm">{item.name}</p>
+                            <p className="text-xs text-slate-500">{item.partner_name}</p>
+                          </div>
+                          <Badge className={STATE_COLORS[item.state] || 'bg-slate-100 text-slate-700'}>
+                            {STATE_LABELS[item.state] || item.state}
+                          </Badge>
+                        </div>
 
-                    {/* Work description */}
-                    {item.work_description && (
-                      <p className="text-sm text-slate-600 line-clamp-2">{item.work_description}</p>
-                    )}
-
-                    {/* Amount */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500">{t('contract_amount') || 'Shartnoma summasi'}</span>
-                      <span className="font-semibold text-sm">{formatCurrency(item.amount || 0)}</span>
-                    </div>
-
-                    {/* Rating */}
-                    {item.rating > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-500">{t('rating') || 'Reyting'}</span>
-                        {renderStars(item.rating)}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center justify-between pt-2 border-t">
-                      <div className="flex gap-1">
-                        {item.state === 'draft' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-green-600 hover:text-green-700"
-                            onClick={() => handleStateChange(item, 'active')}
-                          >
-                            <Play className="w-3 h-3 mr-1" />
-                            {t('activate') || 'Faollashtirish'}
-                          </Button>
+                        {/* Work description */}
+                        {item.work_description && (
+                          <p className="text-sm text-slate-600 line-clamp-2">{item.work_description}</p>
                         )}
-                        {item.state === 'active' && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-blue-600 hover:text-blue-700"
-                              onClick={() => handleStateChange(item, 'completed')}
-                            >
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              {t('complete') || 'Yakunlash'}
+
+                        {/* Amount */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500">{t('contract_amount') || 'Shartnoma summasi'}</span>
+                          <span className="font-semibold text-sm">{formatCurrency(item.amount || 0)}</span>
+                        </div>
+
+                        {/* Rating */}
+                        {item.rating > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-slate-500">{t('rating') || 'Reyting'}</span>
+                            {renderStars(item.rating)}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between pt-2 border-t">
+                          <div className="flex gap-1">
+                            {item.state === 'draft' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-green-600 hover:text-green-700"
+                                onClick={() => handleStateChange(item, 'active')}
+                              >
+                                <Play className="w-3 h-3 mr-1" />
+                                {t('activate') || 'Faollashtirish'}
+                              </Button>
+                            )}
+                            {item.state === 'active' && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-blue-600 hover:text-blue-700"
+                                  onClick={() => handleStateChange(item, 'completed')}
+                                >
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  {t('complete') || 'Yakunlash'}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleStateChange(item, 'terminated')}
+                                >
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  {t('terminate') || 'Bekor qilish'}
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
+                              <Edit className="w-4 h-4" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 hover:text-red-700"
-                              onClick={() => handleStateChange(item, 'terminated')}
-                            >
-                              <XCircle className="w-3 h-3 mr-1" />
-                              {t('terminate') || 'Bekor qilish'}
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        {item.state === 'draft' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700"
-                            onClick={() => setDeleteTarget(item)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                            {item.state === 'draft' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-500 hover:text-red-700"
+                                onClick={() => setDeleteTarget(item)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Estimates Sub-Tab */}
+        <TabsContent value="estimates" className="mt-4">
+          <EstimatesTab
+            project={project}
+            wbsItems={wbsItems}
+            buildings={buildings}
+            scope="subcontract"
+            subcontracts={subcontracts}
+          />
+        </TabsContent>
+
+        {/* Expenses Sub-Tab */}
+        <TabsContent value="expenses" className="mt-4">
+          <ExpensesTab
+            project={project}
+            scope="subcontract"
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Create/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
@@ -456,6 +512,26 @@ const SubcontractorsTab = ({ project }) => {
                 />
               </div>
             </div>
+
+            {/* Buildings multi-select checkboxes */}
+            {buildings.length > 0 && (
+              <div>
+                <Label>{t('buildings') || 'Binolar'}</Label>
+                <div className="border rounded-md p-2 bg-slate-50 max-h-40 overflow-y-auto space-y-1">
+                  {buildings.map(bld => (
+                    <label key={bld.id} className="flex items-center gap-2 cursor-pointer hover:bg-white rounded px-2 py-1">
+                      <input
+                        type="checkbox"
+                        checked={(form.building_ids || []).includes(bld.id)}
+                        onChange={() => toggleBuilding(bld.id)}
+                        className="rounded border-slate-300"
+                      />
+                      <span className="text-sm">{bld.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* WBS multi-select checkboxes */}
             {wbsList.length > 0 && (

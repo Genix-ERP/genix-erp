@@ -43,11 +43,12 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
-import { ExportModal, ImportExportButtons } from '@/components/shared';
+import { ImportExportButtons } from '@/components/shared';
 import SmetaImportModal from '@/components/construction/SmetaImportModal';
+import SmetaExportModal from '@/components/construction/SmetaExportModal';
 import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
 
-const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
+const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontracts = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
@@ -66,7 +67,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
-    name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+    name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: ''
   });
   const [lineForm, setLineForm] = useState({
     id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '',
@@ -78,25 +79,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportData, setExportData] = useState([]);
-
-  const exportColumns = [
-    { key: 'estimate_name', label: t('estimate') || 'Smeta' },
-    { key: 'item_number', label: '№' },
-    { key: 'code', label: 'Kod' },
-    { key: 'name', label: t('name') || 'Nomi' },
-    { key: 'uom', label: t('unit') || "O'lchov birligi" },
-    { key: 'quantity', label: t('quantity') || 'Miqdor' },
-    { key: 'material_rate', label: t('material') || 'Material', render: (v) => formatCurrency(v || 0) },
-    { key: 'labor_rate', label: t('labor') || 'Ish haqi', render: (v) => formatCurrency(v || 0) },
-    { key: 'equipment_rate', label: t('equipment') || 'Jihozlar', render: (v) => formatCurrency(v || 0) },
-    { key: 'unit_rate', label: t('unit_rate') || 'Birlik narxi', render: (v) => formatCurrency(v || 0) },
-    { key: 'total_amount', label: t('total') || 'Jami', render: (v) => formatCurrency(v || 0) },
-  ];
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, subcontractId }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -108,14 +94,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       if (est) {
         estId = est.id;
       } else {
-        const created = await constructionService.createEstimate(project.id, {
+        const createData = {
           name: estimateName,
           building_id: buildingId,
           overhead_pct: 0,
           profit_pct: 0,
           vat_pct: 12,
           source_type: sourceType || '',
-        });
+        };
+        if (subcontractId) createData.subcontract_id = subcontractId;
+        const created = await constructionService.createEstimate(project.id, createData);
         estId = created.id;
       }
 
@@ -142,54 +130,20 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
 
   const expandedLines = expandedEstimate ? (estimateLines[expandedEstimate] || []) : [];
 
-  // Prepare export data: all lines from all filtered estimates
-  const handlePrepareExport = async () => {
-    const ests = getFilteredEstimates();
-    const allRows = [];
-    for (const est of ests) {
-      let lines = estimateLines[est.id];
-      if (!lines) {
-        try {
-          const data = await constructionService.getEstimate(est.id);
-          lines = data?.lines || [];
-          setEstimateLines(prev => ({ ...prev, [est.id]: lines }));
-        } catch {
-          lines = [];
-        }
-      }
-      for (const line of lines) {
-        allRows.push({
-          estimate_name: `${est.name} (v${est.version})`,
-          item_number: line.item_number || '',
-          code: line.code || '',
-          name: line.name,
-          uom: line.uom,
-          quantity: line.quantity,
-          material_rate: line.material_rate,
-          labor_rate: line.labor_rate,
-          equipment_rate: line.equipment_rate,
-          unit_rate: line.unit_rate || ((line.material_rate || 0) + (line.labor_rate || 0) + (line.equipment_rate || 0)),
-          total_amount: line.total_amount || 0,
-        });
-      }
-    }
-    setExportData(allRows);
-    setShowExportModal(true);
-  };
 
   // Load estimates
   const loadEstimates = useCallback(async () => {
     if (!project?.id) return;
     setLoading(true);
     try {
-      const data = await constructionService.listEstimates(project.id);
+      const data = await constructionService.listEstimates(project.id, scope ? { scope } : {});
       setEstimates(data || []);
     } catch (error) {
       console.error('Error loading estimates:', error);
     } finally {
       setLoading(false);
     }
-  }, [project?.id]);
+  }, [project?.id, scope]);
 
   useEffect(() => {
     loadEstimates();
@@ -240,15 +194,19 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
     e.preventDefault();
     try {
       const buildingId = estimateForm.building_id ? parseInt(estimateForm.building_id) : 0;
-      await constructionService.createEstimate(project.id, {
+      const createData = {
         name: estimateForm.name,
         building_id: buildingId,
         overhead_pct: parseFloat(estimateForm.overhead_pct) || 0,
         profit_pct: parseFloat(estimateForm.profit_pct) || 0,
         vat_pct: parseFloat(estimateForm.vat_pct) || 0,
-      });
+      };
+      if (estimateForm.subcontract_id) {
+        createData.subcontract_id = parseInt(estimateForm.subcontract_id);
+      }
+      await constructionService.createEstimate(project.id, createData);
       setShowEstimateModal(false);
-      setEstimateForm({ name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12' });
+      setEstimateForm({ name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '' });
       await loadEstimates();
     } catch (error) {
       console.error('Error creating estimate:', error);
@@ -414,7 +372,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       <div className="flex items-center justify-end">
         <ImportExportButtons
           onImport={() => setShowImportModal(true)}
-          onExport={handlePrepareExport}
+          onExport={() => setShowExportModal(true)}
           importDisabled={false}
           exportDisabled={!selectedBuilding || filteredEstimates.length === 0}
         />
@@ -439,6 +397,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                   const buildingEstimates = estimates.filter(e => e.building_id === building.id);
                   const totalAmount = buildingEstimates.reduce((sum, e) => sum + (e.amount_total || 0), 0);
                   const isSelected = selectedBuilding?.id === building.id;
+                  // Get unique subcontractor names for this building (subcontract mode)
+                  // Show subcontractors linked to building via junction table + from estimates
+                  const subNames = scope === 'subcontract'
+                    ? [...new Set([
+                        ...subcontracts
+                          .filter(sc => (sc.building_ids || []).includes(building.id))
+                          .map(sc => sc.partner_name || sc.name),
+                        ...buildingEstimates.map(e => e.subcontract_name).filter(Boolean),
+                      ].filter(Boolean))]
+                    : [];
                   return (
                     <div
                       key={building.id}
@@ -454,6 +422,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                           {building.code ? `${building.code} - ${building.name}` : building.name}
                         </span>
                       </div>
+                      {subNames.length > 0 && (
+                        <div className="ml-6 mt-0.5">
+                          {subNames.map((name, i) => (
+                            <span key={i} className="text-xs text-blue-600 bg-blue-50 rounded px-1.5 py-0.5 mr-1">{name}</span>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between mt-1 ml-6">
                         <span className="text-xs text-slate-400">{buildingEstimates.length} {t('estimates_count') || 'smeta'}</span>
                         {totalAmount > 0 && (
@@ -505,7 +480,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
               setEstimateForm({
                 name: '',
                 building_id: selectedBuilding === 'project' ? '' : String(selectedBuilding.id),
-                overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+                overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: ''
               });
               setShowEstimateModal(true);
             }}>
@@ -568,6 +543,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                               if (!info) return null;
                               return <Badge className={`text-xs ${info.color}`}>{info[language] || info.ru}</Badge>;
                             })()}
+                            {est.subcontract_name && <Badge className="bg-orange-100 text-orange-700 text-xs">{est.subcontract_name}</Badge>}
                             {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Faol'}</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
@@ -763,8 +739,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       </Card>
       </div>
 
-      {/* Svod Summary */}
-      <SmetaSummaryView key={summaryKey} projectId={project?.id} />
+      {/* Svod Summary (only in main estimates view) */}
+      {!scope && <SmetaSummaryView key={summaryKey} projectId={project?.id} />}
 
       {/* Create Estimate Modal */}
       <Dialog open={showEstimateModal} onOpenChange={setShowEstimateModal}>
@@ -798,6 +774,27 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                       {buildings.map(b => (
                         <SelectItem key={b.id} value={String(b.id)}>
                           {b.code ? `${b.code} - ${b.name}` : b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {scope === 'subcontract' && subcontracts.length > 0 && (
+                <div>
+                  <Label>{t('subcontractor') || 'Pudratchi'} *</Label>
+                  <Select
+                    value={estimateForm.subcontract_id || "none"}
+                    onValueChange={(val) => setEstimateForm({ ...estimateForm, subcontract_id: val === "none" ? '' : val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_subcontractor') || "Pudratchi tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">-</SelectItem>
+                      {subcontracts.map(sc => (
+                        <SelectItem key={sc.id} value={String(sc.id)}>
+                          {sc.name}{sc.partner_name ? ` - ${sc.partner_name}` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1007,13 +1004,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       />
 
       {/* Export Modal */}
-      <ExportModal
+      <SmetaExportModal
         open={showExportModal}
         onClose={() => setShowExportModal(false)}
-        data={exportData}
-        columns={exportColumns}
-        entityName={t('estimates') || 'Smetalar'}
-        title={selectedBuilding === 'project' ? (t('entire_project') || 'Butun loyiha') : (selectedBuilding?.name || '')}
+        estimates={getFilteredEstimates()}
+        estimateLines={estimateLines}
+        loadEstimateLines={loadEstimateLines}
+        selectedBuilding={selectedBuilding}
+        project={project}
       />
     </div>
   );
