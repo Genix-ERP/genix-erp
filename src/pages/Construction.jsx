@@ -1963,27 +1963,37 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50">
-                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('product') || 'Mahsulot'}</th>
-                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('uom') || 'O\'lchov'}</th>
-                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('approved_quantity') || 'Tasdiqlangan miqdor'}</th>
-                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('unit_cost') || 'Birlik narxi'}</th>
-                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('total') || 'Jami'}</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('product')}</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-600">{t('uom')}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('approved_quantity')}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('used')}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('remaining')}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('unit_cost')}</th>
+                        <th className="text-right py-2 px-3 font-medium text-slate-600">{t('total')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {projectMaterials.map((mat) => (
-                        <tr key={mat.id} className="border-b hover:bg-slate-50 transition-colors">
-                          <td className="py-2 px-3 font-medium">{mat.product_name}</td>
-                          <td className="py-2 px-3 text-slate-500">{mat.uom}</td>
-                          <td className="py-2 px-3 text-right">{Number(mat.approved_quantity).toFixed(2)}</td>
-                          <td className="py-2 px-3 text-right">{formatCurrency(mat.unit_cost)}</td>
-                          <td className="py-2 px-3 text-right font-medium">{formatCurrency(mat.approved_quantity * mat.unit_cost)}</td>
-                        </tr>
-                      ))}
+                      {projectMaterials.map((mat) => {
+                        const assigned = mat.assigned_quantity || 0;
+                        const remaining = mat.approved_quantity - assigned;
+                        return (
+                          <tr key={mat.id} className="border-b hover:bg-slate-50 transition-colors">
+                            <td className="py-2 px-3 font-medium">{mat.product_name}</td>
+                            <td className="py-2 px-3 text-slate-500">{mat.uom}</td>
+                            <td className="py-2 px-3 text-right">{Number(mat.approved_quantity).toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right text-purple-600">{assigned > 0 ? Number(assigned).toFixed(2) : '-'}</td>
+                            <td className={`py-2 px-3 text-right font-medium ${remaining < 0 ? 'text-red-600' : remaining === 0 ? 'text-slate-400' : 'text-green-600'}`}>
+                              {Number(remaining).toFixed(2)}
+                            </td>
+                            <td className="py-2 px-3 text-right">{formatCurrency(mat.unit_cost)}</td>
+                            <td className="py-2 px-3 text-right font-medium">{formatCurrency(mat.approved_quantity * mat.unit_cost)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="bg-slate-50 font-semibold">
-                        <td colSpan={4} className="py-2 px-3 text-right">{t('total') || 'Jami'}:</td>
+                        <td colSpan={6} className="py-2 px-3 text-right">{t('total')}:</td>
                         <td className="py-2 px-3 text-right">{formatCurrency(projectMaterials.reduce((s, m) => s + m.approved_quantity * m.unit_cost, 0))}</td>
                       </tr>
                     </tfoot>

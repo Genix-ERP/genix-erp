@@ -35,14 +35,18 @@ import {
   ChevronRight,
   AlertCircle,
   Layers,
+  Package,
+  Wallet,
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { format } from 'date-fns';
 
 const DailyJournalTab = ({ project, buildings = [] }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { formatCurrency } = useCurrencyFormatter();
 
   const [stages, setStages] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -268,6 +272,23 @@ const DailyJournalTab = ({ project, buildings = [] }) => {
                           />
                         </div>
                         <span className="text-xs text-slate-500 w-10 text-right">{log.stage_progress || 0}%</span>
+                      </div>
+                    )}
+                    {/* Stage budget & materials */}
+                    {(log.stage_planned_budget > 0 || log.stage_material_total > 0) && (
+                      <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                        {log.stage_planned_budget > 0 && (
+                          <span className="text-blue-600 font-medium">
+                            <Wallet className="w-3.5 h-3.5 inline mr-1" />
+                            {t('planned_budget')}: {formatCurrency(log.stage_planned_budget)}
+                          </span>
+                        )}
+                        {log.stage_material_total > 0 && (
+                          <span className="text-amber-600 font-medium">
+                            <Package className="w-3.5 h-3.5 inline mr-1" />
+                            {t('materials')}: {formatCurrency(log.stage_material_total)}
+                          </span>
+                        )}
                       </div>
                     )}
                     <div className="flex flex-wrap gap-4 mt-2 text-sm">
