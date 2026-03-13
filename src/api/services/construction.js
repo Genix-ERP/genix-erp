@@ -445,6 +445,11 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async bulkCreateEstimateLines(estimateId, lines) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines });
+    return response.data.data;
+  },
+
   async updateEstimateLine(estimateId, lineId, data) {
     const response = await apiClient.put(`/construction/estimates/${estimateId}/lines/${lineId}`, data);
     return response.data.data;
@@ -452,6 +457,24 @@ export const constructionService = {
 
   async deleteEstimateLine(estimateId, lineId) {
     await apiClient.delete(`/construction/estimates/${estimateId}/lines/${lineId}`);
+  },
+
+  // =====================================================
+  // ESTIMATE SUMMARY (Свод)
+  // =====================================================
+
+  async listEstimateSummary(projectId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/estimate-summary`);
+    return response.data.data;
+  },
+
+  async importEstimateSummary(projectId, rows) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/estimate-summary/import`, { rows });
+    return response.data.data;
+  },
+
+  async deleteEstimateSummaryBatch(batchId) {
+    await apiClient.delete(`/construction/estimate-summary/${batchId}`);
   },
 
   // =====================================================
