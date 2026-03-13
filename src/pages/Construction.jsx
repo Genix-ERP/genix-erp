@@ -680,8 +680,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   });
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
-    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
+    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: [],
+    bill_subcontractor: false, subcontract_id: ''
   });
+  const [projectSubcontracts, setProjectSubcontracts] = useState([]);
   const [inventoryProducts, setInventoryProducts] = useState([]);
   const [inventoryWarehouses, setInventoryWarehouses] = useState([]);
   const [variantsByProduct, setVariantsByProduct] = useState({});
@@ -827,16 +829,18 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             break;
           case 'materials':
             try {
-              const [materialsData, productsData, warehousesData, projMatsData] = await Promise.all([
+              const [materialsData, productsData, warehousesData, projMatsData, subcontractsData] = await Promise.all([
                 constructionService.listMaterialRequests(project.id),
                 inventoryService.listProducts({ limit: 500, is_stockable: true }),
                 inventoryService.listWarehouses({ limit: 100 }),
-                constructionService.listProjectMaterials(project.id)
+                constructionService.listProjectMaterials(project.id),
+                constructionService.listSubcontracts(project.id)
               ]);
               setMaterialRequests(materialsData || []);
               setInventoryProducts(productsData?.items || productsData || []);
               setInventoryWarehouses(warehousesData?.items || warehousesData || []);
               setProjectMaterials(projMatsData || []);
+              setProjectSubcontracts(subcontractsData || []);
             } catch (e) { setMaterialRequests([]); }
             break;
           case 'estimates':
@@ -940,7 +944,9 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         request_date: materialRequestForm.request_date,
         required_date: materialRequestForm.required_date,
         notes: materialRequestForm.notes,
-        items: materialRequestForm.items
+        items: materialRequestForm.items,
+        bill_subcontractor: materialRequestForm.bill_subcontractor || false,
+        subcontract_id: materialRequestForm.bill_subcontractor && materialRequestForm.subcontract_id ? parseInt(materialRequestForm.subcontract_id) : 0,
       };
 
       if (materialRequestForm.id) {
@@ -952,7 +958,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setMaterialRequests(materialsData || []);
       setShowMaterialRequestModal(false);
       setMaterialRequestForm({
-        id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
+        id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: [],
+        bill_subcontractor: false, subcontract_id: ''
       });
     } catch (error) {
       console.error('Error saving material request:', error);
@@ -1768,7 +1775,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 <CardTitle>{t('material_requests') || 'Material so\'rovlari'}</CardTitle>
                 <Button size="sm" onClick={() => {
                   setMaterialRequestForm({
-                    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: []
+                    id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: [],
+        bill_subcontractor: false, subcontract_id: ''
                   });
                   setShowMaterialRequestModal(true);
                 }}>
@@ -2200,7 +2208,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
 {/* Subcontractors Tab */}
         <TabsContent value="subcontractors" className="mt-6">
-          <SubcontractorsTab project={project} />
+          <SubcontractorsTab project={project} buildings={buildings} wbsItems={wbsTree} />
         </TabsContent>
 
         {/* Acts (KS-2/KS-3) Tab */}
@@ -2582,6 +2590,44 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 rows={2}
               />
             </div>
+
+            {/* Bill Subcontractor */}
+            {projectSubcontracts.length > 0 && (
+              <div className="space-y-2 border rounded-lg p-3 bg-slate-50">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={materialRequestForm.bill_subcontractor || false}
+                    onChange={(e) => setMaterialRequestForm({
+                      ...materialRequestForm,
+                      bill_subcontractor: e.target.checked,
+                      subcontract_id: e.target.checked ? materialRequestForm.subcontract_id : ''
+                    })}
+                    className="rounded border-slate-300"
+                  />
+                  <span className="text-sm font-medium">{t('bill_subcontractor') || 'Pudratchiga yozish'}</span>
+                </label>
+                {materialRequestForm.bill_subcontractor && (
+                  <Select
+                    value={materialRequestForm.subcontract_id || "none"}
+                    onValueChange={(val) => setMaterialRequestForm({ ...materialRequestForm, subcontract_id: val === "none" ? '' : val })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder={t('select_subcontractor') || 'Pudratchi tanlang'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('select_subcontractor') || 'Pudratchi tanlang'}</SelectItem>
+                      {projectSubcontracts.map(sc => (
+                        <SelectItem key={sc.id} value={String(sc.id)}>
+                          {sc.name} — {sc.partner_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowMaterialRequestModal(false)}>
                 {t('cancel') || 'Bekor qilish'}

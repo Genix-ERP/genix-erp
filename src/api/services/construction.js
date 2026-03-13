@@ -400,8 +400,9 @@ export const constructionService = {
   // ESTIMATES (Versioned Smeta)
   // =====================================================
 
-  async listEstimates(projectId) {
-    const response = await apiClient.get(`/construction/projects/${projectId}/estimates`);
+  async listEstimates(projectId, { scope } = {}) {
+    const params = scope ? { scope } : {};
+    const response = await apiClient.get(`/construction/projects/${projectId}/estimates`, { params });
     return response.data.data;
   },
 

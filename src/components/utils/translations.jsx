@@ -1076,6 +1076,8 @@ export const translations = {
     "select_all": "Select All",
     "columns_to_export": "columns to export",
     "exporting": "Exporting",
+    "export_estimate": "Export Estimate",
+    "select_export_type": "Select export type",
 
     "new_product": "New Product",
     "edit_product": "Edit Product",
@@ -7395,6 +7397,8 @@ export const translations = {
     "select_all": "Barchasini tanlash",
     "columns_to_export": "ustun eksport qilinadi",
     "exporting": "Eksport qilinmoqda",
+    "export_estimate": "Smetani eksport qilish",
+    "select_export_type": "Eksport turini tanlang",
 
     "new_product": "Yangi mahsulot",
     "edit_product": "Mahsulotni tahrirlash",
@@ -13840,6 +13844,8 @@ export const translations = {
     "select_all": "Выбрать все",
     "columns_to_export": "столбцов для экспорта",
     "exporting": "Экспортируется",
+    "export_estimate": "Экспорт сметы",
+    "select_export_type": "Выберите тип экспорта",
 
     "new_product": "Новый товар",
     "edit_product": "Редактировать товар",
