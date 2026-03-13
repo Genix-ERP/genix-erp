@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -38,9 +38,9 @@ const StagesTab = ({ project }) => {
   const { formatCurrency } = useCurrencyFormatter();
 
   const STATUS_LABELS = {
-    not_started: t('not_started') || 'Not started',
-    in_progress: t('in_progress') || 'In progress',
-    completed: t('completed') || 'Completed',
+    not_started: t('not_started'),
+    in_progress: t('in_progress'),
+    completed: t('completed'),
   };
 
   const [stages, setStages] = useState([]);
@@ -51,14 +51,30 @@ const StagesTab = ({ project }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingStage, setEditingStage] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  // Inline sub-stages in modal: [{ _key, id?, name, status }]
   const [modalSubStages, setModalSubStages] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
   // Delete confirmations
   const [deleteStage, setDeleteStage] = useState(null);
-  const [deleteSubStage, setDeleteSubStage] = useState(null); // { sub, stageId }
+  const [deleteSubStage, setDeleteSubStage] = useState(null);
+
+  // Materials
+  const [expandedSubStage, setExpandedSubStage] = useState(null); // sub-stage id
+  const [subStageMaterials, setSubStageMaterials] = useState({}); // { [subStageId]: Material[] }
+  const [materialsLoading, setMaterialsLoading] = useState(null);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [materialSubStageId, setMaterialSubStageId] = useState(null);
+  const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+  const [products, setProducts] = useState([]);
+
+  // Load project materials for dropdown
+  useEffect(() => {
+    if (!project?.id) return;
+    constructionService.listProjectMaterials(project.id)
+      .then(data => setProducts(data || []))
+      .catch(() => setProducts([]));
+  }, [project?.id]);
 
   const loadAllSubStages = useCallback(async (stageList) => {
     if (!stageList.length) return;
@@ -98,7 +114,80 @@ const StagesTab = ({ project }) => {
     }
   };
 
-  // ── Modal helpers ─────────────────────────────────────────────
+  // Materials helpers
+  const loadSubStageMaterials = async (subStageId) => {
+    setMaterialsLoading(subStageId);
+    try {
+      const data = await constructionService.listSubStageMaterials(subStageId);
+      setSubStageMaterials(prev => ({ ...prev, [subStageId]: data || [] }));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setMaterialsLoading(null);
+    }
+  };
+
+  const toggleSubStageMaterials = (subStageId) => {
+    if (expandedSubStage === subStageId) {
+      setExpandedSubStage(null);
+    } else {
+      setExpandedSubStage(subStageId);
+      if (!subStageMaterials[subStageId]) {
+        loadSubStageMaterials(subStageId);
+      }
+    }
+  };
+
+  const openAddMaterial = (subStageId) => {
+    setMaterialSubStageId(subStageId);
+    setMaterialForm({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+    setShowMaterialModal(true);
+  };
+
+  const handleAddMaterial = async () => {
+    if (!materialForm.product_name.trim() || !materialSubStageId) return;
+    try {
+      await constructionService.createSubStageMaterial(materialSubStageId, {
+        product_id: materialForm.product_id || '',
+        product_name: materialForm.product_name,
+        uom: materialForm.uom || 'шт',
+        quantity: parseFloat(materialForm.quantity) || 0,
+        unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
+      });
+      setShowMaterialModal(false);
+      await loadSubStageMaterials(materialSubStageId);
+      // Reload sub-stages to update material_count/material_total
+      const stageId = findStageForSubStage(materialSubStageId);
+      if (stageId) await reloadSubStages(stageId);
+      // Reload stages to update material_total on stage card
+      const data = await constructionService.listStages(project.id);
+      setStages(data || []);
+    } catch (e) {
+      toast.error(t('error_occurred'));
+    }
+  };
+
+  const handleDeleteMaterial = async (materialId, subStageId) => {
+    try {
+      await constructionService.deleteSubStageMaterial(materialId);
+      await loadSubStageMaterials(subStageId);
+      const stageId = findStageForSubStage(subStageId);
+      if (stageId) await reloadSubStages(stageId);
+      const data = await constructionService.listStages(project.id);
+      setStages(data || []);
+    } catch (e) {
+      toast.error(t('error_occurred'));
+    }
+  };
+
+  const findStageForSubStage = (subStageId) => {
+    for (const [stageId, subs] of Object.entries(subStagesMap)) {
+      if (subs.some(s => s.id === subStageId)) return parseInt(stageId);
+    }
+    return null;
+  };
+
+  // ── Stage Modal helpers ─────────────────────────────────────────────
 
   const openCreate = () => {
     setEditingStage(null);
@@ -119,12 +208,8 @@ const StagesTab = ({ project }) => {
       planned_end: stage.planned_end ? stage.planned_end.slice(0, 10) : '',
       notes: stage.notes || '',
     });
-    // Load existing sub-stages into modal
     const existing = (subStagesMap[stage.id] || []).map(s => ({
-      _key: s.id,
-      id: s.id,
-      name: s.name,
-      status: s.status,
+      _key: s.id, id: s.id, name: s.name, status: s.status,
     }));
     setModalSubStages(existing);
     setError(null);
@@ -163,18 +248,15 @@ const StagesTab = ({ project }) => {
         await constructionService.updateStage(editingStage.id, payload);
         stageId = editingStage.id;
 
-        // Sync sub-stages: delete removed ones, create new ones, update changed ones
         const existing = subStagesMap[stageId] || [];
         const existingIds = new Set(existing.map(s => s.id));
         const modalIds = new Set(modalSubStages.filter(s => s.id).map(s => s.id));
 
-        // Delete removed
         for (const s of existing) {
           if (!modalIds.has(s.id)) {
             await constructionService.deleteSubStage(s.id).catch(() => {});
           }
         }
-        // Create new / update existing
         for (const s of modalSubStages) {
           if (!s.name.trim()) continue;
           if (s.id && existingIds.has(s.id)) {
@@ -186,7 +268,6 @@ const StagesTab = ({ project }) => {
       } else {
         const res = await constructionService.createStage(project.id, payload);
         stageId = res?.id;
-        // Create sub-stages
         if (stageId) {
           for (const s of modalSubStages) {
             if (!s.name.trim()) continue;
@@ -227,7 +308,6 @@ const StagesTab = ({ project }) => {
   };
 
   const handleSubStatusChange = async (stageId, subId, newStatus) => {
-    // Optimistically update local state
     setSubStagesMap(prev => ({
       ...prev,
       [stageId]: (prev[stageId] || []).map(s => s.id === subId ? { ...s, status: newStatus } : s),
@@ -236,19 +316,16 @@ const StagesTab = ({ project }) => {
     try {
       await constructionService.updateSubStage(subId, { status: newStatus });
 
-      // Check if all sub-stages are now completed
       const updatedSubs = (subStagesMap[stageId] || []).map(s => s.id === subId ? { ...s, status: newStatus } : s);
       const allDone = updatedSubs.length > 0 && updatedSubs.every(s => s.status === 'completed');
 
       if (allDone) {
-        // Auto-complete the parent stage
         const stage = stages.find(s => s.id === stageId);
         if (stage && stage.status !== 'completed') {
           await constructionService.updateStage(stageId, { status: 'completed' });
           setStages(prev => prev.map(s => s.id === stageId ? { ...s, status: 'completed' } : s));
         }
       } else {
-        // If at least one is in progress, set stage to in_progress
         const stage = stages.find(s => s.id === stageId);
         const anyInProgress = updatedSubs.some(s => s.status === 'in_progress' || s.status === 'completed');
         if (stage && stage.status === 'not_started' && anyInProgress) {
@@ -260,12 +337,10 @@ const StagesTab = ({ project }) => {
         }
       }
     } catch (e) {
-      // Revert on error
       reloadSubStages(stageId);
     }
   };
 
-  // Progress based on sub-stages if they exist, else budget
   const getProgress = (stage) => {
     const subs = subStagesMap[stage.id];
     if (subs && subs.length > 0) {
@@ -279,11 +354,12 @@ const StagesTab = ({ project }) => {
 
   const totalPlanned = stages.reduce((s, st) => s + (st.planned_budget || 0), 0);
   const totalActual = stages.reduce((s, st) => s + (st.actual_amount || 0), 0);
+  const totalMaterials = stages.reduce((s, st) => s + (st.material_total || 0), 0);
 
   return (
     <div className="space-y-4">
       {/* Summary row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card><CardContent className="p-4">
           <p className="text-sm text-slate-500">{t('total_stages')}</p>
           <p className="text-2xl font-bold">{stages.length}</p>
@@ -297,6 +373,10 @@ const StagesTab = ({ project }) => {
           <p className={`text-2xl font-bold ${totalActual > totalPlanned ? 'text-red-600' : 'text-green-600'}`}>
             {formatCurrency(totalActual)}
           </p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-sm text-slate-500">{t('materials')}</p>
+          <p className="text-2xl font-bold text-amber-600">{formatCurrency(totalMaterials)}</p>
         </CardContent></Card>
       </div>
 
@@ -342,7 +422,7 @@ const StagesTab = ({ project }) => {
                               {STATUS_LABELS[stage.status] || stage.status}
                             </Badge>
                             {overBudget && subs.length === 0 && (
-                              <Badge className="bg-red-100 text-red-700">{t('over_budget') || 'Over budget'}</Badge>
+                              <Badge className="bg-red-100 text-red-700">{t('over_budget')}</Badge>
                             )}
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-slate-600 mb-3">
@@ -355,6 +435,15 @@ const StagesTab = ({ project }) => {
                               </span>
                             )}
                           </div>
+                          {/* Material total for stage */}
+                          {stage.material_total > 0 && (
+                            <div className="flex items-center gap-2 mb-3 text-sm">
+                              <Package className="w-4 h-4 text-amber-500" />
+                              <span className="text-amber-700 font-medium">
+                                {t('materials')}: {formatCurrency(stage.material_total)}
+                              </span>
+                            </div>
+                          )}
                           {/* Progress bar */}
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-slate-200 rounded-full h-2">
@@ -386,33 +475,108 @@ const StagesTab = ({ project }) => {
                     {/* Sub-stages — always visible */}
                     {subs.length > 0 && (
                       <div className="border-t bg-slate-50 px-4 py-2 space-y-1">
-                        {subs.map(sub => (
-                          <div key={sub.id} className="flex items-center justify-between bg-white rounded border px-3 py-1.5">
-                            <div className="flex items-center gap-2 flex-1">
-                              <Select
-                                value={sub.status}
-                                onValueChange={v => handleSubStatusChange(stage.id, sub.id, v)}
-                              >
-                                <SelectTrigger className={`h-6 w-32 text-xs border-0 p-1 font-medium ${STATUS_COLORS[sub.status] || 'bg-slate-100 text-slate-700'}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="not_started">{STATUS_LABELS.not_started}</SelectItem>
-                                  <SelectItem value="in_progress">{STATUS_LABELS.in_progress}</SelectItem>
-                                  <SelectItem value="completed">{STATUS_LABELS.completed}</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <span className="text-sm">{sub.name}</span>
+                        {subs.map(sub => {
+                          const isExpanded = expandedSubStage === sub.id;
+                          const materials = subStageMaterials[sub.id] || [];
+                          const isLoadingMats = materialsLoading === sub.id;
+
+                          return (
+                            <div key={sub.id}>
+                              <div className="flex items-center justify-between bg-white rounded border px-3 py-1.5">
+                                <div className="flex items-center gap-2 flex-1">
+                                  <Select
+                                    value={sub.status}
+                                    onValueChange={v => handleSubStatusChange(stage.id, sub.id, v)}
+                                  >
+                                    <SelectTrigger className={`h-6 w-32 text-xs border-0 p-1 font-medium ${STATUS_COLORS[sub.status] || 'bg-slate-100 text-slate-700'}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="not_started">{STATUS_LABELS.not_started}</SelectItem>
+                                      <SelectItem value="in_progress">{STATUS_LABELS.in_progress}</SelectItem>
+                                      <SelectItem value="completed">{STATUS_LABELS.completed}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <span className="text-sm">{sub.name}</span>
+                                  {sub.material_total > 0 && (
+                                    <span className="text-xs text-amber-600 font-medium ml-auto mr-2">
+                                      {sub.material_count} mat. &middot; {formatCurrency(sub.material_total)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="h-6 w-6 p-0 text-amber-500 hover:text-amber-700"
+                                    onClick={() => toggleSubStageMaterials(sub.id)}
+                                    title={t('materials')}
+                                  >
+                                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <Package className="w-3 h-3" />}
+                                  </Button>
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                                    onClick={() => setDeleteSubStage({ sub, stageId: stage.id })}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Expanded materials list */}
+                              {isExpanded && (
+                                <div className="ml-4 mt-1 mb-2 border rounded bg-white p-2 space-y-1">
+                                  {isLoadingMats ? (
+                                    <p className="text-xs text-slate-400 py-2 text-center">{t('loading')}</p>
+                                  ) : materials.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-2 text-center">{t('no_items')}</p>
+                                  ) : (
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b text-slate-500">
+                                          <th className="text-left py-1 px-1">{t('name')}</th>
+                                          <th className="text-right py-1 px-1">{t('unit')}</th>
+                                          <th className="text-right py-1 px-1">{t('quantity')}</th>
+                                          <th className="text-right py-1 px-1">{t('unit_cost')}</th>
+                                          <th className="text-right py-1 px-1">{t('total')}</th>
+                                          <th className="w-8"></th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {materials.map(mat => (
+                                          <tr key={mat.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                            <td className="py-1 px-1">{mat.product_name}</td>
+                                            <td className="py-1 px-1 text-right text-slate-500">{mat.uom}</td>
+                                            <td className="py-1 px-1 text-right">{mat.quantity}</td>
+                                            <td className="py-1 px-1 text-right">{formatCurrency(mat.unit_cost)}</td>
+                                            <td className="py-1 px-1 text-right font-medium">{formatCurrency(mat.total_cost)}</td>
+                                            <td className="py-1 px-1 text-center">
+                                              <Button
+                                                variant="ghost" size="sm"
+                                                className="h-5 w-5 p-0 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                onClick={() => handleDeleteMaterial(mat.id, sub.id)}
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </Button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                  <Button
+                                    variant="outline" size="sm"
+                                    className="h-7 text-xs w-full mt-1"
+                                    onClick={() => openAddMaterial(sub.id)}
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    {t('add')}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                            <Button
-                              variant="ghost" size="sm"
-                              className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                              onClick={() => setDeleteSubStage({ sub, stageId: stage.id })}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -495,6 +659,112 @@ const StagesTab = ({ project }) => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowModal(false)}>{t('cancel')}</Button>
             <Button onClick={handleSave} disabled={saving}>{saving ? t('saving') : t('save')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Material Modal */}
+      <Dialog open={showMaterialModal} onOpenChange={setShowMaterialModal}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{t('add')}</DialogTitle>
+            <DialogDescription className="sr-only">{t('add')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{t('product')}</Label>
+              {products.length > 0 ? (
+                <Select
+                  value={materialForm.product_name || 'custom'}
+                  onValueChange={(val) => {
+                    if (val === 'custom') {
+                      setMaterialForm(f => ({ ...f, product_id: '', product_name: '', uom: 'шт', unit_cost: '' }));
+                    } else {
+                      const p = products.find(pr => pr.product_name === val);
+                      if (p) {
+                        setMaterialForm(f => ({
+                          ...f,
+                          product_id: p.product_id || '',
+                          product_name: p.product_name,
+                          uom: p.uom || 'шт',
+                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                        }));
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder={t('select_product')} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">{t('other')}</SelectItem>
+                    {products.map(p => {
+                      const remaining = (p.approved_quantity || 0) - (p.assigned_quantity || 0);
+                      return (
+                        <SelectItem key={p.product_id || p.id} value={p.product_name}>
+                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
+                          {p.approved_quantity > 0 && (
+                            <span className="text-slate-400 ml-1">— {remaining.toFixed(1)} {t('remaining')}</span>
+                          )}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={materialForm.product_name}
+                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
+                  placeholder={t('product_name')}
+                />
+              )}
+              {/* Show custom name input if 'custom' selected or products empty */}
+              {products.length > 0 && !products.some(p => p.product_name === materialForm.product_name) && (
+                <Input
+                  className="mt-2"
+                  value={materialForm.product_name}
+                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
+                  placeholder={t('product_name')}
+                />
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>{t('unit')}</Label>
+                <Input
+                  value={materialForm.uom}
+                  onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>{t('quantity')}</Label>
+                <Input
+                  type="number" step="0.0001" min="0"
+                  value={materialForm.quantity}
+                  onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>{t('unit_cost')}</Label>
+                <Input
+                  value={materialForm.unit_cost}
+                  onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            {materialForm.quantity && materialForm.unit_cost && (
+              <div className="flex justify-between items-center pt-2 border-t text-sm">
+                <span className="text-slate-500">{t('total')}</span>
+                <span className="font-semibold">
+                  {formatCurrency((parseFloat(materialForm.quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}
+                </span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+            <Button onClick={handleAddMaterial} disabled={!materialForm.product_name.trim()}>
+              {t('add')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
