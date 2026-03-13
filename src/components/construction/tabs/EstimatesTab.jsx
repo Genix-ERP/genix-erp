@@ -43,7 +43,9 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
-import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
+import { ExportModal, ImportExportButtons } from '@/components/shared';
+import SmetaImportModal from '@/components/construction/SmetaImportModal';
+import SmetaSummaryView from '@/components/construction/SmetaSummaryView';
 
 const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
   const { language } = useLanguage();
@@ -80,6 +82,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
 
   const exportColumns = [
     { key: 'estimate_name', label: t('estimate') || 'Smeta' },
+    { key: 'item_number', label: '№' },
+    { key: 'code', label: 'Kod' },
     { key: 'name', label: t('name') || 'Nomi' },
     { key: 'uom', label: t('unit') || "O'lchov birligi" },
     { key: 'quantity', label: t('quantity') || 'Miqdor' },
@@ -90,66 +94,49 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
     { key: 'total_amount', label: t('total') || 'Jami', render: (v) => formatCurrency(v || 0) },
   ];
 
-  const importColumns = [
-    { key: 'estimate_name', label: t('estimate') || 'Smeta', required: true },
-    { key: 'name', label: t('name') || 'Nomi', required: true },
-    { key: 'uom', label: t('unit') || "O'lchov birligi" },
-    { key: 'quantity', label: t('quantity') || 'Miqdor' },
-    { key: 'material_rate', label: t('material') || 'Material' },
-    { key: 'labor_rate', label: t('labor') || 'Ish haqi' },
-    { key: 'equipment_rate', label: t('equipment') || 'Jihozlar' },
-  ];
+  // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async (data) => {
-    if (!selectedBuilding) return;
-    const buildingId = selectedBuilding === 'project' ? 0 : selectedBuilding.id;
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType }) => {
     try {
-      // Group rows by estimate_name
-      const grouped = {};
-      for (const row of data) {
-        const estName = row.estimate_name || 'Imported';
-        if (!grouped[estName]) grouped[estName] = [];
-        grouped[estName].push(row);
+      // Find existing draft estimate with same name for this building, or create new
+      let est = estimates.find(e =>
+        e.name === estimateName &&
+        e.state === 'draft' &&
+        (buildingId === 0 ? !e.building_id : e.building_id === buildingId)
+      );
+      let estId;
+      if (est) {
+        estId = est.id;
+      } else {
+        const created = await constructionService.createEstimate(project.id, {
+          name: estimateName,
+          building_id: buildingId,
+          overhead_pct: 0,
+          profit_pct: 0,
+          vat_pct: 12,
+          source_type: sourceType || '',
+        });
+        estId = created.id;
       }
 
-      for (const [estName, rows] of Object.entries(grouped)) {
-        // Find existing draft estimate with same name for this building, or create new
-        let est = estimates.find(e =>
-          e.name === estName &&
-          e.state === 'draft' &&
-          (selectedBuilding === 'project' ? !e.building_id : e.building_id === buildingId)
-        );
-        let estId;
-        if (est) {
-          estId = est.id;
-        } else {
-          const created = await constructionService.createEstimate(project.id, {
-            name: estName,
-            building_id: buildingId,
-            overhead_pct: 0,
-            profit_pct: 0,
-            vat_pct: 12,
-          });
-          estId = created.id;
-        }
-
-        for (const row of rows) {
-          await constructionService.createEstimateLine(estId, {
-            name: row.name,
-            uom: row.uom || 'шт',
-            quantity: row.quantity ? parseFloat(row.quantity) : 0,
-            material_rate: row.material_rate ? parseFloat(row.material_rate) : 0,
-            labor_rate: row.labor_rate ? parseFloat(row.labor_rate) : 0,
-            equipment_rate: row.equipment_rate ? parseFloat(row.equipment_rate) : 0,
-            sort_order: 0,
-          });
-        }
-      }
-
+      // Bulk create all lines
+      await constructionService.bulkCreateEstimateLines(estId, lines);
       await loadEstimates();
-      setShowImportModal(false);
     } catch (error) {
       console.error('Error importing estimates:', error);
+      throw error;
+    }
+  };
+
+  const [summaryKey, setSummaryKey] = useState(0);
+
+  const handleImportSvod = async (rows) => {
+    try {
+      await constructionService.importEstimateSummary(project.id, rows);
+      setSummaryKey((k) => k + 1);
+    } catch (error) {
+      console.error('Error importing svod:', error);
+      throw error;
     }
   };
 
@@ -173,6 +160,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       for (const line of lines) {
         allRows.push({
           estimate_name: `${est.name} (v${est.version})`,
+          item_number: line.item_number || '',
+          code: line.code || '',
           name: line.name,
           uom: line.uom,
           quantity: line.quantity,
@@ -426,7 +415,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
         <ImportExportButtons
           onImport={() => setShowImportModal(true)}
           onExport={handlePrepareExport}
-          importDisabled={!selectedBuilding}
+          importDisabled={false}
           exportDisabled={!selectedBuilding || filteredEstimates.length === 0}
         />
       </div>
@@ -569,6 +558,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                             {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                             <Badge variant="outline" className="text-xs font-mono">v{est.version}</Badge>
                             <span className="font-medium">{est.name}</span>
+                            {est.source_type && (() => {
+                              const sourceLabels = {
+                                vor: { uz: 'ВОР', ru: 'ВОР', color: 'bg-blue-100 text-blue-700' },
+                                edinich: { uz: 'Единич', ru: 'Единич', color: 'bg-purple-100 text-purple-700' },
+                                resurs: { uz: 'Ресурс', ru: 'Ресурс', color: 'bg-green-100 text-green-700' },
+                              };
+                              const info = sourceLabels[est.source_type];
+                              if (!info) return null;
+                              return <Badge className={`text-xs ${info.color}`}>{info[language] || info.ru}</Badge>;
+                            })()}
                             {est.is_current && <Badge className="bg-blue-500 text-white text-xs">{t('current') || 'Faol'}</Badge>}
                           </div>
                           <div className="flex items-center gap-2">
@@ -638,6 +637,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="border-b">
+                                      <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 w-10">№</th>
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit') || "O'lchov"}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('quantity') || 'Miqdor'}</th>
@@ -651,8 +651,19 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
                                   </thead>
                                   <tbody>
                                     {lines.map((line) => (
-                                      <tr key={line.id} className="border-b border-slate-100 hover:bg-white group">
-                                        <td className="py-2 px-2 text-xs">{line.name}</td>
+                                      <tr key={line.id} className={`border-b border-slate-100 hover:bg-white group ${line.resource_type ? 'bg-slate-50/50' : ''}`}>
+                                        <td className="py-2 px-2 text-xs text-slate-400">
+                                          {line.resource_type ? <span className="pl-2">{line.item_number}</span> : <span className="font-medium">{line.item_number}</span>}
+                                        </td>
+                                        <td className="py-2 px-2 text-xs">
+                                          {line.resource_type && (
+                                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
+                                              line.resource_type === 'labor' ? 'bg-blue-400' :
+                                              line.resource_type === 'equipment' ? 'bg-amber-400' : 'bg-green-400'
+                                            }`} />
+                                          )}
+                                          {line.name}
+                                        </td>
                                         <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
                                         <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
                                         <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
@@ -751,6 +762,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
         </CardContent>
       </Card>
       </div>
+
+      {/* Svod Summary */}
+      <SmetaSummaryView key={summaryKey} projectId={project?.id} />
 
       {/* Create Estimate Modal */}
       <Dialog open={showEstimateModal} onOpenChange={setShowEstimateModal}>
@@ -983,13 +997,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [] }) => {
       </AlertDialog>
 
       {/* Import Modal */}
-      <ImportModal
+      <SmetaImportModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
-        columns={importColumns}
-        entityName={t('estimates') || 'Smetalar'}
-        templateColumns={importColumns}
+        onImportSvod={handleImportSvod}
+        buildings={buildings}
+        project={project}
       />
 
       {/* Export Modal */}
