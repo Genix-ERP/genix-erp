@@ -86,8 +86,12 @@ export function formatCompactNumber(amount, options = {}) {
 // Format a raw number string for display in price inputs (adds thousands separators)
 export function formatPriceInput(value) {
   if (value === '' || value === null || value === undefined) return '';
-  const str = String(value);
-  const parts = str.split('.');
+  const str = String(value).replace(/[^\d.]/g, '');
+  const dotIndex = str.indexOf('.');
+  const clean = dotIndex >= 0
+    ? str.slice(0, dotIndex + 1) + str.slice(dotIndex + 1).replace(/\./g, '')
+    : str;
+  const parts = clean.split('.');
   const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   if (parts.length > 1) return intPart + '.' + parts[1];
   return intPart;

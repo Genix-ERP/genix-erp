@@ -36,6 +36,7 @@ const EMPTY_FORM = {
   quantity: '',
   uom: '',
   unit_price: '',
+  supplier_name: '',
 };
 
 const ExpensesTab = ({ project, scope }) => {
@@ -121,6 +122,7 @@ const ExpensesTab = ({ project, scope }) => {
       quantity: line.quantity ? String(line.quantity) : '',
       uom: line.uom || '',
       unit_price: line.unit_price ? String(line.unit_price) : '',
+      supplier_name: line.supplier_name || '',
     });
     setError(null);
     setShowModal(true);
@@ -148,6 +150,7 @@ const ExpensesTab = ({ project, scope }) => {
         cost_category_id: form.cost_category_id ? Number(form.cost_category_id) : 0,
         quantity: form.quantity ? Number(form.quantity) : 0,
         unit_price: form.unit_price ? parseFloat(parsePriceInput(form.unit_price)) : 0,
+        supplier_name: form.supplier_name || '',
       };
       if (editingLine) {
         await constructionService.updateExpenseLine(editingLine.id, payload);
@@ -412,6 +415,7 @@ const ExpensesTab = ({ project, scope }) => {
                   <tr className="border-b text-slate-500">
                     <th className="text-left py-2 px-3">{t('date')}</th>
                     <th className="text-left py-2 px-3">{t('description')}</th>
+                    <th className="text-left py-2 px-3">{t('supplier') || 'Taminotchi'}</th>
                     <th className="text-left py-2 px-3">{t('stage')}</th>
                     <th className="text-left py-2 px-3">{t('category')}</th>
                     <th className="text-right py-2 px-3">{t('amount')}</th>
@@ -424,6 +428,7 @@ const ExpensesTab = ({ project, scope }) => {
                     <tr key={line.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 whitespace-nowrap">{line.expense_date}</td>
                       <td className="py-2 px-3 max-w-[200px] truncate" title={line.description}>{line.description}</td>
+                      <td className="py-2 px-3">{line.supplier_name || '—'}</td>
                       <td className="py-2 px-3">{line.stage_name || '—'}</td>
                       <td className="py-2 px-3">{line.cost_category_name || '—'}</td>
                       <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(line.amount)}</td>
@@ -490,6 +495,10 @@ const ExpensesTab = ({ project, scope }) => {
             <div>
               <Label>{t('expense_description')}</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} rows={2} placeholder={t('expense_description')} />
+            </div>
+            <div>
+              <Label>{t('supplier') || 'Taminotchi'}</Label>
+              <Input value={form.supplier_name} onChange={e => setForm(f => ({...f, supplier_name: e.target.value}))} placeholder={t('supplier_name_placeholder') || 'Taminotchi nomini kiriting'} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
