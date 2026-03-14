@@ -27,7 +27,7 @@ const STATE_COLORS = {
 };
 
 const EMPTY_FORM = {
-  partner_id: '',
+  partner_name: '',
   work_description: '',
   amount: '',
   currency: 'UZS',
@@ -56,7 +56,6 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const [activeSubTab, setActiveSubTab] = useState('list');
   const [subcontracts, setSubcontracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [organizations, setOrganizations] = useState([]);
   const [wbsList, setWbsList] = useState([]);
 
   // Modal
@@ -85,11 +84,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const loadOptions = useCallback(async () => {
     if (!project?.id) return;
     try {
-      const [orgs, wbs] = await Promise.all([
-        constructionService.listOrganizations(),
-        constructionService.listWBS(project.id),
-      ]);
-      setOrganizations(orgs || []);
+      const wbs = await constructionService.listWBS(project.id);
       setWbsList(wbs || []);
     } catch (e) {
       console.error('Failed to load options:', e);
@@ -111,7 +106,7 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   const openEdit = (item) => {
     setEditing(item);
     setForm({
-      partner_id: item.partner_id ? String(item.partner_id) : '',
+      partner_name: item.partner_name || '',
       work_description: item.work_description || '',
       amount: item.amount ? String(item.amount) : '',
       currency: item.currency || 'UZS',
@@ -149,12 +144,12 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
   };
 
   const handleSave = async () => {
-    if (!form.partner_id) { setError(t('partner_required') || 'Tashkilotni tanlang'); return; }
+    if (!form.partner_name?.trim()) { setError(t('partner_required') || 'Hamkor nomini kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
       const payload = {
-        partner_id: form.partner_id,
+        partner_name: form.partner_name.trim(),
         work_description: form.work_description || '',
         amount: form.amount ? parseFloat(parsePriceInput(form.amount)) : 0,
         currency: form.currency || 'UZS',
@@ -418,15 +413,12 @@ const SubcontractorsTab = ({ project, buildings = [], wbsItems = [] }) => {
             )}
 
             <div>
-              <Label>{t('partner') || 'Tashkilot'}</Label>
-              <Select value={form.partner_id} onValueChange={v => setForm(f => ({ ...f, partner_id: v }))}>
-                <SelectTrigger><SelectValue placeholder={t('select_partner') || 'Tashkilotni tanlang'} /></SelectTrigger>
-                <SelectContent>
-                  {organizations.map(org => (
-                    <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>{t('partner') || 'Hamkor'}</Label>
+              <Input
+                value={form.partner_name}
+                onChange={e => setForm(f => ({ ...f, partner_name: e.target.value }))}
+                placeholder={t('partner_name_placeholder') || 'Hamkor nomini kiriting'}
+              />
             </div>
 
             <div>
