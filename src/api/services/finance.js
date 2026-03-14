@@ -475,6 +475,16 @@ export const financeService = {
     return response.data.data;
   },
 
+  async updateAssetCategory(id, data) {
+    const response = await apiClient.put(`/asset-categories/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteAssetCategory(id) {
+    const response = await apiClient.delete(`/asset-categories/${id}`);
+    return response.data.data;
+  },
+
   async getAssetDashboard() {
     const response = await apiClient.get('/fixed-assets/dashboard');
     return response.data.data;

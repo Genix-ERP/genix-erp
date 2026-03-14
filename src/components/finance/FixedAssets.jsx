@@ -83,6 +83,7 @@ export default function FixedAssets() {
     performed_by: '',
     document_number: '',
     payment_account_code: '1000',
+    next_service_date: '',
   });
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -124,13 +125,17 @@ export default function FixedAssets() {
     const totalDepreciation = activeAssets.reduce((sum, a) => sum + (a.accumulated_depreciation || 0), 0);
     const totalNetBookValue = totalOriginalCost - totalDepreciation;
     const disposedAssets = fixedAssets.filter(a => a.status === 'disposed').length;
+    const thisMonthDepr = activeAssets
+      .filter(a => (a.remaining_months || 0) > 0)
+      .reduce((sum, a) => sum + (a.monthly_depr || 0), 0);
 
     return {
       activeCount: activeAssets.length,
       totalOriginalCost,
       totalDepreciation,
       totalNetBookValue,
-      disposedAssets
+      disposedAssets,
+      thisMonthDepr
     };
   }, [fixedAssets]);
 
@@ -305,6 +310,7 @@ export default function FixedAssets() {
       performed_by: '',
       document_number: '',
       payment_account_code: '1000',
+      next_service_date: '',
     });
     try {
       const history = await financeService.listMaintenance(asset.id);
@@ -444,7 +450,7 @@ export default function FixedAssets() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -510,6 +516,20 @@ export default function FixedAssets() {
               <div>
                 <p className="text-xs text-slate-600 font-medium">{t('disposed') || 'Disposed'}</p>
                 <p className="text-2xl font-bold text-slate-800">{stats.disposedAssets}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs text-indigo-600 font-medium">{t('this_month_depreciation') || 'Bu oy amortizatsiya'}</p>
+                <p className="text-lg font-bold text-indigo-800">{formatCurrencyCompact(stats.thisMonthDepr)}</p>
               </div>
             </div>
           </CardContent>
@@ -1168,17 +1188,25 @@ export default function FixedAssets() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Hujjat raqami</label>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('document_number') || 'Hujjat raqami'}</label>
                 <Input
-                  placeholder="Ixtiyoriy"
+                  placeholder={t('optional') || 'Ixtiyoriy'}
                   value={maintenanceForm.document_number}
                   onChange={(e) => setMaintenanceForm({...maintenanceForm, document_number: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700 mb-1 block">{t('next_service_date') || 'Keyingi TO sanasi'}</label>
+                <Input
+                  type="date"
+                  value={maintenanceForm.next_service_date}
+                  onChange={(e) => setMaintenanceForm({...maintenanceForm, next_service_date: e.target.value})}
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1 block">Izoh</label>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">{t('notes') || 'Izoh'}</label>
               <Textarea
                 placeholder="Texnik xizmat haqida izoh..."
                 value={maintenanceForm.description}

@@ -576,6 +576,48 @@ export const constructionService = {
   },
 
   // =====================================================
+  // REJA VS FAKT (Plan vs Fact)
+  // =====================================================
+
+  async getRejaFakt(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reja-fakt`, { params });
+    return response.data.data;
+  },
+
+  // =====================================================
+  // SUB-STAGE EQUIPMENT
+  // =====================================================
+
+  async listSubStageEquipment(subStageId) {
+    const response = await apiClient.get(`/construction/sub-stages/${subStageId}/equipment`);
+    return response.data.data;
+  },
+
+  async createSubStageEquipment(subStageId, data) {
+    const response = await apiClient.post(`/construction/sub-stages/${subStageId}/equipment`, data);
+    return response.data.data;
+  },
+
+  async updateSubStageEquipment(id, data) {
+    const response = await apiClient.put(`/construction/sub-stage-equipment/${id}`, data);
+    return response.data.data;
+  },
+
+  async deleteSubStageEquipment(id) {
+    await apiClient.delete(`/construction/sub-stage-equipment/${id}`);
+  },
+
+  async updateSubStageMaterialPlanFact(id, data) {
+    const response = await apiClient.put(`/construction/sub-stage-materials/${id}/plan-fact`, data);
+    return response.data.data;
+  },
+
+  async getRejaFaktAudit(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/reja-fakt/audit`, { params });
+    return response.data.data;
+  },
+
+  // =====================================================
   // COST CATEGORIES & ACCOUNT MAPPING
   // =====================================================
 
@@ -776,6 +818,35 @@ export const constructionService = {
 
   async generateKS3FromKS2(id) {
     const response = await apiClient.post(`/construction/acts/${id}/generate-ks3`);
+    return response.data.data;
+  },
+
+  async signAct(id, data) {
+    const response = await apiClient.put(`/construction/acts/${id}/sign`, data);
+    return response.data.data;
+  },
+
+  async cancelAct(id, data) {
+    const response = await apiClient.put(`/construction/acts/${id}/cancel`, data);
+    return response.data.data;
+  },
+
+  async exportActPDF(id) {
+    const response = await apiClient.get(`/construction/acts/${id}/export?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  async generateForma3(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/acts/generate-ks3`, data);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // SMETA VS FACT ANALYTICS
+  // =====================================================
+
+  async getSmetaVsFact(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/smeta-vs-fact`, { params });
     return response.data.data;
   },
 

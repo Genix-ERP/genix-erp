@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import Layout from "./Layout.jsx";
 
 const Login = React.lazy(() => import('./Login'));
+const SharedReconciliation = React.lazy(() => import('./SharedReconciliation'));
 const Register = React.lazy(() => import('./Register'));
 const AcceptInvite = React.lazy(() => import('./AcceptInvite'));
 const Dashboard = React.lazy(() => import('./Dashboard'));
@@ -180,6 +181,7 @@ function PagesContent() {
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/shared/reconciliation/:token" element={<SharedReconciliation />} />
             <Route
                 path="/"
                 element={

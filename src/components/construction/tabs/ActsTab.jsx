@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -28,6 +28,8 @@ const STATE_COLORS = {
   submitted: 'bg-yellow-100 text-yellow-700',
   approved: 'bg-green-100 text-green-700',
   rejected: 'bg-red-100 text-red-700',
+  signed: 'bg-emerald-100 text-emerald-700',
+  cancelled: 'bg-gray-100 text-gray-500',
 };
 
 const EMPTY_FORM = {
@@ -38,15 +40,26 @@ const EMPTY_FORM = {
   notes: '',
 };
 
+const EMPTY_F19_FORM = {
+  stage_id: '',
+  location_axes: '',
+  drawing_reference: '',
+  works_start_date: '',
+  works_end_date: '',
+  notes: '',
+  photos: [],
+  materials_json: [],
+};
+
 const ActsTab = ({ project }) => {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const TYPE_LABELS = {
-    ks2: 'KS-2',
-    ks3: 'KS-3',
-    hidden_work: t('hidden_work') || 'Yashirin ish',
+    ks2: t('forma_2') || 'Forma 2 (KS-2)',
+    ks3: t('forma_3') || 'Forma 3 (KS-3)',
+    hidden_work: t('forma_19') || 'Forma 19',
     acceptance: t('acceptance') || 'Qabul qilish',
     defect: t('defect') || 'Nuqson',
   };
@@ -56,11 +69,14 @@ const ActsTab = ({ project }) => {
     submitted: t('submitted') || 'Yuborilgan',
     approved: t('approved') || 'Tasdiqlangan',
     rejected: t('rejected') || 'Rad etilgan',
+    signed: t('signed') || 'Imzolangan',
+    cancelled: t('cancelled') || 'Bekor qilingan',
   };
 
   // List state
   const [acts, setActs] = useState([]);
   const [subcontracts, setSubcontracts] = useState([]);
+  const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
 
@@ -70,14 +86,32 @@ const ActsTab = ({ project }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Auto-generate KS-2 modal state
+  // Forma 19 create modal
+  const [showF19Modal, setShowF19Modal] = useState(false);
+  const [f19Form, setF19Form] = useState(EMPTY_F19_FORM);
+  const [f19Saving, setF19Saving] = useState(false);
+  const [f19Error, setF19Error] = useState(null);
+
+  // Auto-generate modals
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
   const [autoGenForm, setAutoGenForm] = useState({ subcontract_id: '', period_from: '', period_to: '' });
   const [autoGenSaving, setAutoGenSaving] = useState(false);
 
+  const [showGenF3Modal, setShowGenF3Modal] = useState(false);
+  const [genF3Form, setGenF3Form] = useState({ subcontract_id: '', period_from: '', period_to: '' });
+  const [genF3Saving, setGenF3Saving] = useState(false);
+
   // Detail view state
   const [selectedAct, setSelectedAct] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Sign dialog
+  const [signTarget, setSignTarget] = useState(null);
+  const [signRole, setSignRole] = useState('');
+
+  // Cancel dialog
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   // Reject dialog state
   const [rejectTarget, setRejectTarget] = useState(null);
@@ -91,14 +125,16 @@ const ActsTab = ({ project }) => {
     setLoading(true);
     try {
       const params = {};
-      if (filters.act_type) params.act_type = filters.act_type;
+      if (filters.act_type) params.type = filters.act_type;
       if (filters.state) params.state = filters.state;
-      const [actsData, subData] = await Promise.all([
+      const [actsData, subData, stagesData] = await Promise.all([
         constructionService.listActs(project.id, params),
         constructionService.listSubcontracts(project.id),
+        constructionService.listStages(project.id).catch(() => []),
       ]);
       setActs(actsData || []);
       setSubcontracts(subData || []);
+      setStages(stagesData || []);
     } catch (e) {
       console.error('Failed to load acts:', e);
     } finally {
@@ -114,28 +150,24 @@ const ActsTab = ({ project }) => {
       const act = await constructionService.getAct(actId);
       setSelectedAct(act);
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const openCreate = () => {
-    setForm(EMPTY_FORM);
-    setError(null);
-    setShowCreateModal(true);
-  };
+  // ---- Handlers ----
 
   const handleCreate = async () => {
-    if (!form.act_type) { setError(t('validation_type_required') || 'Akt turini tanlang'); return; }
-    if (!form.subcontract_id) { setError(t('validation_subcontract_required') || 'Subpudratni tanlang'); return; }
-    if (!form.period_from || !form.period_to) { setError(t('validation_period_required') || 'Davrni kiriting'); return; }
+    if (!form.act_type) { setError('Akt turini tanlang'); return; }
+    if (form.act_type !== 'hidden_work' && !form.subcontract_id) { setError('Subpudratni tanlang'); return; }
+    if (form.act_type !== 'hidden_work' && (!form.period_from || !form.period_to)) { setError('Davrni kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
       const payload = {
         act_type: form.act_type,
-        subcontract_id: Number(form.subcontract_id),
+        subcontract_id: Number(form.subcontract_id) || 0,
         period_from: form.period_from,
         period_to: form.period_to,
         notes: form.notes || '',
@@ -145,21 +177,44 @@ const ActsTab = ({ project }) => {
       toast.success(t('act_created') || 'Akt yaratildi');
       load();
     } catch (e) {
-      setError(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      setError(e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setSaving(false);
     }
   };
 
-  const openAutoGen = () => {
-    setAutoGenForm({ subcontract_id: '', period_from: '', period_to: '' });
-    setShowAutoGenModal(true);
+  const handleCreateF19 = async () => {
+    if (!f19Form.stage_id) { setF19Error('Bosqichni tanlang'); return; }
+    if (!f19Form.location_axes) { setF19Error("O'qi va belgilarni kiriting"); return; }
+    if (!f19Form.works_start_date || !f19Form.works_end_date) { setF19Error('Ish sanalarini kiriting'); return; }
+    if (f19Form.photos.length < 2) { setF19Error("Kamida 2 ta rasm yuklang"); return; }
+    setF19Saving(true);
+    setF19Error(null);
+    try {
+      await constructionService.createAct(project.id, {
+        act_type: 'hidden_work',
+        stage_id: Number(f19Form.stage_id),
+        location_axes: f19Form.location_axes,
+        drawing_reference: f19Form.drawing_reference,
+        works_start_date: f19Form.works_start_date,
+        works_end_date: f19Form.works_end_date,
+        notes: f19Form.notes,
+        photos: f19Form.photos,
+        materials_json: f19Form.materials_json.filter(m => m.name),
+      });
+      setShowF19Modal(false);
+      toast.success(t('f19_created') || 'Forma 19 yaratildi');
+      load();
+    } catch (e) {
+      setF19Error(e?.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setF19Saving(false);
+    }
   };
 
   const handleAutoGenerate = async () => {
     if (!autoGenForm.subcontract_id || !autoGenForm.period_from || !autoGenForm.period_to) {
-      toast.error(t('fill_all_fields') || 'Barcha maydonlarni to\'ldiring');
-      return;
+      toast.error("Barcha maydonlarni to'ldiring"); return;
     }
     setAutoGenSaving(true);
     try {
@@ -169,55 +224,104 @@ const ActsTab = ({ project }) => {
         period_to: autoGenForm.period_to,
       });
       setShowAutoGenModal(false);
-      toast.success(t('ks2_generated') || 'KS-2 avtomatik yaratildi');
+      toast.success('KS-2 avtomatik yaratildi');
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setAutoGenSaving(false);
+    }
+  };
+
+  const handleGenerateF3 = async () => {
+    if (!genF3Form.subcontract_id || !genF3Form.period_from || !genF3Form.period_to) {
+      toast.error("Barcha maydonlarni to'ldiring"); return;
+    }
+    setGenF3Saving(true);
+    try {
+      await constructionService.generateForma3(project.id, {
+        subcontract_id: Number(genF3Form.subcontract_id),
+        period_from: genF3Form.period_from,
+        period_to: genF3Form.period_to,
+      });
+      setShowGenF3Modal(false);
+      toast.success('KS-3 (Forma 3) yaratildi');
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setGenF3Saving(false);
+    }
+  };
+
+  const handleSign = async () => {
+    if (!signTarget || !signRole) return;
+    try {
+      await constructionService.signAct(signTarget.id, { role: signRole });
+      setSignTarget(null);
+      setSignRole('');
+      toast.success(`Akt imzolandi (${signRole})`);
+      if (selectedAct?.id === signTarget.id) await loadActDetail(signTarget.id);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!cancelTarget || !cancelReason.trim()) {
+      toast.error('Bekor qilish sababini kiriting'); return;
+    }
+    try {
+      await constructionService.cancelAct(cancelTarget.id, { rejection_reason: cancelReason });
+      setCancelTarget(null);
+      setCancelReason('');
+      toast.success('Akt bekor qilindi');
+      if (selectedAct?.id === cancelTarget.id) await loadActDetail(cancelTarget.id);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
   const handleApprove = async (act) => {
     try {
       await constructionService.approveAct(act.id);
-      toast.success(t('act_approved') || 'Akt tasdiqlandi');
-      if (selectedAct?.id === act.id) {
-        await loadActDetail(act.id);
-      }
+      toast.success('Akt tasdiqlandi');
+      if (selectedAct?.id === act.id) await loadActDetail(act.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
   const handleReject = async () => {
-    if (!rejectTarget) return;
-    if (!rejectionReason.trim()) {
-      toast.error(t('rejection_reason_required') || 'Rad etish sababini kiriting');
-      return;
+    if (!rejectTarget || !rejectionReason.trim()) {
+      toast.error('Rad etish sababini kiriting'); return;
     }
     try {
       await constructionService.rejectAct(rejectTarget.id, { rejection_reason: rejectionReason });
       setRejectTarget(null);
       setRejectionReason('');
-      toast.success(t('act_rejected') || 'Akt rad etildi');
-      if (selectedAct?.id === rejectTarget.id) {
-        await loadActDetail(rejectTarget.id);
-      }
+      toast.success('Akt rad etildi');
+      if (selectedAct?.id === rejectTarget.id) await loadActDetail(rejectTarget.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
-  const handleGenerateKS3 = async (act) => {
+  const handleExportPDF = async (act) => {
     try {
-      await constructionService.generateKS3FromKS2(act.id);
-      toast.success(t('ks3_generated') || 'KS-3 yaratildi');
-      load();
+      const blob = await constructionService.exportActPDF(act.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${act.name || 'act'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'PDF yuklab olishda xatolik');
     }
   };
 
@@ -226,149 +330,277 @@ const ActsTab = ({ project }) => {
     try {
       await constructionService.deleteAct(deleteTarget.id);
       setDeleteTarget(null);
-      if (selectedAct?.id === deleteTarget.id) {
-        setSelectedAct(null);
-      }
-      toast.success(t('act_deleted') || 'Akt o\'chirildi');
+      if (selectedAct?.id === deleteTarget.id) setSelectedAct(null);
+      toast.success("Akt o'chirildi");
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
-  // Detail view
+  // --- Signing status component ---
+  const SignaturePanel = ({ act }) => {
+    if (!act) return null;
+    const isKS = act.act_type === 'ks2' || act.act_type === 'ks3';
+    const isF19 = act.act_type === 'hidden_work';
+    if (!isKS && !isF19) return null;
+
+    const sigs = [];
+    sigs.push({ role: 'contractor', label: t('contractor') || 'Pudratchi', at: act.signed_contractor_at, name: act.signed_contractor_name });
+    sigs.push({ role: 'client', label: t('client_tech') || 'Buyurtmachi / Texnadzor', at: act.signed_client_at, name: act.signed_client_name });
+    if (isF19) {
+      sigs.push({ role: 'designer', label: t('designer') || 'Loyihalovchi', at: act.signed_designer_at, name: act.signed_designer_name });
+      sigs.push({ role: 'gasn', label: t('gasn_inspector') || 'GASN inspektori', at: act.signed_gasn_at, name: act.signed_gasn_name });
+    }
+
+    const totalSigs = sigs.length;
+    const signedCount = sigs.filter(s => s.at).length;
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2"><PenLine className="w-5 h-5" /> {t('signatures') || 'Imzolar'}</span>
+            <Badge className={signedCount === totalSigs ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+              {signedCount}/{totalSigs}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            {sigs.map(sig => (
+              <div key={sig.role} className={`p-3 rounded-lg border ${sig.at ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                <p className="text-sm font-medium">{sig.label}</p>
+                {sig.at ? (
+                  <div className="mt-1">
+                    <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {t('signed') || 'Imzolangan'}</p>
+                    {sig.name && <p className="text-xs text-slate-600">{sig.name}</p>}
+                    <p className="text-xs text-slate-400">{new Date(sig.at).toLocaleDateString()}</p>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <p className="text-xs text-slate-400">{t('not_signed') || 'Imzolanmagan'}</p>
+                    {(act.state === 'draft' || act.state === 'submitted' || act.state === 'approved') && (
+                      <Button size="sm" variant="outline" className="mt-2 h-7 text-xs"
+                        onClick={() => { setSignTarget(act); setSignRole(sig.role); }}>
+                        <PenLine className="w-3 h-3 mr-1" /> {t('sign') || 'Imzolash'}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // --- Forma 19 detail ---
+  const Forma19Detail = ({ act }) => {
+    if (!act || act.act_type !== 'hidden_work') return null;
+    return (
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="w-5 h-5" /> {t('hidden_work_details') || 'Yashirin ishlar tafsilotlari'}</CardTitle></CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {act.stage_name && <div><span className="text-slate-500">{t('stage') || 'Bosqich'}:</span> <span className="font-medium">{act.stage_name}</span></div>}
+          {act.location_axes && <div><span className="text-slate-500">{t('axes_marks') || "O'qlar, belgilar"}:</span> <span className="font-medium">{act.location_axes}</span></div>}
+          {act.drawing_reference && <div><span className="text-slate-500">{t('drawing_ref') || 'Chizma havolasi'}:</span> <span className="font-medium">{act.drawing_reference}</span></div>}
+          {act.works_start_date && <div><span className="text-slate-500">{t('work_period') || 'Ish davri'}:</span> <span className="font-medium">{act.works_start_date} — {act.works_end_date}</span></div>}
+          {/* Photos */}
+          {act.photos && act.photos.length > 0 && (
+            <div>
+              <p className="text-slate-500 mb-2 flex items-center gap-1"><Image className="w-4 h-4" /> {t('photos') || 'Rasmlar'} ({act.photos.length})</p>
+              <div className="flex gap-2 flex-wrap">
+                {act.photos.map((p, i) => (
+                  <a key={i} href={p.url} target="_blank" rel="noreferrer" className="block w-24 h-24 rounded border overflow-hidden bg-slate-100">
+                    <img src={p.url} alt={p.filename || `Photo ${i+1}`} className="w-full h-full object-cover" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Materials */}
+          {act.materials_json && act.materials_json.length > 0 && (
+            <div>
+              <p className="text-slate-500 mb-1">{t('materials') || 'Materiallar'}</p>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b"><th className="text-left py-1 px-2">№</th><th className="text-left py-1 px-2">{t('name') || 'Nomi'}</th><th className="text-left py-1 px-2">{t('certificate') || 'Sertifikat'}</th></tr></thead>
+                <tbody>
+                  {act.materials_json.map((m, i) => (
+                    <tr key={i} className="border-b"><td className="py-1 px-2">{i+1}</td><td className="py-1 px-2">{m.name}</td><td className="py-1 px-2">{m.certificate_url ? <a href={m.certificate_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">Ko'rish</a> : '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // --- Forma 3 cumulative detail ---
+  const Forma3Detail = ({ act }) => {
+    if (!act || act.act_type !== 'ks3') return null;
+    return (
+      <Card>
+        <CardHeader><CardTitle>{t('cumulative_data') || "Yig'ma ma'lumotlar"}</CardTitle></CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-slate-500">
+                <th className="text-left py-2">{t('indicator') || "Ko'rsatkich"}</th>
+                <th className="text-right py-2">{t('from_start') || 'Qurilish boshidan'}</th>
+                <th className="text-right py-2">{t('from_year_start') || 'Yil boshidan'}</th>
+                <th className="text-right py-2">{t('for_period') || 'Hisobot davri uchun'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b">
+                <td className="py-2 font-medium">{t('work_cost') || 'Ishlar qiymati'}</td>
+                <td className="py-2 text-right">{formatCurrency(act.cumul_from_start || 0)}</td>
+                <td className="py-2 text-right">{formatCurrency(act.cumul_from_year_start || 0)}</td>
+                <td className="py-2 text-right">{formatCurrency(act.amount_total || 0)}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2">{t('vat') || 'QQS'} ({act.vat_pct || 12}%)</td>
+                <td className="py-2 text-right">{formatCurrency((act.cumul_from_start || 0) * (act.vat_pct || 12) / 100)}</td>
+                <td className="py-2 text-right">{formatCurrency((act.cumul_from_year_start || 0) * (act.vat_pct || 12) / 100)}</td>
+                <td className="py-2 text-right">{formatCurrency(act.vat_amount || 0)}</td>
+              </tr>
+              <tr className="font-bold">
+                <td className="py-2">{t('total_with_vat') || 'QQS bilan jami'}</td>
+                <td className="py-2 text-right">{formatCurrency((act.cumul_from_start || 0) * (1 + (act.vat_pct || 12) / 100))}</td>
+                <td className="py-2 text-right">{formatCurrency((act.cumul_from_year_start || 0) * (1 + (act.vat_pct || 12) / 100))}</td>
+                <td className="py-2 text-right">{formatCurrency(act.amount_total_with_vat || 0)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // ======== DETAIL VIEW ========
   if (selectedAct) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedAct(null)}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            {t('back') || 'Ortga'}
-          </Button>
-          <h3 className="text-lg font-semibold">{selectedAct.name}</h3>
-          <Badge className={TYPE_COLORS[selectedAct.act_type]}>{TYPE_LABELS[selectedAct.act_type] || selectedAct.act_type}</Badge>
-          <Badge className={STATE_COLORS[selectedAct.state]}>{STATE_LABELS[selectedAct.state] || selectedAct.state}</Badge>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedAct(null)}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t('back') || 'Ortga'}
+            </Button>
+            <h3 className="text-lg font-semibold">{selectedAct.name}</h3>
+            {selectedAct.act_number && <span className="text-sm text-slate-500">#{selectedAct.act_number}</span>}
+            <Badge className={TYPE_COLORS[selectedAct.act_type]}>{TYPE_LABELS[selectedAct.act_type] || selectedAct.act_type}</Badge>
+            <Badge className={STATE_COLORS[selectedAct.state]}>{STATE_LABELS[selectedAct.state] || selectedAct.state}</Badge>
+          </div>
+          <div className="flex gap-2">
+            {(selectedAct.act_type === 'ks2' || selectedAct.act_type === 'ks3' || selectedAct.act_type === 'hidden_work') && (
+              <Button variant="outline" size="sm" onClick={() => handleExportPDF(selectedAct)}>
+                <Download className="w-4 h-4 mr-1" /> PDF
+              </Button>
+            )}
+          </div>
         </div>
 
+        {/* Act info card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              {t('act_info') || 'Akt ma\'lumotlari'}
-            </CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t('act_info') || "Akt ma'lumotlari"}</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-slate-500">{t('type') || 'Turi'}</p>
-                <p className="font-medium">{TYPE_LABELS[selectedAct.act_type] || selectedAct.act_type}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">{t('period') || 'Davr'}</p>
-                <p className="font-medium">{selectedAct.period_from} — {selectedAct.period_to}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">{t('subcontractor') || 'Subpudratchi'}</p>
-                <p className="font-medium">{selectedAct.subcontract_name || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">{t('amount') || 'Summa'}</p>
-                <p className="font-medium">{formatCurrency(selectedAct.amount || 0)}</p>
-              </div>
+              <div><p className="text-slate-500">{t('type') || 'Turi'}</p><p className="font-medium">{TYPE_LABELS[selectedAct.act_type]}</p></div>
+              {selectedAct.period_from && <div><p className="text-slate-500">{t('period') || 'Davr'}</p><p className="font-medium">{selectedAct.period_from} — {selectedAct.period_to}</p></div>}
+              {selectedAct.subcontract_name && <div><p className="text-slate-500">{t('subcontractor') || 'Subpudratchi'}</p><p className="font-medium">{selectedAct.subcontract_name}</p></div>}
+              <div><p className="text-slate-500">{t('amount') || 'Summa'}</p><p className="font-medium">{formatCurrency(selectedAct.amount_total || 0)}</p></div>
+              {selectedAct.vat_amount > 0 && (
+                <>
+                  <div><p className="text-slate-500">{t('vat') || 'QQS'} ({selectedAct.vat_pct}%)</p><p className="font-medium">{formatCurrency(selectedAct.vat_amount)}</p></div>
+                  <div><p className="text-slate-500">{t('total_with_vat') || 'QQS bilan'}</p><p className="font-medium text-blue-600">{formatCurrency(selectedAct.amount_total_with_vat)}</p></div>
+                </>
+              )}
             </div>
-            {selectedAct.notes && (
-              <div className="mt-4">
-                <p className="text-slate-500 text-sm">{t('notes') || 'Izohlar'}</p>
-                <p className="text-sm mt-1">{selectedAct.notes}</p>
-              </div>
-            )}
+            {selectedAct.notes && <div className="mt-4"><p className="text-slate-500 text-sm">{t('notes') || 'Izohlar'}</p><p className="text-sm mt-1">{selectedAct.notes}</p></div>}
           </CardContent>
         </Card>
 
+        {/* Forma 19 specific details */}
+        <Forma19Detail act={selectedAct} />
+
+        {/* Forma 3 cumulative table */}
+        <Forma3Detail act={selectedAct} />
+
+        {/* Signing panel */}
+        <SignaturePanel act={selectedAct} />
+
         {/* Lines table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('act_lines') || 'Akt qatorlari'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(selectedAct.lines || []).length === 0 ? (
-              <div className="text-center py-8 text-slate-400">{t('no_lines') || 'Qatorlar yo\'q'}</div>
-            ) : (
+        {(selectedAct.lines || []).length > 0 && (
+          <Card>
+            <CardHeader><CardTitle>{t('act_lines') || 'Akt qatorlari'}</CardTitle></CardHeader>
+            <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-slate-500">
+                      <th className="text-left py-2 px-3">№</th>
                       <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
-                      <th className="text-left py-2 px-3">{t('uom') || 'O\'lchov birligi'}</th>
-                      <th className="text-right py-2 px-3">{t('quantity') || 'Miqdor'}</th>
+                      <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
+                      {selectedAct.act_type === 'ks2' && <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta miqdori'}</th>}
+                      <th className="text-right py-2 px-3">{selectedAct.act_type === 'ks2' ? (t('qty_period') || 'Davr miqdori') : (t('quantity') || 'Miqdor')}</th>
                       <th className="text-right py-2 px-3">{t('unit_rate') || 'Birlik narxi'}</th>
-                      <th className="text-right py-2 px-3">{t('total_amount') || 'Jami summa'}</th>
+                      <th className="text-right py-2 px-3">{t('total_amount') || 'Jami'}</th>
+                      {selectedAct.act_type === 'ks2' && <th className="text-left py-2 px-3">{t('note') || 'Izoh'}</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {(selectedAct.lines || []).map((line, idx) => (
                       <tr key={line.id || idx} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
                         <td className="py-2 px-3">{line.name}</td>
                         <td className="py-2 px-3">{line.uom || '—'}</td>
+                        {selectedAct.act_type === 'ks2' && <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>}
                         <td className="py-2 px-3 text-right">{line.quantity}</td>
                         <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
                         <td className="py-2 px-3 text-right font-medium">{formatCurrency(line.total_amount || 0)}</td>
+                        {selectedAct.act_type === 'ks2' && <td className="py-2 px-3 text-slate-500">{line.note || ''}</td>}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Action buttons based on state */}
-        <div className="flex gap-2">
+        {/* Action buttons */}
+        <div className="flex gap-2 flex-wrap">
           {selectedAct.state === 'draft' && (
-            <>
-              <Badge className="bg-slate-100 text-slate-700 text-sm px-3 py-1">{t('draft') || 'Qoralama'}</Badge>
-              <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(selectedAct)}>
-                <Trash2 className="w-4 h-4 mr-1" />
-                {t('delete') || 'O\'chirish'}
-              </Button>
-            </>
+            <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(selectedAct)}>
+              <Trash2 className="w-4 h-4 mr-1" /> {t('delete') || "O'chirish"}
+            </Button>
           )}
-          {selectedAct.state === 'submitted' && (
+          {(selectedAct.state === 'submitted') && (
             <>
               <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprove(selectedAct)}>
-                <CheckCircle className="w-4 h-4 mr-1" />
-                {t('approve') || 'Tasdiqlash'}
+                <CheckCircle className="w-4 h-4 mr-1" /> {t('approve') || 'Tasdiqlash'}
               </Button>
               <Button variant="destructive" size="sm" onClick={() => { setRejectTarget(selectedAct); setRejectionReason(''); }}>
-                <XCircle className="w-4 h-4 mr-1" />
-                {t('reject') || 'Rad etish'}
+                <XCircle className="w-4 h-4 mr-1" /> {t('reject') || 'Rad etish'}
               </Button>
             </>
           )}
-          {selectedAct.state === 'approved' && selectedAct.act_type === 'ks2' && (
-            <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => handleGenerateKS3(selectedAct)}>
-              <FileText className="w-4 h-4 mr-1" />
-              {t('generate_ks3') || 'KS-3 yaratish'}
+          {(selectedAct.state === 'signed' || selectedAct.state === 'approved') && (
+            <Button variant="outline" size="sm" className="text-red-600 border-red-300" onClick={() => { setCancelTarget(selectedAct); setCancelReason(''); }}>
+              <Ban className="w-4 h-4 mr-1" /> {t('cancel_act') || 'Bekor qilish'}
             </Button>
           )}
         </div>
 
-        {/* Reject dialog */}
+        {/* Reject, Cancel, Delete, Sign dialogs */}
         <AlertDialog open={!!rejectTarget} onOpenChange={() => { setRejectTarget(null); setRejectionReason(''); }}>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle>
-              <AlertDialogDescription>{t('reject_act_desc') || 'Rad etish sababini kiriting'}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="px-6 pb-2">
-              <Label>{t('rejection_reason') || 'Rad etish sababi'}</Label>
-              <Textarea
-                value={rejectionReason}
-                onChange={e => setRejectionReason(e.target.value)}
-                placeholder={t('rejection_reason_placeholder') || 'Sababni kiriting...'}
-                rows={3}
-              />
-            </div>
+            <AlertDialogHeader><AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle><AlertDialogDescription>{t('reject_act_desc') || 'Rad etish sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
+            <div className="px-6 pb-2"><Label>{t('rejection_reason') || 'Sabab'}</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={3} /></div>
             <AlertDialogFooter>
               <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
               <AlertDialogAction onClick={handleReject} className="bg-red-600 hover:bg-red-700">{t('reject') || 'Rad etish'}</AlertDialogAction>
@@ -376,16 +608,38 @@ const ActsTab = ({ project }) => {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Delete dialog */}
+        <AlertDialog open={!!cancelTarget} onOpenChange={() => { setCancelTarget(null); setCancelReason(''); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>{t('cancel_act') || 'Aktni bekor qilish'}</AlertDialogTitle><AlertDialogDescription>{t('cancel_act_desc') || 'Bekor qilish sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
+            <div className="px-6 pb-2"><Label>{t('reason') || 'Sabab'}</Label><Textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} rows={3} /></div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
+              <AlertDialogAction onClick={handleCancel} className="bg-red-600 hover:bg-red-700">{t('confirm_cancel') || 'Bekor qilish'}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
           <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>{t('delete_act_title') || "Aktni o'chirish"}</AlertDialogTitle><AlertDialogDescription>{t('delete_act_desc') || "Haqiqatan ham bu aktni o'chirmoqchimisiz?"}</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">{t('delete') || "O'chirish"}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!signTarget} onOpenChange={() => { setSignTarget(null); setSignRole(''); }}>
+          <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{t('delete_act_title') || 'Aktni o\'chirish'}</AlertDialogTitle>
-              <AlertDialogDescription>{t('delete_act_desc') || 'Haqiqatan ham bu aktni o\'chirmoqchimisiz?'}</AlertDialogDescription>
+              <AlertDialogTitle>{t('sign_act') || 'Aktni imzolash'}</AlertDialogTitle>
+              <AlertDialogDescription>{t('sign_act_desc') || `"${signRole}" sifatida imzolaysizmi?`}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">{t('delete') || 'O\'chirish'}</AlertDialogAction>
+              <AlertDialogAction onClick={handleSign} className="bg-blue-600 hover:bg-blue-700">
+                <PenLine className="w-4 h-4 mr-1" /> {t('sign') || 'Imzolash'}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -393,23 +647,20 @@ const ActsTab = ({ project }) => {
     );
   }
 
-  // List view
+  // ======== LIST VIEW ========
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            {t('acts') || 'Aktlar'}
-          </CardTitle>
+          <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> {t('acts') || 'Aktlar'}</CardTitle>
           <div className="flex gap-2 flex-wrap">
             <Select value={filters.act_type || 'all'} onValueChange={v => setFilters(f => ({ ...f, act_type: v === 'all' ? '' : v }))}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t('all_types') || 'Barcha turlar'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all_types') || 'Barcha turlar'}</SelectItem>
-                <SelectItem value="ks2">KS-2</SelectItem>
-                <SelectItem value="ks3">KS-3</SelectItem>
-                <SelectItem value="hidden_work">{t('hidden_work') || 'Yashirin ish'}</SelectItem>
+                <SelectItem value="ks2">{t('forma_2') || 'Forma 2 (KS-2)'}</SelectItem>
+                <SelectItem value="ks3">{t('forma_3') || 'Forma 3 (KS-3)'}</SelectItem>
+                <SelectItem value="hidden_work">{t('forma_19') || 'Forma 19'}</SelectItem>
                 <SelectItem value="acceptance">{t('acceptance') || 'Qabul qilish'}</SelectItem>
                 <SelectItem value="defect">{t('defect') || 'Nuqson'}</SelectItem>
               </SelectContent>
@@ -421,16 +672,18 @@ const ActsTab = ({ project }) => {
                 <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
                 <SelectItem value="submitted">{t('submitted') || 'Yuborilgan'}</SelectItem>
                 <SelectItem value="approved">{t('approved') || 'Tasdiqlangan'}</SelectItem>
+                <SelectItem value="signed">{t('signed') || 'Imzolangan'}</SelectItem>
                 <SelectItem value="rejected">{t('rejected') || 'Rad etilgan'}</SelectItem>
+                <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={openAutoGen}>
-              <Zap className="w-4 h-4 mr-2" />
-              {t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}
+            <Button variant="outline" onClick={() => setShowAutoGenModal(true)}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
+            <Button variant="outline" onClick={() => setShowGenF3Modal(true)}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
+            <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19Form(EMPTY_F19_FORM); setF19Error(null); setShowF19Modal(true); }}>
+              <Camera className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
-            <Button onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t('create_act') || 'Akt yaratish'}
+            <Button onClick={() => { setForm(EMPTY_FORM); setError(null); setShowCreateModal(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> {t('create_act') || 'Akt yaratish'}
             </Button>
           </div>
         </CardHeader>
@@ -440,11 +693,7 @@ const ActsTab = ({ project }) => {
           ) : (acts || []).length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">{t('no_acts') || 'Aktlar yo\'q'}</p>
-              <Button variant="outline" className="mt-4" onClick={openCreate}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('create_first_act') || 'Birinchi aktni yarating'}
-              </Button>
+              <p className="text-slate-500">{t('no_acts') || "Aktlar yo'q"}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -463,40 +712,20 @@ const ActsTab = ({ project }) => {
                 <tbody>
                   {(acts || []).map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
-                      <td className="py-2 px-3 font-medium">{act.name}</td>
-                      <td className="py-2 px-3">
-                        <Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge>
-                      </td>
-                      <td className="py-2 px-3 whitespace-nowrap">{act.period_from} — {act.period_to}</td>
+                      <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
+                      <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
+                      <td className="py-2 px-3 whitespace-nowrap">{act.period_from ? `${act.period_from} — ${act.period_to}` : (act.works_start_date ? `${act.works_start_date} — ${act.works_end_date}` : '—')}</td>
                       <td className="py-2 px-3">{act.subcontract_name || '—'}</td>
-                      <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount || 0)}</td>
-                      <td className="py-2 px-3">
-                        <Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge>
-                      </td>
+                      <td className="py-2 px-3 text-right font-medium whitespace-nowrap">{formatCurrency(act.amount_total_with_vat || act.amount_total || 0)}</td>
+                      <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" title={t('view') || 'Ko\'rish'} onClick={() => loadActDetail(act.id)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {act.state === 'submitted' && (
-                            <>
-                              <Button variant="ghost" size="sm" title={t('approve') || 'Tasdiqlash'} onClick={() => handleApprove(act)}>
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              </Button>
-                              <Button variant="ghost" size="sm" title={t('reject') || 'Rad etish'} onClick={() => { setRejectTarget(act); setRejectionReason(''); }}>
-                                <XCircle className="w-4 h-4 text-red-500" />
-                              </Button>
-                            </>
-                          )}
-                          {act.state === 'approved' && act.act_type === 'ks2' && (
-                            <Button variant="ghost" size="sm" title={t('generate_ks3') || 'KS-3 yaratish'} onClick={() => handleGenerateKS3(act)}>
-                              <FileText className="w-4 h-4 text-purple-600" />
-                            </Button>
+                          <Button variant="ghost" size="sm" onClick={() => loadActDetail(act.id)}><Eye className="w-4 h-4" /></Button>
+                          {(act.act_type === 'ks2' || act.act_type === 'ks3' || act.act_type === 'hidden_work') && (
+                            <Button variant="ghost" size="sm" onClick={() => handleExportPDF(act)}><Download className="w-4 h-4 text-slate-500" /></Button>
                           )}
                           {act.state === 'draft' && (
-                            <Button variant="ghost" size="sm" title={t('delete') || 'O\'chirish'} onClick={() => setDeleteTarget(act)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(act)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                           )}
                         </div>
                       </td>
@@ -509,62 +738,92 @@ const ActsTab = ({ project }) => {
         </CardContent>
       </Card>
 
-      {/* Create Act Modal */}
+      {/* Create Act Modal (KS-2, acceptance, defect) */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="max-w-lg" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>{t('create_act') || 'Akt yaratish'}</DialogTitle>
-            <DialogDescription className="sr-only">{t('create_act') || 'Akt yaratish'}</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{t('create_act') || 'Akt yaratish'}</DialogTitle><DialogDescription className="sr-only">Create act</DialogDescription></DialogHeader>
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
-            <div>
-              <Label>{t('act_type') || 'Akt turi'} *</Label>
+            <div><Label>{t('act_type') || 'Akt turi'} *</Label>
               <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
-                <SelectTrigger><SelectValue placeholder={t('select_act_type') || 'Akt turini tanlang'} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ks2">KS-2</SelectItem>
-                  <SelectItem value="ks3">KS-3</SelectItem>
-                  <SelectItem value="hidden_work">{t('hidden_work') || 'Yashirin ish'}</SelectItem>
+                  <SelectItem value="ks2">Forma 2 (KS-2)</SelectItem>
                   <SelectItem value="acceptance">{t('acceptance') || 'Qabul qilish'}</SelectItem>
                   <SelectItem value="defect">{t('defect') || 'Nuqson'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>{t('subcontract') || 'Subpudrat'} *</Label>
+            <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
               <Select value={form.subcontract_id || ''} onValueChange={v => setForm(f => ({ ...f, subcontract_id: v }))}>
-                <SelectTrigger><SelectValue placeholder={t('select_subcontract') || 'Subpudratni tanlang'} /></SelectTrigger>
-                <SelectContent>
-                  {(subcontracts || []).map(s => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.name || s.contractor_name}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
+                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('period_from') || 'Boshlanish sanasi'} *</Label>
-                <Input type="date" value={form.period_from} onChange={e => setForm(f => ({ ...f, period_from: e.target.value }))} />
-              </div>
-              <div>
-                <Label>{t('period_to') || 'Tugash sanasi'} *</Label>
-                <Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} />
-              </div>
+              <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={form.period_from} onChange={e => setForm(f => ({ ...f, period_from: e.target.value }))} /></div>
+              <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
-            <div>
-              <Label>{t('notes') || 'Izohlar'}</Label>
-              <Textarea
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                rows={3}
-                placeholder={t('notes_placeholder') || 'Izoh kiriting...'}
-              />
-            </div>
+            <div><Label>{t('notes') || 'Izohlar'}</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleCreate} disabled={saving}>{saving ? (t('saving') || 'Saqlanmoqda...') : (t('create') || 'Yaratish')}</Button>
+            <Button onClick={handleCreate} disabled={saving}>{saving ? 'Saqlanmoqda...' : 'Yaratish'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Forma 19 Modal */}
+      <Dialog open={showF19Modal} onOpenChange={setShowF19Modal}>
+        <DialogContent className="max-w-xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>{t('create_f19') || 'Forma 19 yaratish'}</DialogTitle><DialogDescription className="sr-only">Create Forma 19</DialogDescription></DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+            {f19Error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{f19Error}</p>}
+            <div><Label>{t('stage') || 'Bosqich'} *</Label>
+              <Select value={f19Form.stage_id || ''} onValueChange={v => setF19Form(f => ({ ...f, stage_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Bosqichni tanlang" /></SelectTrigger>
+                <SelectContent>{(stages || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label>{t('axes_marks') || "O'qlar, belgilar, kesim"} *</Label><Input value={f19Form.location_axes} onChange={e => setF19Form(f => ({ ...f, location_axes: e.target.value }))} placeholder="A-D / 1-5, отм. -3.200" /></div>
+            <div><Label>{t('drawing_ref') || 'Chizma havolasi'}</Label><Input value={f19Form.drawing_reference} onChange={e => setF19Form(f => ({ ...f, drawing_reference: e.target.value }))} placeholder="КЖ-1, лист 5" /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>{t('works_start') || 'Ish boshlangan sana'} *</Label><Input type="date" value={f19Form.works_start_date} onChange={e => setF19Form(f => ({ ...f, works_start_date: e.target.value }))} /></div>
+              <div><Label>{t('works_end') || 'Ish tugagan sana'} *</Label><Input type="date" value={f19Form.works_end_date} onChange={e => setF19Form(f => ({ ...f, works_end_date: e.target.value }))} /></div>
+            </div>
+            <div><Label>{t('description') || 'Tavsif'}</Label><Textarea value={f19Form.notes} onChange={e => setF19Form(f => ({ ...f, notes: e.target.value }))} rows={3} placeholder="Yashirin ishlar tavsifi..." /></div>
+            {/* Photos */}
+            <div>
+              <Label>{t('photos') || 'Rasmlar'} * ({t('min_2') || 'kamida 2 ta'})</Label>
+              <div className="text-xs text-slate-500 mb-2">{t('photos_hint') || "Rasm URL manzillarini qo'shing (fayl yuklash orqali olingan)"}</div>
+              {f19Form.photos.map((p, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+                  <Input value={p.url} onChange={e => { const photos = [...f19Form.photos]; photos[i] = { ...photos[i], url: e.target.value }; setF19Form(f => ({ ...f, photos })); }} placeholder="URL" className="flex-1" />
+                  <Button variant="ghost" size="sm" onClick={() => { const photos = f19Form.photos.filter((_, j) => j !== i); setF19Form(f => ({ ...f, photos })); }}><Trash2 className="w-4 h-4 text-red-400" /></Button>
+                </div>
+              ))}
+              <Button variant="outline" size="sm" onClick={() => setF19Form(f => ({ ...f, photos: [...f.photos, { url: '', filename: '' }] }))}>
+                <Plus className="w-4 h-4 mr-1" /> {t('add_photo') || "Rasm qo'shish"}
+              </Button>
+            </div>
+            {/* Materials */}
+            <div>
+              <Label>{t('materials') || 'Materiallar'}</Label>
+              {f19Form.materials_json.map((m, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+                  <Input value={m.name} onChange={e => { const mats = [...f19Form.materials_json]; mats[i] = { ...mats[i], name: e.target.value }; setF19Form(f => ({ ...f, materials_json: mats })); }} placeholder="Material nomi" className="flex-1" />
+                  <Input value={m.certificate_url} onChange={e => { const mats = [...f19Form.materials_json]; mats[i] = { ...mats[i], certificate_url: e.target.value }; setF19Form(f => ({ ...f, materials_json: mats })); }} placeholder="Sertifikat URL" className="flex-1" />
+                  <Button variant="ghost" size="sm" onClick={() => { const mats = f19Form.materials_json.filter((_, j) => j !== i); setF19Form(f => ({ ...f, materials_json: mats })); }}><Trash2 className="w-4 h-4 text-red-400" /></Button>
+                </div>
+              ))}
+              <Button variant="outline" size="sm" onClick={() => setF19Form(f => ({ ...f, materials_json: [...f.materials_json, { name: '', certificate_url: '' }] }))}>
+                <Plus className="w-4 h-4 mr-1" /> {t('add_material') || "Material qo'shish"}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowF19Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleCreateF19} disabled={f19Saving}>{f19Saving ? 'Saqlanmoqda...' : 'Yaratish'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -572,38 +831,46 @@ const ActsTab = ({ project }) => {
       {/* Auto-generate KS-2 Modal */}
       <Dialog open={showAutoGenModal} onOpenChange={setShowAutoGenModal}>
         <DialogContent className="max-w-md" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle>
-            <DialogDescription className="sr-only">{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>{t('subcontractor') || 'Subpudratchi'} *</Label>
+            <div><Label>{t('subcontractor') || 'Subpudratchi'} *</Label>
               <Select value={autoGenForm.subcontract_id || ''} onValueChange={v => setAutoGenForm(f => ({ ...f, subcontract_id: v }))}>
-                <SelectTrigger><SelectValue placeholder={t('select_subcontract') || 'Subpudratni tanlang'} /></SelectTrigger>
-                <SelectContent>
-                  {(subcontracts || []).map(s => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.name || s.contractor_name}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
+                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>{t('period_from') || 'Boshlanish sanasi'} *</Label>
-                <Input type="date" value={autoGenForm.period_from} onChange={e => setAutoGenForm(f => ({ ...f, period_from: e.target.value }))} />
-              </div>
-              <div>
-                <Label>{t('period_to') || 'Tugash sanasi'} *</Label>
-                <Input type="date" value={autoGenForm.period_to} onChange={e => setAutoGenForm(f => ({ ...f, period_to: e.target.value }))} />
-              </div>
+              <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={autoGenForm.period_from} onChange={e => setAutoGenForm(f => ({ ...f, period_from: e.target.value }))} /></div>
+              <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={autoGenForm.period_to} onChange={e => setAutoGenForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAutoGenModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleAutoGenerate} disabled={autoGenSaving}>
-              {autoGenSaving ? (t('generating') || 'Yaratilmoqda...') : (t('generate') || 'Yaratish')}
-            </Button>
+            <Button onClick={handleAutoGenerate} disabled={autoGenSaving}>{autoGenSaving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Forma 3 (KS-3) Modal */}
+      <Dialog open={showGenF3Modal} onOpenChange={setShowGenF3Modal}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
+            <div><Label>{t('subcontractor') || 'Subpudratchi'} *</Label>
+              <Select value={genF3Form.subcontract_id || ''} onValueChange={v => setGenF3Form(f => ({ ...f, subcontract_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
+                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={genF3Form.period_from} onChange={e => setGenF3Form(f => ({ ...f, period_from: e.target.value }))} /></div>
+              <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={genF3Form.period_to} onChange={e => setGenF3Form(f => ({ ...f, period_to: e.target.value }))} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGenF3Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleGenerateF3} disabled={genF3Saving}>{genF3Saving ? 'Yaratilmoqda...' : 'Yaratish'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -611,19 +878,8 @@ const ActsTab = ({ project }) => {
       {/* Reject dialog */}
       <AlertDialog open={!!rejectTarget} onOpenChange={() => { setRejectTarget(null); setRejectionReason(''); }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle>
-            <AlertDialogDescription>{t('reject_act_desc') || 'Rad etish sababini kiriting'}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="px-6 pb-2">
-            <Label>{t('rejection_reason') || 'Rad etish sababi'}</Label>
-            <Textarea
-              value={rejectionReason}
-              onChange={e => setRejectionReason(e.target.value)}
-              placeholder={t('rejection_reason_placeholder') || 'Sababni kiriting...'}
-              rows={3}
-            />
-          </div>
+          <AlertDialogHeader><AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle><AlertDialogDescription>{t('reject_act_desc') || 'Sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
+          <div className="px-6 pb-2"><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={3} /></div>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
             <AlertDialogAction onClick={handleReject} className="bg-red-600 hover:bg-red-700">{t('reject') || 'Rad etish'}</AlertDialogAction>
@@ -634,13 +890,10 @@ const ActsTab = ({ project }) => {
       {/* Delete dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('delete_act_title') || 'Aktni o\'chirish'}</AlertDialogTitle>
-            <AlertDialogDescription>{t('delete_act_desc') || 'Haqiqatan ham bu aktni o\'chirmoqchimisiz?'}</AlertDialogDescription>
-          </AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>{t('delete_act_title') || "Aktni o'chirish"}</AlertDialogTitle><AlertDialogDescription>{t('delete_act_desc') || "Haqiqatan ham o'chirmoqchimisiz?"}</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">{t('delete') || 'O\'chirish'}</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">{t('delete') || "O'chirish"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
