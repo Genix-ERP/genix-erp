@@ -91,6 +91,10 @@ export default function TaxReports() {
   const [showCreatePeriod, setShowCreatePeriod] = useState(false);
   const [showPeriodDetails, setShowPeriodDetails] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
+  const [showPayDialog, setShowPayDialog] = useState(false);
+  const [payPeriodId, setPayPeriodId] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [isPaying, setIsPaying] = useState(false);
 
   // Form data
   const [newPeriod, setNewPeriod] = useState({
@@ -218,6 +222,30 @@ export default function TaxReports() {
       loadPeriods();
     } catch (error) {
       console.error('Failed to delete period:', error);
+    }
+  };
+
+  const openPayDialog = (periodId = null) => {
+    const id = periodId || periods.find(p => p.net_tax_liability > 0 && p.status !== 'draft' && !p.paid_at)?.id;
+    if (!id) return;
+    setPayPeriodId(id);
+    setPaymentMethod('bank');
+    setShowPayDialog(true);
+  };
+
+  const handlePayTax = async () => {
+    if (!payPeriodId) return;
+    try {
+      setIsPaying(true);
+      await taxReportsService.payPeriod(payPeriodId, { payment_method: paymentMethod });
+      setShowPayDialog(false);
+      setPayPeriodId(null);
+      loadSummary();
+      loadPeriods();
+    } catch (error) {
+      console.error('Failed to pay tax:', error);
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -370,7 +398,7 @@ export default function TaxReports() {
               <Button
                 size="sm"
                 className="w-full mt-3 bg-orange-600 hover:bg-orange-700"
-                onClick={() => setSearchParams({ tab: 'payments' })}
+                onClick={() => openPayDialog()}
               >
                 <CreditCard className="w-4 h-4 mr-2" />
                 {t('record_payment') || "To'lovni qayd etish"}
@@ -610,6 +638,12 @@ export default function TaxReports() {
                                 <DropdownMenuItem onClick={() => handleCalculateReport(period.id)}>
                                   <Calculator className="w-4 h-4 mr-2" />
                                   {t('calculate') || 'Calculate'}
+                                </DropdownMenuItem>
+                              )}
+                              {canUpdate(MODULES.FINANCIALS) && period.status !== 'draft' && !period.paid_at && period.net_tax_liability > 0 && (
+                                <DropdownMenuItem onClick={() => openPayDialog(period.id)}>
+                                  <CreditCard className="w-4 h-4 mr-2" />
+                                  {t('record_payment') || "To'lovni qayd etish"}
                                 </DropdownMenuItem>
                               )}
                               {canDelete(MODULES.FINANCIALS) && period.status !== 'filed' && (
@@ -913,6 +947,49 @@ export default function TaxReports() {
             <Button onClick={handleFileReport} disabled={isLoading}>
               <CheckCircle className="w-4 h-4 mr-2" />
               {t('confirm_file') || 'Confirm & File'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay Tax Dialog */}
+      <Dialog open={showPayDialog} onOpenChange={setShowPayDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('record_tax_payment') || "Soliq to'lovini qayd etish"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-orange-50 rounded-lg">
+              <p className="text-sm text-orange-600">{t('net_tax_liability') || 'Sof soliq majburiyati'}</p>
+              <p className="text-2xl font-bold text-orange-700">{formatCurrency(summary?.net_tax_liability || 0)}</p>
+            </div>
+            <div>
+              <Label>{t('payment_method') || "To'lov usuli"}</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank">{t('bank_account') || 'Bank hisobi'}</SelectItem>
+                  <SelectItem value="cash">{t('cash') || 'Naqd pul (Kassa)'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('tax_payment_note') || "To'lov qayd etilganda avtomatik buxgalteriya provodkasi yaratiladi: Dt QQS majburiyat / Kt Bank"}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPayDialog(false)}>
+              {t('cancel') || 'Bekor qilish'}
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handlePayTax}
+              disabled={isPaying}
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              {isPaying ? (t('processing') || 'Jarayonda...') : (t('confirm_payment') || "To'lovni tasdiqlash")}
             </Button>
           </DialogFooter>
         </DialogContent>

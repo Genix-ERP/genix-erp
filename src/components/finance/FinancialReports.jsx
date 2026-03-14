@@ -314,6 +314,27 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
         </table>
         ` : ''}
 
+        ${cashFlow ? `
+        <h2>${language === 'uz' ? 'Pul Oqimi' : 'Cash Flow Statement'}</h2>
+        <p style="color:#64748b;font-size:12px">${cashFlow.period_from} - ${cashFlow.period_to}</p>
+        <table>
+          <tr><th></th><th class="amount">${language === 'uz' ? 'Summa' : 'Amount'}</th></tr>
+          <tr><td>${language === 'uz' ? 'Boshlang\'ich qoldiq' : 'Opening Cash Balance'}</td><td class="amount">${formatCurrency(cashFlow.opening_cash_balance)}</td></tr>
+
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Operatsion faoliyat' : 'Operating Activities'}</strong></td><td class="amount"><strong>${formatCurrency(cashFlow.operating_activities?.total || 0)}</strong></td></tr>
+          ${cashFlow.operating_activities?.items?.map(item => `<tr><td style="padding-left:30px">${item.description || item.account_name || ''}</td><td class="amount ${item.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(item.amount)}</td></tr>`).join('') || ''}
+
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Investitsion faoliyat' : 'Investing Activities'}</strong></td><td class="amount"><strong>${formatCurrency(cashFlow.investing_activities?.total || 0)}</strong></td></tr>
+          ${cashFlow.investing_activities?.items?.map(item => `<tr><td style="padding-left:30px">${item.description || item.account_name || ''}</td><td class="amount ${item.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(item.amount)}</td></tr>`).join('') || ''}
+
+          <tr class="total-row"><td><strong>${language === 'uz' ? 'Moliyaviy faoliyat' : 'Financing Activities'}</strong></td><td class="amount"><strong>${formatCurrency(cashFlow.financing_activities?.total || 0)}</strong></td></tr>
+          ${cashFlow.financing_activities?.items?.map(item => `<tr><td style="padding-left:30px">${item.description || item.account_name || ''}</td><td class="amount ${item.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(item.amount)}</td></tr>`).join('') || ''}
+
+          <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Sof pul o\'zgarishi' : 'Net Cash Change'}</strong></td><td class="amount"><strong>${formatCurrency(cashFlow.net_cash_change || 0)}</strong></td></tr>
+          <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Yakuniy qoldiq' : 'Closing Cash Balance'}</strong></td><td class="amount"><strong>${formatCurrency(cashFlow.closing_cash_balance)}</strong></td></tr>
+        </table>
+        ` : ''}
+
         <div class="footer">
           ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Genix ERP
         </div>

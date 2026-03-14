@@ -50,4 +50,9 @@ export const taxReportsService = {
     const response = await apiClient.delete(`/tax-reports/periods/${id}`);
     return response.data.data;
   },
+
+  payPeriod: async (id, data = {}) => {
+    const response = await apiClient.post(`/tax-reports/periods/${id}/pay`, data);
+    return response.data.data;
+  },
 };
