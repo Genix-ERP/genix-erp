@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
-  Send, Mail, MessageCircle, ChevronDown, Link2, Check
+  Send, Mail, MessageCircle, ChevronDown, Link2, Check, Copy
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -51,6 +51,8 @@ export default function ActSverka() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendMethod, setSendMethod] = useState('email'); // 'email' or 'whatsapp'
   const [sendEmail, setSendEmail] = useState('');
+  const [sendSubject, setSendSubject] = useState('');
+  const [sendMessage, setSendMessage] = useState('');
   const [sendPhone, setSendPhone] = useState('+998');
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState(null);
@@ -366,16 +368,39 @@ export default function ActSverka() {
     setSendMethod(method);
     setSendResult(null);
     setShowSendDropdown(false);
+    const act = actDetail || selectedAct;
     // Pre-fill email from contact if available
-    if (method === 'email' && actDetail) {
-      const contact = contacts.find(c => c.id === (actDetail.partner_id || selectedAct?.partner_id));
+    if (method === 'email' && act) {
+      const contact = contacts.find(c => c.id === (act.partner_id || selectedAct?.partner_id));
       setSendEmail(contact?.email || '');
+      setSendSubject(`${t('reconciliation_act') || 'Akt sverka'} — ${act.partner_name} (${act.period_start} – ${act.period_end})`);
+      setSendMessage('');
     }
-    if (method === 'whatsapp' && actDetail) {
-      const contact = contacts.find(c => c.id === (actDetail.partner_id || selectedAct?.partner_id));
+    if (method === 'whatsapp' && act) {
+      const contact = contacts.find(c => c.id === (act.partner_id || selectedAct?.partner_id));
       setSendPhone(contact?.phone || '');
     }
     setShowSendModal(true);
+  };
+
+  const handleCopyLink = async () => {
+    if (!selectedAct) return;
+    setShowSendDropdown(false);
+    setIsSending(true);
+    try {
+      const result = await financeService.sendReconciliationAct(selectedAct.id, {
+        via: 'link',
+      });
+      if (result.share_url) {
+        await navigator.clipboard.writeText(result.share_url);
+        setSendResult({ message: t('link_copied') || 'Havola nusxalandi', share_url: result.share_url });
+        setShowSendModal(true);
+      }
+    } catch (err) {
+      console.error('Copy link failed:', err);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSend = async () => {
@@ -388,6 +413,8 @@ export default function ActSverka() {
         via: sendMethod,
         email: sendMethod === 'email' ? sendEmail : '',
         phone: sendMethod === 'whatsapp' ? sendPhone : '',
+        subject: sendMethod === 'email' ? sendSubject : '',
+        message: sendMethod === 'email' ? sendMessage : '',
       });
       setSendResult(result);
       // Update local status
@@ -471,20 +498,27 @@ export default function ActSverka() {
                       onClick={() => openSendModal('email')}
                     >
                       <Mail className="w-4 h-4 text-blue-600" />
-                      Email orqali
+                      {t('send_via_email') || 'Email orqali yuborish'}
                     </button>
                     <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-green-50 rounded-b-lg"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-green-50"
                       onClick={() => openSendModal('whatsapp')}
                     >
                       <MessageCircle className="w-4 h-4 text-green-600" />
-                      WhatsApp orqali
+                      {t('send_via_whatsapp') || 'WhatsApp orqali yuborish'}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 rounded-b-lg border-t border-slate-100"
+                      onClick={handleCopyLink}
+                    >
+                      <Link2 className="w-4 h-4 text-slate-600" />
+                      {t('copy_link') || 'Havolani nusxalash'}
                     </button>
                   </div>
                 </>
               )}
             </div>
-            {(act.status === 'draft' || act.status === 'discrepancy') && (
+            {(act.status === 'draft' || act.status === 'sent' || act.status === 'discrepancy' || act.status === 'disputed') && (
               <Button
                 size="sm"
                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -505,7 +539,7 @@ export default function ActSverka() {
                 {t('discrepancy') || 'Solishtirishda xatolik'}
               </Button>
             )}
-            {(act.status === 'confirmed' || act.status === 'discrepancy') && (
+            {(act.status === 'confirmed' || act.status === 'discrepancy' || act.status === 'sent') && (
               <Button variant="outline" size="sm" onClick={() => handleStatusChange('draft')}>
                 {t('revert_to_draft') || 'Qoralamaga qaytarish'}
               </Button>
@@ -648,6 +682,13 @@ export default function ActSverka() {
                         <strong>{act.sent_via === 'email' ? 'Email' : 'WhatsApp'}</strong> orqali yuborilgan:
                         {' '}{act.sent_to}
                         {' '}— {new Date(act.sent_at).toLocaleDateString('uz-UZ')}
+                        {act.share_expires_at && (
+                          <span className="text-slate-400 ml-2">
+                            (havola {new Date(act.share_expires_at) > new Date() ?
+                              `${new Date(act.share_expires_at).toLocaleString('uz-UZ')} gacha amal qiladi` :
+                              'muddati tugagan'})
+                          </span>
+                        )}
                       </span>
                     </div>
                   )}
@@ -683,6 +724,11 @@ export default function ActSverka() {
                         {act.dispute_note && (
                           <p className="text-red-600 text-xs mt-1">Izoh: {act.dispute_note}</p>
                         )}
+                        {act.dispute_amount != null && (
+                          <p className="text-red-600 text-xs mt-1">
+                            Kontragent summasi: {Number(act.dispute_amount).toLocaleString('uz-UZ')} so'm
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -701,6 +747,135 @@ export default function ActSverka() {
             )}
           </>
         )}
+
+        {/* Send Modal (detail view) */}
+        <Dialog open={showSendModal} onOpenChange={(open) => { setShowSendModal(open); if (!open) setSendResult(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {sendMethod === 'email' ? (
+                  <><Mail className="w-5 h-5 text-blue-600" /> {t('send_via_email') || 'Email orqali yuborish'}</>
+                ) : sendMethod === 'whatsapp' ? (
+                  <><MessageCircle className="w-5 h-5 text-green-600" /> {t('send_via_whatsapp') || 'WhatsApp orqali yuborish'}</>
+                ) : (
+                  <><Link2 className="w-5 h-5 text-slate-600" /> {t('copy_link') || 'Havolani nusxalash'}</>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedAct && `${selectedAct.partner_name} — ${selectedAct.period_start} — ${selectedAct.period_end}`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {sendMethod === 'email' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      {t('email_address') || 'Email manzil'} *
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="kontragent@example.com"
+                      value={sendEmail}
+                      onChange={(e) => setSendEmail(e.target.value)}
+                      className="bg-slate-50 border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      {t('email_subject') || 'Mavzu'}
+                    </label>
+                    <Input
+                      type="text"
+                      value={sendSubject}
+                      onChange={(e) => setSendSubject(e.target.value)}
+                      className="bg-slate-50 border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">
+                      {t('message_body') || 'Xabar matni'}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={sendMessage}
+                      onChange={(e) => setSendMessage(e.target.value)}
+                      placeholder={t('optional_message') || 'Qo\'shimcha xabar (ixtiyoriy)'}
+                      className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : sendMethod === 'whatsapp' ? (
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {t('phone_number') || 'Telefon raqam'}
+                  </label>
+                  <Input
+                    type="tel"
+                    placeholder="+998901234567"
+                    value={sendPhone}
+                    onChange={(e) => setSendPhone(e.target.value)}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+              ) : null}
+
+              {/* Result message */}
+              {sendResult && !sendResult.error && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+                    <Check className="w-4 h-4" />
+                    {sendResult.message}
+                  </div>
+                  {sendResult.share_url && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Link2 className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                      <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                        {sendResult.share_url}
+                      </a>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(sendResult.share_url); }}
+                        className="flex-shrink-0 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                        title="Nusxalash"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {sendResult?.error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{sendResult.error}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => setShowSendModal(false)}>
+                  {sendResult && !sendResult.error ? (t('close') || 'Yopish') : (t('cancel') || 'Bekor qilish')}
+                </Button>
+                {(!sendResult || sendResult.error) && (
+                  <Button
+                    onClick={handleSend}
+                    disabled={isSending || (sendMethod === 'email' && !sendEmail)}
+                    className={sendMethod === 'email'
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-green-600 hover:bg-green-700 text-white"
+                    }
+                  >
+                    {isSending ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : sendMethod === 'email' ? (
+                      <Mail className="w-4 h-4 mr-2" />
+                    ) : (
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                    )}
+                    {t('send') || 'Yuborish'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -1113,9 +1288,11 @@ export default function ActSverka() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {sendMethod === 'email' ? (
-                <><Mail className="w-5 h-5 text-blue-600" /> Email orqali yuborish</>
+                <><Mail className="w-5 h-5 text-blue-600" /> {t('send_via_email') || 'Email orqali yuborish'}</>
+              ) : sendMethod === 'whatsapp' ? (
+                <><MessageCircle className="w-5 h-5 text-green-600" /> {t('send_via_whatsapp') || 'WhatsApp orqali yuborish'}</>
               ) : (
-                <><MessageCircle className="w-5 h-5 text-green-600" /> WhatsApp orqali yuborish</>
+                <><Link2 className="w-5 h-5 text-slate-600" /> {t('copy_link') || 'Havolani nusxalash'}</>
               )}
             </DialogTitle>
             <DialogDescription>
@@ -1124,22 +1301,47 @@ export default function ActSverka() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             {sendMethod === 'email' ? (
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Email manzil *
-                </label>
-                <Input
-                  type="email"
-                  placeholder="kontragent@example.com"
-                  value={sendEmail}
-                  onChange={(e) => setSendEmail(e.target.value)}
-                  className="bg-slate-50 border-slate-200"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {t('email_address') || 'Email manzil'} *
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="kontragent@example.com"
+                    value={sendEmail}
+                    onChange={(e) => setSendEmail(e.target.value)}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {t('email_subject') || 'Mavzu'}
+                  </label>
+                  <Input
+                    type="text"
+                    value={sendSubject}
+                    onChange={(e) => setSendSubject(e.target.value)}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {t('message_body') || 'Xabar matni'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={sendMessage}
+                    onChange={(e) => setSendMessage(e.target.value)}
+                    placeholder={t('optional_message') || 'Qo\'shimcha xabar (ixtiyoriy)'}
+                    className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
-            ) : (
+            ) : sendMethod === 'whatsapp' ? (
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">
-                  Telefon raqam
+                  {t('phone_number') || 'Telefon raqam'}
                 </label>
                 <Input
                   type="tel"
@@ -1149,7 +1351,7 @@ export default function ActSverka() {
                   className="bg-slate-50 border-slate-200"
                 />
               </div>
-            )}
+            ) : null}
 
             {/* Result message */}
             {sendResult && !sendResult.error && (
@@ -1176,7 +1378,7 @@ export default function ActSverka() {
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setShowSendModal(false)}>
-                {sendResult && !sendResult.error ? 'Yopish' : 'Bekor qilish'}
+                {sendResult && !sendResult.error ? (t('close') || 'Yopish') : (t('cancel') || 'Bekor qilish')}
               </Button>
               {(!sendResult || sendResult.error) && (
                 <Button
