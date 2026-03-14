@@ -62,7 +62,8 @@ import {
   Upload,
   X,
   Image,
-  Layers
+  Layers,
+  Scale
 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -83,6 +84,8 @@ import ProgressTab from '@/components/construction/tabs/ProgressTab';
 import SubcontractorsTab from '@/components/construction/tabs/SubcontractorsTab';
 import ActsTab from '@/components/construction/tabs/ActsTab';
 import FinancialTab from '@/components/construction/tabs/FinancialTab';
+import RejaFaktTab from '@/components/construction/tabs/RejaFaktTab';
+import SmetaVsFactTab from '@/components/construction/tabs/SmetaVsFactTab';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -1431,6 +1434,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <TrendingUp className="w-4 h-4 mr-2" />
             {t('budget_plan_actual') || 'Byudjet (reja/fakt)'}
           </TabsTrigger>
+          <TabsTrigger value="reja_fakt" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <Scale className="w-4 h-4 mr-2" />
+            {t('reja_vs_fakt') || 'Reja vs Fakt'}
+          </TabsTrigger>
           <TabsTrigger value="material_usage" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <Package className="w-4 h-4 mr-2" />
             {t('material_usage') || 'Material sarfi'}
@@ -1442,6 +1449,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <TabsTrigger value="acts" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <FileText className="w-4 h-4 mr-2" />
             {t('acts') || 'Aktlar'}
+          </TabsTrigger>
+          <TabsTrigger value="smeta_vs_fact" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            {t('svf_tab_title') || 'Smeta vs Fakt'}
           </TabsTrigger>
           <TabsTrigger value="financial" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <DollarSign className="w-4 h-4 mr-2" />
@@ -2202,6 +2213,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <BudgetTab project={project} />
         </TabsContent>
 
+        {/* Reja vs Fakt Tab */}
+        <TabsContent value="reja_fakt" className="mt-6">
+          <RejaFaktTab project={project} />
+        </TabsContent>
+
         {/* Material Usage Tab */}
         <TabsContent value="material_usage" className="mt-6">
           <MaterialUsageTab project={project} />
@@ -2215,6 +2231,11 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         {/* Acts (KS-2/KS-3) Tab */}
         <TabsContent value="acts" className="mt-6">
           <ActsTab project={project} />
+        </TabsContent>
+
+        {/* Smeta vs Fact Tab */}
+        <TabsContent value="smeta_vs_fact" className="mt-6">
+          <SmetaVsFactTab project={project} />
         </TabsContent>
 
         {/* Financial Analysis Tab */}
