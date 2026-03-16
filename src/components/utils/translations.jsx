@@ -4214,6 +4214,12 @@ export const translations = {
     "generate_ks3": "Generate KS-3",
     "generating": "Generating...",
 
+    // Construction — Forms tab
+    "forms": "Forms",
+    "create_form": "Create form",
+    "no_forms": "No forms",
+    "form_type": "Form type",
+
     // Construction — Acts (Forma 2/3/19) extra keys
     "auto_ks2": "Auto KS-2",
     "gen_ks3": "Generate KS-3",
@@ -11020,6 +11026,12 @@ export const translations = {
     "generate_ks3": "KS-3 yaratish",
     "generating": "Yaratilmoqda...",
 
+    // Construction — Formalar tab
+    "forms": "Formalar",
+    "create_form": "Forma yaratish",
+    "no_forms": "Formalar yo'q",
+    "form_type": "Forma turi",
+
     // Construction — Aktlar (Forma 2/3/19) qo'shimcha kalitlar
     "auto_ks2": "KS-2 avto",
     "gen_ks3": "KS-3 yaratish",
@@ -17319,6 +17331,12 @@ export const translations = {
     "rf_budget_approaching_msg": "приближается к лимиту бюджета",
     "rf_sub_stage": "Подэтап",
     "rf_type": "Тип",
+
+    // Construction — Вкладка Формы
+    "forms": "Формы",
+    "create_form": "Создать форму",
+    "no_forms": "Нет форм",
+    "form_type": "Тип формы",
 
     // Construction — Акты (Форма 2/3/19) доп. ключи
     "auto_ks2": "КС-2 авто",
