@@ -831,6 +831,11 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async updateActLine(actId, lineId, data) {
+    const response = await apiClient.put(`/construction/acts/${actId}/lines/${lineId}`, data);
+    return response.data.data;
+  },
+
   async exportActPDF(id) {
     const response = await apiClient.get(`/construction/acts/${id}/export?format=pdf`, { responseType: 'blob' });
     return response.data;
