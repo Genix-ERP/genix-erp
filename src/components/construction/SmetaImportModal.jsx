@@ -847,7 +847,7 @@ const typeDescriptions = {
 // SMETA IMPORT MODAL
 // =====================================================
 
-export default function SmetaImportModal({ open, onClose, onImport, onImportSvod, buildings = [], project }) {
+export default function SmetaImportModal({ open, onClose, onImport, onImportSvod, buildings = [], project, subcontracts = [], scope }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const fileInputRef = useRef(null);
@@ -861,6 +861,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
   const [expandedSections, setExpandedSections] = useState({});
   const [estimateName, setEstimateName] = useState('');
   const [selectedBuildingId, setSelectedBuildingId] = useState('');
+  const [selectedSubcontractId, setSelectedSubcontractId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errors, setErrors] = useState([]);
   const [importResult, setImportResult] = useState(null);
@@ -875,6 +876,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
     setExpandedSections({});
     setEstimateName('');
     setSelectedBuildingId('');
+    setSelectedSubcontractId('');
     setIsProcessing(false);
     setErrors([]);
     setImportResult(null);
@@ -1045,6 +1047,7 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
             buildingId,
             sourceType: selectedType,
             lines: allLines,
+            subcontractId: selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined,
           });
         }
 
@@ -1289,6 +1292,25 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
                   {buildings.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code ? `${b.code} - ${b.name}` : b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Subcontract selector (when in subcontract scope) */}
+            {subcontracts.length > 0 && selectedType !== 'svod' && (
+              <div className="flex items-center gap-2">
+                <Label className="text-sm shrink-0">Subpudratchi:</Label>
+                <select
+                  value={selectedSubcontractId}
+                  onChange={(e) => setSelectedSubcontractId(e.target.value)}
+                  className="border rounded-md px-3 py-1.5 text-sm max-w-xs"
+                >
+                  <option value="">Subpudratchi tanlang...</option>
+                  {subcontracts.map((sc) => (
+                    <option key={sc.id} value={sc.id}>
+                      {sc.partner_name || sc.name}
                     </option>
                   ))}
                 </select>
