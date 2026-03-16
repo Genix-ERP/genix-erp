@@ -849,12 +849,14 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           case 'estimates':
           case 'daily_journal':
             try {
-              const [estBuildings, estWbs] = await Promise.all([
+              const [estBuildings, estWbs, estSubcontracts] = await Promise.all([
                 constructionService.listBuildings(project.id),
                 constructionService.getWBSTree(project.id),
+                constructionService.listSubcontracts(project.id),
               ]);
               setBuildings(estBuildings || []);
               setWbsTree(estWbs || []);
+              setProjectSubcontracts(estSubcontracts || []);
             } catch (e) { setWbsTree([]); }
             break;
           case 'progress':
@@ -1708,7 +1710,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
 
         {/* Estimates Tab */}
         <TabsContent value="estimates" className="mt-6">
-          <EstimatesTab project={project} wbsItems={wbsTree} buildings={buildings} />
+          <EstimatesTab project={project} wbsItems={wbsTree} buildings={buildings} subcontracts={projectSubcontracts} />
         </TabsContent>
 
         {/* Daily Journal Tab (WBS-linked progress) */}
