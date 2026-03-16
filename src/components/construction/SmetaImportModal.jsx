@@ -177,9 +177,9 @@ function parseEdinich(workbook) {
     }
   }
 
-  // Extract object name from rows 4-9
+  // Extract object name from rows 1-10
   let objectName = '';
-  for (let row = 4; row < 10; row++) {
+  for (let row = 0; row < 10; row++) {
     const rowData = rawData[row];
     if (rowData) {
       for (let col = 0; col < 7; col++) {
@@ -191,6 +191,22 @@ function parseEdinich(workbook) {
         }
       }
       if (objectName) break;
+    }
+  }
+  // Fallback: use project description from row 2 (index 1) if no object name found
+  if (!objectName) {
+    for (let row = 0; row < 5; row++) {
+      const rowData = rawData[row];
+      if (rowData) {
+        for (let col = 0; col < 7; col++) {
+          const val = rowData[col];
+          if (val && typeof val === 'string' && val.length > 15 && !val.includes('наименование') && !val.includes('ведомость') && !val.includes('смета')) {
+            objectName = val.trim().replace(/\.$/, '');
+            break;
+          }
+        }
+        if (objectName) break;
+      }
     }
   }
 
@@ -997,38 +1013,39 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         const buildingId = selectedBuildingId === 'project' ? 0 : parseInt(selectedBuildingId);
         let importedCount = 0;
 
+        // Merge all sections into a single estimate with all lines
+        const allLines = [];
+        let sortIdx = 0;
         for (const section of parsedData.sections) {
           if (section.items.length === 0) continue;
+          for (const item of section.items) {
+            sortIdx++;
+            const unitPrice = item.unit_price || 0;
+            const rt = item.resource_type || '';
+            allLines.push({
+              name: item.name,
+              uom: item.uom || 'шт',
+              quantity: item.quantity || 0,
+              material_rate: rt === 'material' ? unitPrice : 0,
+              labor_rate: rt === 'labor' ? unitPrice : 0,
+              equipment_rate: rt === 'equipment' ? unitPrice : 0,
+              code: item.code || '',
+              item_number: item.item_number || '',
+              resource_type: rt,
+              parent_item_number: item.parent_item_number || '',
+              sort_order: sortIdx,
+            });
+          }
+          importedCount += section.items.length;
+        }
 
-          const name = parsedData.sections.length === 1
-            ? (estimateName || section.name)
-            : section.name;
-
+        if (allLines.length > 0) {
           await onImport({
-            estimateName: name,
+            estimateName: estimateName || parsedData.objectName || parsedData.sections[0]?.name || 'Imported',
             buildingId,
             sourceType: selectedType,
-            lines: section.items.map((item, idx) => {
-              // For ресурс: place unit_price in the correct rate column
-              const unitPrice = item.unit_price || 0;
-              const rt = item.resource_type || '';
-              return {
-                name: item.name,
-                uom: item.uom || 'шт',
-                quantity: item.quantity || 0,
-                material_rate: rt === 'material' ? unitPrice : 0,
-                labor_rate: rt === 'labor' ? unitPrice : 0,
-                equipment_rate: rt === 'equipment' ? unitPrice : 0,
-                code: item.code || '',
-                item_number: item.item_number || '',
-                resource_type: rt,
-                parent_item_number: item.parent_item_number || '',
-                sort_order: idx + 1,
-              };
-            }),
+            lines: allLines,
           });
-
-          importedCount += section.items.length;
         }
 
         setImportResult({
