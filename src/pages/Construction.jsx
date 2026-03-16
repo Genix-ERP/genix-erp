@@ -83,6 +83,7 @@ import MaterialUsageTab from '@/components/construction/tabs/MaterialUsageTab';
 import ProgressTab from '@/components/construction/tabs/ProgressTab';
 import SubcontractorsTab from '@/components/construction/tabs/SubcontractorsTab';
 import ActsTab from '@/components/construction/tabs/ActsTab';
+import FormsTab from '@/components/construction/tabs/FormsTab';
 import FinancialTab from '@/components/construction/tabs/FinancialTab';
 import RejaFaktTab from '@/components/construction/tabs/RejaFaktTab';
 import SmetaVsFactTab from '@/components/construction/tabs/SmetaVsFactTab';
@@ -1448,6 +1449,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             <HardHat className="w-4 h-4 mr-2" />
             {t('subcontractors') || 'Pudratchilar'}
           </TabsTrigger>
+          <TabsTrigger value="forms" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <FileText className="w-4 h-4 mr-2" />
+            {t('forms') || 'Formalar'}
+          </TabsTrigger>
           <TabsTrigger value="acts" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
             <FileText className="w-4 h-4 mr-2" />
             {t('acts') || 'Aktlar'}
@@ -2230,7 +2235,12 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           <SubcontractorsTab project={project} buildings={buildings} wbsItems={wbsTree} />
         </TabsContent>
 
-        {/* Acts (KS-2/KS-3) Tab */}
+        {/* Forms (Forma 2/3/19) Tab */}
+        <TabsContent value="forms" className="mt-6">
+          <FormsTab project={project} />
+        </TabsContent>
+
+        {/* Acts (Acceptance/Defect) Tab */}
         <TabsContent value="acts" className="mt-6">
           <ActsTab project={project} />
         </TabsContent>
