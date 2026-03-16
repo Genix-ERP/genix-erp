@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image, Upload, Loader2 } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image, Upload, Loader2, ChevronUp, ChevronDown, Send } from 'lucide-react';
 import { UploadFile } from '@/api/integrations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -24,11 +24,9 @@ const TYPE_COLORS = {
 
 const STATE_COLORS = {
   draft: 'bg-slate-100 text-slate-700',
-  submitted: 'bg-yellow-100 text-yellow-700',
-  approved: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-  signed: 'bg-emerald-100 text-emerald-700',
-  cancelled: 'bg-gray-100 text-gray-500',
+  pending: 'bg-yellow-100 text-yellow-700',
+  signed: 'bg-green-100 text-green-700',
+  cancelled: 'bg-red-100 text-red-700',
 };
 
 const EMPTY_FORM = {
@@ -63,9 +61,7 @@ const FormsTab = ({ project }) => {
 
   const STATE_LABELS = {
     draft: t('draft') || 'Qoralama',
-    submitted: t('submitted') || 'Yuborilgan',
-    approved: t('approved') || 'Tasdiqlangan',
-    rejected: t('rejected') || 'Rad etilgan',
+    pending: t('pending') || 'Imzolashda',
     signed: t('signed') || 'Imzolangan',
     cancelled: t('cancelled') || 'Bekor qilingan',
   };
@@ -77,11 +73,20 @@ const FormsTab = ({ project }) => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
 
+  // Sorting state
+  const [sortField, setSortField] = useState('created_date');
+  const [sortDir, setSortDir] = useState('desc');
+
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  // Estimate line picker state for F2 create
+  const [estimateLines, setEstimateLines] = useState([]);
+  const [selectedLines, setSelectedLines] = useState([]);
+  const [estimateLinesLoading, setEstimateLinesLoading] = useState(false);
 
   // Forma 19 create modal
   const [showF19Modal, setShowF19Modal] = useState(false);
@@ -111,10 +116,6 @@ const FormsTab = ({ project }) => {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Reject dialog state
-  const [rejectTarget, setRejectTarget] = useState(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-
   // Inline line editing
   const [editingLineId, setEditingLineId] = useState(null);
   const [editLineForm, setEditLineForm] = useState({ qty_period: '', note: '' });
@@ -129,20 +130,16 @@ const FormsTab = ({ project }) => {
     setLoading(true);
     try {
       const params = {};
-      if (filters.act_type) {
-        params.type = filters.act_type;
-      }
       if (filters.state) params.state = filters.state;
-      const [actsData, subData, stagesData] = await Promise.all([
-        constructionService.listActs(project.id, params),
-        constructionService.listSubcontracts(project.id),
+
+      const [f2s, f3s, f19s, subData, stagesData] = await Promise.all([
+        (!filters.act_type || filters.act_type === 'ks2') ? constructionService.listF2(project.id, params).catch(() => []) : Promise.resolve([]),
+        (!filters.act_type || filters.act_type === 'ks3') ? constructionService.listF3(project.id, params).catch(() => []) : Promise.resolve([]),
+        (!filters.act_type || filters.act_type === 'hidden_work') ? constructionService.listF19(project.id, params).catch(() => []) : Promise.resolve([]),
+        constructionService.listSubcontracts(project.id).catch(() => []),
         constructionService.listStages(project.id).catch(() => []),
       ]);
-      const allActs = actsData || [];
-      const filteredActs = filters.act_type
-        ? allActs
-        : allActs.filter(a => FORMS_TYPES.includes(a.act_type));
-      setActs(filteredActs);
+      setActs([...(f2s || []), ...(f3s || []), ...(f19s || [])]);
       setSubcontracts(subData || []);
       setStages(stagesData || []);
     } catch (e) {
@@ -154,10 +151,17 @@ const FormsTab = ({ project }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const loadActDetail = async (actId) => {
+  const loadActDetail = async (actId, actType) => {
     setDetailLoading(true);
     try {
-      const act = await constructionService.getAct(actId);
+      let act;
+      if (actType === 'ks3') {
+        act = await constructionService.getF3(project.id, actId);
+      } else if (actType === 'hidden_work') {
+        act = await constructionService.getF19(project.id, actId);
+      } else {
+        act = await constructionService.getF2(project.id, actId);
+      }
       setSelectedAct(act);
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -166,24 +170,84 @@ const FormsTab = ({ project }) => {
     }
   };
 
+  // ---- Estimate line picker ----
+
+  const loadEstimateLines = async (subcontractId) => {
+    setEstimateLinesLoading(true);
+    try {
+      const estimates = await constructionService.listEstimates(project.id);
+      const allLines = [];
+      for (const est of (estimates || [])) {
+        const detail = await constructionService.getEstimate(est.id);
+        if (detail?.lines) {
+          for (const line of detail.lines) {
+            if (line.item_number && !line.resource_type) {
+              allLines.push({
+                estimate_line_id: line.id,
+                name: line.name,
+                uom: line.uom,
+                qty_smeta: line.quantity || 0,
+                unit_rate: line.unit_rate || 0,
+                qty_period: 0,
+              });
+            }
+          }
+        }
+      }
+      setEstimateLines(allLines);
+    } catch {
+      setEstimateLines([]);
+    } finally {
+      setEstimateLinesLoading(false);
+    }
+  };
+
+  const toggleEstimateLine = (line) => {
+    setSelectedLines(prev => {
+      const exists = prev.find(l => l.estimate_line_id === line.estimate_line_id);
+      if (exists) {
+        return prev.filter(l => l.estimate_line_id !== line.estimate_line_id);
+      }
+      return [...prev, { ...line, qty_period: 0 }];
+    });
+  };
+
+  const updateSelectedLineQty = (estimateLineId, qty) => {
+    setSelectedLines(prev => prev.map(l =>
+      l.estimate_line_id === estimateLineId ? { ...l, qty_period: parseFloat(qty) || 0 } : l
+    ));
+  };
+
   // ---- Handlers ----
 
   const handleCreate = async () => {
     if (!form.act_type) { setError('Akt turini tanlang'); return; }
-    if (form.act_type !== 'hidden_work' && !form.subcontract_id) { setError('Subpudratni tanlang'); return; }
-    if (form.act_type !== 'hidden_work' && (!form.period_from || !form.period_to)) { setError('Davrni kiriting'); return; }
+    if (!form.subcontract_id) { setError('Subpudratni tanlang'); return; }
+    if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
+    const linesWithQty = selectedLines.filter(l => l.qty_period > 0);
+    if (linesWithQty.length === 0) { setError('Kamida bitta qator tanlang va miqdor kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
       const payload = {
-        act_type: form.act_type,
-        subcontract_id: Number(form.subcontract_id) || 0,
+        act_type: 'ks2',
+        subcontract_id: Number(form.subcontract_id),
         period_from: form.period_from,
         period_to: form.period_to,
-        notes: form.notes || '',
+        notes: form.notes,
+        lines: linesWithQty.map(l => ({
+          estimate_line_id: l.estimate_line_id,
+          name: l.name,
+          uom: l.uom,
+          quantity: l.qty_period,
+          unit_rate: l.unit_rate,
+          qty_smeta: l.qty_smeta,
+        })),
       };
-      await constructionService.createAct(project.id, payload);
+      await constructionService.createF2(project.id, payload);
       setShowCreateModal(false);
+      setSelectedLines([]);
+      setEstimateLines([]);
       toast.success(t('act_created') || 'Forma yaratildi');
       load();
     } catch (e) {
@@ -201,7 +265,7 @@ const FormsTab = ({ project }) => {
     setF19Saving(true);
     setF19Error(null);
     try {
-      await constructionService.createAct(project.id, {
+      await constructionService.createF19(project.id, {
         act_type: 'hidden_work',
         stage_id: Number(f19Form.stage_id),
         location_axes: f19Form.location_axes,
@@ -249,7 +313,7 @@ const FormsTab = ({ project }) => {
     }
     setGenF3Saving(true);
     try {
-      await constructionService.generateForma3(project.id, {
+      await constructionService.generateF3(project.id, {
         subcontract_id: Number(genF3Form.subcontract_id),
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
@@ -267,11 +331,17 @@ const FormsTab = ({ project }) => {
   const handleSign = async () => {
     if (!signTarget || !signRole) return;
     try {
-      await constructionService.signAct(signTarget.id, { role: signRole });
+      if (signTarget.act_type === 'ks2') {
+        await constructionService.signF2(signTarget.id, { role: signRole });
+      } else if (signTarget.act_type === 'ks3') {
+        await constructionService.signF3(signTarget.id, { role: signRole });
+      } else if (signTarget.act_type === 'hidden_work') {
+        await constructionService.signF19(signTarget.id, { role: signRole });
+      }
       setSignTarget(null);
       setSignRole('');
       toast.success(`Akt imzolandi (${signRole})`);
-      if (selectedAct?.id === signTarget.id) await loadActDetail(signTarget.id);
+      if (selectedAct?.id === signTarget.id) await loadActDetail(signTarget.id, signTarget.act_type);
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
@@ -283,47 +353,47 @@ const FormsTab = ({ project }) => {
       toast.error('Bekor qilish sababini kiriting'); return;
     }
     try {
-      await constructionService.cancelAct(cancelTarget.id, { rejection_reason: cancelReason });
+      if (cancelTarget.act_type === 'ks2') {
+        await constructionService.cancelF2(cancelTarget.id, { rejection_reason: cancelReason });
+      } else if (cancelTarget.act_type === 'hidden_work') {
+        await constructionService.cancelF19(cancelTarget.id, { rejection_reason: cancelReason });
+      }
       setCancelTarget(null);
       setCancelReason('');
       toast.success('Akt bekor qilindi');
-      if (selectedAct?.id === cancelTarget.id) await loadActDetail(cancelTarget.id);
+      if (selectedAct?.id === cancelTarget.id) await loadActDetail(cancelTarget.id, cancelTarget.act_type);
       load();
     } catch (e) {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
-  const handleApprove = async (act) => {
+  const handleSubmitForSigning = async () => {
     try {
-      await constructionService.approveAct(act.id);
-      toast.success('Akt tasdiqlandi');
-      if (selectedAct?.id === act.id) await loadActDetail(act.id);
+      if (selectedAct.act_type === 'ks2') {
+        await constructionService.submitF2(project.id, selectedAct.id);
+      } else if (selectedAct.act_type === 'hidden_work') {
+        await constructionService.submitF19(project.id, selectedAct.id);
+      }
+      toast.success("Imzolashga yuborildi");
+      loadActDetail(selectedAct.id, selectedAct.act_type);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectTarget || !rejectionReason.trim()) {
-      toast.error('Rad etish sababini kiriting'); return;
-    }
-    try {
-      await constructionService.rejectAct(rejectTarget.id, { rejection_reason: rejectionReason });
-      setRejectTarget(null);
-      setRejectionReason('');
-      toast.success('Akt rad etildi');
-      if (selectedAct?.id === rejectTarget.id) await loadActDetail(rejectTarget.id);
-      load();
-    } catch (e) {
-      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik');
     }
   };
 
   const handleExportPDF = async (act) => {
     try {
-      const blob = await constructionService.exportActPDF(act.id);
+      let blob;
+      if (act.act_type === 'ks2') {
+        blob = await constructionService.exportF2PDF(act.id);
+      } else if (act.act_type === 'ks3') {
+        blob = await constructionService.exportF3PDF(act.id);
+      } else if (act.act_type === 'hidden_work') {
+        blob = await constructionService.exportF19PDF(act.id);
+      }
+      if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -447,13 +517,12 @@ const FormsTab = ({ project }) => {
 
   const saveEditLine = async (actId, lineId) => {
     try {
-      await constructionService.updateActLine(actId, lineId, {
+      await constructionService.updateF2Line(project.id, actId, lineId, {
         qty_period: parseFloat(editLineForm.qty_period) || 0,
         note: editLineForm.note,
       });
       setEditingLineId(null);
-      // Refresh act detail
-      const updated = await constructionService.getAct(actId);
+      const updated = await constructionService.getF2(project.id, actId);
       setSelectedAct(updated);
       load();
     } catch (e) {
@@ -468,7 +537,11 @@ const FormsTab = ({ project }) => {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await constructionService.deleteAct(deleteTarget.id);
+      if (deleteTarget.act_type === 'ks2') {
+        await constructionService.deleteF2(deleteTarget.id);
+      } else if (deleteTarget.act_type === 'hidden_work') {
+        await constructionService.deleteF19(deleteTarget.id);
+      }
       setDeleteTarget(null);
       if (selectedAct?.id === deleteTarget.id) setSelectedAct(null);
       toast.success("Akt o'chirildi");
@@ -477,6 +550,30 @@ const FormsTab = ({ project }) => {
       toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
+
+  // --- Sorting helpers ---
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIndicator = ({ field }) => {
+    if (sortField !== field) return <span className="text-slate-300 ml-1 inline-flex flex-col leading-none"><ChevronUp className="w-3 h-3" /><ChevronDown className="w-3 h-3 -mt-1" /></span>;
+    return sortDir === 'asc'
+      ? <ChevronUp className="w-3 h-3 ml-1 inline text-blue-600" />
+      : <ChevronDown className="w-3 h-3 ml-1 inline text-blue-600" />;
+  };
+
+  const sortedActs = [...(acts || [])].sort((a, b) => {
+    let va = a[sortField], vb = b[sortField];
+    if (sortField === 'amount') { va = a.amount_total_with_vat || a.amount_total || 0; vb = b.amount_total_with_vat || b.amount_total || 0; }
+    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortDir === 'asc' ? (va || 0) - (vb || 0) : (vb || 0) - (va || 0);
+  });
 
   // --- Signing status component ---
   const SignaturePanel = ({ act }) => {
@@ -520,7 +617,7 @@ const FormsTab = ({ project }) => {
                 ) : (
                   <div className="mt-1">
                     <p className="text-xs text-slate-400">{t('not_signed') || 'Imzolanmagan'}</p>
-                    {(act.state === 'draft' || act.state === 'submitted' || act.state === 'approved') && (
+                    {act.state === 'pending' && (
                       <Button size="sm" variant="outline" className="mt-2 h-7 text-xs"
                         onClick={() => { setSignTarget(act); setSignRole(sig.role); }}>
                         <PenLine className="w-3 h-3 mr-1" /> {t('sign') || 'Imzolash'}
@@ -621,6 +718,11 @@ const FormsTab = ({ project }) => {
     );
   };
 
+  // --- Estimate lines subtotals for create modal ---
+  const createModalSubtotal = selectedLines.reduce((sum, l) => sum + (l.qty_period * l.unit_rate), 0);
+  const createModalVat = createModalSubtotal * 0.12;
+  const createModalTotal = createModalSubtotal + createModalVat;
+
   // ======== DETAIL VIEW ========
   if (selectedAct) {
     return (
@@ -675,8 +777,8 @@ const FormsTab = ({ project }) => {
         {/* Forma 3 cumulative table */}
         <Forma3Detail act={selectedAct} />
 
-        {/* Signing panel */}
-        <SignaturePanel act={selectedAct} />
+        {/* Signing panel - only show when pending */}
+        {selectedAct.state === 'pending' && <SignaturePanel act={selectedAct} />}
 
         {/* Lines table */}
         {(selectedAct.lines || []).length > 0 && (
@@ -771,39 +873,23 @@ const FormsTab = ({ project }) => {
         {/* Action buttons */}
         <div className="flex gap-2 flex-wrap">
           {selectedAct.state === 'draft' && (
-            <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(selectedAct)}>
-              <Trash2 className="w-4 h-4 mr-1" /> {t('delete') || "O'chirish"}
-            </Button>
-          )}
-          {(selectedAct.state === 'submitted') && (
             <>
-              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApprove(selectedAct)}>
-                <CheckCircle className="w-4 h-4 mr-1" /> {t('approve') || 'Tasdiqlash'}
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={handleSubmitForSigning}>
+                <Send className="w-4 h-4 mr-1" /> {t('submit_for_signing') || 'Imzolashga yuborish'}
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => { setRejectTarget(selectedAct); setRejectionReason(''); }}>
-                <XCircle className="w-4 h-4 mr-1" /> {t('reject') || 'Rad etish'}
+              <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(selectedAct)}>
+                <Trash2 className="w-4 h-4 mr-1" /> {t('delete') || "O'chirish"}
               </Button>
             </>
           )}
-          {(selectedAct.state === 'signed' || selectedAct.state === 'approved') && (
+          {selectedAct.state === 'signed' && (
             <Button variant="outline" size="sm" className="text-red-600 border-red-300" onClick={() => { setCancelTarget(selectedAct); setCancelReason(''); }}>
               <Ban className="w-4 h-4 mr-1" /> {t('cancel_act') || 'Bekor qilish'}
             </Button>
           )}
         </div>
 
-        {/* Reject, Cancel, Delete, Sign dialogs */}
-        <AlertDialog open={!!rejectTarget} onOpenChange={() => { setRejectTarget(null); setRejectionReason(''); }}>
-          <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle><AlertDialogDescription>{t('reject_act_desc') || 'Rad etish sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
-            <div className="px-6 pb-2"><Label>{t('rejection_reason') || 'Sabab'}</Label><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={3} /></div>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
-              <AlertDialogAction onClick={handleReject} className="bg-red-600 hover:bg-red-700">{t('reject') || 'Rad etish'}</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
+        {/* Cancel, Delete, Sign dialogs */}
         <AlertDialog open={!!cancelTarget} onOpenChange={() => { setCancelTarget(null); setCancelReason(''); }}>
           <AlertDialogContent>
             <AlertDialogHeader><AlertDialogTitle>{t('cancel_act') || 'Aktni bekor qilish'}</AlertDialogTitle><AlertDialogDescription>{t('cancel_act_desc') || 'Bekor qilish sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
@@ -864,10 +950,8 @@ const FormsTab = ({ project }) => {
               <SelectContent>
                 <SelectItem value="all">{t('all_states') || 'Barcha holatlar'}</SelectItem>
                 <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
-                <SelectItem value="submitted">{t('submitted') || 'Yuborilgan'}</SelectItem>
-                <SelectItem value="approved">{t('approved') || 'Tasdiqlangan'}</SelectItem>
+                <SelectItem value="pending">{t('pending') || 'Imzolashda'}</SelectItem>
                 <SelectItem value="signed">{t('signed') || 'Imzolangan'}</SelectItem>
-                <SelectItem value="rejected">{t('rejected') || 'Rad etilgan'}</SelectItem>
                 <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
               </SelectContent>
             </Select>
@@ -876,7 +960,7 @@ const FormsTab = ({ project }) => {
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19Form(EMPTY_F19_FORM); setF19Error(null); setShowF19Modal(true); }}>
               <Camera className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
-            <Button onClick={() => { setForm(EMPTY_FORM); setError(null); setShowCreateModal(true); }}>
+            <Button onClick={() => { setForm(EMPTY_FORM); setError(null); setSelectedLines([]); setEstimateLines([]); setShowCreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_form')}
             </Button>
           </div>
@@ -894,17 +978,29 @@ const FormsTab = ({ project }) => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-slate-500">
-                    <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
-                    <th className="text-left py-2 px-3">{t('type') || 'Turi'}</th>
-                    <th className="text-left py-2 px-3">{t('period') || 'Davr'}</th>
-                    <th className="text-left py-2 px-3">{t('subcontractor') || 'Subpudratchi'}</th>
-                    <th className="text-right py-2 px-3">{t('amount') || 'Summa'}</th>
-                    <th className="text-left py-2 px-3">{t('state') || 'Holat'}</th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('name')}>
+                      {t('name') || 'Nomi'}<SortIndicator field="name" />
+                    </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('act_type')}>
+                      {t('type') || 'Turi'}<SortIndicator field="act_type" />
+                    </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('period_from')}>
+                      {t('period') || 'Davr'}<SortIndicator field="period_from" />
+                    </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('subcontract_name')}>
+                      {t('subcontractor') || 'Subpudratchi'}<SortIndicator field="subcontract_name" />
+                    </th>
+                    <th className="text-right py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('amount')}>
+                      {t('amount') || 'Summa'}<SortIndicator field="amount" />
+                    </th>
+                    <th className="text-left py-2 px-3 cursor-pointer select-none" onClick={() => handleSort('state')}>
+                      {t('state') || 'Holat'}<SortIndicator field="state" />
+                    </th>
                     <th className="text-right py-2 px-3">{t('actions') || 'Amallar'}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(acts || []).map(act => (
+                  {sortedActs.map(act => (
                     <tr key={act.id} className="border-b hover:bg-slate-50">
                       <td className="py-2 px-3 font-medium">{act.name}{act.act_number ? ` #${act.act_number}` : ''}</td>
                       <td className="py-2 px-3"><Badge className={TYPE_COLORS[act.act_type]}>{TYPE_LABELS[act.act_type] || act.act_type}</Badge></td>
@@ -914,7 +1010,7 @@ const FormsTab = ({ project }) => {
                       <td className="py-2 px-3"><Badge className={STATE_COLORS[act.state]}>{STATE_LABELS[act.state] || act.state}</Badge></td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => loadActDetail(act.id)}><Eye className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => loadActDetail(act.id, act.act_type)}><Eye className="w-4 h-4" /></Button>
                           {(act.act_type === 'ks2' || act.act_type === 'ks3' || act.act_type === 'hidden_work') && (
                             <Button variant="ghost" size="sm" onClick={() => handleExportPDF(act)}><Download className="w-4 h-4 text-slate-500" /></Button>
                           )}
@@ -932,9 +1028,9 @@ const FormsTab = ({ project }) => {
         </CardContent>
       </Card>
 
-      {/* Create Form Modal (KS-2 only) */}
+      {/* Create Form Modal (KS-2 with estimate line picker) */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('create_form')}</DialogTitle><DialogDescription className="sr-only">Create form</DialogDescription></DialogHeader>
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
@@ -947,7 +1043,7 @@ const FormsTab = ({ project }) => {
               </Select>
             </div>
             <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
-              <Select value={form.subcontract_id || ''} onValueChange={v => setForm(f => ({ ...f, subcontract_id: v }))}>
+              <Select value={form.subcontract_id || ''} onValueChange={v => { setForm(f => ({ ...f, subcontract_id: v })); loadEstimateLines(v); }}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
                 <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
               </Select>
@@ -957,6 +1053,89 @@ const FormsTab = ({ project }) => {
               <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
             <div><Label>{t('notes') || 'Izohlar'}</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
+
+            {/* Estimate lines picker */}
+            {form.subcontract_id && (
+              <div>
+                <Label className="text-base font-semibold">{t('estimate_lines') || 'Smeta qatorlari'}</Label>
+                {estimateLinesLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t('loading') || 'Yuklanmoqda...'}
+                  </div>
+                ) : estimateLines.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-2">{t('no_estimate_lines') || 'Smeta qatorlari topilmadi'}</p>
+                ) : (
+                  <div className="overflow-x-auto border rounded-lg mt-2">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50 text-slate-500">
+                          <th className="py-2 px-2 w-8"></th>
+                          <th className="text-left py-2 px-2">{t('name') || 'Nomi'}</th>
+                          <th className="text-left py-2 px-2">{t('uom') || "O'lchov"}</th>
+                          <th className="text-right py-2 px-2">{t('qty_smeta') || 'Smeta miqdori'}</th>
+                          <th className="text-right py-2 px-2">{t('unit_rate') || 'Birlik narxi'}</th>
+                          <th className="text-right py-2 px-2 w-32">{t('qty_period') || 'Davr miqdori'}</th>
+                          <th className="text-right py-2 px-2">{t('line_total') || 'Qator jami'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {estimateLines.map(line => {
+                          const isSelected = selectedLines.some(l => l.estimate_line_id === line.estimate_line_id);
+                          const selectedLine = selectedLines.find(l => l.estimate_line_id === line.estimate_line_id);
+                          const lineTotal = isSelected ? (selectedLine?.qty_period || 0) * line.unit_rate : 0;
+                          return (
+                            <tr key={line.estimate_line_id} className={`border-b hover:bg-slate-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleEstimateLine(line)}
+                                  className="rounded border-slate-300"
+                                />
+                              </td>
+                              <td className="py-2 px-2">{line.name}</td>
+                              <td className="py-2 px-2">{line.uom || '—'}</td>
+                              <td className="py-2 px-2 text-right">{line.qty_smeta}</td>
+                              <td className="py-2 px-2 text-right">{formatCurrency(line.unit_rate)}</td>
+                              <td className="py-2 px-2 text-right">
+                                {isSelected ? (
+                                  <Input
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                    value={selectedLine?.qty_period || ''}
+                                    onChange={e => updateSelectedLineQty(line.estimate_line_id, e.target.value)}
+                                    className="w-28 h-7 text-right text-sm"
+                                  />
+                                ) : '—'}
+                              </td>
+                              <td className="py-2 px-2 text-right font-medium">{isSelected ? formatCurrency(lineTotal) : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {/* Totals */}
+                    {selectedLines.length > 0 && (
+                      <div className="border-t bg-slate-50 p-3 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">{t('subtotal') || 'Jami'}:</span>
+                          <span className="font-medium">{formatCurrency(createModalSubtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">{t('vat') || 'QQS'} (12%):</span>
+                          <span className="font-medium">{formatCurrency(createModalVat)}</span>
+                        </div>
+                        <div className="flex justify-between text-base font-semibold">
+                          <span>{t('total_with_vat') || 'QQS bilan jami'}:</span>
+                          <span className="text-blue-600">{formatCurrency(createModalTotal)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
@@ -1105,18 +1284,6 @@ const FormsTab = ({ project }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Reject dialog */}
-      <AlertDialog open={!!rejectTarget} onOpenChange={() => { setRejectTarget(null); setRejectionReason(''); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>{t('reject_act') || 'Aktni rad etish'}</AlertDialogTitle><AlertDialogDescription>{t('reject_act_desc') || 'Sababini kiriting'}</AlertDialogDescription></AlertDialogHeader>
-          <div className="px-6 pb-2"><Textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} rows={3} /></div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('cancel') || 'Bekor qilish'}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReject} className="bg-red-600 hover:bg-red-700">{t('reject') || 'Rad etish'}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Delete dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>

@@ -847,6 +847,113 @@ export const constructionService = {
   },
 
   // =====================================================
+  // FORMA 2 (KS-2) DEDICATED API
+  // =====================================================
+
+  async listF2(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f2`, { params: { ...params, act_type: 'ks2' } });
+    return response.data.data;
+  },
+  async createF2(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f2`, { ...data, act_type: 'ks2' });
+    return response.data.data;
+  },
+  async getF2(projectId, f2Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f2/${f2Id}`);
+    return response.data.data;
+  },
+  async submitF2(projectId, f2Id) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f2/${f2Id}/submit`);
+    return response.data.data;
+  },
+  async signF2(projectId, f2Id, data) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/f2/${f2Id}/sign`, data);
+    return response.data.data;
+  },
+  async cancelF2(projectId, f2Id, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f2/${f2Id}/cancel`, data);
+    return response.data.data;
+  },
+  async updateF2Line(projectId, f2Id, lineId, data) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/f2/${f2Id}/lines/${lineId}`, data);
+    return response.data.data;
+  },
+  async exportF2PDF(projectId, f2Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f2/${f2Id}/pdf?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+  async exportF2XLSX(projectId, f2Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f2/${f2Id}/xlsx?format=xlsx`, { responseType: 'blob' });
+    return response.data;
+  },
+  async deleteF2(projectId, f2Id) {
+    const response = await apiClient.delete(`/construction/projects/${projectId}/f2/${f2Id}`);
+    return response.data.data;
+  },
+
+  // =====================================================
+  // FORMA 3 (KS-3) DEDICATED API
+  // =====================================================
+
+  async listF3(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f3`, { params: { ...params, act_type: 'ks3' } });
+    return response.data.data;
+  },
+  async generateF3(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f3/generate`, data);
+    return response.data.data;
+  },
+  async getF3(projectId, f3Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f3/${f3Id}`);
+    return response.data.data;
+  },
+  async signF3(projectId, f3Id, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f3/${f3Id}/sign`, data);
+    return response.data.data;
+  },
+  async exportF3PDF(projectId, f3Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f3/${f3Id}/pdf?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+
+  // =====================================================
+  // FORMA 19 DEDICATED API
+  // =====================================================
+
+  async listF19(projectId, params = {}) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f19`, { params: { ...params, act_type: 'hidden_work' } });
+    return response.data.data;
+  },
+  async createF19(projectId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f19`, { ...data, act_type: 'hidden_work' });
+    return response.data.data;
+  },
+  async getF19(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f19/${f19Id}`);
+    return response.data.data;
+  },
+  async submitF19(projectId, f19Id) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f19/${f19Id}/submit`);
+    return response.data.data;
+  },
+  async signF19(projectId, f19Id, data) {
+    const response = await apiClient.put(`/construction/projects/${projectId}/f19/${f19Id}/sign`, data);
+    return response.data.data;
+  },
+  async cancelF19(projectId, f19Id, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/f19/${f19Id}/cancel`, data);
+    return response.data.data;
+  },
+  async exportF19PDF(projectId, f19Id) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/f19/${f19Id}/pdf?format=pdf`, { responseType: 'blob' });
+    return response.data;
+  },
+  async deleteF19(projectId, f19Id) {
+    const response = await apiClient.delete(`/construction/projects/${projectId}/f19/${f19Id}`);
+    return response.data.data;
+  },
+
+  // =====================================================
   // SMETA VS FACT ANALYTICS
   // =====================================================
 
