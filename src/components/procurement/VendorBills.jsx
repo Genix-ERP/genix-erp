@@ -45,7 +45,9 @@ import {
   Calculator,
   Globe,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  CreditCard,
+  Calendar
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -89,10 +91,14 @@ export default function VendorBills() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [newBill, setNewBill] = useState({
     vendor_id: '',
     vendor_name: '',
     bill_number: '',
+    vendor_invoice_number: '',
     bill_date: new Date().toISOString().split('T')[0],
     due_date: '',
     purchase_order_id: '',
@@ -153,7 +159,9 @@ export default function VendorBills() {
         tax_percent: inv.subtotal > 0 && inv.tax_amount > 0 ? Math.round((inv.tax_amount / inv.subtotal) * 10000) / 100 : 12,
         tax_amount: inv.tax_amount || 0,
         total_amount: inv.total_amount || 0,
+        vendor_invoice_number: inv.vendor_invoice_number || '',
         paid_amount: inv.amount_paid || 0,
+        amount_paid: inv.amount_paid || 0,
         status: inv.status === 'confirmed' ? 'approved' : inv.status || 'draft',
         matching_status: inv.three_way_match_status || 'pending',
         currency: inv.currency_code || 'UZS',
@@ -175,6 +183,13 @@ export default function VendorBills() {
     fetchBills();
   }, []);
 
+  // Overdue detection
+  const isOverdue = (bill) => {
+    if (!bill.due_date) return false;
+    if (bill.status === 'paid' || bill.status === 'cancelled') return false;
+    return new Date(bill.due_date) < new Date(new Date().toDateString());
+  };
+
   // Filter bills
   useEffect(() => {
     let filtered = bills;
@@ -183,22 +198,37 @@ export default function VendorBills() {
       filtered = filtered.filter(bill =>
         bill.bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
         bill.vendor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (bill.vendor_invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         bill.purchase_order_id?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'overdue') {
+      filtered = filtered.filter(bill => isOverdue(bill));
+    } else if (statusFilter !== 'all') {
       filtered = filtered.filter(bill => bill.status === statusFilter);
     }
 
+    if (vendorFilter !== 'all') {
+      filtered = filtered.filter(bill => bill.vendor_id === vendorFilter);
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter(bill => bill.bill_date >= dateFrom);
+    }
+    if (dateTo) {
+      filtered = filtered.filter(bill => bill.bill_date <= dateTo);
+    }
+
     setFilteredBills(filtered);
-  }, [bills, searchTerm, statusFilter]);
+  }, [bills, searchTerm, statusFilter, vendorFilter, dateFrom, dateTo]);
 
   const handleCreateBill = async () => {
     try {
       const currencyObj = currencies.find(c => c.code === newBill.currency_code);
       const data = {
         vendor_id: newBill.vendor_id,
+        vendor_invoice_number: newBill.vendor_invoice_number,
         invoice_date: newBill.bill_date,
         due_date: newBill.due_date,
         subtotal: newBill.subtotal,
@@ -305,6 +335,7 @@ export default function VendorBills() {
       vendor_id: '',
       vendor_name: '',
       bill_number: '',
+      vendor_invoice_number: '',
       bill_date: new Date().toISOString().split('T')[0],
       due_date: '',
       purchase_order_id: '',
@@ -470,9 +501,15 @@ export default function VendorBills() {
   const pendingBills = bills.filter(b => b.status === 'pending_approval').length;
   const approvedBills = bills.filter(b => b.status === 'approved').length;
   const paidBills = bills.filter(b => b.status === 'paid').length;
+  const overdueBills = bills.filter(b => isOverdue(b));
+  const overdueCount = overdueBills.length;
+  const overdueAmount = overdueBills.reduce((sum, b) => sum + b.total_amount - (b.paid_amount || 0), 0);
   const totalAmount = bills.reduce((sum, b) => sum + b.total_amount, 0);
   const paidAmount = bills.reduce((sum, b) => sum + b.paid_amount, 0);
   const outstandingAmount = totalAmount - paidAmount;
+
+  // Unique vendors for filter
+  const uniqueVendors = [...new Map(bills.map(b => [b.vendor_id, { id: b.vendor_id, name: b.vendor_name }])).values()].filter(v => v.id);
 
   return (
     <div className="space-y-6">
@@ -496,7 +533,7 @@ export default function VendorBills() {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>{t('total_bills') || 'Total Bills'}</CardDescription>
@@ -550,34 +587,96 @@ export default function VendorBills() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className={overdueCount > 0 ? 'border-red-200 bg-red-50/50' : ''}>
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+              {t('overdue') || "Muddati o'tgan"}
+            </CardDescription>
+            <CardTitle className={`text-3xl ${overdueCount > 0 ? 'text-red-600' : ''}`}>
+              {overdueCount}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-red-600">
+              {formatCurrency(overdueAmount)}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                placeholder={t('search_bills') || 'Search bills...'}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder={t('search_bills') || 'Search bills...'}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_statuses') || 'All Statuses'}</SelectItem>
+                  <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                  <SelectItem value="pending_approval">{t('pending_approval') || 'Pending'}</SelectItem>
+                  <SelectItem value="approved">{t('approved') || 'Approved'}</SelectItem>
+                  <SelectItem value="partial">{t('partially_paid') || 'Partial'}</SelectItem>
+                  <SelectItem value="paid">{t('paid') || 'Paid'}</SelectItem>
+                  <SelectItem value="overdue">{t('overdue') || "Muddati o'tgan"}</SelectItem>
+                  <SelectItem value="rejected">{t('rejected') || 'Rejected'}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={vendorFilter} onValueChange={setVendorFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder={t('all_vendors') || 'All Vendors'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('all_vendors') || 'All Vendors'}</SelectItem>
+                  {uniqueVendors.map(v => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('all_statuses') || 'All Statuses'}</SelectItem>
-                <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
-                <SelectItem value="pending_approval">{t('pending_approval') || 'Pending'}</SelectItem>
-                <SelectItem value="approved">{t('approved') || 'Approved'}</SelectItem>
-                <SelectItem value="paid">{t('paid') || 'Paid'}</SelectItem>
-                <SelectItem value="rejected">{t('rejected') || 'Rejected'}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[160px]"
+                  placeholder={t('from') || 'From'}
+                />
+                <span className="text-muted-foreground">—</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[160px]"
+                  placeholder={t('to') || 'To'}
+                />
+              </div>
+              {(searchTerm || statusFilter !== 'all' || vendorFilter !== 'all' || dateFrom || dateTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setSearchTerm(''); setStatusFilter('all'); setVendorFilter('all'); setDateFrom(''); setDateTo(''); }}
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  {t('clear_filters') || 'Clear'}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -610,22 +709,27 @@ export default function VendorBills() {
                   <TableRow>
                     <TableHead>{t('bill_number') || 'Bill Number'}</TableHead>
                     <TableHead>{t('vendor') || 'Vendor'}</TableHead>
+                    <TableHead>{t('vendor_ref') || "Yetkazuvchi huj.№"}</TableHead>
                     <TableHead>{t('bill_date') || 'Bill Date'}</TableHead>
                     <TableHead>{t('due_date') || 'Due Date'}</TableHead>
                     <TableHead>{t('purchase_order') || 'PO'}</TableHead>
-                    <TableHead>{t('total_amount') || 'Amount'}</TableHead>
+                    <TableHead className="text-right">{t('tax') || 'QQS'}</TableHead>
+                    <TableHead className="text-right">{t('total_amount') || 'Amount'}</TableHead>
                     <TableHead>{t('status') || 'Status'}</TableHead>
                     <TableHead>{t('matching') || 'Matching'}</TableHead>
                     <TableHead className="text-right">{t('actions') || 'Actions'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBills.map((bill) => (
-                    <TableRow key={bill.id}>
+                  {filteredBills.map((bill) => {
+                    const overdue = isOverdue(bill);
+                    return (
+                    <TableRow key={bill.id} className={overdue ? 'bg-red-50/80 hover:bg-red-100/60' : ''}>
                       <TableCell className="font-medium">{bill.bill_number}</TableCell>
                       <TableCell>{bill.vendor_name}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{bill.vendor_invoice_number || '-'}</TableCell>
                       <TableCell>{bill.bill_date ? format(parseISO(bill.bill_date), 'MMM dd, yyyy') : '-'}</TableCell>
-                      <TableCell>{bill.due_date ? format(parseISO(bill.due_date), 'MMM dd, yyyy') : '-'}</TableCell>
+                      <TableCell className={overdue ? 'text-red-600 font-medium' : ''}>{bill.due_date ? format(parseISO(bill.due_date), 'MMM dd, yyyy') : '-'}</TableCell>
                       <TableCell>
                         {bill.purchase_order_id && (
                           <Badge variant="outline" className="flex items-center gap-1 w-fit">
@@ -634,10 +738,18 @@ export default function VendorBills() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="font-semibold">
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {(bill.tax_amount || 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
                         {bill.total_amount.toLocaleString()} {bill.currency}
                       </TableCell>
-                      <TableCell>{getStatusBadge(bill.status)}</TableCell>
+                      <TableCell>
+                        {overdue
+                          ? <Badge variant="destructive" className="flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{t('overdue') || "Muddati o'tgan"}</Badge>
+                          : getStatusBadge(bill.status)
+                        }
+                      </TableCell>
                       <TableCell>{getMatchingStatusBadge(bill.matching_status)}</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
@@ -695,15 +807,15 @@ export default function VendorBills() {
                               </Button>
                             </>
                           )}
-                          {(bill.status === 'approved' || bill.status === 'partial' || bill.status === 'partially_paid') && (
+                          {(bill.status === 'approved' || bill.status === 'partial' || bill.status === 'partially_paid' || overdue) && bill.status !== 'paid' && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenPayment(bill)}
-                              className="text-green-600"
-                              title={t('record_payment') || 'Record Payment'}
+                              className={overdue ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}
+                              title={t('record_payment') || "To'lash"}
                             >
-                              <DollarSign className="w-4 h-4" />
+                              <CreditCard className="w-4 h-4" />
                             </Button>
                           )}
                           {bill.purchase_order_id && (
@@ -718,7 +830,8 @@ export default function VendorBills() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -781,6 +894,21 @@ export default function VendorBills() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('vendor_ref') || "Yetkazuvchi hujjat raqami"} *</Label>
+                <Input
+                  value={editingBill?.vendor_invoice_number || newBill.vendor_invoice_number}
+                  onChange={(e) => {
+                    if (editingBill) {
+                      setEditingBill({ ...editingBill, vendor_invoice_number: e.target.value });
+                    } else {
+                      setNewBill({ ...newBill, vendor_invoice_number: e.target.value });
+                    }
+                  }}
+                  placeholder={t('vendor_doc_number') || "Yetkazuvchi hujjat raqami"}
+                  required
+                />
+              </div>
               <div className="space-y-2">
                 <Label>{t('bill_date') || 'Bill Date'}</Label>
                 <Input
@@ -1130,16 +1258,25 @@ export default function VendorBills() {
                   <p className="font-semibold">{selectedBill.vendor_name}</p>
                 </div>
                 <div>
+                  <Label className="text-muted-foreground">{t('vendor_ref') || "Yetkazuvchi huj.№"}</Label>
+                  <p className="font-semibold">{selectedBill.vendor_invoice_number || '-'}</p>
+                </div>
+                <div>
                   <Label className="text-muted-foreground">{t('bill_date') || 'Bill Date'}</Label>
                   <p>{selectedBill.bill_date ? format(parseISO(selectedBill.bill_date), 'MMM dd, yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('due_date') || 'Due Date'}</Label>
-                  <p>{selectedBill.due_date ? format(parseISO(selectedBill.due_date), 'MMM dd, yyyy') : '-'}</p>
+                  <p className={isOverdue(selectedBill) ? 'text-red-600 font-medium' : ''}>{selectedBill.due_date ? format(parseISO(selectedBill.due_date), 'MMM dd, yyyy') : '-'}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('status') || 'Status'}</Label>
-                  <div className="mt-1">{getStatusBadge(selectedBill.status)}</div>
+                  <div className="mt-1">
+                    {isOverdue(selectedBill)
+                      ? <Badge variant="destructive" className="flex items-center gap-1 w-fit"><AlertTriangle className="w-3 h-3" />{t('overdue') || "Muddati o'tgan"}</Badge>
+                      : getStatusBadge(selectedBill.status)
+                    }
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">{t('matching_status') || 'Matching'}</Label>
