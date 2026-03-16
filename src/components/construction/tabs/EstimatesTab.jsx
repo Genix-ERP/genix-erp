@@ -406,14 +406,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                   const isSelected = selectedBuilding?.id === building.id;
                   // Get unique subcontractor names for this building (subcontract mode)
                   // Show subcontractors linked to building via junction table + from estimates
-                  const subNames = scope === 'subcontract'
-                    ? [...new Set([
-                        ...subcontracts
-                          .filter(sc => (sc.building_ids || []).includes(building.id))
-                          .map(sc => sc.partner_name || sc.name),
-                        ...buildingEstimates.map(e => e.subcontract_name).filter(Boolean),
-                      ].filter(Boolean))]
-                    : [];
+                  const subNames = [...new Set([
+                    ...subcontracts
+                      .filter(sc => (sc.building_ids || []).includes(building.id))
+                      .map(sc => sc.partner_name || sc.name),
+                    ...buildingEstimates.map(e => e.subcontract_name).filter(Boolean),
+                  ].filter(Boolean))];
                   return (
                     <div
                       key={building.id}
@@ -1065,6 +1063,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         onImportSvod={handleImportSvod}
         buildings={buildings}
         project={project}
+        subcontracts={scope === 'subcontract' ? subcontracts : []}
+        scope={scope}
       />
 
       {/* Export Modal */}

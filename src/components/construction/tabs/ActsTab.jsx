@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image, Upload, Loader2 } from 'lucide-react';
+import { UploadFile } from '@/api/integrations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -91,6 +92,7 @@ const ActsTab = ({ project }) => {
   const [f19Form, setF19Form] = useState(EMPTY_F19_FORM);
   const [f19Saving, setF19Saving] = useState(false);
   const [f19Error, setF19Error] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   // Auto-generate modals
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
@@ -116,6 +118,10 @@ const ActsTab = ({ project }) => {
   // Reject dialog state
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Inline line editing
+  const [editingLineId, setEditingLineId] = useState(null);
+  const [editLineForm, setEditLineForm] = useState({ qty_period: '', note: '' });
 
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -150,7 +156,7 @@ const ActsTab = ({ project }) => {
       const act = await constructionService.getAct(actId);
       setSelectedAct(act);
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setDetailLoading(false);
     }
@@ -177,7 +183,7 @@ const ActsTab = ({ project }) => {
       toast.success(t('act_created') || 'Akt yaratildi');
       load();
     } catch (e) {
-      setError(e?.response?.data?.message || 'Xatolik yuz berdi');
+      setError(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setSaving(false);
     }
@@ -206,7 +212,7 @@ const ActsTab = ({ project }) => {
       toast.success(t('f19_created') || 'Forma 19 yaratildi');
       load();
     } catch (e) {
-      setF19Error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      setF19Error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setF19Saving(false);
     }
@@ -227,7 +233,7 @@ const ActsTab = ({ project }) => {
       toast.success('KS-2 avtomatik yaratildi');
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setAutoGenSaving(false);
     }
@@ -248,7 +254,7 @@ const ActsTab = ({ project }) => {
       toast.success('KS-3 (Forma 3) yaratildi');
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
       setGenF3Saving(false);
     }
@@ -264,7 +270,7 @@ const ActsTab = ({ project }) => {
       if (selectedAct?.id === signTarget.id) await loadActDetail(signTarget.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -280,7 +286,7 @@ const ActsTab = ({ project }) => {
       if (selectedAct?.id === cancelTarget.id) await loadActDetail(cancelTarget.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -291,7 +297,7 @@ const ActsTab = ({ project }) => {
       if (selectedAct?.id === act.id) await loadActDetail(act.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -307,7 +313,7 @@ const ActsTab = ({ project }) => {
       if (selectedAct?.id === rejectTarget.id) await loadActDetail(rejectTarget.id);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -321,8 +327,138 @@ const ActsTab = ({ project }) => {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'PDF yuklab olishda xatolik');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'PDF yuklab olishda xatolik');
     }
+  };
+
+  const handleExportXLSX = async (act) => {
+    if (act.act_type !== 'ks2') return;
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Форма 2 (КС-2)');
+
+      const titleFont = { name: 'Times New Roman', size: 12, bold: true };
+      const headerFont = { name: 'Times New Roman', size: 10, bold: true };
+      const dataFont = { name: 'Times New Roman', size: 10 };
+      const numFmt = '#,##0.00';
+      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D6E4F0' } };
+      const totalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FCE4D6' } };
+      const thinBorder = {
+        top: { style: 'thin', color: { argb: 'B4C6E7' } },
+        left: { style: 'thin', color: { argb: 'B4C6E7' } },
+        bottom: { style: 'thin', color: { argb: 'B4C6E7' } },
+        right: { style: 'thin', color: { argb: 'B4C6E7' } },
+      };
+
+      ws.columns = [
+        { width: 6 }, { width: 40 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 },
+      ];
+
+      // Title
+      ws.mergeCells('A1:H1');
+      const t1 = ws.getCell('A1');
+      t1.value = 'АКТ ПРИЁМКИ ВЫПОЛНЕННЫХ РАБОТ (Форма 2 / КС-2)';
+      t1.font = titleFont; t1.alignment = { horizontal: 'center' };
+
+      // Info rows
+      const info = [
+        ['Объект:', act.project_name || ''],
+        ['Подрядчик:', act.subcontract_name || ''],
+        ['Акт №:', act.act_number || ''],
+        ['Период:', `${act.period_from || ''} — ${act.period_to || ''}`],
+      ];
+      info.forEach((row, i) => {
+        ws.getCell(`A${3 + i}`).value = row[0];
+        ws.getCell(`A${3 + i}`).font = { ...dataFont, bold: true };
+        ws.mergeCells(`B${3 + i}:D${3 + i}`);
+        ws.getCell(`B${3 + i}`).value = row[1];
+        ws.getCell(`B${3 + i}`).font = dataFont;
+      });
+
+      // Table header (row 8)
+      const headers = ['№', 'Наименование работ', 'Ед. изм.', 'Кол-во по смете', 'Кол-во за период', 'Цена ед.', 'Стоимость', 'Примечание'];
+      const hdrRow = ws.getRow(8);
+      headers.forEach((v, i) => {
+        const cell = hdrRow.getCell(i + 1);
+        cell.value = v; cell.font = headerFont; cell.fill = headerFill; cell.border = thinBorder;
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+
+      // Data rows
+      const lines = act.lines || [];
+      lines.forEach((line, idx) => {
+        const r = ws.getRow(9 + idx);
+        const vals = [idx + 1, line.name || '', line.uom || '', line.qty_smeta || 0, line.quantity || 0, line.unit_rate || 0, line.total_amount || 0, line.note || ''];
+        vals.forEach((v, i) => {
+          const cell = r.getCell(i + 1);
+          cell.value = v; cell.font = dataFont; cell.border = thinBorder;
+          if (i === 0) cell.alignment = { horizontal: 'center' };
+          if (i >= 3 && i <= 6 && typeof v === 'number') cell.numFmt = numFmt;
+        });
+      });
+
+      // Totals
+      const totalRowIdx = 9 + lines.length;
+      const subtotal = act.amount_total || lines.reduce((s, l) => s + (l.total_amount || 0), 0);
+      const vatPct = act.vat_pct || 12;
+      const vatAmt = act.vat_amount || subtotal * vatPct / 100;
+      const totalWithVat = act.amount_total_with_vat || subtotal + vatAmt;
+
+      const totals = [
+        ['Итого', subtotal],
+        [`НДС (${vatPct}%)`, vatAmt],
+        ['Итого с НДС', totalWithVat],
+      ];
+      totals.forEach((row, i) => {
+        const r = ws.getRow(totalRowIdx + i);
+        ws.mergeCells(`A${totalRowIdx + i}:F${totalRowIdx + i}`);
+        r.getCell(1).value = row[0]; r.getCell(1).font = headerFont; r.getCell(1).alignment = { horizontal: 'right' };
+        r.getCell(7).value = row[1]; r.getCell(7).font = headerFont; r.getCell(7).numFmt = numFmt;
+        for (let c = 1; c <= 8; c++) { r.getCell(c).fill = totalFill; r.getCell(c).border = thinBorder; }
+      });
+
+      // Signature area
+      const sigRow = totalRowIdx + totals.length + 2;
+      ws.getCell(`A${sigRow}`).value = 'Подрядчик: _______________'; ws.getCell(`A${sigRow}`).font = dataFont;
+      ws.getCell(`E${sigRow}`).value = 'Заказчик: _______________'; ws.getCell(`E${sigRow}`).font = dataFont;
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Forma2_${act.act_number || act.id}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('XLSX yuklab olishda xatolik');
+    }
+  };
+
+  const startEditLine = (line) => {
+    setEditingLineId(line.id);
+    setEditLineForm({ qty_period: String(line.quantity || ''), note: line.note || '' });
+  };
+
+  const saveEditLine = async (actId, lineId) => {
+    try {
+      await constructionService.updateActLine(actId, lineId, {
+        qty_period: parseFloat(editLineForm.qty_period) || 0,
+        note: editLineForm.note,
+      });
+      setEditingLineId(null);
+      // Refresh act detail
+      const updated = await constructionService.getAct(actId);
+      setSelectedAct(updated);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Saqlashda xatolik');
+    }
+  };
+
+  const cancelEditLine = () => {
+    setEditingLineId(null);
   };
 
   const handleDelete = async () => {
@@ -334,7 +470,7 @@ const ActsTab = ({ project }) => {
       toast.success("Akt o'chirildi");
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -501,6 +637,11 @@ const ActsTab = ({ project }) => {
                 <Download className="w-4 h-4 mr-1" /> PDF
               </Button>
             )}
+            {selectedAct.act_type === 'ks2' && (
+              <Button variant="outline" size="sm" onClick={() => handleExportXLSX(selectedAct)}>
+                <Download className="w-4 h-4 mr-1" /> XLSX
+              </Button>
+            )}
           </div>
         </div>
 
@@ -553,18 +694,69 @@ const ActsTab = ({ project }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedAct.lines || []).map((line, idx) => (
-                      <tr key={line.id || idx} className="border-b hover:bg-slate-50">
-                        <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
-                        <td className="py-2 px-3">{line.name}</td>
-                        <td className="py-2 px-3">{line.uom || '—'}</td>
-                        {selectedAct.act_type === 'ks2' && <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>}
-                        <td className="py-2 px-3 text-right">{line.quantity}</td>
-                        <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
-                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(line.total_amount || 0)}</td>
-                        {selectedAct.act_type === 'ks2' && <td className="py-2 px-3 text-slate-500">{line.note || ''}</td>}
-                      </tr>
-                    ))}
+                    {(selectedAct.lines || []).map((line, idx) => {
+                      const isEditing = editingLineId === line.id;
+                      const isDraft = selectedAct.state === 'draft';
+                      const isKs2 = selectedAct.act_type === 'ks2';
+                      return (
+                        <tr
+                          key={line.id || idx}
+                          className={`border-b hover:bg-slate-50 ${isDraft && isKs2 ? 'cursor-pointer' : ''} ${isEditing ? 'bg-blue-50' : ''}`}
+                          onClick={() => { if (isDraft && isKs2 && !isEditing) startEditLine(line); }}
+                        >
+                          <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
+                          <td className="py-2 px-3">{line.name}</td>
+                          <td className="py-2 px-3">{line.uom || '—'}</td>
+                          {isKs2 && <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>}
+                          <td className="py-2 px-3 text-right">
+                            {isEditing ? (
+                              <Input
+                                type="number"
+                                step="0.0001"
+                                value={editLineForm.qty_period}
+                                onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                className="w-28 h-7 text-right text-sm"
+                                autoFocus
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : line.quantity}
+                          </td>
+                          <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
+                          <td className="py-2 px-3 text-right font-medium">
+                            {isEditing
+                              ? formatCurrency((parseFloat(editLineForm.qty_period) || 0) * (line.unit_rate || 0))
+                              : formatCurrency(line.total_amount || 0)}
+                          </td>
+                          {isKs2 && (
+                            <td className="py-2 px-3 text-slate-500">
+                              {isEditing ? (
+                                <Input
+                                  value={editLineForm.note}
+                                  onChange={e => setEditLineForm(f => ({ ...f, note: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                  className="h-7 text-sm"
+                                  placeholder="Izoh..."
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              ) : (line.note || '')}
+                            </td>
+                          )}
+                          {isEditing && (
+                            <td className="py-2 px-3">
+                              <div className="flex gap-1">
+                                <Button size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); saveEditLine(selectedAct.id, line.id); }}>
+                                  <CheckCircle className="w-3 h-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); cancelEditLine(); }}>
+                                  <XCircle className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -795,16 +987,55 @@ const ActsTab = ({ project }) => {
             {/* Photos */}
             <div>
               <Label>{t('photos') || 'Rasmlar'} * ({t('min_2') || 'kamida 2 ta'})</Label>
-              <div className="text-xs text-slate-500 mb-2">{t('photos_hint') || "Rasm URL manzillarini qo'shing (fayl yuklash orqali olingan)"}</div>
-              {f19Form.photos.map((p, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <Input value={p.url} onChange={e => { const photos = [...f19Form.photos]; photos[i] = { ...photos[i], url: e.target.value }; setF19Form(f => ({ ...f, photos })); }} placeholder="URL" className="flex-1" />
-                  <Button variant="ghost" size="sm" onClick={() => { const photos = f19Form.photos.filter((_, j) => j !== i); setF19Form(f => ({ ...f, photos })); }}><Trash2 className="w-4 h-4 text-red-400" /></Button>
+              {f19Form.photos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3 mt-2">
+                  {f19Form.photos.map((p, i) => (
+                    <div key={i} className="relative group rounded-lg border overflow-hidden">
+                      <img src={p.url} alt={p.filename || `Photo ${i + 1}`} className="w-full h-24 object-cover" />
+                      <Button
+                        variant="destructive" size="sm"
+                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setF19Form(f => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                      <p className="text-[10px] text-slate-500 p-1 truncate">{p.filename || 'Photo'}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={() => setF19Form(f => ({ ...f, photos: [...f.photos, { url: '', filename: '' }] }))}>
-                <Plus className="w-4 h-4 mr-1" /> {t('add_photo') || "Rasm qo'shish"}
-              </Button>
+              )}
+              <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${photoUploading ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={photoUploading}
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (!files.length) return;
+                    setPhotoUploading(true);
+                    try {
+                      const uploaded = [];
+                      for (const file of files) {
+                        const res = await UploadFile(file);
+                        uploaded.push({ url: res.url, filename: file.name });
+                      }
+                      setF19Form(f => ({ ...f, photos: [...f.photos, ...uploaded] }));
+                    } catch {
+                      toast.error('Rasm yuklashda xatolik');
+                    } finally {
+                      setPhotoUploading(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                {photoUploading ? (
+                  <><Loader2 className="w-5 h-5 animate-spin text-blue-500" /> <span className="text-sm text-blue-600">Yuklanmoqda...</span></>
+                ) : (
+                  <><Upload className="w-5 h-5 text-slate-400" /> <span className="text-sm text-slate-500">Rasm yuklash (bir nechta tanlash mumkin)</span></>
+                )}
+              </label>
             </div>
             {/* Materials */}
             <div>

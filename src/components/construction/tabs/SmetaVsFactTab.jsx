@@ -89,25 +89,99 @@ const SmetaVsFactTab = ({ project }) => {
     return 'bg-green-500';
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!data) return;
     try {
-      // Build CSV for simple export
-      let csv = '\uFEFF'; // BOM for Excel UTF-8
-      csv += `${t('svf_name') || 'Nomi'},${t('svf_unit') || 'Birlik'},${t('svf_qty_smeta') || 'Smeta miqdor'},${t('svf_qty_fact') || 'Fakt miqdor'},${t('svf_unit_price') || 'Birlik narx'},${t('svf_smeta_sum') || 'Smeta summa'},${t('svf_fact_sum') || 'Fakt summa'},${t('svf_completion') || 'Bajarilish %'},${t('svf_delta') || 'Farq'},${t('status') || 'Holat'}\n`;
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Smeta vs Fakt');
+
+      const titleFont = { name: 'Times New Roman', size: 12, bold: true };
+      const headerFont = { name: 'Times New Roman', size: 10, bold: true };
+      const dataFont = { name: 'Times New Roman', size: 10 };
+      const numFmt = '#,##0.00';
+      const pctFmt = '0.0%';
+      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D6E4F0' } };
+      const sectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E2EFDA' } };
+      const thinBorder = {
+        top: { style: 'thin', color: { argb: 'B4C6E7' } },
+        left: { style: 'thin', color: { argb: 'B4C6E7' } },
+        bottom: { style: 'thin', color: { argb: 'B4C6E7' } },
+        right: { style: 'thin', color: { argb: 'B4C6E7' } },
+      };
+
+      ws.columns = [
+        { width: 6 }, { width: 40 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 12 }, { width: 18 }, { width: 14 },
+      ];
+
+      // Title
+      ws.mergeCells('A1:K1');
+      ws.getCell('A1').value = `Smeta vs Fakt — ${project?.name || ''}`;
+      ws.getCell('A1').font = titleFont;
+      ws.getCell('A1').alignment = { horizontal: 'center' };
+
+      // Summary row
+      const s = data?.summary || {};
+      const sumLabels = ['Smeta jami', 'Fakt jami', 'Bajarilish %', 'Farq', 'Oshib ketgan', 'Boshlanmagan'];
+      const sumValues = [
+        s.total_smeta || 0, s.total_fact || 0,
+        `${(s.completion_pct || 0).toFixed(1)}%`,
+        s.delta || 0, s.overrun_count || 0, s.not_started_count || 0
+      ];
+      sumLabels.forEach((label, i) => {
+        const col = i * 2 + 1;
+        ws.getCell(3, col).value = label;
+        ws.getCell(3, col).font = { ...dataFont, bold: true, size: 9 };
+        ws.getCell(4, col).value = sumValues[i];
+        ws.getCell(4, col).font = { ...dataFont, bold: true };
+        if (typeof sumValues[i] === 'number' && i < 2) ws.getCell(4, col).numFmt = numFmt;
+        if (i === 3 && sumValues[i] > 0) ws.getCell(4, col).font = { ...dataFont, bold: true, color: { argb: 'DC2626' } };
+      });
+
+      // Table headers (row 6)
+      const headers = ['№', 'Nomi', 'Birlik', 'Smeta miqdor', 'Fakt miqdor', 'Birlik narx', 'Smeta summa', 'Fakt summa', 'Bajarilish', 'Farq', 'Holat'];
+      const hdrRow = ws.getRow(6);
+      headers.forEach((v, i) => {
+        const cell = hdrRow.getCell(i + 1);
+        cell.value = v; cell.font = headerFont; cell.fill = headerFill; cell.border = thinBorder;
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      });
+
+      let rowIdx = 7;
+      const statusLabels = { not_started: 'Boshlanmagan', ok: 'Normal', warn: 'Ogohlantirish', overrun: 'Oshib ketgan', completed: 'Bajarilgan' };
 
       (data.sections || []).forEach(section => {
-        csv += `\n"${section.section_name}",,,,,,,,\n`;
-        (section.items || []).forEach(item => {
-          csv += `"${item.name}","${item.unit}",${item.qty_smeta},${item.qty_fact},${item.unit_price},${item.smeta_sum},${item.fact_sum},${(item.completion_pct || 0).toFixed(1)},${item.delta},"${item.status}"\n`;
+        // Section header
+        const secRow = ws.getRow(rowIdx);
+        ws.mergeCells(`B${rowIdx}:K${rowIdx}`);
+        secRow.getCell(2).value = section.section_name;
+        for (let c = 1; c <= 11; c++) { secRow.getCell(c).font = { ...headerFont, color: { argb: '1F4E79' } }; secRow.getCell(c).fill = sectionFill; secRow.getCell(c).border = thinBorder; }
+        rowIdx++;
+
+        (section.items || []).forEach((item, iIdx) => {
+          const r = ws.getRow(rowIdx);
+          const pct = (item.completion_pct || 0) / 100;
+          const delta = item.delta || 0;
+          const vals = [iIdx + 1, item.name, item.unit, item.qty_smeta, item.qty_fact, item.unit_price, item.smeta_sum, item.fact_sum, pct, delta, statusLabels[item.status] || item.status];
+          vals.forEach((v, i) => {
+            const cell = r.getCell(i + 1);
+            cell.value = v; cell.font = dataFont; cell.border = thinBorder;
+            if (i === 0) cell.alignment = { horizontal: 'center' };
+            if (i >= 3 && i <= 7 && typeof v === 'number') cell.numFmt = numFmt;
+            if (i === 8) cell.numFmt = pctFmt;
+            if (i === 9 && delta > 0) cell.font = { ...dataFont, color: { argb: 'DC2626' } };
+            if (i === 9 && delta < 0) cell.font = { ...dataFont, color: { argb: '16A34A' } };
+          });
+          rowIdx++;
         });
       });
 
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `smeta_vs_fact_${project.name || project.id}.csv`;
+      a.download = `smeta_vs_fact_${project?.name || project?.id}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(t('svf_exported') || 'Exported');
