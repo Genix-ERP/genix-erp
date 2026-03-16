@@ -67,7 +67,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
-    name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: ''
+    name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '', source_type: 'vor'
   });
   const [lineForm, setLineForm] = useState({
     id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '',
@@ -75,6 +75,9 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
   });
   const [addLines, setAddLines] = useState([{ product_id: '', quantity: '' }]);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', description: '', onConfirm: null, variant: 'default' });
+
+  // Source type filter for estimates list
+  const [sourceTypeFilter, setSourceTypeFilter] = useState('all');
 
   // Import/Export
   const [showImportModal, setShowImportModal] = useState(false);
@@ -200,13 +203,14 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         overhead_pct: parseFloat(estimateForm.overhead_pct) || 0,
         profit_pct: parseFloat(estimateForm.profit_pct) || 0,
         vat_pct: parseFloat(estimateForm.vat_pct) || 0,
+        source_type: estimateForm.source_type || '',
       };
       if (estimateForm.subcontract_id) {
         createData.subcontract_id = parseInt(estimateForm.subcontract_id);
       }
       await constructionService.createEstimate(project.id, createData);
       setShowEstimateModal(false);
-      setEstimateForm({ name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '' });
+      setEstimateForm({ name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '', source_type: 'vor' });
       await loadEstimates();
     } catch (error) {
       console.error('Error creating estimate:', error);
@@ -352,13 +356,16 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // Get estimates for current building selection
   const getFilteredEstimates = () => {
+    let filtered = [];
     if (selectedBuilding === 'project') {
-      return estimates.filter(e => !e.building_id);
+      filtered = estimates.filter(e => !e.building_id);
+    } else if (selectedBuilding?.id) {
+      filtered = estimates.filter(e => e.building_id === selectedBuilding.id);
     }
-    if (selectedBuilding?.id) {
-      return estimates.filter(e => e.building_id === selectedBuilding.id);
+    if (sourceTypeFilter !== 'all') {
+      filtered = filtered.filter(e => (e.source_type || '') === sourceTypeFilter);
     }
-    return [];
+    return filtered;
   };
 
   const filteredEstimates = getFilteredEstimates();
@@ -480,7 +487,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
               setEstimateForm({
                 name: '',
                 building_id: selectedBuilding === 'project' ? '' : String(selectedBuilding.id),
-                overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: ''
+                overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '',
+                source_type: sourceTypeFilter !== 'all' ? sourceTypeFilter : 'vor'
               });
               setShowEstimateModal(true);
             }}>
@@ -489,6 +497,33 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
             </Button>
           )}
         </CardHeader>
+        {selectedBuilding && (
+          <div className="flex items-center gap-1 px-6 pb-3 border-b">
+            {[
+              { key: 'all', label: t('all') || 'Barchasi' },
+              { key: 'vor', label: 'ВОР' },
+              { key: 'edinich', label: 'Единич' },
+              { key: 'resurs', label: 'Ресурс' },
+            ].map(tab => {
+              const count = tab.key === 'all'
+                ? (selectedBuilding === 'project' ? estimates.filter(e => !e.building_id) : estimates.filter(e => e.building_id === selectedBuilding?.id)).length
+                : (selectedBuilding === 'project' ? estimates.filter(e => !e.building_id && e.source_type === tab.key) : estimates.filter(e => e.building_id === selectedBuilding?.id && e.source_type === tab.key)).length;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setSourceTypeFilter(tab.key)}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    sourceTypeFilter === tab.key
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {tab.label} {count > 0 && <span className="ml-1 text-xs opacity-70">({count})</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <CardContent className="p-0">
           {!selectedBuilding ? (
             <div className="text-center py-12">
@@ -505,7 +540,8 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                 setEstimateForm({
                   name: '',
                   building_id: selectedBuilding === 'project' ? '' : String(selectedBuilding.id),
-                  overhead_pct: '0', profit_pct: '0', vat_pct: '12'
+                  overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '',
+                  source_type: sourceTypeFilter !== 'all' ? sourceTypeFilter : 'vor'
                 });
                 setShowEstimateModal(true);
               }}>
@@ -614,14 +650,17 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   <thead>
                                     <tr className="border-b">
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500 w-10">№</th>
+                                      {est.source_type !== 'resurs' && <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('code') || 'Shifr'}</th>}
                                       <th className="text-left py-2 px-2 text-xs font-medium text-slate-500">{t('name') || 'Nomi'}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit') || "O'lchov"}</th>
                                       <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('quantity') || 'Miqdor'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('material') || 'Material'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('labor') || 'Ish haqi'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('equipment') || 'Jihozlar'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit_rate') || 'Birlik'}</th>
-                                      <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('total') || 'Jami'}</th>
+                                      {est.source_type === 'resurs' && <>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('material') || 'Material'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('labor') || 'Ish haqi'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('equipment') || 'Jihozlar'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('unit_rate') || 'Birlik narxi'}</th>
+                                        <th className="text-right py-2 px-2 text-xs font-medium text-slate-500">{t('total') || 'Jami'}</th>
+                                      </>}
                                       {est.state === 'draft' && <th className="w-16"></th>}
                                     </tr>
                                   </thead>
@@ -631,6 +670,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         <td className="py-2 px-2 text-xs text-slate-400">
                                           {line.resource_type ? <span className="pl-2">{line.item_number}</span> : <span className="font-medium">{line.item_number}</span>}
                                         </td>
+                                        {est.source_type !== 'resurs' && <td className="py-2 px-2 text-xs text-slate-500">{line.code}</td>}
                                         <td className="py-2 px-2 text-xs">
                                           {line.resource_type && (
                                             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${
@@ -642,11 +682,13 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                         </td>
                                         <td className="py-2 px-2 text-right text-xs text-slate-600">{line.uom}</td>
                                         <td className="py-2 px-2 text-right text-xs">{line.quantity}</td>
-                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
-                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
-                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
-                                        <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
-                                        <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
+                                        {est.source_type === 'resurs' && <>
+                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.material_rate)}</td>
+                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.labor_rate)}</td>
+                                          <td className="py-2 px-2 text-right text-xs">{formatCurrency(line.equipment_rate)}</td>
+                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.unit_rate)}</td>
+                                          <td className="py-2 px-2 text-right text-xs font-medium">{formatCurrency(line.total_amount)}</td>
+                                        </>}
                                         {est.state === 'draft' && (
                                           <td className="py-2 px-2 text-center">
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100">
@@ -684,17 +726,20 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                       </tr>
                                     ))}
                                   </tbody>
-                                  <tfoot>
-                                    <tr className="font-semibold bg-white">
-                                      <td colSpan={7} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
-                                      <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
-                                      {est.state === 'draft' && <td></td>}
-                                    </tr>
-                                  </tfoot>
+                                  {est.source_type === 'resurs' && (
+                                    <tfoot>
+                                      <tr className="font-semibold bg-white">
+                                        <td colSpan={8} className="py-2 px-2 text-right text-xs">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}:</td>
+                                        <td className="py-2 px-2 text-right text-xs">{formatCurrency(est.amount_direct || 0)}</td>
+                                        {est.state === 'draft' && <td></td>}
+                                      </tr>
+                                    </tfoot>
+                                  )}
                                 </table>
                               </div>
 
-                              {/* Summary */}
+                              {/* Summary — only for resurs type */}
+                              {est.source_type === 'resurs' && (
                               <div className="mt-2 mx-2 border-t pt-2 space-y-1 text-xs">
                                 <div className="flex justify-between">
                                   <span className="text-slate-600">{t('direct_cost') || "To'g'ridan-to'g'ri xarajat"}</span>
@@ -725,6 +770,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                                   <span>{formatCurrency(est.amount_total || 0)}</span>
                                 </div>
                               </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -744,7 +790,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
       {/* Create Estimate Modal */}
       <Dialog open={showEstimateModal} onOpenChange={setShowEstimateModal}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="overflow-visible">
           <DialogHeader>
             <DialogTitle>{t('create_estimate') || "Yangi smeta yaratish"}</DialogTitle>
           </DialogHeader>
@@ -758,6 +804,22 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                   placeholder={t('estimate_name_placeholder') || "Asosiy smeta"}
                   required
                 />
+              </div>
+              <div>
+                <Label>Smeta turi *</Label>
+                <Select
+                  value={estimateForm.source_type}
+                  onValueChange={(val) => setEstimateForm({ ...estimateForm, source_type: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vor">ВОР — Ishlar ro'yxati</SelectItem>
+                    <SelectItem value="edinich">Единич — Batafsil miqdor</SelectItem>
+                    <SelectItem value="resurs">Ресурс — Resurslar narxi</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {buildings.length > 0 && (
                 <div>
@@ -801,32 +863,34 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                   </Select>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-4 items-end">
-                <div>
-                  <Label className="text-xs">{t('overhead') || "Qo'shimcha"}, %</Label>
-                  <Input
-                    type="number" step="0.01" min="0"
-                    value={estimateForm.overhead_pct}
-                    onChange={(e) => setEstimateForm({ ...estimateForm, overhead_pct: e.target.value })}
-                  />
+              {estimateForm.source_type === 'resurs' && (
+                <div className="grid grid-cols-3 gap-4 items-end">
+                  <div>
+                    <Label className="text-xs">{t('overhead') || "Qo'shimcha"}, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={estimateForm.overhead_pct}
+                      onChange={(e) => setEstimateForm({ ...estimateForm, overhead_pct: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('profit') || 'Foyda'}, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={estimateForm.profit_pct}
+                      onChange={(e) => setEstimateForm({ ...estimateForm, profit_pct: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">QQS, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={estimateForm.vat_pct}
+                      onChange={(e) => setEstimateForm({ ...estimateForm, vat_pct: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-xs">{t('profit') || 'Foyda'}, %</Label>
-                  <Input
-                    type="number" step="0.01" min="0"
-                    value={estimateForm.profit_pct}
-                    onChange={(e) => setEstimateForm({ ...estimateForm, profit_pct: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">QQS, %</Label>
-                  <Input
-                    type="number" step="0.01" min="0"
-                    value={estimateForm.vat_pct}
-                    onChange={(e) => setEstimateForm({ ...estimateForm, vat_pct: e.target.value })}
-                  />
-                </div>
-              </div>
+              )}
             </div>
             <DialogFooter className="mt-6">
               <Button type="button" variant="outline" onClick={() => setShowEstimateModal(false)}>
