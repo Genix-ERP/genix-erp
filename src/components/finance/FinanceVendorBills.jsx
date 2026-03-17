@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +32,18 @@ export default function FinanceVendorBills() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("bank");
   const [isPaying, setIsPaying] = useState(false);
+  const [backendStats, setBackendStats] = useState(null);
+
+  // Fetch backend stats on mount
+  useEffect(() => {
+    financeService.getPurchaseInvoiceStats()
+      .then(data => setBackendStats(data))
+      .catch(() => setBackendStats(null));
+  }, [vendorBills]);
 
   const isOverdue = (bill) => {
+    // Use backend-computed is_overdue if available
+    if (bill.is_overdue !== undefined) return bill.is_overdue;
     if (!bill.due_date) return false;
     const status = bill.status;
     if (status === 'paid' || status === 'cancelled') return false;
@@ -94,21 +104,38 @@ export default function FinanceVendorBills() {
     return filtered;
   }, [vendorBills, searchQuery, statusFilter]);
 
-  // Summary stats
+  // Summary stats - use backend stats if available, otherwise compute client-side
   const summaryStats = useMemo(() => {
+    if (backendStats) {
+      return {
+        total: backendStats.total_count || 0,
+        totalAmount: backendStats.total_amount || 0,
+        notPaid: backendStats.unpaid_count || 0,
+        unpaidAmount: backendStats.unpaid_amount || 0,
+        partial: backendStats.partial_count || 0,
+        partialAmount: backendStats.partial_amount || 0,
+        overdue: backendStats.overdue_count || 0,
+        overdueAmount: backendStats.overdue_amount || 0,
+      };
+    }
     const bills = vendorBills || [];
+    const unpaidBills = bills.filter(b => {
+      const s = getPaymentStatus(b);
+      return s === 'not_paid' || s === 'draft';
+    });
+    const partialBills = bills.filter(b => getPaymentStatus(b) === 'partial');
+    const overdueBills = bills.filter(b => isOverdue(b));
     return {
       total: bills.length,
-      notPaid: bills.filter(b => {
-        const s = getPaymentStatus(b);
-        return s === 'not_paid' || s === 'draft';
-      }).length,
-      partial: bills.filter(b => getPaymentStatus(b) === 'partial').length,
-      paid: bills.filter(b => getPaymentStatus(b) === 'paid').length,
-      overdue: bills.filter(b => isOverdue(b)).length,
       totalAmount: bills.reduce((sum, b) => sum + (b.total_amount || 0), 0),
+      notPaid: unpaidBills.length,
+      unpaidAmount: unpaidBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
+      partial: partialBills.length,
+      partialAmount: partialBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
+      overdue: overdueBills.length,
+      overdueAmount: overdueBills.reduce((sum, b) => sum + ((b.total_amount || 0) - (b.amount_paid || 0)), 0),
     };
-  }, [vendorBills]);
+  }, [vendorBills, backendStats]);
 
   const handleViewDetail = async (bill) => {
     setSelectedBill(bill);
@@ -213,6 +240,7 @@ export default function FinanceVendorBills() {
               <div>
                 <p className="text-sm text-slate-500">{t('not_paid') || "To'lanmagan"}</p>
                 <p className="text-2xl font-bold text-orange-600">{summaryStats.notPaid}</p>
+                <p className="text-xs text-orange-500 mt-0.5">{formatCurrencyCompact(summaryStats.unpaidAmount)}</p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-orange-600" />
@@ -227,6 +255,7 @@ export default function FinanceVendorBills() {
               <div>
                 <p className="text-sm text-slate-500">{t('partially_paid') || 'Qisman'}</p>
                 <p className="text-2xl font-bold text-blue-600">{summaryStats.partial}</p>
+                <p className="text-xs text-blue-500 mt-0.5">{formatCurrencyCompact(summaryStats.partialAmount)}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6 text-blue-600" />
@@ -241,6 +270,7 @@ export default function FinanceVendorBills() {
               <div>
                 <p className="text-sm text-red-600 font-medium">{t('overdue') || "Muddati o'tgan"}</p>
                 <p className="text-2xl font-bold text-red-700">{summaryStats.overdue}</p>
+                <p className="text-xs text-red-600 font-medium mt-0.5">{formatCurrencyCompact(summaryStats.overdueAmount)}</p>
               </div>
               <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
@@ -357,7 +387,7 @@ export default function FinanceVendorBills() {
                 <TableBody>
                   {filteredBills.map((bill, index) => {
                     const overdue = isOverdue(bill);
-                    const amountDue = bill.amount_due ?? ((bill.total_amount || 0) - (bill.amount_paid || 0));
+                    const amountDue = bill.amount_residual ?? bill.amount_due ?? ((bill.total_amount || 0) - (bill.amount_paid || 0));
                     return (
                       <TableRow
                         key={bill.id || `bill-${index}`}

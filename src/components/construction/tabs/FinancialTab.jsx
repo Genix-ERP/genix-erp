@@ -268,8 +268,14 @@ const FinancialTab = ({ project }) => {
                     {bvaRows.map((row, i) => {
                       const variance = (row.planned || 0) - (row.actual || 0);
                       const variancePct = row.planned > 0 ? ((row.actual / row.planned) * 100) : 0;
+                      // Color coding: green (<80%), yellow (80-100%), red (>100%)
+                      const rowBg = variancePct > 100
+                        ? 'bg-red-50 hover:bg-red-100'
+                        : variancePct >= 80
+                          ? 'bg-yellow-50 hover:bg-yellow-100'
+                          : 'bg-green-50 hover:bg-green-100';
                       return (
-                        <tr key={i} className="border-b hover:bg-slate-50">
+                        <tr key={i} className={`border-b ${row.planned > 0 ? rowBg : 'hover:bg-slate-50'}`}>
                           <td className="py-2 px-3 font-mono">{row.wbs_code || '—'}</td>
                           <td className="py-2 px-3">{row.name || '—'}</td>
                           <td className="py-2 px-3 text-right">{formatCurrency(row.planned || 0)}</td>
@@ -277,7 +283,9 @@ const FinancialTab = ({ project }) => {
                           <td className={`py-2 px-3 text-right ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
                           </td>
-                          <td className="py-2 px-3 text-right">{variancePct.toFixed(1)}%</td>
+                          <td className={`py-2 px-3 text-right font-medium ${
+                            variancePct > 100 ? 'text-red-700' : variancePct >= 80 ? 'text-yellow-700' : 'text-green-700'
+                          }`}>{variancePct.toFixed(1)}%</td>
                           <td className="py-2 px-3">
                             <Badge className={STATUS_BADGE[row.status] || STATUS_BADGE.normal}>
                               {row.status === 'over_budget'
