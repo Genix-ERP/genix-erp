@@ -7,7 +7,7 @@ import {
   Plus, Search, Building2, CreditCard, CheckCircle, Clock, AlertCircle,
   ArrowUpRight, ArrowDownLeft, RefreshCw, FileText, Upload, Download,
   MoreHorizontal, Eye, Check, X, Landmark, Wallet, TrendingUp, TrendingDown, Globe,
-  Calendar, Target, Scale, Trash2, Pencil
+  Calendar, Target, Scale, Trash2, Pencil, Lock
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -21,6 +21,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import CashRegister from "./CashRegister";
 import CurrencyManagement from "./CurrencyManagement";
 import FiscalPeriods from "./FiscalPeriods";
+import AccountingPeriods from "./AccountingPeriods";
 import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
@@ -248,6 +249,13 @@ export default function BankReconciliation() {
           >
             <Target className="w-4 h-4" />
             {t('budgets') || 'Budgets'}
+          </TabsTrigger>
+          <TabsTrigger
+            value="accounting-periods"
+            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+          >
+            <Lock className="w-4 h-4" />
+            Hisob davrlari
           </TabsTrigger>
         </TabsList>
 
@@ -801,6 +809,10 @@ export default function BankReconciliation() {
 
         <TabsContent value="budgets" className="mt-4">
           <BudgetManagement />
+        </TabsContent>
+
+        <TabsContent value="accounting-periods" className="mt-4">
+          <AccountingPeriods />
         </TabsContent>
       </Tabs>
 

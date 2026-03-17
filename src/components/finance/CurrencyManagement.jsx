@@ -93,17 +93,13 @@ export default function CurrencyManagement() {
     }
   };
 
-  // Handle currency conversion
-  const handleConvert = () => {
-    const result = convertCurrency(parseFloat(converter.amount) || 0, converter.from, converter.to);
-    setConverter({ ...converter, result });
-  };
-
+  // Auto-convert when inputs change
   useEffect(() => {
     if (converter.amount && converter.from && converter.to) {
-      handleConvert();
+      const result = convertCurrency(parseFloat(converter.amount) || 0, converter.from, converter.to);
+      setConverter(prev => ({ ...prev, result }));
     }
-  }, [converter.amount, converter.from, converter.to]);
+  }, [converter.amount, converter.from, converter.to, convertCurrency]);
 
   const handleCreateCurrency = async () => {
     setIsSaving(true);
@@ -152,6 +148,17 @@ export default function CurrencyManagement() {
   // Calculate rate change — returns { delta, percent } or null
   const getRateChange = (currencyCode) => {
     const history = getRateHistory(currencyCode);
+    if (history.length === 0) return null;
+    const latest = history[0];
+    // Prefer backend-provided previous_rate / rate_change fields
+    if (latest.previous_rate && latest.previous_rate > 0) {
+      const delta = latest.rate_change || (latest.rate - latest.previous_rate);
+      const percent = latest.rate_change_percent != null
+        ? latest.rate_change_percent.toFixed(1)
+        : ((delta / latest.previous_rate) * 100).toFixed(1);
+      return { delta: Math.round(delta), percent };
+    }
+    // Fallback: compare last two history entries
     if (history.length < 2) return null;
     const current = history[0].rate;
     const previous = history[1].rate;
@@ -402,8 +409,8 @@ export default function CurrencyManagement() {
                             </div>
                             <span className="font-semibold">{currency.code}</span>
                             {currency.is_base && (
-                              <Badge className="bg-green-100 text-green-700 border-green-200 text-xs" title={t('base_currency_tooltip') || "Tizimning asosiy valyutasi"}>
-                                {t('base') || 'Asosiy'}
+                              <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs font-semibold px-2 py-0.5" title={t('base_currency_tooltip') || "Tizimning asosiy valyutasi — barcha kurslar shu valyutaga nisbatan hisoblanadi"}>
+                                ★ {t('base_currency') || 'Asosiy valyuta'}
                               </Badge>
                             )}
                           </div>
