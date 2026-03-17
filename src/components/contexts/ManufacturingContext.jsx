@@ -269,11 +269,11 @@ export function ManufacturingProvider({ children }) {
             console.error('Failed to load work centers:', err);
             return [];
           }),
-          productionOrdersService.list(companyId).catch(err => {
+          productionOrdersService.list(companyId, { limit: 1000 }).catch(err => {
             console.error('Failed to load production orders:', err);
             return [];
           }),
-          workOrdersService.list(companyId).catch(err => {
+          workOrdersService.list(companyId, { limit: 1000 }).catch(err => {
             console.error('Failed to load work orders:', err);
             return [];
           }),
@@ -395,7 +395,7 @@ export function ManufacturingProvider({ children }) {
       const updated = await productionOrdersService.confirm(id, companyId);
       setProductionOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'confirmed', ...updated } : po));
       // Re-fetch work orders since confirm creates them from BOM operations
-      const woData = await workOrdersService.list(companyId);
+      const woData = await workOrdersService.list(companyId, { limit: 1000 });
       setWorkOrders(woData || []);
       return updated;
     } catch (error) {
@@ -410,7 +410,7 @@ export function ManufacturingProvider({ children }) {
       const updated = await productionOrdersService.start(id, companyId);
       setProductionOrders(prev => prev.map(po => po.id === id ? { ...po, status: 'in_progress', ...updated } : po));
       // Re-fetch work orders since start may create them (fallback) and auto-starts first one
-      const woData = await workOrdersService.list(companyId);
+      const woData = await workOrdersService.list(companyId, { limit: 1000 });
       setWorkOrders(woData || []);
       return updated;
     } catch (error) {

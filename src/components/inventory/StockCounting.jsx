@@ -215,7 +215,7 @@ export default function StockCounting() {
       i.warehouse_id === selectedCount.warehouse_id
     );
     const systemQty = line?.system_quantity ?? line?.system_qty ?? inventoryItem?.quantity_on_hand ?? inventoryItem?.quantity ?? 0;
-    const parsedCountedQty = typeof countedQty === 'number' ? countedQty : (parseInt(countedQty, 10) || 0);
+    const parsedCountedQty = typeof countedQty === 'number' ? countedQty : (parseFloat(countedQty) || 0);
     const variance = parsedCountedQty - systemQty;
 
     // Update the line locally immediately for better UX
