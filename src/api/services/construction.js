@@ -335,6 +335,11 @@ export const constructionService = {
     return response.data.data;
   },
 
+  async transferTeamMember(projectId, memberId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/team/${memberId}/transfer`, data);
+    return response.data.data;
+  },
+
   // =====================================================
   // VENDOR PAYMENTS (Future)
   // =====================================================
