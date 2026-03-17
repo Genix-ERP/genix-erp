@@ -6,7 +6,8 @@ import { hrService } from '@/api/services/hr';
 import { inventoryService } from '@/api/services/inventory';
 import { Core as Integrations } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// Tabs import kept for potential sub-component usage
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -58,6 +59,7 @@ import {
   Hammer,
   HardHat,
   LayoutGrid,
+  LayoutDashboard,
   Columns3,
   Upload,
   X,
@@ -65,6 +67,7 @@ import {
   Layers,
   Scale
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
@@ -87,6 +90,8 @@ import FormsTab from '@/components/construction/tabs/FormsTab';
 import FinancialTab from '@/components/construction/tabs/FinancialTab';
 import RejaFaktTab from '@/components/construction/tabs/RejaFaktTab';
 import SmetaVsFactTab from '@/components/construction/tabs/SmetaVsFactTab';
+import PhotoReportsTab from '@/components/construction/tabs/PhotoReportsTab';
+import TeamTab from '@/components/construction/tabs/TeamTab';
 import { ImportModal, ExportModal, ImportExportButtons } from '@/components/shared';
 import { ReportGenerator } from '@/components/construction/ReportGenerator';
 import { ProjectKanban } from '@/components/construction/ProjectKanban';
@@ -651,7 +656,50 @@ const ProjectDetailView = ({
   getStatusBadge
 }) => {
   const { formatCurrencyCompact } = useCurrencyFormatter();
-  const [activeSubTab, setActiveSubTab] = useState('overview');
+  const [activeGroup, setActiveGroup] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const NAV_GROUPS = [
+    { key: 'dashboard', label: "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
+    { key: 'qurilish', label: 'Qurilish', icon: Building2, subs: [
+      { key: 'buildings', label: 'Binolar' },
+      { key: 'progress', label: 'Jarayon' },
+      { key: 'stages', label: 'Bosqichlar' },
+      { key: 'reja_fakt', label: 'Reja vs Fakt' },
+    ]},
+    { key: 'moliya', label: 'Moliya', icon: DollarSign, subs: [
+      { key: 'estimates', label: 'Smetalar' },
+      { key: 'budget', label: 'Byudjet' },
+      { key: 'expenses', label: 'Xarajatlar' },
+      { key: 'financial', label: 'Tahlil' },
+    ]},
+    { key: 'materiallar', label: 'Materiallar', icon: Package, subs: [
+      { key: 'materials', label: 'Materiallar' },
+      { key: 'forms', label: 'Forma 19' },
+      { key: 'material_usage', label: 'Material sarfi' },
+    ]},
+    { key: 'hujjatlar', label: 'Hujjatlar', icon: FileText, subs: [
+      { key: 'acts', label: 'Aktlar' },
+      { key: 'daily_logs', label: 'Kunlik jurnal' },
+      { key: 'subcontractors', label: 'Subpudratchilar' },
+      { key: 'activity', label: 'Faoliyat' },
+    ]},
+    { key: 'jamoa', label: 'Jamoa', icon: Users, subs: [
+      { key: 'team_tab', label: "Jamoa a'zolari" },
+      { key: 'photo_reports', label: 'Foto hisobot' },
+    ]},
+  ];
+
+  const handleGroupClick = (group) => {
+    setActiveGroup(group.key);
+    if (group.subs.length === 0) {
+      setActiveTab('overview');
+    } else {
+      setActiveTab(group.subs[0].key);
+    }
+  };
+
+  const currentGroup = NAV_GROUPS.find(g => g.key === activeGroup) || NAV_GROUPS[0];
   const [buildings, setBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [sections, setSections] = useState([]);
@@ -779,7 +827,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     const loadData = async () => {
       setLoading(true);
       try {
-        switch (activeSubTab) {
+        switch (activeTab) {
           case 'overview':
             try {
               const [buildingsData, overviewSectionsData, overviewTeamData, overviewVendorsData] = await Promise.all([
@@ -875,7 +923,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     };
 
     loadData();
-  }, [project?.id, activeSubTab]);
+  }, [project?.id, activeTab]);
 
 
   // Handle building creation/update
@@ -1386,89 +1434,52 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         </Button>
       </div>
 
-      {/* Sub-tabs */}
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
-        <TabsList className="bg-white border border-slate-200 p-1 flex-wrap h-auto gap-1">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Eye className="w-4 h-4 mr-2" />
-            {t('overview') || 'Umumiy'}
-          </TabsTrigger>
-          <TabsTrigger value="buildings" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Building2 className="w-4 h-4 mr-2" />
-            {t('buildings') || 'Binolar'}
-          </TabsTrigger>
-          <TabsTrigger value="estimates" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            {t('estimates') || 'Smetalar'}
-          </TabsTrigger>
-          <TabsTrigger value="daily_journal" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Receipt className="w-4 h-4 mr-2" />
-            {t('daily_journal') || 'Kunlik jurnal (WBS)'}
-          </TabsTrigger>
-          <TabsTrigger value="team" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Users className="w-4 h-4 mr-2" />
-            {t('team') || 'Jamoa'}
-          </TabsTrigger>
-<TabsTrigger value="materials" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Package className="w-4 h-4 mr-2" />
-            {t('materials') || 'Materiallar'}
-          </TabsTrigger>
-          <TabsTrigger value="daily_logs" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <ClipboardList className="w-4 h-4 mr-2" />
-            {t('daily_logs') || 'Kunlik jurnal'}
-          </TabsTrigger>
-          <TabsTrigger value="progress" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Layers className="w-4 h-4 mr-2" />
-            {t('progress_visualization') || 'Jarayon'}
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Clock className="w-4 h-4 mr-2" />
-            {t('activity') || 'Faoliyat'}
-          </TabsTrigger>
-          <TabsTrigger value="stages" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Layers className="w-4 h-4 mr-2" />
-            {t('stages') || 'Bosqichlar'}
-          </TabsTrigger>
-          <TabsTrigger value="expenses" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Receipt className="w-4 h-4 mr-2" />
-            {t('expenses') || 'Xarajatlar'}
-          </TabsTrigger>
-          <TabsTrigger value="budget" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            {t('budget_plan_actual') || 'Byudjet (reja/fakt)'}
-          </TabsTrigger>
-          <TabsTrigger value="reja_fakt" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Scale className="w-4 h-4 mr-2" />
-            {t('reja_vs_fakt') || 'Reja vs Fakt'}
-          </TabsTrigger>
-          <TabsTrigger value="material_usage" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <Package className="w-4 h-4 mr-2" />
-            {t('material_usage') || 'Material sarfi'}
-          </TabsTrigger>
-<TabsTrigger value="subcontractors" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <HardHat className="w-4 h-4 mr-2" />
-            {t('subcontractors') || 'Pudratchilar'}
-          </TabsTrigger>
-          <TabsTrigger value="forms" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <FileText className="w-4 h-4 mr-2" />
-            {t('forms') || 'Formalar'}
-          </TabsTrigger>
-          <TabsTrigger value="acts" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <FileText className="w-4 h-4 mr-2" />
-            {t('acts') || 'Aktlar'}
-          </TabsTrigger>
-          <TabsTrigger value="smeta_vs_fact" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            {t('svf_tab_title') || 'Smeta vs Fakt'}
-          </TabsTrigger>
-          <TabsTrigger value="financial" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
-            <DollarSign className="w-4 h-4 mr-2" />
-            {t('financial_analysis') || 'Moliyaviy tahlil'}
-          </TabsTrigger>
-        </TabsList>
+      {/* Navigation Pills - Row 1: Group selector */}
+      <div className="flex flex-wrap gap-2">
+        {NAV_GROUPS.map((group) => {
+          const Icon = group.icon;
+          return (
+            <button
+              key={group.key}
+              onClick={() => handleGroupClick(group)}
+              className={cn(
+                'inline-flex items-center rounded-full px-4 py-2 text-sm border transition-colors',
+                activeGroup === group.key
+                  ? 'bg-[#185FA5] text-white border-[#185FA5] font-medium'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-900'
+              )}
+            >
+              <Icon className="w-4 h-4 mr-2" />
+              {group.label}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Navigation Pills - Row 2: Submenu */}
+      {currentGroup.subs.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-1 flex mt-3">
+          {currentGroup.subs.map((sub) => (
+            <button
+              key={sub.key}
+              onClick={() => setActiveTab(sub.key)}
+              className={cn(
+                'flex-1 text-center text-xs py-1.5 rounded-md transition-colors',
+                activeTab === sub.key
+                  ? 'bg-white text-slate-900 font-medium shadow-sm'
+                  : 'text-slate-500 hover:bg-white'
+              )}
+            >
+              {sub.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tab Content */}
+      <div className="mt-6">
         {/* Overview Tab */}
-        <TabsContent value="overview" className="mt-6">
+        {activeTab === 'overview' && (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* Progress Widget - Full width on small screens */}
             <div className="lg:col-span-1">
@@ -1541,11 +1552,34 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               vendors={vendors}
             />
 
+            {/* Quick Action Buttons */}
+            <Card className="lg:col-span-3">
+              <CardHeader>
+                <CardTitle className="text-base">Tezkor amallar</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('forms'); }}>
+                    <FileText className="w-4 h-4 mr-2" /> Forma 19
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('materiallar'); setActiveTab('materials'); }}>
+                    <Package className="w-4 h-4 mr-2" /> Material
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('hujjatlar'); setActiveTab('daily_logs'); }}>
+                    <ClipboardList className="w-4 h-4 mr-2" /> Jurnal
+                  </Button>
+                  <Button variant="outline" onClick={() => { setActiveGroup('moliya'); setActiveTab('expenses'); }}>
+                    <DollarSign className="w-4 h-4 mr-2" /> Xarajat
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
-        </TabsContent>
+        )}
 
         {/* Buildings Tab */}
-        <TabsContent value="buildings" className="mt-6">
+        {activeTab === 'buildings' && (<>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between border-b">
               <CardTitle>{t('buildings_blocks') || 'Binolar / Bloklar'}</CardTitle>
@@ -1711,20 +1745,20 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </>)}
 
         {/* Estimates Tab */}
-        <TabsContent value="estimates" className="mt-6">
+        {activeTab === 'estimates' && (
           <EstimatesTab project={project} wbsItems={wbsTree} buildings={buildings} subcontracts={projectSubcontracts} />
-        </TabsContent>
+        )}
 
         {/* Daily Journal Tab (WBS-linked progress) */}
-        <TabsContent value="daily_journal" className="mt-6">
+        {activeTab === 'daily_journal' && (
           <DailyJournalTab project={project} wbsItems={wbsTree} buildings={buildings} />
-        </TabsContent>
+        )}
 
         {/* Team Tab */}
-        <TabsContent value="team" className="mt-6">
+        {activeTab === 'team' && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>{t('project_team') || 'Loyiha jamoasi'}</CardTitle>
@@ -1783,10 +1817,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* Materials Tab */}
-        <TabsContent value="materials" className="mt-6">
+        {activeTab === 'materials' && (
           <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
@@ -2030,10 +2064,10 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </CardContent>
           </Card>
           </div>
-        </TabsContent>
+        )}
 
         {/* Daily Logs Tab */}
-        <TabsContent value="daily_logs" className="mt-6">
+        {activeTab === 'daily_logs' && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>{t('daily_logs') || 'Kunlik jurnal'} ({dailyLogs.length})</CardTitle>
@@ -2189,72 +2223,82 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* Progress Tab */}
-        <TabsContent value="progress" className="mt-6">
+        {activeTab === 'progress' && (
           <ProgressTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Activity Log Tab */}
-        <TabsContent value="activity" className="mt-6">
+        {activeTab === 'activity' && (
           <Card>
             <CardContent className="p-6">
               <ActivityTab projectId={project.id} t={t} />
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* Stages Tab */}
-        <TabsContent value="stages" className="mt-6">
+        {activeTab === 'stages' && (
           <StagesTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Expenses Tab */}
-        <TabsContent value="expenses" className="mt-6">
+        {activeTab === 'expenses' && (
           <ExpensesTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Budget Plan vs Actual Tab */}
-        <TabsContent value="budget" className="mt-6">
+        {activeTab === 'budget' && (
           <BudgetTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Reja vs Fakt Tab */}
-        <TabsContent value="reja_fakt" className="mt-6">
+        {activeTab === 'reja_fakt' && (
           <RejaFaktTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Material Usage Tab */}
-        <TabsContent value="material_usage" className="mt-6">
+        {activeTab === 'material_usage' && (
           <MaterialUsageTab project={project} />
-        </TabsContent>
+        )}
 
-{/* Subcontractors Tab */}
-        <TabsContent value="subcontractors" className="mt-6">
+        {/* Subcontractors Tab */}
+        {activeTab === 'subcontractors' && (
           <SubcontractorsTab project={project} buildings={buildings} wbsItems={wbsTree} />
-        </TabsContent>
+        )}
 
         {/* Forms (Forma 2/3/19) Tab */}
-        <TabsContent value="forms" className="mt-6">
+        {activeTab === 'forms' && (
           <FormsTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Acts (Acceptance/Defect) Tab */}
-        <TabsContent value="acts" className="mt-6">
+        {activeTab === 'acts' && (
           <ActsTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Smeta vs Fact Tab */}
-        <TabsContent value="smeta_vs_fact" className="mt-6">
+        {activeTab === 'smeta_vs_fact' && (
           <SmetaVsFactTab project={project} />
-        </TabsContent>
+        )}
 
         {/* Financial Analysis Tab */}
-        <TabsContent value="financial" className="mt-6">
+        {activeTab === 'financial' && (
           <FinancialTab project={project} />
-        </TabsContent>
-      </Tabs>
+        )}
+
+        {/* Photo Reports Tab */}
+        {activeTab === 'photo_reports' && (
+          <PhotoReportsTab project={project} />
+        )}
+
+        {/* Team Tab (Full) */}
+        {activeTab === 'team_tab' && (
+          <TeamTab project={project} />
+        )}
+      </div>
 
       {/* Building Modal */}
       <Dialog open={showBuildingModal} onOpenChange={setShowBuildingModal}>

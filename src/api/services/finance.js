@@ -496,6 +496,11 @@ export const financeService = {
     return response.data;
   },
 
+  async getPurchaseInvoiceStats() {
+    const response = await apiClient.get('/purchase-invoices/stats');
+    return response.data.data;
+  },
+
   async getPurchaseInvoice(id) {
     const response = await apiClient.get(`/purchase-invoices/${id}`);
     return response.data.data;
@@ -800,6 +805,11 @@ export const financeService = {
     return response.data.data;
   },
 
+  async sendReconciliationReminder(id) {
+    const response = await apiClient.post(`/reconciliation/${id}/remind`);
+    return response.data.data;
+  },
+
   // ========== Budget Consolidated ==========
   async getBudgetConsolidated(params = {}) {
     const response = await apiClient.get('/budget/consolidated', { params });
@@ -834,6 +844,32 @@ export const financeService = {
   async rejectBudget(id, reason) {
     const response = await apiClient.post(`/budget/${id}/reject`, { reason });
     return response.data;
+  },
+
+  // ========== Accounting Periods ==========
+  async listAccountingPeriods() {
+    const response = await apiClient.get('/accounting-periods');
+    return response.data.data;
+  },
+
+  async createAccountingPeriod(data) {
+    const response = await apiClient.post('/accounting-periods', data);
+    return response.data.data;
+  },
+
+  async lockAccountingPeriod(id) {
+    const response = await apiClient.post(`/accounting-periods/${id}/lock`);
+    return response.data.data;
+  },
+
+  async unlockAccountingPeriod(id) {
+    const response = await apiClient.post(`/accounting-periods/${id}/unlock`);
+    return response.data.data;
+  },
+
+  async autoCreatePeriods(year) {
+    const response = await apiClient.post('/accounting-periods/auto-create', { year });
+    return response.data.data;
   },
 };
 

@@ -376,7 +376,7 @@ export function FinancialsProvider({ children }) {
             ...p,
             payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
             party_name: p.contact_name || '',
-            payment_method: p.payment_method || 'bank_transfer',
+            payment_method: p.payment_method || (p.journal_name?.toLowerCase().includes('cash') ? 'cash' : 'bank_transfer'),
           }));
           setPayments(mappedPayments);
           setTaxRates(taxRatesData || []);
@@ -888,9 +888,13 @@ export function FinancialsProvider({ children }) {
 
   const convertCurrency = useCallback((amount, fromCurrency, toCurrency = 'UZS') => {
     if (fromCurrency === toCurrency) return amount;
-    const rate = getLatestExchangeRate(fromCurrency, toCurrency);
-    if (!rate) return null;
-    return amount * rate.rate;
+    // Try direct rate first (e.g. USD -> UZS)
+    const directRate = getLatestExchangeRate(fromCurrency, toCurrency);
+    if (directRate) return amount * directRate.rate;
+    // Try reverse rate (e.g. for UZS -> USD, use the USD -> UZS rate and divide)
+    const reverseRate = getLatestExchangeRate(toCurrency, fromCurrency);
+    if (reverseRate && reverseRate.rate > 0) return amount / reverseRate.rate;
+    return null;
   }, [getLatestExchangeRate]);
 
   // ==================== JOURNAL ENTRIES CRUD ====================
@@ -1123,7 +1127,7 @@ export function FinancialsProvider({ children }) {
             ...p,
             payment_type: p.type === 'receipt' ? 'inbound' : 'outbound',
             party_name: p.contact_name || '',
-            payment_method: p.payment_method || 'bank_transfer',
+            payment_method: p.payment_method || (p.journal_name?.toLowerCase().includes('cash') ? 'cash' : 'bank_transfer'),
           }));
           setPayments(mappedPayments);
         }
