@@ -9,8 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Camera, MapPin, Image, Upload, Loader2, ChevronUp, ChevronDown, Send } from 'lucide-react';
-import { UploadFile } from '@/api/integrations';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Zap, Eye, Download, PenLine, Ban, Loader2, ChevronUp, ChevronDown, Send, Save, X } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -37,16 +36,13 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-const EMPTY_F19_FORM = {
-  stage_id: '',
-  location_axes: '',
-  drawing_reference: '',
-  works_start_date: '',
-  works_end_date: '',
-  notes: '',
-  photos: [],
-  materials_json: [],
-};
+const CHANGE_REASONS = [
+  { value: 'project_changed', label: "Loyiha o'zgardi" },
+  { value: 'client_request', label: 'Mijoz talabi' },
+  { value: 'material_shortage', label: 'Material yetmadi' },
+  { value: 'material_replacement', label: 'Material almashtirish' },
+  { value: 'other', label: 'Boshqa' },
+];
 
 const FormsTab = ({ project }) => {
   const { language } = useLanguage();
@@ -88,12 +84,18 @@ const FormsTab = ({ project }) => {
   const [selectedLines, setSelectedLines] = useState([]);
   const [estimateLinesLoading, setEstimateLinesLoading] = useState(false);
 
-  // Forma 19 create modal
-  const [showF19Modal, setShowF19Modal] = useState(false);
-  const [f19Form, setF19Form] = useState(EMPTY_F19_FORM);
-  const [f19Saving, setF19Saving] = useState(false);
-  const [f19Error, setF19Error] = useState(null);
-  const [photoUploading, setPhotoUploading] = useState(false);
+  // Forma 19 (material consumption) state
+  const [showF19CreateModal, setShowF19CreateModal] = useState(false);
+  const [f19CreateForm, setF19CreateForm] = useState({ building_id: '', period_from: '', period_to: '', notes: '' });
+  const [f19Creating, setF19Creating] = useState(false);
+  const [f19Detail, setF19Detail] = useState(null);
+  const [f19RowFilter, setF19RowFilter] = useState('all');
+  const [showAddChangeModal, setShowAddChangeModal] = useState(false);
+  const [changeRowForm, setChangeRowForm] = useState({ material_name: '', unit: '', keldi: 0, sarf: 0, cost_price: 0, change_reason: '', change_note: '' });
+  const [changeSaving, setChangeSaving] = useState(false);
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [editRowForm, setEditRowForm] = useState({});
+  const [buildings, setBuildings] = useState([]);
 
   // Auto-generate modals
   const [showAutoGenModal, setShowAutoGenModal] = useState(false);
@@ -132,16 +134,18 @@ const FormsTab = ({ project }) => {
       const params = {};
       if (filters.state) params.state = filters.state;
 
-      const [f2s, f3s, f19s, subData, stagesData] = await Promise.all([
+      const [f2s, f3s, f19s, subData, stagesData, buildingsData] = await Promise.all([
         (!filters.act_type || filters.act_type === 'ks2') ? constructionService.listF2(project.id, params).catch(() => []) : Promise.resolve([]),
         (!filters.act_type || filters.act_type === 'ks3') ? constructionService.listF3(project.id, params).catch(() => []) : Promise.resolve([]),
         (!filters.act_type || filters.act_type === 'hidden_work') ? constructionService.listF19(project.id, params).catch(() => []) : Promise.resolve([]),
         constructionService.listSubcontracts(project.id).catch(() => []),
         constructionService.listStages(project.id).catch(() => []),
+        constructionService.listBuildings(project.id).catch(() => []),
       ]);
       setActs([...(f2s || []), ...(f3s || []), ...(f19s || [])]);
       setSubcontracts(subData || []);
       setStages(stagesData || []);
+      setBuildings(buildingsData || []);
     } catch (e) {
       console.error('Failed to load forms:', e);
     } finally {
@@ -154,11 +158,14 @@ const FormsTab = ({ project }) => {
   const loadActDetail = async (actId, actType) => {
     setDetailLoading(true);
     try {
+      if (actType === 'hidden_work') {
+        const detail = await constructionService.getF19Detail(project.id, actId);
+        setF19Detail(detail);
+        return;
+      }
       let act;
       if (actType === 'ks3') {
         act = await constructionService.getF3(project.id, actId);
-      } else if (actType === 'hidden_work') {
-        act = await constructionService.getF19(project.id, actId);
       } else {
         act = await constructionService.getF2(project.id, actId);
       }
@@ -258,32 +265,112 @@ const FormsTab = ({ project }) => {
   };
 
   const handleCreateF19 = async () => {
-    if (!f19Form.stage_id) { setF19Error('Bosqichni tanlang'); return; }
-    if (!f19Form.location_axes) { setF19Error("O'qi va belgilarni kiriting"); return; }
-    if (!f19Form.works_start_date || !f19Form.works_end_date) { setF19Error('Ish sanalarini kiriting'); return; }
-    if (f19Form.photos.length < 2) { setF19Error("Kamida 2 ta rasm yuklang"); return; }
-    setF19Saving(true);
-    setF19Error(null);
+    if (!f19CreateForm.period_from || !f19CreateForm.period_to) {
+      toast.error('Davrni kiriting');
+      return;
+    }
+    setF19Creating(true);
     try {
       await constructionService.createF19(project.id, {
-        act_type: 'hidden_work',
-        stage_id: Number(f19Form.stage_id),
-        location_axes: f19Form.location_axes,
-        drawing_reference: f19Form.drawing_reference,
-        works_start_date: f19Form.works_start_date,
-        works_end_date: f19Form.works_end_date,
-        notes: f19Form.notes,
-        photos: f19Form.photos,
-        materials_json: f19Form.materials_json.filter(m => m.name),
+        building_id: f19CreateForm.building_id ? Number(f19CreateForm.building_id) : undefined,
+        period_from: f19CreateForm.period_from,
+        period_to: f19CreateForm.period_to,
+        notes: f19CreateForm.notes,
       });
-      setShowF19Modal(false);
+      setShowF19CreateModal(false);
+      setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' });
       toast.success(t('f19_created') || 'Forma 19 yaratildi');
       load();
     } catch (e) {
-      setF19Error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
     } finally {
-      setF19Saving(false);
+      setF19Creating(false);
     }
+  };
+
+  const handleApproveF19 = async () => {
+    try {
+      await constructionService.approveF19(project.id, f19Detail.act.id);
+      toast.success("Forma 19 tasdiqlandi");
+      const updated = await constructionService.getF19Detail(project.id, f19Detail.act.id);
+      setF19Detail(updated);
+    } catch (err) {
+      toast.error(err?.response?.data?.error?.message || "Xatolik yuz berdi");
+    }
+  };
+
+  const handleDeleteF19 = async () => {
+    try {
+      await constructionService.deleteF19(project.id, f19Detail.act.id);
+      toast.success("Forma 19 o'chirildi");
+      setF19Detail(null);
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.error?.message || "Xatolik yuz berdi");
+    }
+  };
+
+  const handleAddChangeRow = async () => {
+    if (!changeRowForm.material_name || !changeRowForm.unit || !changeRowForm.change_reason) {
+      toast.error("Majburiy maydonlarni to'ldiring");
+      return;
+    }
+    setChangeSaving(true);
+    try {
+      await constructionService.addF19ChangeRow(project.id, f19Detail.act.id, {
+        material_name: changeRowForm.material_name,
+        unit: changeRowForm.unit,
+        keldi: parseFloat(changeRowForm.keldi) || 0,
+        sarf: parseFloat(changeRowForm.sarf) || 0,
+        cost_price: parseFloat(changeRowForm.cost_price) || 0,
+        change_reason: changeRowForm.change_reason,
+        change_note: changeRowForm.change_note,
+      });
+      setShowAddChangeModal(false);
+      setChangeRowForm({ material_name: '', unit: '', keldi: 0, sarf: 0, cost_price: 0, change_reason: '', change_note: '' });
+      toast.success("O'zgarish qatori qo'shildi");
+      const updated = await constructionService.getF19Detail(project.id, f19Detail.act.id);
+      setF19Detail(updated);
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || "Xatolik yuz berdi");
+    } finally {
+      setChangeSaving(false);
+    }
+  };
+
+  const startEditF19Row = (row) => {
+    setEditingRowId(row.id);
+    setEditRowForm({
+      boshi: row.boshi || 0,
+      keldi: row.keldi || 0,
+      sarf: row.sarf || 0,
+      cost_price: row.cost_price || 0,
+      change_reason: row.change_reason || '',
+      change_note: row.change_note || '',
+    });
+  };
+
+  const saveF19Row = async (rowId) => {
+    try {
+      await constructionService.updateF19Row(project.id, f19Detail.act.id, rowId, {
+        boshi: parseFloat(editRowForm.boshi) || 0,
+        keldi: parseFloat(editRowForm.keldi) || 0,
+        sarf: parseFloat(editRowForm.sarf) || 0,
+        cost_price: parseFloat(editRowForm.cost_price) || 0,
+        change_reason: editRowForm.change_reason,
+        change_note: editRowForm.change_note,
+      });
+      setEditingRowId(null);
+      const updated = await constructionService.getF19Detail(project.id, f19Detail.act.id);
+      setF19Detail(updated);
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || "Saqlashda xatolik");
+    }
+  };
+
+  const cancelEditF19Row = () => {
+    setEditingRowId(null);
+    setEditRowForm({});
   };
 
   const handleAutoGenerate = async () => {
@@ -579,16 +666,11 @@ const FormsTab = ({ project }) => {
   const SignaturePanel = ({ act }) => {
     if (!act) return null;
     const isKS = act.act_type === 'ks2' || act.act_type === 'ks3';
-    const isF19 = act.act_type === 'hidden_work';
-    if (!isKS && !isF19) return null;
+    if (!isKS) return null;
 
     const sigs = [];
     sigs.push({ role: 'contractor', label: t('contractor') || 'Pudratchi', at: act.signed_contractor_at, name: act.signed_contractor_name });
     sigs.push({ role: 'client', label: t('client_tech') || 'Buyurtmachi / Texnadzor', at: act.signed_client_at, name: act.signed_client_name });
-    if (isF19) {
-      sigs.push({ role: 'designer', label: t('designer') || 'Loyihalovchi', at: act.signed_designer_at, name: act.signed_designer_name });
-      sigs.push({ role: 'gasn', label: t('gasn_inspector') || 'GASN inspektori', at: act.signed_gasn_at, name: act.signed_gasn_name });
-    }
 
     const totalSigs = sigs.length;
     const signedCount = sigs.filter(s => s.at).length;
@@ -633,48 +715,6 @@ const FormsTab = ({ project }) => {
     );
   };
 
-  // --- Forma 19 detail ---
-  const Forma19Detail = ({ act }) => {
-    if (!act || act.act_type !== 'hidden_work') return null;
-    return (
-      <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="w-5 h-5" /> {t('hidden_work_details') || 'Yashirin ishlar tafsilotlari'}</CardTitle></CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {act.stage_name && <div><span className="text-slate-500">{t('stage') || 'Bosqich'}:</span> <span className="font-medium">{act.stage_name}</span></div>}
-          {act.location_axes && <div><span className="text-slate-500">{t('axes_marks') || "O'qlar, belgilar"}:</span> <span className="font-medium">{act.location_axes}</span></div>}
-          {act.drawing_reference && <div><span className="text-slate-500">{t('drawing_ref') || 'Chizma havolasi'}:</span> <span className="font-medium">{act.drawing_reference}</span></div>}
-          {act.works_start_date && <div><span className="text-slate-500">{t('work_period') || 'Ish davri'}:</span> <span className="font-medium">{act.works_start_date} — {act.works_end_date}</span></div>}
-          {/* Photos */}
-          {act.photos && act.photos.length > 0 && (
-            <div>
-              <p className="text-slate-500 mb-2 flex items-center gap-1"><Image className="w-4 h-4" /> {t('photos') || 'Rasmlar'} ({act.photos.length})</p>
-              <div className="flex gap-2 flex-wrap">
-                {act.photos.map((p, i) => (
-                  <a key={i} href={p.url} target="_blank" rel="noreferrer" className="block w-24 h-24 rounded border overflow-hidden bg-slate-100">
-                    <img src={p.url} alt={p.filename || `Photo ${i+1}`} className="w-full h-full object-cover" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* Materials */}
-          {act.materials_json && act.materials_json.length > 0 && (
-            <div>
-              <p className="text-slate-500 mb-1">{t('materials') || 'Materiallar'}</p>
-              <table className="w-full text-sm">
-                <thead><tr className="border-b"><th className="text-left py-1 px-2">№</th><th className="text-left py-1 px-2">{t('name') || 'Nomi'}</th><th className="text-left py-1 px-2">{t('certificate') || 'Sertifikat'}</th></tr></thead>
-                <tbody>
-                  {act.materials_json.map((m, i) => (
-                    <tr key={i} className="border-b"><td className="py-1 px-2">{i+1}</td><td className="py-1 px-2">{m.name}</td><td className="py-1 px-2">{m.certificate_url ? <a href={m.certificate_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">Ko'rish</a> : '—'}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
 
   // --- Forma 3 cumulative detail ---
   const Forma3Detail = ({ act }) => {
@@ -723,7 +763,232 @@ const FormsTab = ({ project }) => {
   const createModalVat = createModalSubtotal * 0.12;
   const createModalTotal = createModalSubtotal + createModalVat;
 
-  // ======== DETAIL VIEW ========
+  // ======== F19 DETAIL VIEW ========
+  if (f19Detail) {
+    const { act: f19Act, lines: f19Lines = [], summary = {} } = f19Detail;
+    const filteredF19Lines = f19RowFilter === 'all'
+      ? f19Lines
+      : f19Lines.filter(r => f19RowFilter === 'base' ? r.row_type === 'base' : r.row_type === 'change');
+
+    return (
+      <div className="space-y-4">
+        {/* Back + header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setF19Detail(null)}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t('back') || 'Ortga'}
+            </Button>
+            <h3 className="text-lg font-semibold">{f19Act.name || 'F19'}</h3>
+            <Badge className={STATE_COLORS[f19Act.state]}>{STATE_LABELS[f19Act.state] || f19Act.state}</Badge>
+          </div>
+          <div className="flex gap-2">
+            {f19Act.state === 'draft' && (
+              <>
+                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={handleApproveF19}>
+                  <CheckCircle className="w-4 h-4 mr-1" /> {t('approve') || 'Tasdiqlash'}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleDeleteF19}>
+                  <Trash2 className="w-4 h-4 mr-1" /> {t('delete') || "O'chirish"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="border-blue-200">
+            <CardContent className="p-4">
+              <p className="text-sm text-blue-600 font-medium">{t('smeta_total') || "Smeta bo'yicha"}</p>
+              <p className="text-xl font-bold text-blue-700">{formatCurrency(summary.smeta_total || 0)}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-yellow-200">
+            <CardContent className="p-4">
+              <p className="text-sm text-yellow-600 font-medium">{t('change_total') || "O'zgarishlar (+/-)"}</p>
+              <p className="text-xl font-bold text-yellow-700">{formatCurrency(summary.change_total || 0)}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200">
+            <CardContent className="p-4">
+              <p className="text-sm text-green-600 font-medium">{t('actual_total') || 'Jami haqiqiy'}</p>
+              <p className="text-xl font-bold text-green-700">{formatCurrency(summary.total || 0)}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-red-200">
+            <CardContent className="p-4">
+              <p className="text-sm text-red-600 font-medium">{t('difference') || 'Farq'}</p>
+              <p className="text-xl font-bold text-red-700">{formatCurrency(summary.diff || 0)}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filter tabs + add change button */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex gap-1">
+            {[
+              { value: 'all', label: t('all') || 'Hammasi' },
+              { value: 'base', label: t('base_estimate') || 'Asos smeta' },
+              { value: 'change', label: t('changes') || "O'zgarishlar" },
+            ].map(tab => (
+              <Button
+                key={tab.value}
+                variant={f19RowFilter === tab.value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setF19RowFilter(tab.value)}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+          {f19Act.state === 'draft' && (
+            <Button size="sm" variant="outline" className="text-orange-600 border-orange-300" onClick={() => setShowAddChangeModal(true)}>
+              <Plus className="w-4 h-4 mr-1" /> {t('add_change') || "O'zgarish qo'shish"}
+            </Button>
+          )}
+        </div>
+
+        {/* Material table */}
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-slate-500">
+                    <th className="text-left py-2 px-3">№</th>
+                    <th className="text-left py-2 px-3">{t('material_name') || 'Material nomi'}</th>
+                    <th className="text-left py-2 px-3">{t('unit') || 'Birlik'}</th>
+                    <th className="text-right py-2 px-3">{t('boshi') || 'Boshi'}</th>
+                    <th className="text-right py-2 px-3">{t('keldi') || 'Keldi'}</th>
+                    <th className="text-right py-2 px-3">{t('sarf') || 'Sarflandi'}</th>
+                    <th className="text-right py-2 px-3">{t('qoldi') || 'Qoldi'}</th>
+                    <th className="text-right py-2 px-3">{t('price') || 'Narx'}</th>
+                    <th className="text-right py-2 px-3">{t('amount') || 'Summa'}</th>
+                    <th className="text-left py-2 px-3">{t('row_type') || 'Tur'}</th>
+                    <th className="text-left py-2 px-3">{t('reason') || 'Sabab'}</th>
+                    {f19Act.state === 'draft' && <th className="text-right py-2 px-3"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredF19Lines.map((row, idx) => {
+                    const isEditing = editingRowId === row.id;
+                    const isBase = row.row_type === 'base';
+                    const isDraft = f19Act.state === 'draft';
+                    const qoldi = (row.boshi || 0) + (row.keldi || 0) - (row.sarf || 0);
+                    const summa = (row.sarf || 0) * (row.cost_price || 0);
+
+                    if (isEditing) {
+                      const editQoldi = (parseFloat(editRowForm.boshi) || 0) + (parseFloat(editRowForm.keldi) || 0) - (parseFloat(editRowForm.sarf) || 0);
+                      const editSumma = (parseFloat(editRowForm.sarf) || 0) * (parseFloat(editRowForm.cost_price) || 0);
+                      return (
+                        <tr key={row.id} className="border-b bg-blue-50">
+                          <td className="py-2 px-3 text-slate-400">{idx + 1}</td>
+                          <td className="py-2 px-3">{row.material_name}</td>
+                          <td className="py-2 px-3">{row.unit}</td>
+                          <td className="py-2 px-3 text-right">
+                            <Input type="number" step="0.01" value={editRowForm.boshi} onChange={e => setEditRowForm(f => ({ ...f, boshi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <Input type="number" step="0.01" value={editRowForm.keldi} onChange={e => setEditRowForm(f => ({ ...f, keldi: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <Input type="number" step="0.01" value={editRowForm.sarf} onChange={e => setEditRowForm(f => ({ ...f, sarf: e.target.value }))} className="w-20 h-7 text-right text-sm" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Enter') saveF19Row(row.id); if (e.key === 'Escape') cancelEditF19Row(); }} />
+                          </td>
+                          <td className="py-2 px-3 text-right">{editQoldi.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right">
+                            <Input type="number" step="0.01" value={editRowForm.cost_price} onChange={e => setEditRowForm(f => ({ ...f, cost_price: e.target.value }))} className="w-24 h-7 text-right text-sm" onClick={e => e.stopPropagation()} />
+                          </td>
+                          <td className="py-2 px-3 text-right font-medium">{formatCurrency(editSumma)}</td>
+                          <td className="py-2 px-3">
+                            <Badge className={isBase ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}>{isBase ? 'Asos' : "O'zgarish"}</Badge>
+                          </td>
+                          <td className="py-2 px-3">
+                            {!isBase && (
+                              <Select value={editRowForm.change_reason || ''} onValueChange={v => setEditRowForm(f => ({ ...f, change_reason: v }))}>
+                                <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
+                                <SelectContent>{CHANGE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                              </Select>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <div className="flex gap-1 justify-end">
+                              <Button size="sm" className="h-7 px-2" onClick={e => { e.stopPropagation(); saveF19Row(row.id); }}>
+                                <Save className="w-3 h-3" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2" onClick={e => { e.stopPropagation(); cancelEditF19Row(); }}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return (
+                      <tr
+                        key={row.id || idx}
+                        className={`border-b hover:bg-slate-50 ${!isBase ? 'bg-amber-50' : ''} ${isDraft ? 'cursor-pointer' : ''}`}
+                        onClick={() => { if (isDraft) startEditF19Row(row); }}
+                      >
+                        <td className="py-2 px-3 text-slate-400">{idx + 1}</td>
+                        <td className="py-2 px-3">{row.material_name}</td>
+                        <td className="py-2 px-3">{row.unit || '—'}</td>
+                        <td className="py-2 px-3 text-right">{row.boshi || 0}</td>
+                        <td className="py-2 px-3 text-right">{row.keldi || 0}</td>
+                        <td className="py-2 px-3 text-right">{row.sarf || 0}</td>
+                        <td className="py-2 px-3 text-right">{qoldi.toFixed(2)}</td>
+                        <td className="py-2 px-3 text-right">{formatCurrency(row.cost_price || 0)}</td>
+                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(summa)}</td>
+                        <td className="py-2 px-3">
+                          <Badge className={isBase ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}>{isBase ? 'Asos' : "O'zgarish"}</Badge>
+                        </td>
+                        <td className="py-2 px-3 text-slate-500 text-xs">
+                          {!isBase && row.change_reason ? (CHANGE_REASONS.find(r => r.value === row.change_reason)?.label || row.change_reason) : '—'}
+                        </td>
+                        {isDraft && <td className="py-2 px-3"></td>}
+                      </tr>
+                    );
+                  })}
+                  {filteredF19Lines.length === 0 && (
+                    <tr><td colSpan={12} className="py-8 text-center text-slate-400">{t('no_data') || "Ma'lumot yo'q"}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Add Change Row Modal */}
+        <Dialog open={showAddChangeModal} onOpenChange={setShowAddChangeModal}>
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
+            <DialogHeader><DialogTitle>{t('add_change_row') || "O'zgarish qatori qo'shish"}</DialogTitle><DialogDescription className="sr-only">Add change row</DialogDescription></DialogHeader>
+            <div className="space-y-4">
+              <div><Label>{t('material_name') || 'Material nomi'} *</Label><Input value={changeRowForm.material_name} onChange={e => setChangeRowForm(f => ({ ...f, material_name: e.target.value }))} placeholder="Material nomi" /></div>
+              <div><Label>{t('unit') || 'Birlik'} *</Label><Input value={changeRowForm.unit} onChange={e => setChangeRowForm(f => ({ ...f, unit: e.target.value }))} placeholder="dona, kg, m3..." /></div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>{t('keldi') || 'Keldi'}</Label><Input type="number" step="0.01" value={changeRowForm.keldi} onChange={e => setChangeRowForm(f => ({ ...f, keldi: e.target.value }))} /></div>
+                <div><Label>{t('sarf') || 'Sarflandi'}</Label><Input type="number" step="0.01" value={changeRowForm.sarf} onChange={e => setChangeRowForm(f => ({ ...f, sarf: e.target.value }))} /></div>
+                <div><Label>{t('price') || 'Narx'}</Label><Input type="number" step="0.01" value={changeRowForm.cost_price} onChange={e => setChangeRowForm(f => ({ ...f, cost_price: e.target.value }))} /></div>
+              </div>
+              <div><Label>{t('change_reason') || "O'zgarish sababi"} *</Label>
+                <Select value={changeRowForm.change_reason || ''} onValueChange={v => setChangeRowForm(f => ({ ...f, change_reason: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
+                  <SelectContent>{CHANGE_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>{t('note') || 'Izoh'}</Label><Textarea value={changeRowForm.change_note} onChange={e => setChangeRowForm(f => ({ ...f, change_note: e.target.value }))} rows={2} placeholder="Izoh..." /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddChangeModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+              <Button onClick={handleAddChangeRow} disabled={changeSaving}>{changeSaving ? 'Saqlanmoqda...' : "Qo'shish"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // ======== DETAIL VIEW (KS2/KS3) ========
   if (selectedAct) {
     return (
       <div className="space-y-4">
@@ -770,9 +1035,6 @@ const FormsTab = ({ project }) => {
             {selectedAct.notes && <div className="mt-4"><p className="text-slate-500 text-sm">{t('notes') || 'Izohlar'}</p><p className="text-sm mt-1">{selectedAct.notes}</p></div>}
           </CardContent>
         </Card>
-
-        {/* Forma 19 specific details */}
-        <Forma19Detail act={selectedAct} />
 
         {/* Forma 3 cumulative table */}
         <Forma3Detail act={selectedAct} />
@@ -957,8 +1219,8 @@ const FormsTab = ({ project }) => {
             </Select>
             <Button variant="outline" onClick={() => setShowAutoGenModal(true)}><Zap className="w-4 h-4 mr-2" /> {t('auto_ks2') || 'KS-2 avto'}</Button>
             <Button variant="outline" onClick={() => setShowGenF3Modal(true)}><FileText className="w-4 h-4 mr-2" /> {t('gen_ks3') || 'KS-3 yaratish'}</Button>
-            <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19Form(EMPTY_F19_FORM); setF19Error(null); setShowF19Modal(true); }}>
-              <Camera className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
+            <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
             <Button onClick={() => { setForm(EMPTY_FORM); setError(null); setSelectedLines([]); setEstimateLines([]); setShowCreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_form')}
@@ -1145,95 +1407,28 @@ const FormsTab = ({ project }) => {
       </Dialog>
 
       {/* Create Forma 19 Modal */}
-      <Dialog open={showF19Modal} onOpenChange={setShowF19Modal}>
-        <DialogContent className="max-w-xl" aria-describedby={undefined}>
+      <Dialog open={showF19CreateModal} onOpenChange={setShowF19CreateModal}>
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('create_f19') || 'Forma 19 yaratish'}</DialogTitle><DialogDescription className="sr-only">Create Forma 19</DialogDescription></DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-            {f19Error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{f19Error}</p>}
-            <div><Label>{t('stage') || 'Bosqich'} *</Label>
-              <Select value={f19Form.stage_id || ''} onValueChange={v => setF19Form(f => ({ ...f, stage_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Bosqichni tanlang" /></SelectTrigger>
-                <SelectContent>{(stages || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={f19CreateForm.period_from} onChange={e => setF19CreateForm(f => ({ ...f, period_from: e.target.value }))} /></div>
+              <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={f19CreateForm.period_to} onChange={e => setF19CreateForm(f => ({ ...f, period_to: e.target.value }))} /></div>
+            </div>
+            <div><Label>{t('building') || 'Bino'}</Label>
+              <Select value={f19CreateForm.building_id || undefined} onValueChange={v => setF19CreateForm(f => ({ ...f, building_id: v === '__none__' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder={t('select_building') || 'Binoni tanlang'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">{t('none') || 'Tanlanmagan'}</SelectItem>
+                  {(buildings || []).map(b => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <div><Label>{t('axes_marks') || "O'qlar, belgilar, kesim"} *</Label><Input value={f19Form.location_axes} onChange={e => setF19Form(f => ({ ...f, location_axes: e.target.value }))} placeholder="A-D / 1-5, отм. -3.200" /></div>
-            <div><Label>{t('drawing_ref') || 'Chizma havolasi'}</Label><Input value={f19Form.drawing_reference} onChange={e => setF19Form(f => ({ ...f, drawing_reference: e.target.value }))} placeholder="КЖ-1, лист 5" /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>{t('works_start') || 'Ish boshlangan sana'} *</Label><Input type="date" value={f19Form.works_start_date} onChange={e => setF19Form(f => ({ ...f, works_start_date: e.target.value }))} /></div>
-              <div><Label>{t('works_end') || 'Ish tugagan sana'} *</Label><Input type="date" value={f19Form.works_end_date} onChange={e => setF19Form(f => ({ ...f, works_end_date: e.target.value }))} /></div>
-            </div>
-            <div><Label>{t('description') || 'Tavsif'}</Label><Textarea value={f19Form.notes} onChange={e => setF19Form(f => ({ ...f, notes: e.target.value }))} rows={3} placeholder="Yashirin ishlar tavsifi..." /></div>
-            {/* Photos */}
-            <div>
-              <Label>{t('photos') || 'Rasmlar'} * ({t('min_2') || 'kamida 2 ta'})</Label>
-              {f19Form.photos.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 mb-3 mt-2">
-                  {f19Form.photos.map((p, i) => (
-                    <div key={i} className="relative group rounded-lg border overflow-hidden">
-                      <img src={p.url} alt={p.filename || `Photo ${i + 1}`} className="w-full h-24 object-cover" />
-                      <Button
-                        variant="destructive" size="sm"
-                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setF19Form(f => ({ ...f, photos: f.photos.filter((_, j) => j !== i) }))}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                      <p className="text-[10px] text-slate-500 p-1 truncate">{p.filename || 'Photo'}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${photoUploading ? 'border-blue-300 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  disabled={photoUploading}
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (!files.length) return;
-                    setPhotoUploading(true);
-                    try {
-                      const uploaded = [];
-                      for (const file of files) {
-                        const res = await UploadFile(file);
-                        uploaded.push({ url: res.url, filename: file.name });
-                      }
-                      setF19Form(f => ({ ...f, photos: [...f.photos, ...uploaded] }));
-                    } catch {
-                      toast.error('Rasm yuklashda xatolik');
-                    } finally {
-                      setPhotoUploading(false);
-                      e.target.value = '';
-                    }
-                  }}
-                />
-                {photoUploading ? (
-                  <><Loader2 className="w-5 h-5 animate-spin text-blue-500" /> <span className="text-sm text-blue-600">Yuklanmoqda...</span></>
-                ) : (
-                  <><Upload className="w-5 h-5 text-slate-400" /> <span className="text-sm text-slate-500">Rasm yuklash (bir nechta tanlash mumkin)</span></>
-                )}
-              </label>
-            </div>
-            {/* Materials */}
-            <div>
-              <Label>{t('materials') || 'Materiallar'}</Label>
-              {f19Form.materials_json.map((m, i) => (
-                <div key={i} className="flex gap-2 mb-2">
-                  <Input value={m.name} onChange={e => { const mats = [...f19Form.materials_json]; mats[i] = { ...mats[i], name: e.target.value }; setF19Form(f => ({ ...f, materials_json: mats })); }} placeholder="Material nomi" className="flex-1" />
-                  <Input value={m.certificate_url} onChange={e => { const mats = [...f19Form.materials_json]; mats[i] = { ...mats[i], certificate_url: e.target.value }; setF19Form(f => ({ ...f, materials_json: mats })); }} placeholder="Sertifikat URL" className="flex-1" />
-                  <Button variant="ghost" size="sm" onClick={() => { const mats = f19Form.materials_json.filter((_, j) => j !== i); setF19Form(f => ({ ...f, materials_json: mats })); }}><Trash2 className="w-4 h-4 text-red-400" /></Button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={() => setF19Form(f => ({ ...f, materials_json: [...f.materials_json, { name: '', certificate_url: '' }] }))}>
-                <Plus className="w-4 h-4 mr-1" /> {t('add_material') || "Material qo'shish"}
-              </Button>
-            </div>
+            <div><Label>{t('notes') || 'Izohlar'}</Label><Textarea value={f19CreateForm.notes} onChange={e => setF19CreateForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Izoh..." /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowF19Modal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
-            <Button onClick={handleCreateF19} disabled={f19Saving}>{f19Saving ? 'Saqlanmoqda...' : 'Yaratish'}</Button>
+            <Button variant="outline" onClick={() => setShowF19CreateModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleCreateF19} disabled={f19Creating}>{f19Creating ? 'Saqlanmoqda...' : 'Yaratish'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
