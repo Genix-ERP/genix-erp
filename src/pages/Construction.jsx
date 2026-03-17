@@ -660,33 +660,33 @@ const ProjectDetailView = ({
   const [activeTab, setActiveTab] = useState('overview');
 
   const NAV_GROUPS = [
-    { key: 'dashboard', label: "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
-    { key: 'qurilish', label: 'Qurilish', icon: Building2, subs: [
-      { key: 'buildings', label: 'Binolar' },
-      { key: 'progress', label: 'Jarayon' },
-      { key: 'stages', label: 'Bosqichlar' },
-      { key: 'reja_fakt', label: 'Reja vs Fakt' },
+    { key: 'dashboard', label: t('nav_overview') || "Umumiy ko'rinish", icon: LayoutDashboard, subs: [] },
+    { key: 'qurilish', label: t('nav_construction') || 'Qurilish', icon: Building2, subs: [
+      { key: 'buildings', label: t('nav_buildings') || 'Binolar' },
+      { key: 'progress', label: t('nav_progress') || 'Jarayon' },
+      { key: 'stages', label: t('nav_stages') || 'Bosqichlar' },
+      { key: 'reja_fakt', label: t('nav_plan_fact') || 'Reja vs Fakt' },
     ]},
-    { key: 'moliya', label: 'Moliya', icon: DollarSign, subs: [
-      { key: 'estimates', label: 'Smetalar' },
-      { key: 'budget', label: 'Byudjet' },
-      { key: 'expenses', label: 'Xarajatlar' },
-      { key: 'financial', label: 'Tahlil' },
+    { key: 'moliya', label: t('nav_finance') || 'Moliya', icon: DollarSign, subs: [
+      { key: 'estimates', label: t('nav_estimates') || 'Smetalar' },
+      { key: 'budget', label: t('nav_budget') || 'Byudjet' },
+      { key: 'expenses', label: t('nav_expenses') || 'Xarajatlar' },
+      { key: 'financial', label: t('nav_analysis') || 'Tahlil' },
     ]},
-    { key: 'materiallar', label: 'Materiallar', icon: Package, subs: [
-      { key: 'materials', label: 'Materiallar' },
+    { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
+      { key: 'materials', label: t('nav_materials') || 'Materiallar' },
       { key: 'forms', label: 'Forma 19' },
-      { key: 'material_usage', label: 'Material sarfi' },
+      { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     ]},
-    { key: 'hujjatlar', label: 'Hujjatlar', icon: FileText, subs: [
-      { key: 'acts', label: 'Aktlar' },
-      { key: 'daily_logs', label: 'Kunlik jurnal' },
-      { key: 'subcontractors', label: 'Subpudratchilar' },
-      { key: 'activity', label: 'Faoliyat' },
+    { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
+      { key: 'acts', label: t('nav_acts') || 'Aktlar' },
+      { key: 'daily_logs', label: t('nav_daily_log') || 'Kunlik jurnal' },
+      { key: 'subcontractors', label: t('nav_subcontractors') || 'Subpudratchilar' },
+      { key: 'activity', label: t('nav_activity') || 'Faoliyat' },
     ]},
-    { key: 'jamoa', label: 'Jamoa', icon: Users, subs: [
-      { key: 'team_tab', label: "Jamoa a'zolari" },
-      { key: 'photo_reports', label: 'Foto hisobot' },
+    { key: 'jamoa', label: t('nav_team') || 'Jamoa', icon: Users, subs: [
+      { key: 'team_tab', label: t('nav_team_members') || "Jamoa a'zolari" },
+      { key: 'photo_reports', label: t('nav_photo_reports') || 'Foto hisobot' },
     ]},
   ];
 

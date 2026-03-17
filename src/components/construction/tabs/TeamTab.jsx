@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2 } from 'lucide-react';
+import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2, ArrowRightLeft } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { toast } from 'sonner';
@@ -34,6 +34,7 @@ const STATUS_COLORS = {
   active: 'bg-green-100 text-green-700',
   inactive: 'bg-slate-100 text-slate-600',
   on_leave: 'bg-yellow-100 text-yellow-700',
+  transferred: 'bg-purple-100 text-purple-700',
 };
 
 const EMPTY_FORM = {
@@ -60,6 +61,12 @@ const TeamTab = ({ project }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTarget, setTransferTarget] = useState(null);
+  const [transferProjectId, setTransferProjectId] = useState('');
+  const [transferNotes, setTransferNotes] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [allProjects, setAllProjects] = useState([]);
 
   const loadData = useCallback(async () => {
     if (!project?.id) return;
@@ -84,6 +91,36 @@ const TeamTab = ({ project }) => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    constructionService.listProjects().then(data => setAllProjects(data || [])).catch(() => {});
+  }, []);
+
+  const openTransfer = (member) => {
+    setTransferTarget(member);
+    setTransferProjectId('');
+    setTransferNotes('');
+    setShowTransferModal(true);
+  };
+
+  const handleTransfer = async () => {
+    if (!transferProjectId) return;
+    setTransferring(true);
+    try {
+      await constructionService.transferTeamMember(project.id, transferTarget.id, {
+        target_project_id: Number(transferProjectId),
+        notes: transferNotes,
+      });
+      setShowTransferModal(false);
+      setTransferTarget(null);
+      toast.success(t('member_transferred') || "Jamoa a'zosi ko'chirildi");
+      loadData();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || t('error_occurred') || 'Xatolik yuz berdi');
+    } finally {
+      setTransferring(false);
+    }
+  };
 
   const openCreate = () => {
     setEditingMember(null);
@@ -168,6 +205,7 @@ const TeamTab = ({ project }) => {
       active: t('active') || 'Faol',
       inactive: t('inactive') || 'Nofaol',
       on_leave: t('on_leave') || "Ta'tilda",
+      transferred: t('transferred') || "Ko'chirilgan",
     };
     return labels[status] || status;
   };
@@ -252,6 +290,11 @@ const TeamTab = ({ project }) => {
                       </td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex justify-end gap-1">
+                          {member.status !== 'transferred' && (
+                            <Button variant="ghost" size="sm" title={t('transfer') || "Ko'chirish"} onClick={() => openTransfer(member)}>
+                              <ArrowRightLeft className="w-4 h-4 text-purple-500" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" title={t('edit') || 'Tahrirlash'} onClick={() => openEdit(member)}>
                             <Edit className="w-4 h-4" />
                           </Button>
@@ -282,14 +325,13 @@ const TeamTab = ({ project }) => {
             <div>
               <Label>{t('employee') || 'Xodim'} *</Label>
               <Select
-                value={form.employee_id || 'none'}
-                onValueChange={v => setForm(f => ({ ...f, employee_id: v === 'none' ? '' : v }))}
+                value={form.employee_id || undefined}
+                onValueChange={v => setForm(f => ({ ...f, employee_id: v }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_employee') || 'Xodimni tanlang'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t('select_employee') || 'Xodimni tanlang'}</SelectItem>
                   {employees.map(emp => (
                     <SelectItem key={emp.id} value={String(emp.id)}>
                       {emp.first_name} {emp.last_name} {emp.position ? `(${emp.position})` : ''}
@@ -302,17 +344,16 @@ const TeamTab = ({ project }) => {
             <div>
               <Label>{t('role') || 'Vazifasi'} *</Label>
               <Select
-                value={form.role || 'none'}
-                onValueChange={v => setForm(f => ({ ...f, role: v === 'none' ? '' : v }))}
+                value={form.role || undefined}
+                onValueChange={v => setForm(f => ({ ...f, role: v }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('select_role') || 'Vazifani tanlang'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t('select_role') || 'Vazifani tanlang'}</SelectItem>
                   {ROLE_OPTIONS.map(opt => (
                     <SelectItem key={opt.value} value={opt.value}>
-                      {t(opt.value) || opt.label}
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -340,7 +381,7 @@ const TeamTab = ({ project }) => {
             </div>
 
             <div>
-              <Label>{t('assigned_building') || 'Biriktirilgan bino'}</Label>
+              <Label>{t('member_building') || 'Biriktirilgan bino'}</Label>
               <Select
                 value={form.building_id || 'none'}
                 onValueChange={v => setForm(f => ({ ...f, building_id: v === 'none' ? '' : v }))}
@@ -408,6 +449,61 @@ const TeamTab = ({ project }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Transfer Modal */}
+      <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{t('transfer_team_member') || "Jamoa a'zosini ko'chirish"}</DialogTitle>
+            <DialogDescription className="sr-only">{t('transfer_team_member') || "Jamoa a'zosini ko'chirish"}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {transferTarget && (
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">{transferTarget.employee_name || transferTarget.name}</span>
+                {' '}{t('will_be_transferred') || "boshqa loyihaga ko'chiriladi"}
+              </p>
+            )}
+
+            <div>
+              <Label>{t('target_project') || 'Maqsad loyiha'} *</Label>
+              <Select
+                value={transferProjectId || undefined}
+                onValueChange={v => setTransferProjectId(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('select_project') || 'Loyihani tanlang'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {allProjects
+                    .filter(p => p.id !== project?.id)
+                    .map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>{t('notes') || 'Izoh'}</Label>
+              <Textarea
+                value={transferNotes}
+                onChange={e => setTransferNotes(e.target.value)}
+                placeholder={t('transfer_notes_placeholder') || "Ko'chirish sababi..."}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTransferModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleTransfer} disabled={transferring || !transferProjectId}>
+              {transferring ? (t('transferring') || "Ko'chirilmoqda...") : (t('transfer') || "Ko'chirish")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
