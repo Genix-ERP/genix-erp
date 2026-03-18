@@ -21,6 +21,7 @@ import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { useSales } from "@/components/contexts/SalesContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { contactsService } from "@/api/services";
+import { toast } from 'sonner';
 
 export default function Payments() {
   const { language } = useLanguage();
@@ -225,22 +226,40 @@ export default function Payments() {
         allocations: allocations.length > 0 ? allocations : undefined,
       };
 
-      await createPayment(paymentData);
+      const created = await createPayment(paymentData);
+      // Auto-confirm the payment
+      if (created?.id) {
+        try {
+          await confirmPayment(created.id);
+          try { await refreshSalesData(); } catch {}
+        } catch (confirmErr) {
+          const message = confirmErr?.response?.data?.error || confirmErr?.response?.data?.message || confirmErr?.message || "To'lovni tasdiqlashda xatolik yuz berdi";
+          toast.error(message);
+          return;
+        }
+      }
       setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating payment:', error);
+      const message = error?.response?.data?.error || error?.response?.data?.message || error?.message || "To'lov yaratishda xatolik yuz berdi";
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleConfirmPayment = async (paymentId) => {
-    await confirmPayment(paymentId);
-    if (selectedPayment?.id === paymentId) {
-      setSelectedPayment({...selectedPayment, status: 'confirmed'});
+    try {
+      await confirmPayment(paymentId);
+      if (selectedPayment?.id === paymentId) {
+        setSelectedPayment({...selectedPayment, status: 'confirmed'});
+      }
+      // Refresh invoices from SalesContext so the invoice list updates
+      try { await refreshSalesData(); } catch {}
+    } catch (err) {
+      const message = err?.response?.data?.error || err?.response?.data?.message || err?.message || "To'lovni tasdiqlashda xatolik yuz berdi";
+      toast.error(message);
     }
-    // Refresh invoices from SalesContext so the invoice list updates
-    try { await refreshSalesData(); } catch {}
   };
 
   const handleViewDetail = (payment) => {
