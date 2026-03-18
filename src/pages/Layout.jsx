@@ -397,12 +397,12 @@ function LayoutContent({ children, currentPageName }) {
         <style>
           {`
             :root {
-              --brand-navy: #0B1426;
-              --brand-blue: #0EA5E9;
-              --brand-light-blue: #E0F2FE;
-              --brand-purple: #8B5CF6;
-              --brand-green: #10B981;
-              --brand-orange: #F59E0B;
+              --genix-navy: #0B1426;
+              --genix-blue: #0EA5E9;
+              --genix-light-blue: #E0F2FE;
+              --genix-purple: #8B5CF6;
+              --genix-green: #10B981;
+              --genix-orange: #F59E0B;
             }
             .brand-logo-transparent {
               mix-blend-mode: multiply;
