@@ -403,13 +403,18 @@ Only return the JSON, no other text.`;
       const hasPhone = newEmployee.phone && newEmployee.phone.trim() && newEmployee.phone.trim() !== '+998';
 
       if (hasEmail || hasPhone) {
-        await apiClient.post('/users', {
-          email: newEmployee.email || '',
-          password: password,
-          first_name: firstName,
-          last_name: lastName,
-          phone: newEmployee.phone || '',
-        });
+        try {
+          await apiClient.post('/users', {
+            email: newEmployee.email || '',
+            password: password,
+            first_name: firstName,
+            last_name: lastName,
+            phone: newEmployee.phone || '',
+          });
+        } catch (userErr) {
+          // 409 = user already exists, that's fine — just continue
+          if (userErr?.response?.status !== 409) throw userErr;
+        }
 
         // Auto-send credentials via SMS (if phone) or email
         try {
