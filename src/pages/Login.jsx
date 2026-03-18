@@ -5,11 +5,11 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, User, Lock, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password, selectedTenantId);
+    const result = await login(identifier, password, selectedTenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -55,7 +55,7 @@ export default function Login() {
     // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(email, password, tenantId);
+      : await login(identifier, password, tenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -178,15 +178,15 @@ export default function Login() {
             )}
 
             <div className="login-form__field">
-              <label htmlFor="email" className="login-form__label">{t('email')}</label>
+              <label htmlFor="identifier" className="login-form__label">{t('email_or_phone')}</label>
               <div className="login-form__input-wrap">
-                <Mail className="login-form__icon" />
+                <User className="login-form__icon" />
                 <input
-                  id="email"
-                  type="email"
-                  placeholder={t('enter_email')}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="identifier"
+                  type="text"
+                  placeholder={t('enter_email_or_phone')}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="login-form__input"
                   required
                 />
