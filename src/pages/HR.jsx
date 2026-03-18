@@ -102,6 +102,7 @@ export default function HR() {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [isAssessingRisk, setIsAssessingRisk] = useState(false);
   const [employeeDeductions, setEmployeeDeductions] = useState([]);
   const [salaryCalc, setSalaryCalc] = useState(null);
@@ -181,6 +182,7 @@ export default function HR() {
     phone: '+998',
     job_title: '',
     job_position_id: '',
+    role_id: '',
     department: '',
     hire_date: new Date().toISOString().split('T')[0],
     salary: '',
@@ -379,7 +381,7 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
-    if (isSubmitting) return;
+    if (submittingRef.current) return;
     if (!newEmployee.full_name || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
@@ -389,6 +391,7 @@ Only return the JSON, no other text.`;
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       // Auto-generate 8-character alphanumeric password
@@ -461,20 +464,6 @@ Only return the JSON, no other text.`;
         }
       }
 
-      // Assign role to employee (auto-applies permissions)
-      if (newEmployee.job_title && createdEmployee?.id) {
-        const selectedRole = roles.find(r => r.name === newEmployee.job_title);
-        if (selectedRole) {
-          try {
-            await apiClient.post(`/roles/${selectedRole.id}/assign`, {
-              employee_id: createdEmployee.id,
-            });
-          } catch (roleErr) {
-            console.error("Error assigning role:", roleErr);
-          }
-        }
-      }
-
       toast({
         title: t('success') || 'Muvaffaqiyatli',
         description: t('employee_created_success') || 'Xodim va foydalanuvchi hisobi yaratildi.',
@@ -483,6 +472,7 @@ Only return the JSON, no other text.`;
       setShowAddModal(false);
       setNewEmployee({
         full_name: '', email: '', phone: '+998', job_title: '',
+        job_position_id: '', role_id: '',
         department: '', hire_date: new Date().toISOString().split('T')[0],
         salary: '', status: 'active', performance_score: 3,
         turnover_risk: 'low', permission: 'important', organization_ids: []
@@ -504,6 +494,7 @@ Only return the JSON, no other text.`;
         });
       }
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
