@@ -613,7 +613,10 @@ export function FinancialsProvider({ children }) {
           setVendorBills(arr);
         }).catch(() => {});
         return;
-      } catch (err) { console.error('API error:', err); }
+      } catch (err) {
+        console.error('API error:', err);
+        throw err;
+      }
     }
     const updated = payments.map(p => p.id === id ? { ...p, status: 'confirmed' } : p);
     localStorage.setItem(storageKey, JSON.stringify(updated));
