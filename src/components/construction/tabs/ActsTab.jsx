@@ -9,10 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download, PenLine, Ban } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, ArrowLeft, FileText, Eye, Download, PenLine, Ban, ImagePlus, X } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { UploadFile } from '@/api/integrations';
 import { toast } from 'sonner';
 
 const TYPE_COLORS = {
@@ -31,10 +32,11 @@ const STATE_COLORS = {
 
 const EMPTY_FORM = {
   act_type: '',
-  subcontract_id: '',
+  subcontract: '',
   period_from: '',
   period_to: '',
   notes: '',
+  photos: [],
 };
 
 const ActsTab = ({ project }) => {
@@ -58,7 +60,6 @@ const ActsTab = ({ project }) => {
 
   // List state
   const [acts, setActs] = useState([]);
-  const [subcontracts, setSubcontracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ act_type: '', state: '' });
 
@@ -94,12 +95,8 @@ const ActsTab = ({ project }) => {
       const params = {};
       if (filters.act_type) params.type = filters.act_type;
       if (filters.state) params.state = filters.state;
-      const [actsData, subData] = await Promise.all([
-        constructionService.listActs(project.id, params),
-        constructionService.listSubcontracts(project.id),
-      ]);
+      const actsData = await constructionService.listActs(project.id, params);
       setActs(actsData || []);
-      setSubcontracts(subData || []);
     } catch (e) {
       console.error('Failed to load acts:', e);
     } finally {
@@ -124,18 +121,27 @@ const ActsTab = ({ project }) => {
   // ---- Handlers ----
 
   const handleCreate = async () => {
-    if (!form.act_type) { setError('Akt turini tanlang'); return; }
-    if (!form.subcontract_id) { setError('Subpudratni tanlang'); return; }
-    if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
+    if (!form.act_type.trim()) { setError(t('act_type_required') || 'Akt turini kiriting'); return; }
+    if (!form.subcontract.trim()) { setError(t('subcontract_required') || 'Subpudratni kiriting'); return; }
+    if (!form.period_from || !form.period_to) { setError(t('period_required') || 'Davrni kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
+      // Upload photos first
+      const uploadedPhotos = [];
+      for (const file of form.photos) {
+        const uploadResult = await UploadFile(file);
+        const fileUrl = uploadResult?.url || uploadResult?.file_url || uploadResult;
+        uploadedPhotos.push({ url: fileUrl, filename: file.name });
+      }
+
       const payload = {
-        act_type: form.act_type,
-        subcontract_id: Number(form.subcontract_id) || 0,
+        act_type: form.act_type.trim(),
+        subcontract_id: 0,
         period_from: form.period_from,
         period_to: form.period_to,
-        notes: form.notes || '',
+        notes: (form.subcontract.trim() ? `Subpudrat: ${form.subcontract.trim()}\n` : '') + (form.notes || ''),
+        photos: uploadedPhotos,
       };
       await constructionService.createAct(project.id, payload);
       setShowCreateModal(false);
@@ -468,25 +474,57 @@ const ActsTab = ({ project }) => {
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
             <div><Label>{t('act_type') || 'Akt turi'} *</Label>
-              <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
-                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="acceptance">{t('acceptance') || 'Qabul qilish'}</SelectItem>
-                  <SelectItem value="defect">{t('defect') || 'Nuqson'}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                value={form.act_type}
+                onChange={e => setForm(f => ({ ...f, act_type: e.target.value }))}
+                placeholder={t('act_type_placeholder') || 'Masalan: Qabul qilish, Nuqson...'}
+              />
             </div>
             <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
-              <Select value={form.subcontract_id || ''} onValueChange={v => setForm(f => ({ ...f, subcontract_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
-                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
-              </Select>
+              <Input
+                value={form.subcontract}
+                onChange={e => setForm(f => ({ ...f, subcontract: e.target.value }))}
+                placeholder={t('subcontract_placeholder') || 'Subpudratchi nomi'}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>{t('period_from') || 'Boshlanish'} *</Label><Input type="date" value={form.period_from} onChange={e => setForm(f => ({ ...f, period_from: e.target.value }))} /></div>
-              <div><Label>{t('period_to') || 'Tugash'} *</Label><Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} /></div>
+              <div><Label>{t('period_from') || 'Boshlanish sanasi'} *</Label><Input type="date" value={form.period_from} onChange={e => setForm(f => ({ ...f, period_from: e.target.value }))} /></div>
+              <div><Label>{t('period_to') || 'Tugash sanasi'} *</Label><Input type="date" value={form.period_to} onChange={e => setForm(f => ({ ...f, period_to: e.target.value }))} /></div>
             </div>
             <div><Label>{t('notes') || 'Izohlar'}</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} /></div>
+            {/* Photo upload */}
+            <div>
+              <Label>{t('photos') || 'Rasmlar'}</Label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {form.photos.map((file, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 group">
+                    <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, photos: f.photos.filter((_, i) => i !== idx) }))}
+                      className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  <ImagePlus className="w-5 h-5 text-slate-400" />
+                  <span className="text-[10px] text-slate-400 mt-1">{t('add_photo') || 'Qo\'shish'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) setForm(f => ({ ...f, photos: [...f.photos, ...files] }));
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>

@@ -101,15 +101,25 @@ function parseVOR(workbook) {
     // Skip ИТОГО / subtotal rows
     if (colC.toUpperCase().includes('ИТОГО')) continue;
 
-    // Detect section headers: no item number in A, no code in B, just text in C
-    // Section headers are often in all caps and contain keywords like СЕКЦИЯ, РАЗДЕЛ, РАБОТЫ
-    const isSectionHeader =
+    // Detect section headers:
+    // 1) Classic: no item number in A, no code in B, uppercase text in C
+    // 2) Numbered: has number in A but NO uom (D), NO quantity (E), text is all uppercase
+    const isClassicHeader =
       !colA &&
       !colB &&
       colC.length > 5 &&
       (colC === colC.toUpperCase() ||
         colC.includes('СЕКЦИЯ') ||
         colC.includes('РАЗДЕЛ'));
+    const isNumberedHeader =
+      colA &&
+      /^\d+$/.test(colA) &&
+      !colD &&
+      (colE === 0 || isNaN(colE)) &&
+      colC.length > 5 &&
+      colC === colC.toUpperCase() &&
+      !/\d{2,}/.test(colC); // exclude codes that look like all-caps but have many digits
+    const isSectionHeader = isClassicHeader || isNumberedHeader;
 
     if (isSectionHeader) {
       // Start new section if current one has items
@@ -229,8 +239,11 @@ function parseEdinich(workbook) {
     if (!colC) continue;
     if (colC.toUpperCase().includes('ИТОГО')) continue;
 
-    // Section headers are merged cells (C spans into D+) with no item number
-    if (mergedSectionRows.has(i) && !colA) {
+    // Section headers: merged cells (C spans into D+) with no item number,
+    // OR numbered rows with no UOM/quantity and uppercase text
+    const isMergedHeader = mergedSectionRows.has(i) && !colA;
+    const isNumberedHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
+    if (isMergedHeader || isNumberedHeader) {
       if (currentSection.items.length > 0) {
         sections.push(currentSection);
         currentSection = { name: colC, items: [] };
@@ -348,13 +361,14 @@ function parseResurs(workbook) {
     const textToCheck = (colC || colB || '').toUpperCase();
     if (textToCheck.includes('ИТОГО')) continue;
 
-    // Detect section header (resource type group)
+    // Detect section header (resource type group) or numbered section header
     const sectionType = detectResourceSection(colC);
-    if (sectionType) {
+    const isNumberedSectionHeader = colA && /^\d+$/.test(colA) && !colD && (colE === 0 || isNaN(colE)) && colC.length > 5 && colC === colC.toUpperCase() && !/\d{2,}/.test(colC);
+    if (sectionType || isNumberedSectionHeader) {
       if (currentSection.items.length > 0) {
         sections.push(currentSection);
       }
-      currentSection = { name: colC, items: [], resourceType: sectionType };
+      currentSection = { name: colC, items: [], resourceType: sectionType || currentSection.resourceType };
       continue;
     }
 
