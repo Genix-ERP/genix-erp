@@ -379,6 +379,7 @@ Only return the JSON, no other text.`;
   }, [employees]);
 
   const handleAddEmployee = async () => {
+    if (isSubmitting) return;
     if (!newEmployee.full_name || !newEmployee.phone) {
       toast({
         title: t('error') || 'Xato',
