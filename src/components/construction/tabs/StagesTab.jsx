@@ -482,21 +482,26 @@ const StagesTab = ({ project }) => {
 
                           return (
                             <div key={sub.id}>
-                              <div className="flex items-center justify-between bg-white rounded border px-3 py-1.5">
+                              <div
+                                className="flex items-center justify-between bg-white rounded border px-3 py-1.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                                onClick={() => toggleSubStageMaterials(sub.id)}
+                              >
                                 <div className="flex items-center gap-2 flex-1">
-                                  <Select
-                                    value={sub.status}
-                                    onValueChange={v => handleSubStatusChange(stage.id, sub.id, v)}
-                                  >
-                                    <SelectTrigger className={`h-6 w-32 text-xs border-0 p-1 font-medium ${STATUS_COLORS[sub.status] || 'bg-slate-100 text-slate-700'}`}>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="not_started">{STATUS_LABELS.not_started}</SelectItem>
-                                      <SelectItem value="in_progress">{STATUS_LABELS.in_progress}</SelectItem>
-                                      <SelectItem value="completed">{STATUS_LABELS.completed}</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <Select
+                                      value={sub.status}
+                                      onValueChange={v => handleSubStatusChange(stage.id, sub.id, v)}
+                                    >
+                                      <SelectTrigger className={`h-6 w-32 text-xs border-0 p-1 font-medium ${STATUS_COLORS[sub.status] || 'bg-slate-100 text-slate-700'}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="not_started">{STATUS_LABELS.not_started}</SelectItem>
+                                        <SelectItem value="in_progress">{STATUS_LABELS.in_progress}</SelectItem>
+                                        <SelectItem value="completed">{STATUS_LABELS.completed}</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                   <span className="text-sm">{sub.name}</span>
                                   {sub.material_total > 0 && (
                                     <span className="text-xs text-amber-600 font-medium ml-auto mr-2">
@@ -505,18 +510,11 @@ const StagesTab = ({ project }) => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost" size="sm"
-                                    className="h-6 w-6 p-0 text-amber-500 hover:text-amber-700"
-                                    onClick={() => toggleSubStageMaterials(sub.id)}
-                                    title={t('materials')}
-                                  >
-                                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <Package className="w-3 h-3" />}
-                                  </Button>
+                                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
                                   <Button
                                     variant="ghost" size="sm"
                                     className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                                    onClick={() => setDeleteSubStage({ sub, stageId: stage.id })}
+                                    onClick={(e) => { e.stopPropagation(); setDeleteSubStage({ sub, stageId: stage.id }); }}
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
