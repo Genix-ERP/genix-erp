@@ -320,10 +320,10 @@ export default function CompanySettings() {
       const mappedData = data.map((row, index) => ({
         code: `ORG-${Date.now()}-${index}`,  // Auto-generate unique code
         name: row.company_name || '',
-        tax_id: row.tax_id || '',
-        oked: row.oked || '',
-        bank_account: row.bank_account || '',
-        bank_mfo: row.bank_mfo || '',
+        tax_id: String(row.tax_id || '').trim(),
+        oked: String(row.oked || '').trim(),
+        bank_account: String(row.bank_account || '').trim(),
+        bank_mfo: String(row.bank_mfo || '').trim(),
         bank_name: row.bank_name || '',
         is_vat_payer: row.is_vat_payer === 'Ha' || row.is_vat_payer === 'Yes' || row.is_vat_payer === true,
         tax_regime: row.tax_regime || '',
