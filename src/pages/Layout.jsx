@@ -135,9 +135,9 @@ function LayoutContent({ children, currentPageName }) {
   // Set browser title based on language
   React.useEffect(() => {
     const titles = {
-      uz: "Genix ERP — Sun'iy intellekt orqali biznes boshqaruvi",
-      ru: "Genix ERP — Система управления бизнесом на основе ИИ",
-      en: "Genix ERP — AI-Powered Business Management System",
+      uz: "Yuksalish ERP — Sun'iy intellekt orqali biznes boshqaruvi",
+      ru: "Yuksalish ERP — Система управления бизнесом на основе ИИ",
+      en: "Yuksalish ERP — AI-Powered Business Management System",
     };
     document.title = titles[language] || titles.en;
   }, [language]);
@@ -397,14 +397,14 @@ function LayoutContent({ children, currentPageName }) {
         <style>
           {`
             :root {
-              --genix-navy: #0B1426;
-              --genix-blue: #0EA5E9;
-              --genix-light-blue: #E0F2FE;
-              --genix-purple: #8B5CF6;
-              --genix-green: #10B981;
-              --genix-orange: #F59E0B;
+              --brand-navy: #0B1426;
+              --brand-blue: #0EA5E9;
+              --brand-light-blue: #E0F2FE;
+              --brand-purple: #8B5CF6;
+              --brand-green: #10B981;
+              --brand-orange: #F59E0B;
             }
-            .genix-logo-transparent {
+            .brand-logo-transparent {
               mix-blend-mode: multiply;
               filter: contrast(1.1);
             }
@@ -415,9 +415,9 @@ function LayoutContent({ children, currentPageName }) {
           <SidebarHeader className="border-b border-slate-100 px-4 py-5">
             <div className="flex items-center justify-center h-10 overflow-hidden">
               <img
-                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-                alt="Genix"
-                className="h-[120px] w-auto object-contain genix-logo-transparent"
+                src="/logo.png"
+                alt="Yuksalish"
+                className="h-[120px] w-auto object-contain brand-logo-transparent"
               />
             </div>
           </SidebarHeader>

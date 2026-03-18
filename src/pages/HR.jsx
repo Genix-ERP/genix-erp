@@ -350,7 +350,7 @@ Only return the JSON, no other text.`;
       const highTurnoverRiskCount = employees.filter(e => e.turnover_risk === 'high').length;
       const avgPerformance = employees.length > 0 ? employees.reduce((sum, e) => sum + (e.performance_score || 0), 0) / employees.length : 0;
 
-      const prompt = `You are the HR AI of Genix. Analyze this workforce data and provide insights on retention, performance, and cost efficiency:
+      const prompt = `You are the HR AI of Yuksalish. Analyze this workforce data and provide insights on retention, performance, and cost efficiency:
         - Total Employees: ${employees.length}
         - High Turnover Risks: ${highTurnoverRiskCount}
         - Average Performance Score: ${avgPerformance.toFixed(2)}/5
