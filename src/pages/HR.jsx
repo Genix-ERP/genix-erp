@@ -393,19 +393,34 @@ Only return the JSON, no other text.`;
       // Auto-generate 8-character alphanumeric password
       const password = generatePassword();
 
-      // Create user account only if email is provided
+      // Create user account if email or phone is provided
       const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
       const firstName = nameParts[0] || 'User';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
 
-      if (newEmployee.email) {
+      const hasEmail = newEmployee.email && newEmployee.email.trim();
+      const hasPhone = newEmployee.phone && newEmployee.phone.trim() && newEmployee.phone.trim() !== '+998';
+
+      if (hasEmail || hasPhone) {
         await apiClient.post('/users', {
-          email: newEmployee.email,
+          email: newEmployee.email || '',
           password: password,
           first_name: firstName,
           last_name: lastName,
           phone: newEmployee.phone || '',
         });
+
+        // Auto-send credentials via SMS (if phone) or email
+        try {
+          await apiClient.post('/users/send-credentials', {
+            email: newEmployee.email || '',
+            password: password,
+            method: hasPhone ? 'sms' : 'email',
+            phone: newEmployee.phone || '',
+          });
+        } catch (credErr) {
+          console.error("Error sending credentials:", credErr);
+        }
       }
 
       // User created successfully, now create employee record
