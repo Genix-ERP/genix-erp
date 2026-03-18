@@ -733,7 +733,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [teamForm, setTeamForm] = useState({ employee_id: '', role: '', responsibilities: '', start_date: '' });
   const [materialRequestForm, setMaterialRequestForm] = useState({
     id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: [],
-    subcontract_id: ''
+    subcontract_id: '', building_id: ''
   });
   const [projectSubcontracts, setProjectSubcontracts] = useState([]);
   const [inventoryProducts, setInventoryProducts] = useState([]);
@@ -995,6 +995,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     e.preventDefault();
     try {
       const scId = materialRequestForm.subcontract_id ? parseInt(materialRequestForm.subcontract_id) : 0;
+      const bldId = materialRequestForm.building_id ? parseInt(materialRequestForm.building_id) : 0;
       const requestData = {
         request_date: materialRequestForm.request_date,
         required_date: materialRequestForm.required_date,
@@ -1002,6 +1003,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
         items: materialRequestForm.items,
         bill_subcontractor: scId > 0,
         subcontract_id: scId,
+        building_id: bldId,
       };
 
       if (materialRequestForm.id) {
@@ -1014,7 +1016,7 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
       setShowMaterialRequestModal(false);
       setMaterialRequestForm({
         id: null, request_date: new Date().toISOString().split('T')[0], required_date: '', notes: '', status: 'draft', items: [],
-        subcontract_id: ''
+        subcontract_id: '', building_id: ''
       });
     } catch (error) {
       console.error('Error saving material request:', error);
@@ -1062,6 +1064,30 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           }
           items[index].variant_name = variant.variant_name || variant.display_name || '';
         }
+      }
+
+      // When warehouse is selected, fetch unit_cost from inventory
+      if (field === 'warehouse_id' && value && items[index].product_id) {
+        const productId = items[index].product_id;
+        const variantId = items[index].variant_id;
+        inventoryService.listInventory({ product_id: productId, warehouse_id: value }).then(invData => {
+          if (invData && invData.length > 0) {
+            let match = invData[0];
+            if (variantId) {
+              const variantMatch = invData.find(i => i.variant_id === variantId);
+              if (variantMatch) match = variantMatch;
+            }
+            if (match.unit_cost && match.unit_cost > 0) {
+              setMaterialRequestForm(prev2 => {
+                const updatedItems = [...prev2.items];
+                if (updatedItems[index]) {
+                  updatedItems[index] = { ...updatedItems[index], unit_cost: match.unit_cost };
+                }
+                return { ...prev2, items: updatedItems };
+              });
+            }
+          }
+        }).catch(() => {});
       }
 
       return { ...prev, items };
@@ -2541,6 +2567,27 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 />
               </div>
             </div>
+
+            {/* Building selector */}
+            {buildings.length > 0 && (
+              <div>
+                <Label>{t('building') || 'Bino'}</Label>
+                <Select
+                  value={materialRequestForm.building_id || "none"}
+                  onValueChange={(val) => setMaterialRequestForm({ ...materialRequestForm, building_id: val === "none" ? '' : val })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t('select_building') || 'Bino tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t('all_buildings') || 'Barcha binolar'}</SelectItem>
+                    {buildings.map(b => (
+                      <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Product Line Items */}
             <div>
