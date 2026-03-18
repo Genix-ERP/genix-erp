@@ -136,7 +136,7 @@ Each array should have 2-4 realistic items.`,
               </div>
               <div>
                 <CardTitle className="text-xl">{t('ai_powered_mrp_planning') || 'AI-Powered MRP Planning'}</CardTitle>
-                <p className="text-sm text-white/80 mt-1">{t('mrp_subtitle') || 'Material Requirements Planning with Genix AI'}</p>
+                <p className="text-sm text-white/80 mt-1">{t('mrp_subtitle') || 'Material Requirements Planning with Yuksalish AI'}</p>
               </div>
             </div>
             <Button
