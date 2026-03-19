@@ -338,20 +338,22 @@ function LayoutContent({ children, currentPageName }) {
     // Add Dashboard first (always visible)
     dynamicItems.push(coreNavigationItems[0]);
 
-    // Add installed app modules - only if user has permission to access
+    // Add app modules based on installation status and permissions
+    const isPrivilegedUser = isAdmin || isUserSiteAdmin || isUserOwner;
     Object.keys(appNavigationMap).forEach(appId => {
       // Skip POS here, we'll add it separately after sales_orders
       if (appId === 'pos') return;
 
       const appConfig = appNavigationMap[appId];
-      // Check if app is installed AND user has permission to access the module
-      // Admins, site admins, and owners always have access
       const installed = isAppInstalled(appId);
-      const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
-      if (!installed || !hasAccess) {
-        console.log(`[NAV] ${appId} hidden: installed=${installed}, hasAccess=${hasAccess}, moduleId=${appConfig.moduleId}`);
-      }
-      if (installed && hasAccess) {
+      const hasModulePermission = canAccessModule(appConfig.moduleId);
+
+      // Privileged users: show if app is installed (they have access to everything)
+      // Employees: show if they have explicit module permission (permission implies installation)
+      const hasAccess = isPrivilegedUser || hasModulePermission;
+      const shouldShow = isPrivilegedUser ? installed : (installed || hasModulePermission);
+
+      if (shouldShow && hasAccess) {
         dynamicItems.push(appConfig);
       }
     });
