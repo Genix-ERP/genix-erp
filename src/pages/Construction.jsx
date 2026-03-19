@@ -724,6 +724,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
   const [showBuildingImportModal, setShowBuildingImportModal] = useState(false);
   const [showBuildingExportModal, setShowBuildingExportModal] = useState(false);
 
+  // Building files
+  const [showBuildingFilesModal, setShowBuildingFilesModal] = useState(false);
+  const [buildingFilesTarget, setBuildingFilesTarget] = useState(null); // { id, name }
+  const [buildingFiles, setBuildingFiles] = useState([]);
+  const [buildingFilesLoading, setBuildingFilesLoading] = useState(false);
+  const [uploadingBuildingFile, setUploadingBuildingFile] = useState(false);
+
   // Forms
   const [buildingForm, setBuildingForm] = useState({
     name: '', code: '', description: '', building_type: '', building_purpose: '',
@@ -961,6 +968,68 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
     } catch (error) {
       console.error('Error saving building:', error);
     }
+  };
+
+  // Building files helpers
+  const openBuildingFiles = async (building) => {
+    setBuildingFilesTarget({ id: building.id, name: building.name });
+    setShowBuildingFilesModal(true);
+    setBuildingFilesLoading(true);
+    try {
+      const data = await constructionService.listBuildingFiles(project.id, building.id);
+      setBuildingFiles(data || []);
+    } catch (e) {
+      console.error('Error loading building files:', e);
+      setBuildingFiles([]);
+    } finally {
+      setBuildingFilesLoading(false);
+    }
+  };
+
+  const handleBuildingFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files?.length || !buildingFilesTarget) return;
+    setUploadingBuildingFile(true);
+    try {
+      for (const file of files) {
+        const uploaded = await Integrations.UploadFile(file);
+        await constructionService.createBuildingFile(project.id, buildingFilesTarget.id, {
+          file_id: uploaded.id,
+          file_url: uploaded.url,
+          filename: uploaded.filename || file.name,
+          file_size: uploaded.size || file.size,
+          mime_type: uploaded.mime_type || file.type,
+        });
+      }
+      const data = await constructionService.listBuildingFiles(project.id, buildingFilesTarget.id);
+      setBuildingFiles(data || []);
+      toast.success(t('file_uploaded') || 'Fayl yuklandi');
+    } catch (err) {
+      console.error('Error uploading building file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    } finally {
+      setUploadingBuildingFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteBuildingFile = async (fileId) => {
+    if (!buildingFilesTarget) return;
+    try {
+      await constructionService.deleteBuildingFile(project.id, buildingFilesTarget.id, fileId);
+      setBuildingFiles(prev => prev.filter(f => f.id !== fileId));
+      toast.success(t('deleted') || "O'chirildi");
+    } catch (err) {
+      console.error('Error deleting building file:', err);
+      toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
 
@@ -1721,6 +1790,50 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                           <p className="text-xs text-slate-500 mb-1">{t('progress') || 'Progress'}</p>
                           <Progress value={building.progress_percent || 0} className="h-2" />
                           <p className="text-xs text-right mt-1">{building.progress_percent || 0}%</p>
+                        </div>
+                        <div className="mt-3 flex gap-2 border-t pt-3">
+                          <Button
+                            variant="outline" size="sm" className="flex-1 text-xs"
+                            onClick={() => {
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.multiple = true;
+                              input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar';
+                              input.onchange = async (e) => {
+                                setBuildingFilesTarget({ id: building.id, name: building.name });
+                                setUploadingBuildingFile(true);
+                                try {
+                                  for (const file of e.target.files) {
+                                    const uploaded = await Integrations.UploadFile(file);
+                                    await constructionService.createBuildingFile(project.id, building.id, {
+                                      file_id: uploaded.id,
+                                      file_url: uploaded.url,
+                                      filename: uploaded.filename || file.name,
+                                      file_size: uploaded.size || file.size,
+                                      mime_type: uploaded.mime_type || file.type,
+                                    });
+                                  }
+                                  toast.success(t('file_uploaded') || 'Fayl yuklandi');
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error(t('error_occurred') || 'Xatolik yuz berdi');
+                                } finally {
+                                  setUploadingBuildingFile(false);
+                                }
+                              };
+                              input.click();
+                            }}
+                          >
+                            <Upload className="w-3.5 h-3.5 mr-1.5" />
+                            {t('upload_file') || 'Fayl yuklash'}
+                          </Button>
+                          <Button
+                            variant="outline" size="sm" className="flex-1 text-xs"
+                            onClick={() => openBuildingFiles(building)}
+                          >
+                            <FileText className="w-3.5 h-3.5 mr-1.5" />
+                            {t('files') || 'Fayllar'}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -3285,6 +3398,90 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
           />
         </div>
       )}
+
+      {/* Building Files Modal */}
+      <Dialog open={showBuildingFilesModal} onOpenChange={setShowBuildingFilesModal}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              {buildingFilesTarget?.name} — {t('files') || 'Fayllar'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <input
+                id="building-file-upload"
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip,.rar"
+                className="hidden"
+                onChange={handleBuildingFileUpload}
+              />
+              <Button
+                variant="outline" size="sm" className="w-full"
+                disabled={uploadingBuildingFile}
+                onClick={() => document.getElementById('building-file-upload')?.click()}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {uploadingBuildingFile ? (t('uploading') || 'Yuklanmoqda...') : (t('upload_file') || 'Fayl yuklash')}
+              </Button>
+            </div>
+
+            {buildingFilesLoading ? (
+              <div className="text-center py-8 text-slate-400">{t('loading') || 'Yuklanmoqda...'}</div>
+            ) : buildingFiles.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">{t('no_files') || "Fayllar yo'q"}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {buildingFiles.map(file => (
+                  <div key={file.id} className="flex items-center justify-between border rounded-lg p-3 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="shrink-0">
+                        {file.mime_type?.includes('pdf') ? (
+                          <FileText className="w-8 h-8 text-red-500" />
+                        ) : file.mime_type?.includes('image') ? (
+                          <Image className="w-8 h-8 text-blue-500" />
+                        ) : file.mime_type?.includes('spreadsheet') || file.mime_type?.includes('excel') ? (
+                          <FileSpreadsheet className="w-8 h-8 text-green-500" />
+                        ) : (
+                          <FileText className="w-8 h-8 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{file.filename}</p>
+                        <p className="text-xs text-slate-400">
+                          {formatFileSize(file.file_size)}
+                          {file.created_at && ` · ${format(new Date(file.created_at), 'dd.MM.yyyy HH:mm')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <Button
+                        variant="ghost" size="sm" className="h-8 w-8 p-0"
+                        onClick={() => window.open(file.file_url, '_blank')}
+                        title={t('open') || 'Ochish'}
+                      >
+                        <Eye className="w-4 h-4 text-slate-500" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
+                        onClick={() => handleDeleteBuildingFile(file.id)}
+                        title={t('delete') || "O'chirish"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={confirmDelete.open} onOpenChange={(open) => !open && setConfirmDelete({ open: false, onConfirm: null })}>
