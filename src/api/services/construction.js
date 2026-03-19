@@ -58,6 +58,24 @@ export const constructionService = {
   },
 
   // =====================================================
+  // BUILDING FILES
+  // =====================================================
+
+  async listBuildingFiles(projectId, buildingId) {
+    const response = await apiClient.get(`/construction/projects/${projectId}/buildings/${buildingId}/files`);
+    return response.data.data;
+  },
+
+  async createBuildingFile(projectId, buildingId, data) {
+    const response = await apiClient.post(`/construction/projects/${projectId}/buildings/${buildingId}/files`, data);
+    return response.data.data;
+  },
+
+  async deleteBuildingFile(projectId, buildingId, fileId) {
+    await apiClient.delete(`/construction/projects/${projectId}/buildings/${buildingId}/files/${fileId}`);
+  },
+
+  // =====================================================
   // SMETA SECTIONS
   // =====================================================
 
