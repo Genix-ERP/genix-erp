@@ -198,14 +198,14 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Customers"),
       icon: Users,
       badge: null,
-      moduleId: 'customers'
+      moduleId: 'crm'
     },
     'finance': {
       title: t("financials"),
       url: createPageUrl("Financials"),
       icon: DollarSign,
       badge: null,
-      moduleId: 'financials'
+      moduleId: 'finance'
     },
     'hr': {
       title: t("hr"),
@@ -226,7 +226,7 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Procurement"),
       icon: ShoppingCart,
       badge: null,
-      moduleId: 'procurement'
+      moduleId: 'purchase'
     },
     'projects': {
       title: t("projects"),
@@ -240,14 +240,14 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("SalesOrders"),
       icon: ShoppingBag,
       badge: null,
-      moduleId: 'sales_orders'
+      moduleId: 'sales'
     },
     'pos': {
       title: 'Point of Sale',
       url: createPageUrl("POS"),
       icon: ShoppingCart,
       badge: null,
-      moduleId: 'sales_orders'
+      moduleId: 'sales'
     },
     'assets': {
       title: t("assets"),
@@ -346,13 +346,13 @@ function LayoutContent({ children, currentPageName }) {
       const appConfig = appNavigationMap[appId];
       // Check if app is installed AND user has permission to access the module
       // Admins, site admins, and owners always have access
+      const installed = isAppInstalled(appId);
       const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
-      if (isAppInstalled(appId) && hasAccess) {
+      if (!installed || !hasAccess) {
+        console.log(`[NAV] ${appId} hidden: installed=${installed}, hasAccess=${hasAccess}, moduleId=${appConfig.moduleId}`);
+      }
+      if (installed && hasAccess) {
         dynamicItems.push(appConfig);
-        // POS temporarily hidden - uncomment when ready
-        // if (appId === 'sales_orders' && appNavigationMap['pos']) {
-        //   dynamicItems.push(appNavigationMap['pos']);
-        // }
       }
     });
 
