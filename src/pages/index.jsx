@@ -203,19 +203,19 @@ function PagesContent() {
                 <Route path="cargo" element={<ModuleRoute moduleId="cargo"><Cargo /></ModuleRoute>} />
                 <Route path="construction" element={<ModuleRoute moduleId="construction"><Construction /></ModuleRoute>} />
                 <Route path="apps" element={<AdminRoute><Apps /></AdminRoute>} />
-                <Route path="customers" element={<ModuleRoute moduleId="customers"><Customers /></ModuleRoute>} />
+                <Route path="customers" element={<ModuleRoute moduleId="crm"><Customers /></ModuleRoute>} />
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="my-settings" element={<MySettings />} />
-                <Route path="financials" element={<ModuleRoute moduleId="financials"><Financials /></ModuleRoute>} />
+                <Route path="financials" element={<ModuleRoute moduleId="finance"><Financials /></ModuleRoute>} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="adminpanel" element={<AdminRoute><AdminPanel /></AdminRoute>} />
                 <Route path="adminsettings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
                 <Route path="manufacturing" element={<ModuleRoute moduleId="manufacturing"><Manufacturing /></ModuleRoute>} />
-                <Route path="procurement" element={<ModuleRoute moduleId="procurement"><Procurement /></ModuleRoute>} />
+                <Route path="procurement" element={<ModuleRoute moduleId="purchase"><Procurement /></ModuleRoute>} />
                 <Route path="projects" element={<ModuleRoute moduleId="projects"><Projects /></ModuleRoute>} />
                 <Route path="projects/:projectId" element={<ModuleRoute moduleId="projects"><ProjectDetail /></ModuleRoute>} />
-                <Route path="salesorders" element={<ModuleRoute moduleId="sales_orders"><SalesOrders /></ModuleRoute>} />
-                <Route path="pos" element={<ModuleRoute moduleId="sales_orders"><POS /></ModuleRoute>} />
+                <Route path="salesorders" element={<ModuleRoute moduleId="sales"><SalesOrders /></ModuleRoute>} />
+                <Route path="pos" element={<ModuleRoute moduleId="sales"><POS /></ModuleRoute>} />
                 <Route path="assets" element={<ModuleRoute moduleId="assets"><Assets /></ModuleRoute>} />
                 <Route path="expenses" element={<ModuleRoute moduleId="expenses"><Expenses /></ModuleRoute>} />
                 <Route path="payroll" element={<ModuleRoute moduleId="payroll"><Payroll /></ModuleRoute>} />

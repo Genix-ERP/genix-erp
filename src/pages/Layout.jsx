@@ -198,14 +198,14 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Customers"),
       icon: Users,
       badge: null,
-      moduleId: 'customers'
+      moduleId: 'crm'
     },
     'finance': {
       title: t("financials"),
       url: createPageUrl("Financials"),
       icon: DollarSign,
       badge: null,
-      moduleId: 'financials'
+      moduleId: 'finance'
     },
     'hr': {
       title: t("hr"),
@@ -226,7 +226,7 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("Procurement"),
       icon: ShoppingCart,
       badge: null,
-      moduleId: 'procurement'
+      moduleId: 'purchase'
     },
     'projects': {
       title: t("projects"),
@@ -240,14 +240,14 @@ function LayoutContent({ children, currentPageName }) {
       url: createPageUrl("SalesOrders"),
       icon: ShoppingBag,
       badge: null,
-      moduleId: 'sales_orders'
+      moduleId: 'sales'
     },
     'pos': {
       title: 'Point of Sale',
       url: createPageUrl("POS"),
       icon: ShoppingCart,
       badge: null,
-      moduleId: 'sales_orders'
+      moduleId: 'sales'
     },
     'assets': {
       title: t("assets"),

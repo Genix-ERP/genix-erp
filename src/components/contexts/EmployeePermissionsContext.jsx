@@ -13,23 +13,24 @@ const EmployeePermissionsContext = createContext(null);
 export const AVAILABLE_MODULES = [
   // Core modules
   { id: 'dashboard', nameKey: 'dashboard', isCore: true },
-  { id: 'ai_assistant', nameKey: 'ai_assistant', isCore: true },
+  { id: 'ai', nameKey: 'ai_assistant', isCore: true },
   { id: 'settings', nameKey: 'settings', isCore: true },
-  // App modules - 'id' matches MODULES constant, 'appId' matches installed apps
+  // App modules - 'id' must match backend Require() module names
   { id: 'inventory', nameKey: 'inventory', appId: 'inventory' },
-  { id: 'customers', nameKey: 'customers', appId: 'crm' },
-  { id: 'financials', nameKey: 'financials', appId: 'finance' },
+  { id: 'crm', nameKey: 'customers', appId: 'crm' },
+  { id: 'finance', nameKey: 'financials', appId: 'finance' },
   { id: 'hr', nameKey: 'hr', appId: 'hr' },
   { id: 'manufacturing', nameKey: 'manufacturing', appId: 'manufacturing' },
-  { id: 'purchases', nameKey: 'procurement', appId: 'procurement' },  // id matches MODULES.PURCHASES
+  { id: 'purchase', nameKey: 'procurement', appId: 'procurement' },
   { id: 'projects', nameKey: 'projects', appId: 'projects' },
-  { id: 'sales', nameKey: 'sales_orders', appId: 'sales_orders' },   // id matches MODULES.SALES
+  { id: 'sales', nameKey: 'sales_orders', appId: 'sales_orders' },
   { id: 'assets', nameKey: 'assets', appId: 'assets' },
   { id: 'expenses', nameKey: 'expenses', appId: 'expenses' },
   { id: 'payroll', nameKey: 'payroll', appId: 'payroll' },
   { id: 'contracts', nameKey: 'contracts', appId: 'contracts' },
   { id: 'cargo', nameKey: 'cargo', appId: 'cargo' },
   { id: 'construction', nameKey: 'construction', appId: 'construction' },
+  { id: 'organization', nameKey: 'organization', isCore: true },
 ];
 
 export function EmployeePermissionsProvider({ children }) {
