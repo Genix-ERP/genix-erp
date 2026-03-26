@@ -20,6 +20,17 @@ import { MODULES } from "@/config/permissions";
 import { contactsService } from '@/api/services';
 import financeService from "@/api/services/finance";
 
+// Fix share URLs: replace backend's FRONTEND_URL with actual browser origin
+const fixShareUrl = (url) => {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    return `${window.location.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+};
+
 export default function ActSverka() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -396,8 +407,9 @@ export default function ActSverka() {
         via: 'link',
       });
       if (result.share_url) {
-        await navigator.clipboard.writeText(result.share_url);
-        setSendResult({ message: t('link_copied') || 'Havola nusxalandi', share_url: result.share_url });
+        const fixedUrl = fixShareUrl(result.share_url);
+        await navigator.clipboard.writeText(fixedUrl);
+        setSendResult({ message: t('link_copied') || 'Havola nusxalandi', share_url: fixedUrl });
         setShowSendModal(true);
       }
     } catch (err) {
@@ -420,7 +432,7 @@ export default function ActSverka() {
         subject: sendMethod === 'email' ? sendSubject : '',
         message: sendMethod === 'email' ? sendMessage : '',
       });
-      setSendResult(result);
+      setSendResult({ ...result, share_url: fixShareUrl(result.share_url) });
       // Update local status
       setSelectedAct(prev => ({ ...prev, status: 'sent' }));
       if (actDetail) setActDetail(prev => ({ ...prev, status: 'sent' }));
@@ -884,9 +896,9 @@ export default function ActSverka() {
                   </div>
                   {sendResult.share_url && (
                     <div className="mt-2 space-y-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <Link2 className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                        <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                        <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate min-w-0">
                           {sendResult.share_url}
                         </a>
                         <button
@@ -1432,9 +1444,9 @@ export default function ActSverka() {
                   {sendResult.message}
                 </div>
                 {sendResult.share_url && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <Link2 className="w-3 h-3 text-slate-400" />
-                    <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate">
+                  <div className="mt-2 flex items-center gap-2 min-w-0">
+                    <Link2 className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    <a href={sendResult.share_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate min-w-0">
                       {sendResult.share_url}
                     </a>
                   </div>
