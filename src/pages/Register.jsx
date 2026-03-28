@@ -31,6 +31,7 @@ export default function Register() {
   const [countdown, setCountdown] = useState(0);
   const [shouldNavigate, setShouldNavigate] = useState(false);
   const [googleStep, setGoogleStep] = useState(null); // null or { credential, user }
+  const [devOtpCode, setDevOtpCode] = useState(null); // Dev mode: auto-filled OTP
   const { registerWithOTP, loginWithGoogle, backendAvailable, isAuthenticated, user } = useAuth();
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -139,9 +140,15 @@ export default function Register() {
     setIsSendingOTP(true);
 
     try {
-      await authService.sendOTP(formData.email, 'registration', language);
+      const result = await authService.sendOTP(formData.email, 'registration', language);
       setSuccess(t('otp_sent_success'));
       setCountdown(60); // 60 seconds countdown for resend
+      // Dev mode: auto-fill OTP code if returned by backend
+      if (result?.dev_otp_code) {
+        const code = result.dev_otp_code.split('');
+        setOtpCode(code);
+        setDevOtpCode(result.dev_otp_code);
+      }
     } catch (err) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to send OTP';
       setError(message);
@@ -170,10 +177,16 @@ export default function Register() {
 
     try {
       // Send OTP to email with selected language
-      await authService.sendOTP(formData.email, 'registration', language);
+      const result = await authService.sendOTP(formData.email, 'registration', language);
       setStep(2);
       setSuccess(t('otp_sent_success'));
       setCountdown(60);
+      // Dev mode: auto-fill OTP code if returned by backend
+      if (result?.dev_otp_code) {
+        const code = result.dev_otp_code.split('');
+        setOtpCode(code);
+        setDevOtpCode(result.dev_otp_code);
+      }
     } catch (err) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to send OTP';
       setError(message);
@@ -458,6 +471,14 @@ export default function Register() {
                   <CheckCircle className="h-4 w-4 text-green-600" />
                   <AlertDescription className="text-green-700">
                     {success}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {devOtpCode && (
+                <Alert className="bg-amber-50 border-amber-200">
+                  <AlertDescription className="text-amber-700 text-sm">
+                    <span className="font-semibold">Dev Mode:</span> OTP code auto-filled — <span className="font-mono font-bold">{devOtpCode}</span>
                   </AlertDescription>
                 </Alert>
               )}
