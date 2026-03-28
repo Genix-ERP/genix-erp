@@ -783,11 +783,11 @@ export default function WorkCenters() {
             {/* Employee Assignment */}
             <div className="space-y-2 pt-4 border-t border-slate-100">
               <LabelWithHelp
-                label={t('assign_employees') || 'Assign Employees'}
+                label={language === 'uz' ? 'Xodimlarni tayinlash' : language === 'ru' ? 'Назначить сотрудников' : 'Assign Employees'}
                 helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
               />
               <Input
-                placeholder={t('search_employees') || 'Search employees...'}
+                placeholder={language === 'uz' ? 'Xodimlarni qidirish...' : language === 'ru' ? 'Поиск сотрудников...' : 'Search employees...'}
                 value={employeeSearch}
                 onChange={(e) => setEmployeeSearch(e.target.value)}
                 className="mb-2"
@@ -832,12 +832,12 @@ export default function WorkCenters() {
               ) : (
                 <div className="border rounded-lg p-4 text-center bg-slate-50">
                   <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm text-slate-500">{t('no_employees_available') || 'No employees available'}</p>
+                  <p className="text-sm text-slate-500">{language === 'uz' ? 'Xodimlar mavjud emas' : language === 'ru' ? 'Нет доступных сотрудников' : 'No employees available'}</p>
                 </div>
               )}
               {selectedEmployeeIds.length > 0 && (
                 <p className="text-xs text-slate-500">
-                  {selectedEmployeeIds.length} {t('employees_selected') || 'employees selected'}
+                  {selectedEmployeeIds.length} {language === 'uz' ? 'xodim tanlangan' : language === 'ru' ? 'сотрудников выбрано' : 'employees selected'}
                 </p>
               )}
             </div>
@@ -1119,11 +1119,11 @@ export default function WorkCenters() {
             {selectedWorkCenter && (
               <div className="space-y-2 pt-4 border-t border-slate-100">
                 <LabelWithHelp
-                  label={t('assign_employees') || 'Assign Employees'}
+                  label={language === 'uz' ? 'Xodimlarni tayinlash' : language === 'ru' ? 'Назначить сотрудников' : 'Assign Employees'}
                   helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
                 />
                 <Input
-                  placeholder={t('search_employees') || 'Search employees...'}
+                  placeholder={language === 'uz' ? 'Xodimlarni qidirish...' : language === 'ru' ? 'Поиск сотрудников...' : 'Search employees...'}
                   value={employeeSearch}
                   onChange={(e) => setEmployeeSearch(e.target.value)}
                   className="mb-2"
@@ -1168,12 +1168,12 @@ export default function WorkCenters() {
                 ) : (
                   <div className="border rounded-lg p-4 text-center bg-slate-50">
                     <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm text-slate-500">{t('no_employees_available') || 'No employees available'}</p>
+                    <p className="text-sm text-slate-500">{language === 'uz' ? 'Xodimlar mavjud emas' : language === 'ru' ? 'Нет доступных сотрудников' : 'No employees available'}</p>
                   </div>
                 )}
                 {selectedEmployeeIds.length > 0 && (
                   <p className="text-xs text-slate-500">
-                    {selectedEmployeeIds.length} {t('employees_selected') || 'employees selected'}
+                    {selectedEmployeeIds.length} {language === 'uz' ? 'xodim tanlangan' : language === 'ru' ? 'сотрудников выбрано' : 'employees selected'}
                   </p>
                 )}
               </div>
@@ -1390,7 +1390,7 @@ export default function WorkCenters() {
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium flex items-center gap-2">
                     <Users className="w-4 h-4" />
-                    {t('assigned_employees') || 'Assigned Employees'}
+                    {language === 'uz' ? 'Tayinlangan xodimlar' : language === 'ru' ? 'Назначенные сотрудники' : 'Assigned Employees'}
                   </p>
                   <Badge variant="outline">
                     {(wcEmployees[selectedWorkCenter.id] || []).length} {t('items') || 'items'}
@@ -1432,7 +1432,7 @@ export default function WorkCenters() {
                 ) : (
                   <div className="text-center py-6 bg-slate-50 rounded-lg">
                     <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm text-slate-500">{t('no_employees_assigned') || 'No employees assigned to this work center'}</p>
+                    <p className="text-sm text-slate-500">{language === 'uz' ? 'Bu ish markaziga xodimlar tayinlanmagan' : language === 'ru' ? 'Нет назначенных сотрудников' : 'No employees assigned to this work center'}</p>
                   </div>
                 )}
               </div>
