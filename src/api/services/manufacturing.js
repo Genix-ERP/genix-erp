@@ -27,6 +27,21 @@ export const workCentersService = {
   async delete(id) {
     await apiClient.delete(`/work-centers/${id}`);
     return true;
+  },
+
+  async getEmployees(id) {
+    const response = await apiClient.get(`/work-centers/${id}/employees`);
+    return response.data.data?.employees || [];
+  },
+
+  async assignEmployees(id, data) {
+    const response = await apiClient.post(`/work-centers/${id}/employees`, data);
+    return response.data;
+  },
+
+  async removeEmployee(wcId, employeeId) {
+    await apiClient.delete(`/work-centers/${wcId}/employees/${employeeId}`);
+    return true;
   }
 };
 
