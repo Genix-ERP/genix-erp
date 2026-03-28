@@ -231,12 +231,6 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="login-divider">
-            <span>{t('or_continue_with') || 'Or continue with'}</span>
-          </div>
-
-          <GoogleSignInButton onSuccess={handleGoogleLogin} text="signin_with" />
-
         </div>
       </div>
     </div>
