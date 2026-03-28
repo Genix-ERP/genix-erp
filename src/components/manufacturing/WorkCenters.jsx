@@ -410,8 +410,8 @@ export default function WorkCenters() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-base font-bold">{wc.name}</CardTitle>
-                      <p className="text-xs text-slate-500 mt-1">{wc.code}</p>
+                      <CardTitle className="text-lg font-bold">{wc.name}</CardTitle>
+                      <p className="text-sm text-slate-500 mt-1">{wc.code}</p>
                     </div>
                     <Badge className={getStatusColor(wc.status)}>
                       {getStatusIcon(wc.status)}
@@ -421,11 +421,11 @@ export default function WorkCenters() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="p-3 bg-blue-50 rounded-lg">
-                    <p className="text-xs text-blue-600 font-medium">{t('utilization')}</p>
-                    <p className="text-lg font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
+                    <p className="text-sm text-blue-600 font-medium">{t('utilization')}</p>
+                    <p className="text-xl font-bold text-blue-900">{Math.round(wc.current_utilization || 0)}%</p>
                   </div>
 
-                  <div className="space-y-2 text-xs">
+                  <div className="space-y-2 text-sm">
                     {wc.department && (
                       <div className="flex justify-between">
                         <span className="text-slate-600">{t('department')}:</span>
@@ -447,14 +447,14 @@ export default function WorkCenters() {
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('equipment')}:</span>
                       <span className="font-semibold flex items-center gap-1">
-                        <Settings className="w-3 h-3" />
+                        <Settings className="w-3.5 h-3.5" />
                         {equipmentCountByWorkCenter[wc.id] || 0} {t('items') || 'items'}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">{t('employees') || 'Employees'}:</span>
                       <span className="font-semibold flex items-center gap-1">
-                        <Users className="w-3 h-3" />
+                        <Users className="w-3.5 h-3.5" />
                         {(wcEmployees[wc.id] || []).length} {t('items') || 'items'}
                       </span>
                     </div>
