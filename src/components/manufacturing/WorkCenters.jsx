@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LabelWithHelp } from "@/components/ui/field-help";
-import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check } from 'lucide-react';
+import { Plus, Cog, AlertTriangle, CheckCircle, Wrench, Eye, Pencil, Trash2, Settings, Check, Users, X } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -17,7 +17,8 @@ import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useCompany } from '@/components/contexts/CompanyContext';
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
-import { equipmentService } from '@/api/services/manufacturing';
+import { equipmentService, workCentersService } from '@/api/services/manufacturing';
+import { hrService } from '@/api/services/hr';
 import { toast } from 'sonner';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b'];
@@ -34,11 +35,35 @@ export default function WorkCenters() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedWorkCenter, setSelectedWorkCenter] = useState(null);
   const [equipment, setEquipment] = useState([]);
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [wcEmployees, setWcEmployees] = useState({});
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
-  // Load equipment from real API
+  // Load equipment and employees from API
   useEffect(() => {
     equipmentService.list().then(data => setEquipment(data)).catch(() => {});
+    hrService.listEmployees({ limit: 1000, status: 'active' }).then(data => {
+      setAllEmployees(data?.employees || data || []);
+    }).catch(() => {});
   }, []);
+
+  // Load employees for all work centers
+  useEffect(() => {
+    if (workCenters?.length > 0) {
+      const loadEmployees = async () => {
+        const empMap = {};
+        for (const wc of workCenters) {
+          try {
+            const emps = await workCentersService.getEmployees(wc.id);
+            empMap[wc.id] = emps;
+          } catch { empMap[wc.id] = []; }
+        }
+        setWcEmployees(empMap);
+      };
+      loadEmployees();
+    }
+  }, [workCenters]);
 
   // Get equipment for a specific work center
   const getEquipmentForWorkCenter = (workCenterId) => {
@@ -156,6 +181,13 @@ export default function WorkCenters() {
         await saveEquipmentAssignments(createdWC.id, selectedEquipmentIds);
       }
 
+      // Save employee assignments if any were selected
+      if (selectedEmployeeIds.length > 0 && createdWC?.id) {
+        await workCentersService.assignEmployees(createdWC.id, { employee_ids: selectedEmployeeIds, role: 'operator' });
+        const emps = await workCentersService.getEmployees(createdWC.id);
+        setWcEmployees(prev => ({ ...prev, [createdWC.id]: emps }));
+      }
+
       setShowCreateModal(false);
       resetForm();
     } catch (error) {
@@ -187,6 +219,8 @@ export default function WorkCenters() {
       operator_monthly_salary: '',
     });
     setSelectedEquipmentIds([]);
+    setSelectedEmployeeIds([]);
+    setEmployeeSearch('');
   };
 
   const handleViewWorkCenter = (wc) => {
@@ -219,6 +253,9 @@ export default function WorkCenters() {
     // Load currently assigned equipment IDs
     const assignedIds = getEquipmentForWorkCenter(wc.id).map(eq => eq.id);
     setSelectedEquipmentIds(assignedIds);
+    // Load currently assigned employee IDs
+    const assignedEmps = (wcEmployees[wc.id] || []).map(emp => emp.employee_id);
+    setSelectedEmployeeIds(assignedEmps);
     setShowEditModal(true);
   };
 
@@ -251,6 +288,19 @@ export default function WorkCenters() {
 
       // Update equipment assignments
       await saveEquipmentAssignments(selectedWorkCenter.id, selectedEquipmentIds);
+
+      // Update employee assignments - remove old, add new
+      const currentEmpIds = (wcEmployees[selectedWorkCenter.id] || []).map(e => e.employee_id);
+      const toRemove = currentEmpIds.filter(id => !selectedEmployeeIds.includes(id));
+      const toAdd = selectedEmployeeIds.filter(id => !currentEmpIds.includes(id));
+      for (const empId of toRemove) {
+        await workCentersService.removeEmployee(selectedWorkCenter.id, empId);
+      }
+      if (toAdd.length > 0) {
+        await workCentersService.assignEmployees(selectedWorkCenter.id, { employee_ids: toAdd, role: 'operator' });
+      }
+      const updatedEmps = await workCentersService.getEmployees(selectedWorkCenter.id);
+      setWcEmployees(prev => ({ ...prev, [selectedWorkCenter.id]: updatedEmps }));
 
       setShowEditModal(false);
       setSelectedWorkCenter(null);
@@ -399,6 +449,13 @@ export default function WorkCenters() {
                       <span className="font-semibold flex items-center gap-1">
                         <Settings className="w-3 h-3" />
                         {equipmentCountByWorkCenter[wc.id] || 0} {t('items') || 'items'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">{t('employees') || 'Employees'}:</span>
+                      <span className="font-semibold flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        {(wcEmployees[wc.id] || []).length} {t('items') || 'items'}
                       </span>
                     </div>
                   </div>
@@ -723,6 +780,68 @@ export default function WorkCenters() {
               )}
             </div>
 
+            {/* Employee Assignment */}
+            <div className="space-y-2 pt-4 border-t border-slate-100">
+              <LabelWithHelp
+                label={t('assign_employees') || 'Assign Employees'}
+                helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
+              />
+              <Input
+                placeholder={t('search_employees') || 'Search employees...'}
+                value={employeeSearch}
+                onChange={(e) => setEmployeeSearch(e.target.value)}
+                className="mb-2"
+              />
+              {allEmployees.length > 0 ? (
+                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {allEmployees
+                    .filter(emp => {
+                      const name = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+                      return name.includes(employeeSearch.toLowerCase()) || (emp.employee_number || '').toLowerCase().includes(employeeSearch.toLowerCase());
+                    })
+                    .map((emp) => (
+                    <div
+                      key={emp.id}
+                      className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedEmployeeIds(prev =>
+                          prev.includes(emp.id)
+                            ? prev.filter(id => id !== emp.id)
+                            : [...prev, emp.id]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        id={`emp-create-${emp.id}`}
+                        checked={selectedEmployeeIds.includes(emp.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedEmployeeIds(prev =>
+                            checked
+                              ? [...prev, emp.id]
+                              : prev.filter(id => id !== emp.id)
+                          );
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                        <p className="text-xs text-slate-500">{emp.employee_number} {emp.job_title ? `• ${emp.job_title}` : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 text-center bg-slate-50">
+                  <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm text-slate-500">{t('no_employees_available') || 'No employees available'}</p>
+                </div>
+              )}
+              {selectedEmployeeIds.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {selectedEmployeeIds.length} {t('employees_selected') || 'employees selected'}
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowCreateModal(false); resetForm(); }} className="flex-1">
                 {t('cancel')}
@@ -996,6 +1115,70 @@ export default function WorkCenters() {
               </div>
             )}
 
+            {/* Employee Assignment for Edit */}
+            {selectedWorkCenter && (
+              <div className="space-y-2 pt-4 border-t border-slate-100">
+                <LabelWithHelp
+                  label={t('assign_employees') || 'Assign Employees'}
+                  helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
+                />
+                <Input
+                  placeholder={t('search_employees') || 'Search employees...'}
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  className="mb-2"
+                />
+                {allEmployees.length > 0 ? (
+                  <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                    {allEmployees
+                      .filter(emp => {
+                        const name = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+                        return name.includes(employeeSearch.toLowerCase()) || (emp.employee_number || '').toLowerCase().includes(employeeSearch.toLowerCase());
+                      })
+                      .map((emp) => (
+                      <div
+                        key={emp.id}
+                        className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployeeIds(prev =>
+                            prev.includes(emp.id)
+                              ? prev.filter(id => id !== emp.id)
+                              : [...prev, emp.id]
+                          );
+                        }}
+                      >
+                        <Checkbox
+                          id={`emp-edit-${emp.id}`}
+                          checked={selectedEmployeeIds.includes(emp.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedEmployeeIds(prev =>
+                              checked
+                                ? [...prev, emp.id]
+                                : prev.filter(id => id !== emp.id)
+                            );
+                          }}
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                          <p className="text-xs text-slate-500">{emp.employee_number} {emp.job_title ? `• ${emp.job_title}` : ''}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center bg-slate-50">
+                    <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm text-slate-500">{t('no_employees_available') || 'No employees available'}</p>
+                  </div>
+                )}
+                {selectedEmployeeIds.length > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {selectedEmployeeIds.length} {t('employees_selected') || 'employees selected'}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowEditModal(false); setSelectedWorkCenter(null); resetForm(); }} className="flex-1">
                 {t('cancel')}
@@ -1198,6 +1381,58 @@ export default function WorkCenters() {
                     <Settings className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm text-slate-500">{t('no_equipment_assigned') || 'No equipment assigned to this work center'}</p>
                     <p className="text-xs text-slate-400 mt-1">{t('assign_equipment_hint') || 'Go to Equipment tab to assign equipment'}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Employees Section */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    {t('assigned_employees') || 'Assigned Employees'}
+                  </p>
+                  <Badge variant="outline">
+                    {(wcEmployees[selectedWorkCenter.id] || []).length} {t('items') || 'items'}
+                  </Badge>
+                </div>
+
+                {(wcEmployees[selectedWorkCenter.id] || []).length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="text-xs">{t('employee') || 'Employee'}</TableHead>
+                          <TableHead className="text-xs">{t('job_title') || 'Job Title'}</TableHead>
+                          <TableHead className="text-xs">{t('role') || 'Role'}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(wcEmployees[selectedWorkCenter.id] || []).map((emp) => (
+                          <TableRow key={emp.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium text-sm">{emp.employee_name}</p>
+                                <p className="text-xs text-slate-500">{emp.employee_number}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{emp.job_title || '-'}</span>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {emp.role}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-slate-50 rounded-lg">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm text-slate-500">{t('no_employees_assigned') || 'No employees assigned to this work center'}</p>
                   </div>
                 )}
               </div>

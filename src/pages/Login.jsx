@@ -237,12 +237,6 @@ export default function Login() {
 
           <GoogleSignInButton onSuccess={handleGoogleLogin} text="signin_with" />
 
-          {backendAvailable && (
-            <p className="login-register">
-              {t('dont_have_account')}{' '}
-              <Link to="/register">{t('sign_up')}</Link>
-            </p>
-          )}
         </div>
       </div>
     </div>
