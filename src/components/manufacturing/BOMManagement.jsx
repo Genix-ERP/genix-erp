@@ -737,7 +737,7 @@ export default function BOMManagement() {
                       </Select>
                     </div>
                     <div>
-                      <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time'} ({t('minutes') || 'min'})</label>
+                      <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time (min)'}</label>
                       <Input
                         type="number"
                         placeholder="0"
@@ -746,7 +746,7 @@ export default function BOMManagement() {
                       />
                     </div>
                     <div>
-                      <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time'} ({t('minutes') || 'min'})</label>
+                      <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time (min)'}</label>
                       <Input
                         type="number"
                         placeholder="0"
@@ -998,7 +998,7 @@ export default function BOMManagement() {
                         </Select>
                       </div>
                       <div>
-                        <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time'} ({t('minutes') || 'min'})</label>
+                        <label className="text-sm font-medium mb-1 block">{t('setup_time') || 'Setup Time (min)'}</label>
                         <Input
                           type="number"
                           placeholder="0"
@@ -1007,7 +1007,7 @@ export default function BOMManagement() {
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time'} ({t('minutes') || 'min'})</label>
+                        <label className="text-sm font-medium mb-1 block">{t('run_time') || 'Run Time (min)'}</label>
                         <Input
                           type="number"
                           placeholder="0"

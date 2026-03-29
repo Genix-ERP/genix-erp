@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, UserPlus, Edit, Trash2, Phone, Mail, Loader2, ArrowRightLeft } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
+import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS = [
@@ -364,9 +365,9 @@ const TeamTab = ({ project }) => {
               <div>
                 <Label>{t('phone') || 'Telefon'}</Label>
                 <Input
-                  value={form.phone}
-                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="+998 90 123 45 67"
+                  value={formatPhoneInput(form.phone)}
+                  onChange={e => setForm(f => ({ ...f, phone: parsePhoneInput(e.target.value) }))}
+                  placeholder="+998 XX XXX XXXX"
                 />
               </div>
               <div>
