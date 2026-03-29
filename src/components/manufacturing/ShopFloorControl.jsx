@@ -26,9 +26,12 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
+import { workOrdersService } from '@/api/services/manufacturing';
+import { toast } from 'sonner';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
 const WORK_ORDER_STATUS = {
@@ -43,7 +46,7 @@ const WORK_ORDER_STATUS = {
 export default function ShopFloorControl({ isActive }) {
   const { language } = useLanguage();
   const { workOrders, workCenters, productionOrders, manufacturingCategories, startWorkOrder, pauseWorkOrder, completeWorkOrder, refreshData } = useManufacturing();
-  const { refreshData: refreshInventory } = useInventory();
+  const { refreshData: refreshInventory, products } = useInventory();
 
   const [selectedWorkCenter, setSelectedWorkCenter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -64,6 +67,16 @@ export default function ShopFloorControl({ isActive }) {
     reason: '',
     notes: '',
   });
+
+  // Materials modal state
+  const [showMaterialsModal, setShowMaterialsModal] = useState(false);
+  const [materialsWorkOrder, setMaterialsWorkOrder] = useState(null);
+  const [woMaterials, setWoMaterials] = useState([]);
+  const [woMaterialsTotalCost, setWoMaterialsTotalCost] = useState(0);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
+  const [productSearch, setProductSearch] = useState('');
+  const [productSearchFocused, setProductSearchFocused] = useState(false);
 
   // Load time logs from localStorage
   useEffect(() => {
@@ -261,6 +274,56 @@ export default function ShopFloorControl({ isActive }) {
     setShowCompleteModal(false);
     setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
     setActiveWorkOrder(null);
+  };
+
+  // Materials handlers
+  const handleOpenMaterials = async (workOrder) => {
+    setMaterialsWorkOrder(workOrder);
+    setShowMaterialsModal(true);
+    setMaterialsLoading(true);
+    try {
+      const data = await workOrdersService.getMaterials(workOrder.id);
+      setWoMaterials(data?.materials || []);
+      setWoMaterialsTotalCost(data?.total_cost || 0);
+    } catch {
+      setWoMaterials([]);
+      setWoMaterialsTotalCost(0);
+    }
+    setMaterialsLoading(false);
+  };
+
+  const handleAddMaterial = async () => {
+    if (!materialsWorkOrder || !newMaterial.product_id || !newMaterial.quantity) return;
+    try {
+      await workOrdersService.addMaterial(materialsWorkOrder.id, {
+        product_id: newMaterial.product_id,
+        quantity: parseFloat(newMaterial.quantity),
+        unit_cost: parseFloat(newMaterial.unit_cost) || 0,
+        notes: newMaterial.notes || null,
+      });
+      // Refresh materials list
+      const data = await workOrdersService.getMaterials(materialsWorkOrder.id);
+      setWoMaterials(data?.materials || []);
+      setWoMaterialsTotalCost(data?.total_cost || 0);
+      setNewMaterial({ product_id: '', quantity: '', unit_cost: '', notes: '' });
+      setProductSearch('');
+      toast.success('Material added');
+    } catch (err) {
+      toast.error('Failed to add material: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleRemoveMaterial = async (materialId) => {
+    if (!materialsWorkOrder) return;
+    try {
+      await workOrdersService.removeMaterial(materialsWorkOrder.id, materialId);
+      const data = await workOrdersService.getMaterials(materialsWorkOrder.id);
+      setWoMaterials(data?.materials || []);
+      setWoMaterialsTotalCost(data?.total_cost || 0);
+      toast.success('Material removed');
+    } catch {
+      toast.error('Failed to remove material');
+    }
   };
 
   // Statistics
@@ -587,6 +650,15 @@ export default function ShopFloorControl({ isActive }) {
                               </TableCell>
                               <TableCell className="text-right pr-5">
                                 <div className="flex justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleOpenMaterials(wo)}
+                                    className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                                  >
+                                    <Package className="w-4 h-4 mr-1" />
+                                    {language === 'uz' ? 'Materiallar' : language === 'ru' ? 'Материалы' : 'Materials'}
+                                  </Button>
                                   {(wo.status === 'ready' || wo.status === 'pending') && (
                                     <Button
                                       size="sm"
@@ -771,6 +843,163 @@ export default function ShopFloorControl({ isActive }) {
                 {language === 'uz' ? "Ishni tugatish" : language === 'ru' ? "Завершить" : "Complete"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Materials Modal */}
+      <Dialog open={showMaterialsModal} onOpenChange={(open) => { setShowMaterialsModal(open); if (!open) { setMaterialsWorkOrder(null); setWoMaterials([]); setNewMaterial({ product_id: '', quantity: '', unit_cost: '', notes: '' }); setProductSearch(''); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              {language === 'uz' ? 'Ishlatilgan materiallar' : language === 'ru' ? 'Использованные материалы' : 'Used Materials'}
+              {materialsWorkOrder && (
+                <Badge variant="outline" className="ml-2">{materialsWorkOrder.name || materialsWorkOrder.code}</Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Existing materials list */}
+            {materialsLoading ? (
+              <div className="text-center py-6 text-slate-500">
+                {language === 'uz' ? 'Yuklanmoqda...' : language === 'ru' ? 'Загрузка...' : 'Loading...'}
+              </div>
+            ) : woMaterials.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'}</TableHead>
+                      <TableHead className="text-xs text-right">{language === 'uz' ? 'Miqdor' : language === 'ru' ? 'Кол-во' : 'Qty'}</TableHead>
+                      <TableHead className="text-xs text-right">{language === 'uz' ? 'Narx' : language === 'ru' ? 'Цена' : 'Unit Cost'}</TableHead>
+                      <TableHead className="text-xs text-right">{language === 'uz' ? 'Jami' : language === 'ru' ? 'Итого' : 'Total'}</TableHead>
+                      <TableHead className="text-xs w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {woMaterials.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell>
+                          <p className="font-medium text-sm">{m.product_name}</p>
+                          {m.notes && <p className="text-xs text-slate-400">{m.notes}</p>}
+                        </TableCell>
+                        <TableCell className="text-right">{m.quantity} {m.uom}</TableCell>
+                        <TableCell className="text-right">{Number(m.unit_cost).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-medium">{Number(m.total_cost).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveMaterial(m.id)}
+                            className="text-red-500 hover:text-red-700 h-7 w-7 p-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="flex justify-between items-center px-4 py-2 bg-slate-50 border-t font-medium text-sm">
+                  <span>{language === 'uz' ? 'Jami xarajat' : language === 'ru' ? 'Общая стоимость' : 'Total Cost'}:</span>
+                  <span className="text-lg">{Number(woMaterialsTotalCost).toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-slate-50 rounded-lg">
+                <Package className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p className="text-sm text-slate-500">
+                  {language === 'uz' ? 'Materiallar hali qo\'shilmagan' : language === 'ru' ? 'Материалы еще не добавлены' : 'No materials added yet'}
+                </p>
+              </div>
+            )}
+
+            {/* Add new material form */}
+            <div className="border rounded-lg p-4 space-y-3 bg-slate-50">
+              <p className="text-sm font-medium">
+                {language === 'uz' ? 'Material qo\'shish' : language === 'ru' ? 'Добавить материал' : 'Add Material'}
+              </p>
+
+              {/* Product search and select */}
+              <div>
+                <Input
+                  placeholder={language === 'uz' ? 'Mahsulot qidirish...' : language === 'ru' ? 'Поиск продукта...' : 'Search product...'}
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  onFocus={() => setProductSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setProductSearchFocused(false), 200)}
+                />
+                {productSearchFocused && (
+                  <div className="border rounded-lg mt-1 max-h-40 overflow-y-auto bg-white shadow-lg">
+                    {(products || [])
+                      .filter(p => !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase()))
+                      .slice(0, 15)
+                      .map(p => (
+                        <div
+                          key={p.id}
+                          className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-sm flex justify-between"
+                          onClick={() => {
+                            setNewMaterial(prev => ({ ...prev, product_id: p.id, unit_cost: p.cost_price || p.price || 0 }));
+                            setProductSearch(p.name);
+                            setProductSearchFocused(false);
+                          }}
+                        >
+                          <span>{p.name}</span>
+                          <span className="text-slate-400">{p.sku}</span>
+                        </div>
+                      ))}
+                    {(products || []).filter(p => !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-400 text-center">
+                        {language === 'uz' ? 'Mahsulot topilmadi' : language === 'ru' ? 'Продукт не найден' : 'No products found'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-xs">{language === 'uz' ? 'Miqdor' : language === 'ru' ? 'Кол-во' : 'Quantity'}</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={newMaterial.quantity}
+                    onChange={(e) => setNewMaterial(prev => ({ ...prev, quantity: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">{language === 'uz' ? 'Narx' : language === 'ru' ? 'Цена' : 'Unit Cost'}</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={newMaterial.unit_cost}
+                    onChange={(e) => setNewMaterial(prev => ({ ...prev, unit_cost: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">{language === 'uz' ? 'Izoh' : language === 'ru' ? 'Примечание' : 'Notes'}</Label>
+                  <Input
+                    placeholder=""
+                    value={newMaterial.notes}
+                    onChange={(e) => setNewMaterial(prev => ({ ...prev, notes: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleAddMaterial}
+                disabled={!newMaterial.product_id || !newMaterial.quantity}
+                className="w-full bg-gradient-to-r from-slate-700 to-slate-800"
+              >
+                <Package className="w-4 h-4 mr-2" />
+                {language === 'uz' ? 'Qo\'shish' : language === 'ru' ? 'Добавить' : 'Add'}
+              </Button>
+            </div>
+
+            <Button variant="outline" onClick={() => setShowMaterialsModal(false)} className="w-full">
+              {language === 'uz' ? 'Yopish' : language === 'ru' ? 'Закрыть' : 'Close'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

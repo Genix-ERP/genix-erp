@@ -3,7 +3,6 @@ import Layout from "./Layout.jsx";
 
 const Login = React.lazy(() => import('./Login'));
 const SharedReconciliation = React.lazy(() => import('./SharedReconciliation'));
-const Register = React.lazy(() => import('./Register'));
 const AcceptInvite = React.lazy(() => import('./AcceptInvite'));
 const Dashboard = React.lazy(() => import('./Dashboard'));
 const AIAssistant = React.lazy(() => import('./AIAssistant'));
@@ -177,7 +176,6 @@ function PagesContent() {
         <Suspense fallback={SuspenseFallback}>
         <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
