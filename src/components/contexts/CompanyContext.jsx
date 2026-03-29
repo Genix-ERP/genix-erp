@@ -48,8 +48,9 @@ export function CompanyProvider({ children }) {
       setCurrentUserId(userId);
       setIsLoading(true);
 
-      // Try to load from backend API
-      const response = await apiClient.get('/organizations');
+      // Use /auth/me/organizations — returns all orgs for admins, only assigned orgs for employees
+      // This endpoint doesn't require organization module permission
+      const response = await apiClient.get('/auth/me/organizations');
       // Backend returns { success: true, data: [...] }
       let companiesList = Array.isArray(response.data?.data) ? response.data.data : [];
 
@@ -86,12 +87,6 @@ export function CompanyProvider({ children }) {
         // Keep original backend data
         _backend: org
       }));
-
-      // Filter companies based on user's organization permissions
-      // Admins see all companies, regular employees see only assigned companies
-      if (!isAdmin && organizationIds && organizationIds.length > 0) {
-        companiesList = companiesList.filter(company => organizationIds.includes(company.id));
-      }
 
       // Only auto-create a default org if the user is an admin and there are truly no orgs at all
       if (companiesList.length === 0 && isAdmin) {
