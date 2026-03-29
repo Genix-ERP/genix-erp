@@ -4,6 +4,7 @@ import { useCompany } from "@/components/contexts/CompanyContext";
 import { useSubscription } from "@/components/contexts/SubscriptionContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -876,18 +877,18 @@ export default function CompanySettings() {
                 <div className="space-y-2">
                   <Label>{t('director_phone') || 'Direktor telefon'}</Label>
                   <Input
-                    value={formData.director_phone}
-                    onChange={(e) => setFormData({ ...formData, director_phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
+                    value={formatPhoneInput(formData.director_phone)}
+                    onChange={(e) => setFormData({ ...formData, director_phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
                   <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+998 71 234 56 78"
+                    value={formatPhoneInput(formData.phone)}
+                    onChange={(e) => setFormData({ ...formData, phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
@@ -1192,18 +1193,18 @@ export default function CompanySettings() {
                 <div className="space-y-2">
                   <Label>{t('director_phone') || 'Direktor telefon'}</Label>
                   <Input
-                    value={addFormData.director_phone}
-                    onChange={(e) => setAddFormData({ ...addFormData, director_phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
+                    value={formatPhoneInput(addFormData.director_phone)}
+                    onChange={(e) => setAddFormData({ ...addFormData, director_phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
                   <Input
-                    value={addFormData.phone}
-                    onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
-                    placeholder="+998 71 234 56 78"
+                    value={formatPhoneInput(addFormData.phone)}
+                    onChange={(e) => setAddFormData({ ...addFormData, phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
