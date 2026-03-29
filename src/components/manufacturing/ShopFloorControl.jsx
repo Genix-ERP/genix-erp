@@ -76,6 +76,7 @@ export default function ShopFloorControl({ isActive }) {
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
+  const [productSearchFocused, setProductSearchFocused] = useState(false);
 
   // Load time logs from localStorage
   useEffect(() => {
@@ -926,25 +927,33 @@ export default function ShopFloorControl({ isActive }) {
                   placeholder={language === 'uz' ? 'Mahsulot qidirish...' : language === 'ru' ? 'Поиск продукта...' : 'Search product...'}
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
+                  onFocus={() => setProductSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setProductSearchFocused(false), 200)}
                 />
-                {productSearch && (
-                  <div className="border rounded-lg mt-1 max-h-32 overflow-y-auto bg-white">
+                {productSearchFocused && (
+                  <div className="border rounded-lg mt-1 max-h-40 overflow-y-auto bg-white shadow-lg">
                     {(products || [])
-                      .filter(p => p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase()))
-                      .slice(0, 10)
+                      .filter(p => !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase()))
+                      .slice(0, 15)
                       .map(p => (
                         <div
                           key={p.id}
-                          className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm flex justify-between"
+                          className="px-3 py-2 hover:bg-slate-100 cursor-pointer text-sm flex justify-between"
                           onClick={() => {
                             setNewMaterial(prev => ({ ...prev, product_id: p.id, unit_cost: p.cost_price || p.price || 0 }));
                             setProductSearch(p.name);
+                            setProductSearchFocused(false);
                           }}
                         >
                           <span>{p.name}</span>
                           <span className="text-slate-400">{p.sku}</span>
                         </div>
                       ))}
+                    {(products || []).filter(p => !productSearch || p.name?.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-400 text-center">
+                        {language === 'uz' ? 'Mahsulot topilmadi' : language === 'ru' ? 'Продукт не найден' : 'No products found'}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
