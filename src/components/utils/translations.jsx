@@ -1753,6 +1753,7 @@ export const translations = {
     "routing": "Routing",
     "equipment": "Equipment",
     "bill_of_materials": "Bill of Materials",
+    "view_bill_of_materials": "View Bill of Materials",
     "bom_description": "Define product structures and component lists",
     "total_boms": "Total BOMs",
     "active_boms": "Active BOMs",
@@ -11980,6 +11981,7 @@ export const translations = {
 
     // Bill of Materials (BOM)
     "bill_of_materials": "Materiallar ro'yxati (BOM)",
+    "view_bill_of_materials": "Materiallar ro'yxatini ko'rish",
     "new_bom": "Yangi BOM",
     "create_bill_of_materials": "Materiallar ro'yxati yaratish",
     "edit_bill_of_materials": "Materiallar ro'yxatini tahrirlash",
@@ -15348,6 +15350,7 @@ export const translations = {
     "routing": "Маршрут",
     "equipment": "Оборудование",
     "bill_of_materials": "Спецификация материалов",
+    "view_bill_of_materials": "Просмотр спецификации материалов",
     "bom_description": "Определение структуры продукции и списков компонентов",
     "total_boms": "Всего спецификаций",
     "active_boms": "Активные спецификации",
