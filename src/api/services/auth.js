@@ -45,9 +45,15 @@ export const authService = {
     return response.data.data;
   },
 
-  // Login with optional tenant_id for multi-tenant scenarios
-  async login(email, password, tenantId = null) {
-    const payload = { email, password };
+  // Login with email or phone + password
+  async login(identifier, password, tenantId = null) {
+    const payload = { password };
+    // Auto-detect: @ means email, otherwise phone
+    if (identifier.includes('@')) {
+      payload.email = identifier;
+    } else {
+      payload.phone = identifier;
+    }
     if (tenantId) {
       payload.tenant_id = tenantId;
     }

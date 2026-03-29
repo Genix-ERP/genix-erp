@@ -4,6 +4,7 @@ import { useCompany } from "@/components/contexts/CompanyContext";
 import { useSubscription } from "@/components/contexts/SubscriptionContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -317,28 +318,29 @@ export default function CompanySettings() {
   const handleImportData = async (data) => {
     try {
       // Transform data to match API format (auto-generate code from name)
+      const str = (v) => v == null ? '' : String(v).trim();
       const mappedData = data.map((row, index) => ({
-        code: `ORG-${Date.now()}-${index}`,  // Auto-generate unique code
-        name: row.company_name || '',
-        tax_id: row.tax_id || '',
-        oked: row.oked || '',
-        bank_account: row.bank_account || '',
-        bank_mfo: row.bank_mfo || '',
-        bank_name: row.bank_name || '',
+        code: `ORG-${Date.now()}-${index}`,
+        name: str(row.company_name),
+        tax_id: str(row.tax_id),
+        oked: str(row.oked),
+        bank_account: str(row.bank_account),
+        bank_mfo: str(row.bank_mfo),
+        bank_name: str(row.bank_name),
         is_vat_payer: row.is_vat_payer === 'Ha' || row.is_vat_payer === 'Yes' || row.is_vat_payer === true,
-        tax_regime: row.tax_regime || '',
-        activity_status: row.activity_status || 'active',
-        business_group: row.business_group || '',
-        intercompany_relations: row.intercompany_relations || '',
-        director_name: row.director_name || '',
-        director_phone: row.director_phone || '',
-        legal_address: row.legal_address || '',
-        notes: row.notes || '',
-        currency: row.currency || 'UZS',
+        tax_regime: str(row.tax_regime),
+        activity_status: str(row.activity_status) || 'active',
+        business_group: str(row.business_group),
+        intercompany_relations: str(row.intercompany_relations),
+        director_name: str(row.director_name),
+        director_phone: str(row.director_phone),
+        legal_address: str(row.legal_address),
+        notes: str(row.notes),
+        currency: str(row.currency) || 'UZS',
         country: 'Uzbekistan',
         contact_info: {
-          email: row.email || '',
-          phone: row.phone || ''
+          email: str(row.email),
+          phone: str(row.phone)
         }
       })).filter(org => org.name); // Filter out empty rows
 
@@ -876,18 +878,18 @@ export default function CompanySettings() {
                 <div className="space-y-2">
                   <Label>{t('director_phone') || 'Direktor telefon'}</Label>
                   <Input
-                    value={formData.director_phone}
-                    onChange={(e) => setFormData({ ...formData, director_phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
+                    value={formatPhoneInput(formData.director_phone)}
+                    onChange={(e) => setFormData({ ...formData, director_phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
                   <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+998 71 234 56 78"
+                    value={formatPhoneInput(formData.phone)}
+                    onChange={(e) => setFormData({ ...formData, phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
@@ -1192,18 +1194,18 @@ export default function CompanySettings() {
                 <div className="space-y-2">
                   <Label>{t('director_phone') || 'Direktor telefon'}</Label>
                   <Input
-                    value={addFormData.director_phone}
-                    onChange={(e) => setAddFormData({ ...addFormData, director_phone: e.target.value })}
-                    placeholder="+998 90 123 45 67"
+                    value={formatPhoneInput(addFormData.director_phone)}
+                    onChange={(e) => setAddFormData({ ...addFormData, director_phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label>{t('company_phone') || 'Kompaniya telefon'}</Label>
                   <Input
-                    value={addFormData.phone}
-                    onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
-                    placeholder="+998 71 234 56 78"
+                    value={formatPhoneInput(addFormData.phone)}
+                    onChange={(e) => setAddFormData({ ...addFormData, phone: parsePhoneInput(e.target.value) })}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
 
