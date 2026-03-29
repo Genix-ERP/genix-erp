@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { hrService } from "@/api/services/hr";
 import { aiService } from "@/api/services/ai";
 import apiClient from "@/api/client";
+import { formatPhoneInput, parsePhoneInput } from "@/utils/formatCurrency";
 import { useToast } from "@/components/ui/use-toast";
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -523,8 +524,13 @@ Only return the JSON, no other text.`;
   };
 
   const handleEditEmployee = async (employee) => {
+    let phone = employee.phone || '+998';
+    if (phone && !phone.startsWith('+')) {
+      phone = phone.startsWith('998') ? '+' + phone : '+998' + phone;
+    }
     setSelectedEmployee({
       ...employee,
+      phone,
       salary: employee.salary || '',
       organization_ids: [],
       _orig_org_ids: []
@@ -1167,9 +1173,9 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('phone')} *</Label>
                   <Input
-                    value={newEmployee.phone}
-                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
-                    placeholder="+998"
+                    value={formatPhoneInput(newEmployee.phone)}
+                    onChange={e => setNewEmployee({...newEmployee, phone: parsePhoneInput(e.target.value)})}
+                    placeholder="+998 XX XXX XXXX"
                   />
                 </div>
                 <div className="space-y-1">
@@ -1457,9 +1463,9 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('phone')}</Label>
                     <Input
-                      value={selectedEmployee.phone}
-                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: e.target.value})}
-                      placeholder="+998"
+                      value={formatPhoneInput(selectedEmployee.phone)}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, phone: parsePhoneInput(e.target.value)})}
+                      placeholder="+998 XX XXX XXXX"
                     />
                   </div>
                 </div>

@@ -106,6 +106,34 @@ export function parsePriceInput(rawValue) {
     : cleaned;
 }
 
+// Format phone number for display: +998 XX XXX XXXX
+export function formatPhoneInput(value) {
+  if (!value) return '+998 ';
+  // Strip everything except digits
+  let digits = value.replace(/[^\d]/g, '');
+  // Ensure starts with 998
+  if (!digits.startsWith('998')) {
+    if (digits.startsWith('8') && digits.length > 9) digits = '99' + digits;
+    else if (digits.length <= 9) digits = '998' + digits;
+  }
+  // Cap at 12 digits (998 + 9 digits)
+  digits = digits.slice(0, 12);
+  // Format: +998 XX XXX XXXX
+  let formatted = '+' + digits.slice(0, 3);
+  if (digits.length > 3) formatted += ' ' + digits.slice(3, 5);
+  if (digits.length > 5) formatted += ' ' + digits.slice(5, 8);
+  if (digits.length > 8) formatted += ' ' + digits.slice(8, 12);
+  return formatted;
+}
+
+// Parse formatted phone back to raw: +998XXXXXXXXX
+export function parsePhoneInput(value) {
+  if (!value) return '';
+  const digits = value.replace(/[^\d]/g, '');
+  if (!digits) return '';
+  return '+' + digits;
+}
+
 export function createCurrencyFormatter(settings = {}) {
   const {
     currency = 'UZS',
