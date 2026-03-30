@@ -26,6 +26,7 @@ import BudgetManagement from "./BudgetManagement";
 import ReconciliationWorkflow from "./ReconciliationWorkflow";
 import BankStatementImport from "./BankStatementImport";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function BankReconciliation() {
   const { language } = useLanguage();
@@ -700,9 +701,10 @@ export default function BankReconciliation() {
             <div>
               <label className="text-sm font-medium">{t('initial_balance') || 'Initial Balance'}</label>
               <Input
-                type="number"
-                value={newBankAccount.balance}
-                onChange={(e) => setNewBankAccount({ ...newBankAccount, balance: e.target.value })}
+                type="text"
+                inputMode="decimal"
+                value={formatPriceInput(newBankAccount.balance)}
+                onChange={(e) => setNewBankAccount({ ...newBankAccount, balance: parsePriceInput(e.target.value) })}
                 placeholder="0"
               />
             </div>

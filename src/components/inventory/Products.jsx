@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useFinancials } from "@/components/contexts/FinancialsContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -2653,8 +2654,8 @@ export default function Products() {
                                       placeholder={t('price_extra')}
                                       type="text"
                                       inputMode="decimal"
-                                      value={newValuePriceExtra}
-                                      onChange={(e) => setNewValuePriceExtra(e.target.value)}
+                                      value={formatPriceInput(newValuePriceExtra)}
+                                      onChange={(e) => setNewValuePriceExtra(parsePriceInput(e.target.value))}
                                     />
                                     <Button
                                       type="button"
@@ -2746,8 +2747,8 @@ export default function Products() {
                                   placeholder={t('price_extra')}
                                   type="text"
                                   inputMode="decimal"
-                                  value={newAttrValPrice}
-                                  onChange={(e) => setNewAttrValPrice(e.target.value)}
+                                  value={formatPriceInput(newAttrValPrice)}
+                                  onChange={(e) => setNewAttrValPrice(parsePriceInput(e.target.value))}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' && newAttrValName.trim()) {
                                       e.preventDefault();
