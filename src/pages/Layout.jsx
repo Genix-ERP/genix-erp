@@ -135,9 +135,9 @@ function LayoutContent({ children, currentPageName }) {
   // Set browser title based on language
   React.useEffect(() => {
     const titles = {
-      uz: "Yuksalish ERP — Sun'iy intellekt orqali biznes boshqaruvi",
-      ru: "Yuksalish ERP — Система управления бизнесом на основе ИИ",
-      en: "Yuksalish ERP — AI-Powered Business Management System",
+      uz: "Genix ERP — Sun'iy intellekt orqali biznes boshqaruvi",
+      ru: "Genix ERP — Система управления бизнесом на основе ИИ",
+      en: "Genix ERP — AI-Powered Business Management System",
     };
     document.title = titles[language] || titles.en;
   }, [language]);
@@ -338,23 +338,21 @@ function LayoutContent({ children, currentPageName }) {
     // Add Dashboard first (always visible)
     dynamicItems.push(coreNavigationItems[0]);
 
-    // Add app modules based on installation status and permissions
-    const isPrivilegedUser = isAdmin || isUserSiteAdmin || isUserOwner;
+    // Add installed app modules - only if user has permission to access
     Object.keys(appNavigationMap).forEach(appId => {
       // Skip POS here, we'll add it separately after sales_orders
       if (appId === 'pos') return;
 
       const appConfig = appNavigationMap[appId];
-      const installed = isAppInstalled(appId);
-      const hasModulePermission = canAccessModule(appConfig.moduleId);
-
-      // Privileged users: show if app is installed (they have access to everything)
-      // Employees: show if they have explicit module permission (permission implies installation)
-      const hasAccess = isPrivilegedUser || hasModulePermission;
-      const shouldShow = isPrivilegedUser ? installed : (installed || hasModulePermission);
-
-      if (shouldShow && hasAccess) {
+      // Check if app is installed AND user has permission to access the module
+      // Admins, site admins, and owners always have access
+      const hasAccess = isAdmin || isUserSiteAdmin || isUserOwner || canAccessModule(appConfig.moduleId);
+      if (isAppInstalled(appId) && hasAccess) {
         dynamicItems.push(appConfig);
+        // POS temporarily hidden - uncomment when ready
+        // if (appId === 'sales_orders' && appNavigationMap['pos']) {
+        //   dynamicItems.push(appNavigationMap['pos']);
+        // }
       }
     });
 
@@ -406,7 +404,7 @@ function LayoutContent({ children, currentPageName }) {
               --genix-green: #10B981;
               --genix-orange: #F59E0B;
             }
-            .brand-logo-transparent {
+            .genix-logo-transparent {
               mix-blend-mode: multiply;
               filter: contrast(1.1);
             }
@@ -415,13 +413,12 @@ function LayoutContent({ children, currentPageName }) {
         
         <Sidebar className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
           <SidebarHeader className="border-b border-slate-100 px-4 py-5">
-            <div className="flex items-center gap-2 h-10 overflow-hidden">
+            <div className="flex items-center justify-center h-10 overflow-hidden">
               <img
-                src="/logo.png"
-                alt="Yuksalish"
-                className="h-10 w-auto object-contain brand-logo-transparent"
+                src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+                alt="Genix"
+                className="h-[120px] w-auto object-contain genix-logo-transparent"
               />
-              <span className="text-xl font-bold tracking-tight text-slate-800">Yuksalish</span>
             </div>
           </SidebarHeader>
           

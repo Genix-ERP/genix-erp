@@ -148,7 +148,7 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [fetchUserFromBackend]);
 
-  const login = useCallback(async (identifier, password, tenantId = null) => {
+  const login = useCallback(async (email, password, tenantId = null) => {
     setIsLoading(true);
     setError(null);
 
@@ -159,7 +159,7 @@ export function AuthProvider({ children }) {
 
       if (isAvailable) {
         // Use real backend authentication
-        const data = await authService.login(identifier, password, tenantId);
+        const data = await authService.login(email, password, tenantId);
         // Derive role from user data returned by login
         const userData = { ...data.user, role: deriveRole(data.user) };
         setUser(userData);
@@ -169,7 +169,7 @@ export function AuthProvider({ children }) {
       } else {
         // Fallback to demo users when backend unavailable
         const foundUser = DEMO_USERS.find(
-          u => u.email === identifier && u.password === password
+          u => u.email === email && u.password === password
         );
 
         if (foundUser) {
