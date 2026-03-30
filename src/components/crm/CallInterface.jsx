@@ -654,10 +654,22 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                   />
                 </div>
 
+                {/* Webhook Token */}
+                <div className="space-y-2">
+                  <Label htmlFor="webhook-token">Webhook Token</Label>
+                  <Input
+                    id="webhook-token"
+                    placeholder="your-secret-token"
+                    value={pbxConfig?.webhook_token || ''}
+                    onChange={(e) => setPbxConfig(prev => ({ ...prev, webhook_token: e.target.value }))}
+                  />
+                  <p className="text-xs text-slate-500">OnlinePBX panel → Интеграции → Webhooks → Secret Token</p>
+                </div>
+
                 {/* Webhook URL info */}
                 {(() => {
                   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-                  const webhookUrl = `${apiBase}/webhooks/pbx?tenant_id=${localStorage.getItem('tenantId') || 'YOUR_TENANT_ID'}`;
+                  const webhookUrl = `${apiBase}/webhooks/pbx`;
                   return (
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="flex items-center justify-between mb-1">
@@ -676,7 +688,7 @@ export default function CallInterface({ callLogs = [], onUpdate, customer, langu
                     {webhookUrl}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    {t('webhook_url_hint')}
+                    Bu URL ni OnlinePBX panelda Webhook URL ga qo'ying. Token ni Secret Token maydoniga kiriting.
                   </p>
                 </div>
                   );
