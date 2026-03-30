@@ -299,14 +299,6 @@ export default function Inventory() {
             </TabsTrigger>
 
             <TabsTrigger
-              value="operations"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
-            >
-              <Settings2 className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('operation_types') || "Operatsiya turlari"}</span>
-            </TabsTrigger>
-
-            <TabsTrigger
               value="locations"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-50"
             >

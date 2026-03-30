@@ -614,7 +614,7 @@ export const translations = {
 
     // Inventory
     "inventory_title": "Inventory & Supply Chain",
-    "inventory_subtitle": "Real-time tracking & optimization by Yuksalish Inventory AI",
+    "inventory_subtitle": "Real-time tracking & optimization by Genix Inventory AI",
     "add_item": "Add Item",
     "total_value": "Total Value",
     "low_stock": "Low Stock",
@@ -1753,7 +1753,6 @@ export const translations = {
     "routing": "Routing",
     "equipment": "Equipment",
     "bill_of_materials": "Bill of Materials",
-    "view_bill_of_materials": "View Bill of Materials",
     "bom_description": "Define product structures and component lists",
     "total_boms": "Total BOMs",
     "active_boms": "Active BOMs",
@@ -2006,8 +2005,6 @@ export const translations = {
     "new_stock_operation": "New Stock Operation",
     "new_stock_operation_desc": "Create a receipt, delivery, internal transfer, or write-off",
     "no_operations": "No operations found",
-    "no_operations_added": "No operations added yet",
-    "add_operations_description": "Add operations to define the manufacturing process",
     "create_first_operation": "Create your first stock operation",
     "all_states": "All States",
     "in_progress": "In Progress",
@@ -2239,7 +2236,7 @@ export const translations = {
 
     // Financials
     "financials_title": "Finance & Accounting",
-    "financials_subtitle": "Automated bookkeeping & intelligence by Yuksalish Finance AI",
+    "financials_subtitle": "Automated bookkeeping & intelligence by Genix Finance AI",
     "accounting": "Accounting",
     "chart_of_accounts": "Chart of Accounts",
     "standard_chart_of_accounts": "Standard Chart of Accounts",
@@ -2935,7 +2932,7 @@ export const translations = {
 
     // HR
     "hr_title": "Human Resources",
-    "hr_subtitle": "Workforce intelligence by Yuksalish HR AI Agent",
+    "hr_subtitle": "Workforce intelligence by Genix HR AI Agent",
     "add_employee": "Add Employee",
     "total_employees": "Total Employees",
     "active_employees": "Active Employees",
@@ -3021,8 +3018,6 @@ export const translations = {
     "salary": "Salary",
     "enter_full_name": "Enter full name",
     "enter_email": "Enter email",
-    "email_or_phone": "Email or phone number",
-    "enter_email_or_phone": "Enter email or phone number",
     "enter_phone": "Enter phone number",
     "enter_job_title": "Enter job title",
     "employee_details": "Employee Details",
@@ -3261,8 +3256,6 @@ export const translations = {
     "operation_notes": "Notes about the operation",
     "run": "Run",
     "no_operations": "No operations defined",
-    "no_operations_added": "No operations added yet",
-    "add_operations_description": "Add operations to define the manufacturing process",
     "search_routings": "Search routings...",
     "delete_routing": "Delete Routing",
     "delete_routing_confirm": "This action cannot be undone. Are you sure you want to delete this routing?",
@@ -3599,7 +3592,7 @@ export const translations = {
     "customer_insights": "Customer Insights",
     "inventory_optimization": "Inventory Optimization",
     "financial_planning": "Financial Planning",
-    "ai_copilot_intro": "Hello! I'm your Yuksalish AI Copilot. I can access all your ERP modules to provide insights, automate tasks, and answer complex questions. How can I help you run your business today?",
+    "ai_copilot_intro": "Hello! I'm your Genix AI Copilot. I can access all your ERP modules to provide insights, automate tasks, and answer complex questions. How can I help you run your business today?",
     
     // Apps
     "apps_title": "App Store",
@@ -4507,7 +4500,7 @@ export const translations = {
     "mark_all_read": "Mark all as read",
     "no_notifications": "You have no new notifications.",
     "mark_as_read": "Mark as read",
-    "notification_welcome_title": "Welcome to Yuksalish ERP",
+    "notification_welcome_title": "Welcome to Genix ERP",
     "notification_welcome_message": "Your account has been created successfully.",
     "notification_system_update_title": "System Update",
     "notification_system_update_message": "New features have been added to the dashboard.",
@@ -5050,7 +5043,7 @@ export const translations = {
 
     // Manufacturing Module
     "manufacturing_operations": "Manufacturing Operations",
-    "manufacturing_subtitle": "Intelligent production planning, scheduling, and quality control powered by Yuksalish AI",
+    "manufacturing_subtitle": "Intelligent production planning, scheduling, and quality control powered by Genix AI",
     "production": "Production",
     "schedule": "Schedule",
     "work_centers": "Work Centers",
@@ -5202,7 +5195,7 @@ export const translations = {
     "on_hand": "On Hand",
     "required": "Required",
     "ai_powered_mrp_planning": "AI-Powered MRP Planning",
-    "mrp_subtitle": "Material Requirements Planning with Yuksalish AI",
+    "mrp_subtitle": "Material Requirements Planning with Genix AI",
     "generate_mrp_plan": "Generate MRP Plan",
     "generating": "Generating...",
     "no_mrp_plan_generated_yet": "No MRP Plan Generated Yet",
@@ -6470,7 +6463,7 @@ export const translations = {
     "signing_in": "Signing in...",
     "dont_have_account": "Don't have an account?",
     "sign_up": "Sign up",
-    "sign_up_to_start": "Sign up to get started with Yuksalish ERP",
+    "sign_up_to_start": "Sign up to get started with GenixERP",
     "demo_mode_register": "Demo mode - registration will be local only",
     "first_name": "First Name",
     "last_name": "Last Name",
@@ -8460,7 +8453,7 @@ export const translations = {
 
     // Inventory
     "inventory_title": "Ombor va ta'minot zanjiri",
-    "inventory_subtitle": "Yuksalish Ombor AI tomonidan real vaqtda kuzatish va optimallashtirish",
+    "inventory_subtitle": "Genix Ombor AI tomonidan real vaqtda kuzatish va optimallashtirish",
     "add_item": "Element qo'shish",
     "dead_stock": "O'lik qoldiq",
     "fifo_items": "FIFO elementlari",
@@ -8706,8 +8699,6 @@ export const translations = {
     "new_stock_operation": "Yangi ombor operatsiyasi",
     "new_stock_operation_desc": "Qabul qilish, jo'natish, ichki o'tkazma yoki hisobdan chiqarish yarating",
     "no_operations": "Operatsiyalar topilmadi",
-    "no_operations_added": "Hali operatsiyalar qo'shilmagan",
-    "add_operations_description": "Ishlab chiqarish jarayonini belgilash uchun operatsiyalar qo'shing",
     "create_first_operation": "Birinchi ombor operatsiyasini yarating",
     "all_states": "Barcha holatlar",
     "in_progress": "Jarayonda",
@@ -8962,7 +8953,7 @@ export const translations = {
 
     // Financials
     "financials_title": "Moliya va buxgalteriya",
-    "financials_subtitle": "Yuksalish Moliya AI tomonidan avtomatlashtirilgan buxgalteriya va tahlil",
+    "financials_subtitle": "Genix Moliya AI tomonidan avtomatlashtirilgan buxgalteriya va tahlil",
     "accounting": "Buxgalteriya",
     "chart_of_accounts": "Hisoblar rejasi",
     "standard_chart_of_accounts": "Standart hisoblar rejasi",
@@ -9826,7 +9817,7 @@ export const translations = {
 
     // HR
     "hr_title": "Kadrlar bo'limi",
-    "hr_subtitle": "Yuksalish HR AI agenti tomonidan ishchi kuchi tahlili",
+    "hr_subtitle": "Genix HR AI agenti tomonidan ishchi kuchi tahlili",
     "add_employee": "Xodim qo'shish",
     "total_employees": "Jami xodimlar",
     "active_employees": "Faol xodimlar",
@@ -9912,8 +9903,6 @@ export const translations = {
     "salary": "Maosh",
     "enter_full_name": "To'liq ismni kiriting",
     "enter_email": "Elektron pochtani kiriting",
-    "email_or_phone": "Elektron pochta yoki telefon raqam",
-    "enter_email_or_phone": "Elektron pochta yoki telefon raqamni kiriting",
     "enter_phone": "Telefon raqamini kiriting",
     "enter_job_title": "Lavozimni kiriting",
     "employee_details": "Xodim ma'lumotlari",
@@ -10155,8 +10144,6 @@ export const translations = {
     "operation_notes": "Operatsiya haqida izohlar",
     "run": "Ishlash",
     "no_operations": "Operatsiyalar aniqlanmagan",
-    "no_operations_added": "Hali operatsiyalar qo'shilmagan",
-    "add_operations_description": "Ishlab chiqarish jarayonini belgilash uchun operatsiyalar qo'shing",
     "search_routings": "Marshrutlarni qidirish...",
     "delete_routing": "Marshrutni o'chirish",
     "delete_routing_confirm": "Bu amalni qaytarib bo'lmaydi. Rostdan ham ushbu marshrutni o'chirmoqchimisiz?",
@@ -10476,7 +10463,7 @@ export const translations = {
     "customer_insights": "Mijozlar tushunchalari",
     "inventory_optimization": "Ombor optimallashtirish",
     "financial_planning": "Moliyaviy rejalashtirish",
-    "ai_copilot_intro": "Salom! Men sizning Yuksalish AI yordamchingizman. Men barcha ERP modullariga kira olaman, tushunchalar beraman, vazifalarni avtomatlashtiraman va murakkab savollarga javob beraman. Biznesingizni boshqarishda qanday yordam bera olaman?",
+    "ai_copilot_intro": "Salom! Men sizning Genix AI yordamchingizman. Men barcha ERP modullariga kira olaman, tushunchalar beraman, vazifalarni avtomatlashtiraman va murakkab savollarga javob beraman. Biznesingizni boshqarishda qanday yordam bera olaman?",
     
     // Apps
     "apps_title": "Ilovalar do'koni",
@@ -11384,7 +11371,7 @@ export const translations = {
     "mark_all_read": "Hammasini o'qilgan deb belgilash",
     "no_notifications": "Sizda yangi bildirishnomalar yo'q.",
     "mark_as_read": "O'qilgan deb belgilash",
-    "notification_welcome_title": "Yuksalish ERP ga xush kelibsiz",
+    "notification_welcome_title": "Genix ERP ga xush kelibsiz",
     "notification_welcome_message": "Sizning akkauntingiz muvaffaqiyatli yaratildi.",
     "notification_system_update_title": "Tizim yangilanishi",
     "notification_system_update_message": "Boshqaruv paneliga yangi funksiyalar qo'shildi.",
@@ -11920,7 +11907,7 @@ export const translations = {
 
     // Manufacturing Module
     "manufacturing_operations": "Ishlab chiqarish operatsiyalari",
-    "manufacturing_subtitle": "Yuksalish AI tomonidan quvvatlanadigan aqlli ishlab chiqarish rejalashtirish, jadval va sifat nazorati",
+    "manufacturing_subtitle": "Genix AI tomonidan quvvatlanadigan aqlli ishlab chiqarish rejalashtirish, jadval va sifat nazorati",
     "production": "Ishlab chiqarish",
     "schedule": "Jadval",
     "bom": "BOM",
@@ -11995,7 +11982,6 @@ export const translations = {
 
     // Bill of Materials (BOM)
     "bill_of_materials": "Materiallar ro'yxati (BOM)",
-    "view_bill_of_materials": "Materiallar ro'yxatini ko'rish",
     "new_bom": "Yangi BOM",
     "create_bill_of_materials": "Materiallar ro'yxati yaratish",
     "edit_bill_of_materials": "Materiallar ro'yxatini tahrirlash",
@@ -12092,7 +12078,7 @@ export const translations = {
     "on_hand": "Qo'lda",
     "required": "Talab qilinadi",
     "ai_powered_mrp_planning": "AI quvvatlanadigan MRP Rejalashtirish",
-    "mrp_subtitle": "Yuksalish AI bilan material talablarini rejalashtirish",
+    "mrp_subtitle": "Genix AI bilan material talablarini rejalashtirish",
     "generate_mrp_plan": "MRP Rejasini yaratish",
     "generating": "Yaratilmoqda...",
     "no_mrp_plan_generated_yet": "Hali MRP rejasi yaratilmagan",
@@ -12769,7 +12755,7 @@ export const translations = {
     "dont_have_account": "Hisobingiz yo'qmi?",
     "sign_up": "Ro'yxatdan o'tish",
     "create_account": "Hisob yaratish",
-    "sign_up_to_start": "Yuksalish ERP bilan ishlashni boshlash uchun ro'yxatdan o'ting",
+    "sign_up_to_start": "GenixERP bilan ishlashni boshlash uchun ro'yxatdan o'ting",
     "demo_mode_register": "Demo rejim - ro'yxatdan o'tish faqat mahalliy bo'ladi",
     "first_name": "Ism",
     "last_name": "Familiya",
@@ -14271,7 +14257,7 @@ export const translations = {
 
     // Inventory
     "inventory_title": "Склад и цепочка поставок",
-    "inventory_subtitle": "Отслеживание в реальном времени и оптимизация от Yuksalish Inventory AI",
+    "inventory_subtitle": "Отслеживание в реальном времени и оптимизация от Genix Inventory AI",
     "add_item": "Добавить товар",
     "total_value": "Общая стоимость",
     "low_stock": "Низкий остаток",
@@ -15364,7 +15350,6 @@ export const translations = {
     "routing": "Маршрут",
     "equipment": "Оборудование",
     "bill_of_materials": "Спецификация материалов",
-    "view_bill_of_materials": "Просмотр спецификации материалов",
     "bom_description": "Определение структуры продукции и списков компонентов",
     "total_boms": "Всего спецификаций",
     "active_boms": "Активные спецификации",
@@ -15617,8 +15602,6 @@ export const translations = {
     "new_stock_operation": "Новая складская операция",
     "new_stock_operation_desc": "Создайте поступление, отгрузку, перемещение или списание",
     "no_operations": "Операции не найдены",
-    "no_operations_added": "Операции ещё не добавлены",
-    "add_operations_description": "Добавьте операции для определения производственного процесса",
     "create_first_operation": "Создайте первую складскую операцию",
     "all_states": "Все статусы",
     "in_progress": "В процессе",
@@ -15851,7 +15834,7 @@ export const translations = {
 
     // Financials
     "financials_title": "Финансы и бухгалтерия",
-    "financials_subtitle": "Автоматизированная отчетность и аналитика от Yuksalish Finance AI",
+    "financials_subtitle": "Автоматизированная отчетность и аналитика от Genix Finance AI",
     "accounting": "Бухгалтерия",
     "chart_of_accounts": "План счетов",
     "standard_chart_of_accounts": "Стандартный план счетов",
@@ -16457,7 +16440,7 @@ export const translations = {
 
     // HR
     "hr_title": "Человеческие ресурсы",
-    "hr_subtitle": "Аналитика трудовых ресурсов от Yuksalish HR AI Agent",
+    "hr_subtitle": "Аналитика трудовых ресурсов от Genix HR AI Agent",
     "add_employee": "Добавить сотрудника",
     "employees": "Сотрудники",
     "employees_list": "Список сотрудников",
@@ -16548,8 +16531,6 @@ export const translations = {
     "salary": "Зарплата",
     "enter_full_name": "Введите полное имя",
     "enter_email": "Введите email",
-    "email_or_phone": "Email или номер телефона",
-    "enter_email_or_phone": "Введите email или номер телефона",
     "enter_phone": "Введите номер телефона",
     "enter_job_title": "Введите должность",
     "employee_details": "Информация о сотруднике",
@@ -16793,8 +16774,6 @@ export const translations = {
     "operation_notes": "Примечания об операции",
     "run": "Выполнение",
     "no_operations": "Операции не определены",
-    "no_operations_added": "Операции ещё не добавлены",
-    "add_operations_description": "Добавьте операции для определения производственного процесса",
     "search_routings": "Поиск маршрутов...",
     "delete_routing": "Удалить маршрут",
     "delete_routing_confirm": "Это действие нельзя отменить. Вы уверены, что хотите удалить этот маршрут?",
@@ -17141,7 +17120,7 @@ export const translations = {
     "customer_insights": "Инсайты клиентов",
     "inventory_optimization": "Оптимизация склада",
     "financial_planning": "Финансовое планирование",
-    "ai_copilot_intro": "Привет! Я ваш Yuksalish ИИ коп-пилот. Я могу получить доступ ко всем модулям ERP для предоставления инсайтов, автоматизации задач и ответов на сложные вопросы. Как могу помочь вам в управлении бизнесом сегодня?",
+    "ai_copilot_intro": "Привет! Я ваш Genix ИИ коп-пилот. Я могу получить доступ ко всем модулям ERP для предоставления инсайтов, автоматизации задач и ответов на сложные вопросы. Как могу помочь вам в управлении бизнесом сегодня?",
     
     // Apps
     "apps_title": "Магазин приложений",
@@ -17766,7 +17745,7 @@ export const translations = {
     "mark_all_read": "Отметить все как прочитанные",
     "no_notifications": "У вас нет новых уведомлений.",
     "mark_as_read": "Отметить как прочитанное",
-    "notification_welcome_title": "Добро пожаловать в Yuksalish ERP",
+    "notification_welcome_title": "Добро пожаловать в Genix ERP",
     "notification_welcome_message": "Ваш аккаунт был успешно создан.",
     "notification_system_update_title": "Обновление системы",
     "notification_system_update_message": "В панель управления добавлены новые функции.",
@@ -18784,7 +18763,7 @@ export const translations = {
 
     // Manufacturing Module (Russian)
     "manufacturing_operations": "Операции производства",
-    "manufacturing_subtitle": "Интеллектуальное планирование производства, составление графиков и контроль качества на базе Yuksalish AI",
+    "manufacturing_subtitle": "Интеллектуальное планирование производства, составление графиков и контроль качества на базе Genix AI",
     "production": "Производство",
     "schedule": "Расписание",
     "work_centers": "Рабочие центры",
@@ -18883,7 +18862,7 @@ export const translations = {
     "purchase_recommendations": "Рекомендации по закупкам",
     "ai_mrp_analysis": "ИИ анализ MRP",
     "ai_powered_mrp_planning": "MRP Планирование на базе ИИ",
-    "mrp_subtitle": "Планирование потребностей в материалах с Yuksalish AI",
+    "mrp_subtitle": "Планирование потребностей в материалах с Genix AI",
     "no_mrp_plan_generated_yet": "MRP план еще не создан",
     "mrp_plan_description": "Нажмите \"Сгенерировать MRP план\" для получения ИИ-рекомендаций по закупкам материалов, планированию производства и оптимизации.",
     "procurement_needs": "Потребности в закупках",
@@ -20301,7 +20280,7 @@ export const translations = {
     "signing_in": "Вход...",
     "dont_have_account": "Нет аккаунта?",
     "sign_up": "Зарегистрироваться",
-    "sign_up_to_start": "Зарегистрируйтесь, чтобы начать работу с Yuksalish ERP",
+    "sign_up_to_start": "Зарегистрируйтесь, чтобы начать работу с GenixERP",
     "demo_mode_register": "Демо режим - регистрация будет только локальной",
     "first_name": "Имя",
     "last_name": "Фамилия",

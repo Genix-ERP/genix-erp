@@ -323,7 +323,7 @@ export default function ChartOfAccounts() {
     const contraAsset = isContraAsset(account);
     const typeInfo = getTypeInfo(account.category || account.type);
     const TypeIcon = typeInfo.icon;
-    const displayName = language === 'uz' && account.name_uz ? account.name_uz : language === 'en' && account.name_en ? account.name_en : account.name;
+    const displayName = language === 'uz' && account.name_uz ? account.name_uz : account.name;
 
     return (
       <React.Fragment key={account.id}>

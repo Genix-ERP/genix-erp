@@ -11,7 +11,6 @@ import { useAuth } from "@/components/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import apiClient from "@/api/client";
 import { leadsService } from "@/api/services/leads";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 
 export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -151,9 +150,9 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                 />
                 <Input
                   id="phone"
-                  value={formatPhoneInput(formData.phone)}
-                  onChange={(e) => handleChange("phone", parsePhoneInput(e.target.value))}
-                  placeholder="+998 XX XXX XXXX"
+                  value={formData.phone}
+                  onChange={(e) => handleChange("phone", e.target.value)}
+                  placeholder="+998 90 123 45 67"
                 />
               </div>
             </div>

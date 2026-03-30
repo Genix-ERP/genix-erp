@@ -1,4 +1,4 @@
-// Default Admin Settings Configuration for Yuksalish ERP
+// Default Admin Settings Configuration for Genix ERP
 // Following Odoo/SAP ERP standards
 
 export const DEFAULT_ADMIN_SETTINGS = {

@@ -60,7 +60,7 @@ import {
   useAuditTrail,
 } from '@/components/shared';
 import { useCompany } from '@/components/contexts/CompanyContext';
-import { formatPriceInput, parsePriceInput, formatAxisTick, formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
+import { formatPriceInput, parsePriceInput, formatAxisTick } from '@/utils/formatCurrency';
 
 export default function SalesOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2666,11 +2666,11 @@ export default function SalesOrders() {
                 <div>
                   <Label>{t('phone') || 'Phone'}</Label>
                   <Input
-                    placeholder="+998 XX XXX XXXX"
-                    value={formatPhoneInput(editingCarrier ? (editingCarrier.phone || '') : newCarrier.phone)}
+                    placeholder="+998 90 123 45 67"
+                    value={editingCarrier ? (editingCarrier.phone || '') : newCarrier.phone}
                     onChange={(e) => editingCarrier
-                      ? setEditingCarrier({...editingCarrier, phone: parsePhoneInput(e.target.value)})
-                      : setNewCarrier({...newCarrier, phone: parsePhoneInput(e.target.value)})
+                      ? setEditingCarrier({...editingCarrier, phone: e.target.value})
+                      : setNewCarrier({...newCarrier, phone: e.target.value})
                     }
                   />
                 </div>
