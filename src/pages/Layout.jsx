@@ -134,12 +134,7 @@ function LayoutContent({ children, currentPageName }) {
 
   // Set browser title based on language
   React.useEffect(() => {
-    const titles = {
-      uz: "Yuksalish ERP — Sun'iy intellekt orqali biznes boshqaruvi",
-      ru: "Yuksalish ERP — Система управления бизнесом на основе ИИ",
-      en: "Yuksalish ERP — AI-Powered Business Management System",
-    };
-    document.title = titles[language] || titles.en;
+    document.title = "Yuksalish ERP";
   }, [language]);
 
   // Force re-render when user role changes by including user in dependency tracking
