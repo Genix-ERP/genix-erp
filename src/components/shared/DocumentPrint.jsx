@@ -108,7 +108,7 @@ export const DOCUMENT_TEMPLATES = {
 // Company info placeholder
 const getCompanyInfo = () => {
   return {
-    name: localStorage.getItem("company_name") || "Yuksalish ERP",
+    name: localStorage.getItem("company_name") || "Genix ERP",
     address: localStorage.getItem("company_address") || "Toshkent, O'zbekiston",
     phone: localStorage.getItem("company_phone") || "+998 XX XXX XX XX",
     email: localStorage.getItem("company_email") || "info@genix.uz",
@@ -427,7 +427,7 @@ export const generateDocumentPDF = (config) => {
   doc.setFontSize(7);
   doc.setTextColor(180, 180, 180);
   doc.text(
-    `Yuksalish ERP | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
+    `Genix ERP | Yaratilgan: ${format(new Date(), "dd.MM.yyyy HH:mm")}`,
     margins.left,
     pageHeight - 8
   );

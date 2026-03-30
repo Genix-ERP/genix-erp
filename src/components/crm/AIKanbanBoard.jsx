@@ -113,7 +113,7 @@ export default function AIKanbanBoard({ opportunities, onUpdate, callLogs, commu
       );
 
       const suggestions = await InvokeLLM({
-        prompt: `You are the Kanban AI of Yuksalish CRM. Analyze this pipeline and provide intelligent stage movement suggestions:
+        prompt: `You are the Kanban AI of Genix CRM. Analyze this pipeline and provide intelligent stage movement suggestions:
 
         Current Pipeline:
         ${JSON.stringify(boardData.columns.map(col => ({

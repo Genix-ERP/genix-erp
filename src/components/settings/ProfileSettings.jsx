@@ -10,7 +10,6 @@ import { Loader2 } from "lucide-react";
 import { toast } from 'sonner';
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
 
 export default function ProfileSettings() {
   const { language } = useLanguage();
@@ -114,7 +113,7 @@ export default function ProfileSettings() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone_number">{t('phone_number')}</Label>
-              <Input id="phone_number" value={formatPhoneInput(formData.phone_number)} onChange={(e) => setFormData(prev => ({ ...prev, phone_number: parsePhoneInput(e.target.value) }))} placeholder="+998 XX XXX XXXX" />
+              <Input id="phone_number" value={formData.phone_number} onChange={handleChange} placeholder="+998" />
             </div>
           </div>
           
