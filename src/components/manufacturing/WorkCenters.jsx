@@ -814,11 +814,12 @@ export default function WorkCenters() {
                       <Checkbox
                         id={`emp-create-${emp.id}`}
                         checked={selectedEmployeeIds.includes(emp.id)}
-                        onCheckedChange={(checked) => {
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={() => {
                           setSelectedEmployeeIds(prev =>
-                            checked
-                              ? [...prev, emp.id]
-                              : prev.filter(id => id !== emp.id)
+                            prev.includes(emp.id)
+                              ? prev.filter(id => id !== emp.id)
+                              : [...prev, emp.id]
                           );
                         }}
                       />
@@ -1150,11 +1151,12 @@ export default function WorkCenters() {
                         <Checkbox
                           id={`emp-edit-${emp.id}`}
                           checked={selectedEmployeeIds.includes(emp.id)}
-                          onCheckedChange={(checked) => {
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={() => {
                             setSelectedEmployeeIds(prev =>
-                              checked
-                                ? [...prev, emp.id]
-                                : prev.filter(id => id !== emp.id)
+                              prev.includes(emp.id)
+                                ? prev.filter(id => id !== emp.id)
+                                : [...prev, emp.id]
                             );
                           }}
                         />
