@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
-import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
+import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function CustomerForm({ customer, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -151,9 +151,10 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   <LabelWithHelp htmlFor="expected_revenue" label={t('expected_revenue') || 'Expected Revenue'} helpText={t('help_customer_expected_revenue') || 'Estimated annual revenue from this customer'} />
                   <Input
                     id="expected_revenue"
-                    type="number"
-                    value={formData.expected_revenue}
-                    onChange={(e) => handleChange("expected_revenue", e.target.value)}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(formData.expected_revenue)}
+                    onChange={(e) => handleChange("expected_revenue", parsePriceInput(e.target.value))}
                   />
                 </div>
               </div>

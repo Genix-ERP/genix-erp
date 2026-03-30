@@ -77,6 +77,7 @@ import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function HR() {
   const { language } = useLanguage();
@@ -1229,9 +1230,10 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('salary')}</Label>
                   <Input
-                    type="number"
-                    value={newEmployee.salary}
-                    onChange={e => setNewEmployee({...newEmployee, salary: e.target.value})}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatPriceInput(newEmployee.salary)}
+                    onChange={e => setNewEmployee({...newEmployee, salary: parsePriceInput(e.target.value)})}
                     placeholder="0.00"
                   />
                 </div>
@@ -1511,9 +1513,10 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('salary')}</Label>
                     <Input
-                      type="number"
-                      value={selectedEmployee.salary}
-                      onChange={e => setSelectedEmployee({...selectedEmployee, salary: e.target.value})}
+                      type="text"
+                      inputMode="decimal"
+                      value={formatPriceInput(selectedEmployee.salary)}
+                      onChange={e => setSelectedEmployee({...selectedEmployee, salary: parsePriceInput(e.target.value)})}
                       placeholder="0.00"
                     />
                   </div>
