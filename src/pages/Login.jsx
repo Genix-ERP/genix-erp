@@ -5,11 +5,11 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, User, Lock, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(identifier, password, selectedTenantId);
+    const result = await login(email, password, selectedTenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -55,7 +55,7 @@ export default function Login() {
     // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(identifier, password, tenantId);
+      : await login(email, password, tenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -106,8 +106,8 @@ export default function Login() {
         <div className="login-card">
           <div className="login-card__header">
             <img
-              src="/logo.png"
-              alt="Yuksalish Logo"
+              src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+              alt="Genix Logo"
               className="login-card__logo"
             />
             <h1 className="login-card__title">{t('select_company')}</h1>
@@ -164,8 +164,8 @@ export default function Login() {
       <div className="login-card">
         <div className="login-card__header">
           <img
-            src="/logo.png"
-            alt="Yuksalish Logo"
+            src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
+            alt="Genix Logo"
             className="login-card__logo"
           />
           <h1 className="login-card__title">{t('welcome_back')}</h1>
@@ -178,15 +178,15 @@ export default function Login() {
             )}
 
             <div className="login-form__field">
-              <label htmlFor="identifier" className="login-form__label">{t('email_or_phone')}</label>
+              <label htmlFor="email" className="login-form__label">{t('email')}</label>
               <div className="login-form__input-wrap">
-                <User className="login-form__icon" />
+                <Mail className="login-form__icon" />
                 <input
-                  id="identifier"
-                  type="text"
-                  placeholder={t('enter_email_or_phone')}
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder={t('enter_email')}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="login-form__input"
                   required
                 />
@@ -231,6 +231,18 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="login-divider">
+            <span>{t('or_continue_with') || 'Or continue with'}</span>
+          </div>
+
+          <GoogleSignInButton onSuccess={handleGoogleLogin} text="signin_with" />
+
+          {backendAvailable && (
+            <p className="login-register">
+              {t('dont_have_account')}{' '}
+              <Link to="/register">{t('sign_up')}</Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

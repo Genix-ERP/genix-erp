@@ -336,7 +336,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
         ` : ''}
 
         <div class="footer">
-          ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Yuksalish ERP
+          ${language === 'uz' ? 'Hisobot sanasi' : 'Generated'}: ${new Date().toLocaleString()} | Genix ERP
         </div>
       </body>
       </html>

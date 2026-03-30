@@ -331,7 +331,7 @@ export default function SharedReconciliation() {
 
         {/* Footer */}
         <div style={styles.footer}>
-          <p>Yuksalish ERP</p>
+          <p>Genix ERP &middot; genixerp.com</p>
         </div>
       </div>
     </div>
