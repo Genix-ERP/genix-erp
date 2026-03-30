@@ -85,7 +85,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType, subcontractId }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -112,6 +112,34 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
       // Bulk create all lines
       await constructionService.bulkCreateEstimateLines(estId, lines);
+
+      // Auto-create construction stages from BOP section headers
+      if (sourceType === 'vor' && sectionNames?.length > 0) {
+        // Get existing stages to avoid duplicates
+        let existingStages = [];
+        try {
+          existingStages = await constructionService.listStages(project.id);
+        } catch (e) {
+          // ignore - will create all stages
+        }
+        const existingNames = new Set((existingStages || []).map(s => s.name?.toUpperCase()));
+
+        for (let i = 0; i < sectionNames.length; i++) {
+          const name = sectionNames[i];
+          if (!existingNames.has(name.toUpperCase())) {
+            try {
+              await constructionService.createStage(project.id, {
+                name,
+                status: 'not_started',
+                planned_budget: 0,
+              });
+            } catch (e) {
+              console.error('Failed to create stage:', name, e);
+            }
+          }
+        }
+      }
+
       await loadEstimates();
     } catch (error) {
       console.error('Error importing estimates:', error);
