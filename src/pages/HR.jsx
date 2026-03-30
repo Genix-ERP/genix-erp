@@ -1336,7 +1336,7 @@ Only return the JSON, no other text.`;
                       <Phone className="w-4 h-4" />
                       {t('phone') || 'Phone'}
                     </div>
-                    <p className="font-medium">{selectedEmployee.phone || '-'}</p>
+                    <p className="font-medium">{selectedEmployee.phone ? formatPhoneInput(selectedEmployee.phone.startsWith('+') ? selectedEmployee.phone : (selectedEmployee.phone.startsWith('998') ? '+' + selectedEmployee.phone : '+998' + selectedEmployee.phone)) : '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -1541,11 +1541,13 @@ Only return the JSON, no other text.`;
                     <Label>{t('companies') || 'Kompaniyalar'}</Label>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal">
+                        <Button variant="outline" className="w-full justify-between font-normal h-auto min-h-[40px]">
                           <span className="truncate">
-                            {(selectedEmployee.organization_ids || []).length > 0
-                              ? organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')
-                              : (t('select_companies') || 'Kompaniyalarni tanlang')}
+                            {(selectedEmployee.organization_ids || []).length === 0
+                              ? (t('select_companies') || 'Kompaniyalarni tanlang')
+                              : (selectedEmployee.organization_ids || []).length <= 2
+                                ? organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')
+                                : (() => { const translated = t('companies_selected'); return `${(selectedEmployee.organization_ids || []).length} ${translated === 'companies_selected' ? 'companies selected' : translated}`; })()}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -1571,6 +1573,23 @@ Only return the JSON, no other text.`;
                         </div>
                       </PopoverContent>
                     </Popover>
+                    {(selectedEmployee.organization_ids || []).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(org => (
+                          <span key={org.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs border border-blue-200">
+                            {org.name}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ids = (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
+                                setSelectedEmployee({...selectedEmployee, organization_ids: ids});
+                              }}
+                              className="ml-0.5 hover:text-blue-900 font-bold"
+                            >×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
