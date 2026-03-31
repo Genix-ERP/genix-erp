@@ -355,7 +355,7 @@ export default function Procurement() {
       const totalAmount = calculateOrderTotal(newPO.lines);
       const poData = {
         ...newPO,
-        po_number: newPO.po_number || `PO-${Date.now()}`,
+        po_number: '',
         vendor_name: supplier?.name || newPO.vendor_name,
         total_amount: totalAmount,
         status: 'draft',

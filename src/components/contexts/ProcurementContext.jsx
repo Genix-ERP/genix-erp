@@ -658,8 +658,8 @@ export function ProcurementProvider({ children }) {
     const newPO = {
       ...poData,
       id: Date.now().toString(),
-      po_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
-      order_number: poData.po_number || `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
+      po_number: poData.po_number || `PO-${String(purchaseOrders.length + 1).padStart(5, '0')}`,
+      order_number: poData.po_number || `PO-${String(purchaseOrders.length + 1).padStart(5, '0')}`,
       status: 'draft',
       created_at: new Date().toISOString().split('T')[0],
     };
