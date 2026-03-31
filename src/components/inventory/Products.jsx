@@ -721,6 +721,11 @@ export default function Products() {
   };
 
   const handleCreate = async () => {
+    // Validate at least one company is selected
+    if (companies.length > 0 && formData.organization_ids.length === 0) {
+      toast?.({ title: t('no_companies_selected_warning') || 'Please select at least one company', variant: 'destructive' });
+      return;
+    }
     setIsSaving(true);
     try {
       // Auto-generate EAN-13 barcode if not provided
