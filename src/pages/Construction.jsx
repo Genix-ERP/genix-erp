@@ -675,7 +675,7 @@ const ProjectDetailView = ({
     ]},
     { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
       { key: 'materials', label: t('nav_materials') || 'Materiallar' },
-      { key: 'forms', label: 'Forma 19' },
+      { key: 'forms', label: 'Forma' },
       { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
