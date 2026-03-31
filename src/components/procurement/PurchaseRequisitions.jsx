@@ -180,7 +180,7 @@ export default function PurchaseRequisitions() {
     const supplier = suppliers.find(s => s.id === convertData.supplier_id);
 
     // Create PO from PR
-    const poNumber = `PO-${new Date().toISOString().slice(0, 7).replace('-', '')}-${Date.now().toString().slice(-4)}`;
+    const poNumber = '';
 
     const newPO = {
       id: Date.now().toString(),

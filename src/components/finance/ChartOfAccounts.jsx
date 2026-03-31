@@ -139,6 +139,20 @@ export default function ChartOfAccounts() {
       }
     });
 
+    // Third pass: compute aggregated balances for parent accounts
+    // In standard accounting (like Odoo), parent/group accounts show the sum of their children
+    const computeAggregatedBalance = (node) => {
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(child => computeAggregatedBalance(child));
+        node.aggregated_balance = node.children.reduce(
+          (sum, child) => sum + (child.aggregated_balance ?? child.current_balance ?? 0), 0
+        );
+      } else {
+        node.aggregated_balance = node.current_balance || 0;
+      }
+    };
+    rootAccounts.forEach(root => computeAggregatedBalance(root));
+
     return rootAccounts;
   }, [accounts]);
 
@@ -161,10 +175,14 @@ export default function ChartOfAccounts() {
   }, [accounts, searchQuery, typeFilter]);
 
   // Calculate totals by type (category from backend)
+  // Only sum leaf accounts (non-parent) to avoid double-counting parent + children
   // Contra-asset accounts (normal_balance=credit) reduce the asset total
   const totals = useMemo(() => {
+    const parentIds = new Set(accounts.filter(a => a.parent_id).map(a => a.parent_id));
     const result = { asset: 0, liability: 0, equity: 0, revenue: 0, expense: 0 };
     accounts.forEach(acc => {
+      // Skip parent accounts to avoid double-counting
+      if (parentIds.has(acc.id)) return;
       const category = acc.category || acc.type;
       if (result[category] !== undefined) {
         if (isContraAsset(acc)) {
@@ -366,7 +384,7 @@ export default function ChartOfAccounts() {
             )}
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-            {formatCurrency(account.current_balance || 0)}
+            {formatCurrency(hasChildren ? (account.aggregated_balance ?? account.current_balance ?? 0) : (account.current_balance || 0))}
           </TableCell>
           <TableCell>
             <Badge variant={account.is_active ? "default" : "secondary"}>

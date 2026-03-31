@@ -170,7 +170,7 @@ export default function Products() {
   } = useInventory();
   const { accounts } = useFinancials();
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
-  const { companies } = useCompany();
+  const { companies, activeCompany } = useCompany();
   const { toast } = useToast();
 
   const emptyCategoryAccounts = {
@@ -654,7 +654,7 @@ export default function Products() {
       is_overhead_expense: false,
       is_manufacturable: false,
       auto_manufacture: false,
-      organization_ids: [],
+      organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       tags: [],
       // Advanced fields
       brand: '',

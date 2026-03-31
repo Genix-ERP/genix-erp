@@ -447,7 +447,6 @@ export default function Suppliers() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead>{t('code') || "Kod"}</TableHead>
                     <TableHead>{t('supplier') || "Ta'minotchi"}</TableHead>
                     <TableHead>{t('contact') || "Aloqa"}</TableHead>
                     <TableHead>{t('rating') || "Reyting"}</TableHead>
@@ -460,11 +459,6 @@ export default function Suppliers() {
                 <TableBody>
                   {filteredSuppliers.map((supplier) => (
                     <TableRow key={supplier.id} className="hover:bg-slate-50">
-                      <TableCell>
-                        <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                          {supplier.code}
-                        </code>
-                      </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{supplier.name}</div>

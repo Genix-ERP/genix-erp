@@ -449,7 +449,7 @@ export default function PurchaseOrders() {
       const totalAmount = subtotal + taxAmount;
       const poData = {
         ...newPO,
-        po_number: newPO.po_number || `PO-${Date.now()}`,
+        po_number: '',
         vendor_name: supplier?.name || newPO.vendor_name,
         subtotal: subtotal,
         total_amount: totalAmount,

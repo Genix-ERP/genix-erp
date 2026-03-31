@@ -1222,9 +1222,7 @@ const FormsTab = ({ project }) => {
             <Button variant="outline" className="text-orange-600 border-orange-300" onClick={() => { setF19CreateForm({ building_id: '', period_from: '', period_to: '', notes: '' }); setShowF19CreateModal(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t('create_f19') || 'Forma 19'}
             </Button>
-            <Button onClick={() => { setForm(EMPTY_FORM); setError(null); setSelectedLines([]); setEstimateLines([]); setShowCreateModal(true); }}>
-              <Plus className="w-4 h-4 mr-2" /> {t('create_form')}
-            </Button>
+            {/* Forma yaratish button hidden - other buttons (KS-2 avto, KS-3, Forma 19) cover the same functionality */}
           </div>
         </CardHeader>
         <CardContent>
