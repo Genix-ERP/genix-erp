@@ -827,7 +827,7 @@ export default function BOMManagement() {
               <Button
                 onClick={handleCreateBom}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                disabled={!newBom.name || !newBom.product_id || newBom.lines.length === 0 || isSubmitting}
+                disabled={!newBom.name || !newBom.product_id || isSubmitting}
               >
                 {isSubmitting ? t('saving') : t('create_bom')}
               </Button>
