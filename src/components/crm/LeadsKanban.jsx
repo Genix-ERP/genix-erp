@@ -23,6 +23,7 @@ import {
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
+import { useCompany } from "@/components/contexts/CompanyContext";
 
 // Portal for dragged cards
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -89,10 +90,50 @@ const DEFAULT_STAGES = [
   { id: 'lost', name: 'Lost', color: 'red', sequence: 4, is_won: false, is_lost: true, is_folded: false },
 ];
 
-const LEAD_STAGES_KEY = 'genix_lead_stages';
-
 function getColor(colorId) {
   return STAGE_COLORS.find(c => c.id === colorId) || STAGE_COLORS[0];
+}
+
+// Generate unique ID: supports non-Latin chars by using a counter fallback
+let _stageCounter = Date.now();
+function generateStageId(name, existingIds) {
+  // Try to create a slug from the name
+  let slug = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (!slug) {
+    // Non-Latin name: use 'stage_' + counter
+    slug = 'stage_' + (++_stageCounter);
+  }
+  // Ensure uniqueness by appending a number if needed
+  let finalId = slug;
+  let counter = 2;
+  while (existingIds.has(finalId)) {
+    finalId = `${slug}_${counter}`;
+    counter++;
+  }
+  return finalId;
+}
+
+function getStagesKey(companyId) {
+  return companyId ? `genix_lead_stages_${companyId}` : 'genix_lead_stages';
+}
+
+function loadStages(companyId) {
+  try {
+    const key = getStagesKey(companyId);
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map(s => ({
+        ...s,
+        is_won: s.is_won ?? false,
+        is_lost: s.is_lost ?? false,
+        is_folded: s.is_folded ?? false,
+      }));
+    }
+    // Migrate: if company-specific key doesn't exist but old global key does, use defaults
+    // (don't copy old global data to new company since it may belong to a different company)
+  } catch (e) { /* ignore */ }
+  return null;
 }
 
 export default function LeadsKanban({
@@ -106,22 +147,12 @@ export default function LeadsKanban({
 }) {
   const { t } = useTranslation(language);
   const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { activeCompany } = useCompany();
+  const companyId = activeCompany?.id;
 
-  // Stage state
+  // Stage state - scoped per company
   const [stageList, setStageList] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LEAD_STAGES_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.map(s => ({
-          ...s,
-          is_won: s.is_won ?? false,
-          is_lost: s.is_lost ?? false,
-          is_folded: s.is_folded ?? false,
-        }));
-      }
-    } catch (e) { /* ignore */ }
-    return DEFAULT_STAGES;
+    return loadStages(companyId) || DEFAULT_STAGES;
   });
 
   // Edit modal
@@ -132,10 +163,17 @@ export default function LeadsKanban({
   const [addModal, setAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', color: 'blue', is_won: false, is_lost: false });
 
-  // Persist stages
+  // Persist stages per company
   useEffect(() => {
-    localStorage.setItem(LEAD_STAGES_KEY, JSON.stringify(stageList));
-  }, [stageList]);
+    const key = getStagesKey(companyId);
+    localStorage.setItem(key, JSON.stringify(stageList));
+  }, [stageList, companyId]);
+
+  // Reload stages when company changes
+  useEffect(() => {
+    const loaded = loadStages(companyId);
+    setStageList(loaded || DEFAULT_STAGES);
+  }, [companyId]);
 
   const [kanbanState, setKanbanState] = useState({
     leads: [],
@@ -209,12 +247,8 @@ export default function LeadsKanban({
 
   const saveAddModal = useCallback(() => {
     if (!addForm.name.trim()) return;
-    const id = addForm.name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    if (!id) return;
-    if (stageList.some(s => s.id === id)) {
-      setKanbanState(prev => ({ ...prev, error: 'Stage with this name already exists' }));
-      return;
-    }
+    const existingIds = new Set(stageList.map(s => s.id));
+    const id = generateStageId(addForm.name, existingIds);
     const maxSeq = Math.max(...stageList.map(s => s.sequence), -1);
     setStageList(prev => [...prev, {
       id, name: addForm.name.trim(), color: addForm.color, sequence: maxSeq + 1,
