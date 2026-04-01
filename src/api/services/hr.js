@@ -109,6 +109,43 @@ export const hrService = {
     const response = await apiClient.post(`/payroll-periods/${periodId}/entries/${entryId}/confirm`, data);
     return response.data.data;
   },
+
+  // Employee Loans
+  async listEmployeeLoans(params = {}) {
+    const response = await apiClient.get('/employee-loans', { params });
+    return response.data;
+  },
+
+  async getEmployeeLoan(id) {
+    const response = await apiClient.get(`/employee-loans/${id}`);
+    return response.data.data;
+  },
+
+  async createEmployeeLoan(data) {
+    const response = await apiClient.post('/employee-loans', data);
+    return response.data.data;
+  },
+
+  async markLoanPaymentPaid(loanId, paymentId) {
+    const response = await apiClient.post(`/employee-loans/${loanId}/payments/${paymentId}/mark-paid`);
+    return response.data.data;
+  },
+
+  // Employee Self-Service Portal
+  async getMyProfile() {
+    const response = await apiClient.get('/my/profile');
+    return response.data.data;
+  },
+
+  async getMyPayrollHistory() {
+    const response = await apiClient.get('/my/payroll-history');
+    return response.data.data;
+  },
+
+  async getMyLoan() {
+    const response = await apiClient.get('/my/loan');
+    return response.data.data;
+  },
 };
 
 export default hrService;
