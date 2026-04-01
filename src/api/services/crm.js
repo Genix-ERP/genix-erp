@@ -203,11 +203,11 @@ export const opportunitiesService = {
 // PIPELINE STAGES SERVICE
 // =====================================================
 export const pipelineStagesService = {
-  async list(companyId) {
+  async list(companyId, pipelineType = 'opportunity') {
     try {
       const isBackendAvailable = await checkBackendHealth();
       if (isBackendAvailable) {
-        const response = await apiClient.get('/pipeline-stages');
+        const response = await apiClient.get(`/pipeline-stages?type=${pipelineType}`);
         return response.data.data || [];
       }
     } catch (error) {

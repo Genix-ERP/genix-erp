@@ -24,6 +24,7 @@ import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { MODULES } from "@/config/permissions";
 import { useCompany } from "@/components/contexts/CompanyContext";
+import { pipelineStagesService } from "@/api/services/crm";
 
 // Portal for dragged cards
 const PortalAwareItem = ({ provided, snapshot, children }) => {
@@ -94,46 +95,21 @@ function getColor(colorId) {
   return STAGE_COLORS.find(c => c.id === colorId) || STAGE_COLORS[0];
 }
 
-// Generate unique ID: supports non-Latin chars by using a counter fallback
-let _stageCounter = Date.now();
-function generateStageId(name, existingIds) {
-  // Try to create a slug from the name
-  let slug = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-  if (!slug) {
-    // Non-Latin name: use 'stage_' + counter
-    slug = 'stage_' + (++_stageCounter);
-  }
-  // Ensure uniqueness by appending a number if needed
-  let finalId = slug;
-  let counter = 2;
-  while (existingIds.has(finalId)) {
-    finalId = `${slug}_${counter}`;
-    counter++;
-  }
-  return finalId;
+// Generate code from name for backend
+function generateCode(name) {
+  let code = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (!code) code = 'stage_' + Date.now();
+  return code;
 }
 
-function getStagesKey(companyId) {
-  return companyId ? `genix_lead_stages_${companyId}` : 'genix_lead_stages';
-}
-
-function loadStages(companyId) {
-  try {
-    const key = getStagesKey(companyId);
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.map(s => ({
-        ...s,
-        is_won: s.is_won ?? false,
-        is_lost: s.is_lost ?? false,
-        is_folded: s.is_folded ?? false,
-      }));
-    }
-    // Migrate: if company-specific key doesn't exist but old global key does, use defaults
-    // (don't copy old global data to new company since it may belong to a different company)
-  } catch (e) { /* ignore */ }
-  return null;
+// Map backend color (hex or color name) to our Tailwind color config
+function resolveColor(color) {
+  if (!color) return STAGE_COLORS[0];
+  // If it's one of our color IDs
+  const found = STAGE_COLORS.find(c => c.id === color);
+  if (found) return found;
+  // Default
+  return STAGE_COLORS[0];
 }
 
 export default function LeadsKanban({
@@ -150,10 +126,9 @@ export default function LeadsKanban({
   const { activeCompany } = useCompany();
   const companyId = activeCompany?.id;
 
-  // Stage state - scoped per company
-  const [stageList, setStageList] = useState(() => {
-    return loadStages(companyId) || DEFAULT_STAGES;
-  });
+  // Stage state - loaded from backend API
+  const [stageList, setStageList] = useState(DEFAULT_STAGES);
+  const [stagesLoading, setStagesLoading] = useState(true);
 
   // Edit modal
   const [editModal, setEditModal] = useState({ open: false, stage: null });
@@ -163,17 +138,32 @@ export default function LeadsKanban({
   const [addModal, setAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', color: 'blue', is_won: false, is_lost: false });
 
-  // Persist stages per company
-  useEffect(() => {
-    const key = getStagesKey(companyId);
-    localStorage.setItem(key, JSON.stringify(stageList));
-  }, [stageList, companyId]);
-
-  // Reload stages when company changes
-  useEffect(() => {
-    const loaded = loadStages(companyId);
-    setStageList(loaded || DEFAULT_STAGES);
+  // Load stages from backend
+  const loadStagesFromAPI = useCallback(async () => {
+    setStagesLoading(true);
+    try {
+      const data = await pipelineStagesService.list(companyId, 'lead');
+      if (data && data.length > 0) {
+        setStageList(data.map(s => ({
+          ...s,
+          is_won: s.is_won ?? false,
+          is_lost: s.is_lost ?? false,
+          is_folded: false,
+        })));
+      } else {
+        setStageList(DEFAULT_STAGES);
+      }
+    } catch (e) {
+      console.warn('Failed to load lead stages:', e);
+      setStageList(DEFAULT_STAGES);
+    } finally {
+      setStagesLoading(false);
+    }
   }, [companyId]);
+
+  useEffect(() => {
+    loadStagesFromAPI();
+  }, [loadStagesFromAPI]);
 
   const [kanbanState, setKanbanState] = useState({
     leads: [],
@@ -197,21 +187,23 @@ export default function LeadsKanban({
     [...stageList]
       .sort((a, b) => a.sequence - b.sequence)
       .map(stage => {
-        const color = getColor(stage.color);
-        const Icon = STAGE_ICONS[stage.id] || Target;
+        const color = resolveColor(stage.color);
+        const Icon = STAGE_ICONS[stage.code] || STAGE_ICONS[stage.id] || Target;
         return { ...stage, displayName: stage.name, cc: color, icon: Icon };
       }),
-    [stageList, t]
+    [stageList]
   );
 
+  // Match leads to stages by code (leads have status field that matches stage code)
   const stageData = useMemo(() => {
     const data = {};
     stages.forEach(stage => {
-      const sl = kanbanState.leads.filter(lead => (lead.status || 'new') === stage.id);
-      data[stage.id] = { leads: sl, count: sl.length };
+      const stageCode = stage.code || stage.id;
+      const sl = kanbanState.leads.filter(lead => (lead.status || 'new') === stageCode);
+      data[stage.id] = { leads: sl, count: sl.length, code: stageCode };
     });
-    const knownIds = new Set(stages.map(s => s.id));
-    const unknown = kanbanState.leads.filter(l => !knownIds.has(l.status || 'new'));
+    const knownCodes = new Set(stages.map(s => s.code || s.id));
+    const unknown = kanbanState.leads.filter(l => !knownCodes.has(l.status || 'new'));
     if (unknown.length > 0 && stages.length > 0) {
       const first = stages[0].id;
       if (data[first]) {
@@ -228,15 +220,21 @@ export default function LeadsKanban({
     setEditModal({ open: true, stage });
   }, []);
 
-  const saveEditModal = useCallback(() => {
+  const saveEditModal = useCallback(async () => {
     if (!editForm.name.trim() || !editModal.stage) return;
+    const updates = { name: editForm.name.trim(), color: editForm.color, is_won: editForm.is_won, is_lost: editForm.is_lost };
+    // Optimistic update
     setStageList(prev => prev.map(s =>
-      s.id === editModal.stage.id
-        ? { ...s, name: editForm.name.trim(), color: editForm.color, is_won: editForm.is_won, is_lost: editForm.is_lost }
-        : s
+      s.id === editModal.stage.id ? { ...s, ...updates } : s
     ));
     setEditModal({ open: false, stage: null });
-  }, [editForm, editModal.stage]);
+    // Persist to backend
+    try {
+      await pipelineStagesService.update(editModal.stage.id, updates, companyId);
+    } catch (e) {
+      console.warn('Failed to update stage:', e);
+    }
+  }, [editForm, editModal.stage, companyId]);
 
   const openAddModal = useCallback(() => {
     const usedColors = new Set(stageList.map(s => s.color));
@@ -245,35 +243,56 @@ export default function LeadsKanban({
     setAddModal(true);
   }, [stageList]);
 
-  const saveAddModal = useCallback(() => {
+  const saveAddModal = useCallback(async () => {
     if (!addForm.name.trim()) return;
-    const existingIds = new Set(stageList.map(s => s.id));
-    const id = generateStageId(addForm.name, existingIds);
+    const code = generateCode(addForm.name);
     const maxSeq = Math.max(...stageList.map(s => s.sequence), -1);
-    setStageList(prev => [...prev, {
-      id, name: addForm.name.trim(), color: addForm.color, sequence: maxSeq + 1,
-      is_won: addForm.is_won, is_lost: addForm.is_lost, is_folded: false
-    }]);
+    const newStage = {
+      name: addForm.name.trim(),
+      code,
+      color: addForm.color,
+      sequence: maxSeq + 1,
+      is_won: addForm.is_won,
+      is_lost: addForm.is_lost,
+      pipeline_type: 'lead',
+      probability: addForm.is_won ? 100 : (addForm.is_lost ? 0 : 50),
+    };
     setAddModal(false);
-  }, [addForm, stageList]);
+    try {
+      const created = await pipelineStagesService.create(newStage, companyId);
+      if (created) {
+        setStageList(prev => [...prev, { ...created, is_folded: false }]);
+      }
+    } catch (e) {
+      console.warn('Failed to create stage:', e);
+      setKanbanState(prev => ({ ...prev, error: 'Failed to create stage' }));
+    }
+  }, [addForm, stageList, companyId]);
 
-  const handleDeleteStage = useCallback((stageId) => {
+  const handleDeleteStage = useCallback(async (stageId) => {
     if (stageList.length <= 1) return;
-    const stgLeads = kanbanState.leads.filter(l => (l.status || 'new') === stageId);
+    const stageToDelete = stageList.find(s => s.id === stageId);
+    const stageCode = stageToDelete?.code || stageId;
+    const stgLeads = kanbanState.leads.filter(l => (l.status || 'new') === stageCode);
     const remaining = stageList.filter(s => s.id !== stageId);
     if (stgLeads.length > 0 && remaining.length > 0) {
-      const target = remaining[0].id;
+      const targetCode = remaining[0].code || remaining[0].id;
       stgLeads.forEach(lead => {
-        if (onUpdateLead) onUpdateLead({ ...lead, status: target });
+        if (onUpdateLead) onUpdateLead({ ...lead, status: targetCode });
       });
       setKanbanState(prev => ({
         ...prev,
-        leads: prev.leads.map(l => (l.status || 'new') === stageId ? { ...l, status: target } : l)
+        leads: prev.leads.map(l => (l.status || 'new') === stageCode ? { ...l, status: targetCode } : l)
       }));
     }
     setStageList(prev => prev.filter(s => s.id !== stageId));
     setEditModal({ open: false, stage: null });
-  }, [kanbanState.leads, stageList, onUpdateLead]);
+    try {
+      await pipelineStagesService.delete(stageId, companyId);
+    } catch (e) {
+      console.warn('Failed to delete stage:', e);
+    }
+  }, [kanbanState.leads, stageList, onUpdateLead, companyId]);
 
   const handleToggleFold = useCallback((stageId) => {
     setStageList(prev => prev.map(s => s.id === stageId ? { ...s, is_folded: !s.is_folded } : s));
@@ -293,16 +312,27 @@ export default function LeadsKanban({
 
     if (type === 'STAGE') {
       if (source.index === destination.index) return;
+      // Optimistic reorder
+      let reordered;
       setStageList(prev => {
         const sorted = [...prev].sort((a, b) => a.sequence - b.sequence);
         const [moved] = sorted.splice(source.index, 1);
         sorted.splice(destination.index, 0, moved);
-        return sorted.map((s, i) => ({ ...s, sequence: i }));
+        reordered = sorted.map((s, i) => ({ ...s, sequence: i }));
+        return reordered;
       });
+      // Persist each stage's new sequence to backend
+      if (reordered) {
+        reordered.forEach(s => {
+          pipelineStagesService.update(s.id, { sequence: s.sequence }, companyId).catch(e => {
+            console.warn('Failed to update stage sequence:', e);
+          });
+        });
+      }
       return;
     }
 
-    // Card drag between stages
+    // Card drag between stages — droppableId is the stage code
     if (source.droppableId === destination.droppableId) return;
     const lead = kanbanState.leads.find(l => String(l.id) === String(draggableId));
     if (!lead) return;
@@ -312,7 +342,7 @@ export default function LeadsKanban({
       leads: prev.leads.map(l => String(l.id) === String(draggableId) ? { ...l, status: newStatus } : l)
     }));
     if (onUpdateLead) onUpdateLead({ ...lead, status: newStatus });
-  }, [kanbanState.leads, onUpdateLead]);
+  }, [kanbanState.leads, onUpdateLead, companyId]);
 
   // --- Lead Card ---
   const LeadCard = useCallback(({ lead, isUpdating }) => (
@@ -480,22 +510,6 @@ export default function LeadsKanban({
         </div>
       )}
 
-      {/* Summary stats */}
-      <div className="flex flex-wrap gap-3">
-        {stages.map(stage => {
-          const count = stageData[stage.id]?.count || 0;
-          const StageIcon = stage.icon;
-          const { light, border, text } = stage.cc;
-          return (
-            <div key={stage.id} className={`text-center p-3 ${light} rounded-xl border ${border} flex-1 min-w-[100px]`}>
-              <StageIcon className={`w-5 h-5 mx-auto mb-1 ${text}`} />
-              <div className={`text-xl font-bold ${text}`}>{count}</div>
-              <div className="text-xs text-slate-600 capitalize">{stage.displayName}</div>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Pipeline board */}
       <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-xl overflow-visible">
         <CardHeader className="border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-white py-3 px-4">
@@ -532,6 +546,7 @@ export default function LeadsKanban({
                   className="flex gap-3 overflow-x-auto pb-2"
                 >
                   {stages.map((stage, stageIndex) => {
+                    const stageCode = stage.code || stage.id;
                     const { leads: stageLeads, count } = stageData[stage.id] || { leads: [], count: 0 };
                     const { light, border, text, gradient } = stage.cc;
 
@@ -569,7 +584,7 @@ export default function LeadsKanban({
 
                             {/* Cards area */}
                             {!stage.is_folded ? (
-                              <Droppable droppableId={stage.id} type="CARD">
+                              <Droppable droppableId={stageCode} type="CARD">
                                 {(provided, snapshot) => (
                                   <div
                                     ref={provided.innerRef}
@@ -603,7 +618,7 @@ export default function LeadsKanban({
                                 )}
                               </Droppable>
                             ) : (
-                              <Droppable droppableId={stage.id} type="CARD">
+                              <Droppable droppableId={stageCode} type="CARD">
                                 {(provided, snapshot) => (
                                   <div
                                     ref={provided.innerRef}
