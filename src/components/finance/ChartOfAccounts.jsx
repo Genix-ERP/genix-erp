@@ -140,13 +140,15 @@ export default function ChartOfAccounts() {
     });
 
     // Third pass: compute aggregated balances for parent accounts
-    // In standard accounting (like Odoo), parent/group accounts show the sum of their children
+    // Parent account shows: its OWN balance + sum of all children's balances
     const computeAggregatedBalance = (node) => {
       if (node.children && node.children.length > 0) {
         node.children.forEach(child => computeAggregatedBalance(child));
-        node.aggregated_balance = node.children.reduce(
+        const childrenSum = node.children.reduce(
           (sum, child) => sum + (child.aggregated_balance ?? child.current_balance ?? 0), 0
         );
+        // Parent's total = own direct balance + all children's balances
+        node.aggregated_balance = (node.current_balance || 0) + childrenSum;
       } else {
         node.aggregated_balance = node.current_balance || 0;
       }

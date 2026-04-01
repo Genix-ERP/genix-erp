@@ -887,20 +887,20 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             } catch (e) { setPhotoReports([]); }
             break;
           case 'materials':
-            try {
-              const [materialsData, productsData, warehousesData, projMatsData, subcontractsData] = await Promise.all([
+            {
+              const results = await Promise.allSettled([
                 constructionService.listMaterialRequests(project.id),
-                inventoryService.listProducts({ limit: 500, is_stockable: true }),
+                inventoryService.listProducts({ limit: 100 }),
                 inventoryService.listWarehouses({ limit: 100 }),
                 constructionService.listProjectMaterials(project.id),
                 constructionService.listSubcontracts(project.id)
               ]);
-              setMaterialRequests(materialsData || []);
-              setInventoryProducts(productsData?.items || productsData || []);
-              setInventoryWarehouses(warehousesData?.items || warehousesData || []);
-              setProjectMaterials(projMatsData || []);
-              setProjectSubcontracts(subcontractsData || []);
-            } catch (e) { setMaterialRequests([]); }
+              setMaterialRequests(results[0].status === 'fulfilled' ? (results[0].value || []) : []);
+              setInventoryProducts(results[1].status === 'fulfilled' ? (results[1].value?.items || results[1].value || []) : []);
+              setInventoryWarehouses(results[2].status === 'fulfilled' ? (results[2].value?.items || results[2].value || []) : []);
+              setProjectMaterials(results[3].status === 'fulfilled' ? (results[3].value || []) : []);
+              setProjectSubcontracts(results[4].status === 'fulfilled' ? (results[4].value || []) : []);
+            }
             break;
           case 'estimates':
           case 'daily_journal':

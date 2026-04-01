@@ -157,6 +157,7 @@ export default function Products() {
     products,
     categories,
     inventory,
+    warehouses,
     items,
     stockMovements,
     createProduct,
@@ -196,7 +197,7 @@ export default function Products() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSubTab, setActiveSubTab] = useState("list");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -600,8 +601,11 @@ export default function Products() {
       filtered = filtered.filter(product => product.category_id === categoryFilter);
     }
 
-    if (typeFilter !== "all") {
-      filtered = filtered.filter(product => product.type === typeFilter);
+    if (warehouseFilter !== "all") {
+      const productIdsInWarehouse = new Set(
+        inventory.filter(i => i.warehouse_id === warehouseFilter).map(i => i.product_id)
+      );
+      filtered = filtered.filter(product => productIdsInWarehouse.has(product.id));
     }
 
     if (statusFilter !== "all") {
@@ -613,15 +617,26 @@ export default function Products() {
     }
 
     setFilteredProducts(filtered);
-  }, [searchQuery, categoryFilter, typeFilter, statusFilter, products]);
+  }, [searchQuery, categoryFilter, warehouseFilter, statusFilter, products, inventory]);
+
+  // Set of warehouse IDs belonging to the active company/organization
+  const accessibleWarehouseIds = useMemo(() => {
+    if (!activeCompany?.id) return new Set((warehouses || []).map(w => w.id));
+    return new Set(
+      (warehouses || []).filter(w => w.organization_id === activeCompany.id).map(w => w.id)
+    );
+  }, [warehouses, activeCompany]);
 
   const getProductStock = (productId) => {
-    const stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap');
+    let stockItems = inventory.filter(i => i.product_id === productId && i.warehouse_type !== 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
+    if (warehouseFilter !== "all") {
+      stockItems = stockItems.filter(i => i.warehouse_id === warehouseFilter);
+    }
     return stockItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
   const getProductScrapStock = (productId) => {
-    const scrapItems = inventory.filter(i => i.product_id === productId && i.warehouse_type === 'scrap');
+    const scrapItems = inventory.filter(i => i.product_id === productId && i.warehouse_type === 'scrap' && accessibleWarehouseIds.has(i.warehouse_id));
     return scrapItems.reduce((sum, i) => sum + (i.quantity_on_hand ?? i.quantity ?? 0), 0);
   };
 
@@ -1267,15 +1282,15 @@ export default function Products() {
                   <Tag className="w-4 h-4" />
                 </Button>
               </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[130px] bg-slate-50">
-                  <SelectValue placeholder={t('type')} />
+              <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                <SelectTrigger className="w-[160px] bg-slate-50">
+                  <SelectValue placeholder={t('warehouse') || 'Warehouse'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t('all_types')}</SelectItem>
-                  <SelectItem value="product">{t('product')}</SelectItem>
-                  <SelectItem value="service">{t('service')}</SelectItem>
-                  <SelectItem value="bundle">Bundle</SelectItem>
+                  <SelectItem value="all">{t('all_warehouses') || 'All warehouses'}</SelectItem>
+                  {(warehouses || []).filter(w => w.is_active !== false && accessibleWarehouseIds.has(w.id)).map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -1335,7 +1350,6 @@ export default function Products() {
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-semibold text-slate-700 min-w-[200px]">{t('product')}</TableHead>
                     <TableHead className="hidden sm:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('tags')}</TableHead>
-                    <TableHead className="hidden md:table-cell font-semibold text-slate-700 min-w-[80px] whitespace-nowrap">{t('type')}</TableHead>
                     <TableHead className="hidden lg:table-cell font-semibold text-slate-700 min-w-[100px] whitespace-nowrap">{t('category')}</TableHead>
                     <TableHead className="hidden md:table-cell font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('cost')}</TableHead>
                     <TableHead className="font-semibold text-slate-700 text-right min-w-[80px] whitespace-nowrap">{t('price')}</TableHead>
@@ -1389,11 +1403,6 @@ export default function Products() {
                               </Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge className={getTypeColor(product.type)}>
-                            {product.type}
-                          </Badge>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-slate-600">
                           {getCategoryName(product.category_id)}
@@ -2025,23 +2034,29 @@ export default function Products() {
                       <span className="text-sm font-medium">{t('select_all') || 'Select all'}</span>
                     </div>
                     <div className="border-t my-1" />
-                    {companies.map(company => (
-                      <div
-                        key={company.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer"
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            organization_ids: prev.organization_ids.includes(company.id)
-                              ? prev.organization_ids.filter(id => id !== company.id)
-                              : [...prev.organization_ids, company.id]
-                          }));
-                        }}
-                      >
-                        <Checkbox checked={formData.organization_ids.includes(company.id)} />
-                        <span className="text-sm">{company.company_name}</span>
-                      </div>
-                    ))}
+                    <div className="max-h-60 overflow-y-auto">
+                      {companies.map(company => {
+                        const isActive = activeCompany?.id === company.id;
+                        return (
+                          <div
+                            key={company.id}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer ${isActive ? 'bg-blue-50' : ''}`}
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                organization_ids: prev.organization_ids.includes(company.id)
+                                  ? prev.organization_ids.filter(id => id !== company.id)
+                                  : [...prev.organization_ids, company.id]
+                              }));
+                            }}
+                          >
+                            <Checkbox checked={formData.organization_ids.includes(company.id)} />
+                            <span className="text-sm">{company.company_name}</span>
+                            {isActive && <span className="text-xs text-blue-600 ml-auto">{t('current') || 'joriy'}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </PopoverContent>
                 </Popover>
                 {formData.organization_ids.length === 0 && (
