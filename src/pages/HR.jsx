@@ -399,7 +399,7 @@ Only return the JSON, no other text.`;
       // Auto-generate 8-character alphanumeric password
       const password = generatePassword();
 
-      // Create user account if email or phone is provided
+      // Create user account only if email is provided
       const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
       const firstName = nameParts[0] || 'User';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
@@ -407,10 +407,10 @@ Only return the JSON, no other text.`;
       const hasEmail = newEmployee.email && newEmployee.email.trim();
       const hasPhone = newEmployee.phone && newEmployee.phone.trim() && newEmployee.phone.trim() !== '+998';
 
-      if (hasEmail || hasPhone) {
+      if (hasEmail) {
         try {
           await apiClient.post('/users', {
-            email: newEmployee.email || '',
+            email: newEmployee.email.trim(),
             password: password,
             first_name: firstName,
             last_name: lastName,
@@ -421,10 +421,10 @@ Only return the JSON, no other text.`;
           if (userErr?.response?.status !== 409) throw userErr;
         }
 
-        // Auto-send credentials via SMS (if phone) or email
+        // Auto-send credentials via email
         try {
           await apiClient.post('/users/send-credentials', {
-            email: newEmployee.email || '',
+            email: newEmployee.email.trim(),
             password: password,
             method: hasPhone ? 'sms' : 'email',
             phone: newEmployee.phone || '',
@@ -482,19 +482,11 @@ Only return the JSON, no other text.`;
       await loadEmployees();
     } catch (error) {
       console.error("Error adding employee:", error);
-      if (error.response?.status === 409) {
-        toast({
-          title: t('error') || 'Xato',
-          description: t('email_already_exists') || 'Bu email bilan foydalanuvchi allaqachon mavjud.',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: t('error') || 'Xato',
-          description: error.response?.data?.error?.message || error.message || t('employee_add_error') || "Xodim qo'shishda xatolik yuz berdi",
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: t('error') || 'Xato',
+        description: error.response?.data?.error?.message || error.response?.data?.message || error.message || "Xodim qo'shishda xatolik yuz berdi",
+        variant: 'destructive',
+      });
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -830,24 +822,12 @@ Only return the JSON, no other text.`;
 
     setIsSubmitting(true);
     try {
-      // Delete the employee
       await hrService.deleteEmployee(selectedEmployee.id);
 
-      // Also delete the associated user if they have an email
-      if (selectedEmployee.email) {
-        try {
-          // Find user by email and delete
-          const usersResponse = await apiClient.get('/users', {
-            params: { search: selectedEmployee.email }
-          });
-          const user = usersResponse.data?.data?.find(u => u.email === selectedEmployee.email);
-          if (user) {
-            await apiClient.delete(`/users/${user.id}`);
-          }
-        } catch (userError) {
-          console.warn('Could not delete associated user:', userError.message);
-        }
-      }
+      toast({
+        title: t('success') || 'Muvaffaqiyatli',
+        description: t('employee_deleted') || "Xodim o'chirildi",
+      });
 
       setShowDeleteDialog(false);
       setSelectedEmployee(null);
@@ -1177,7 +1157,6 @@ Only return the JSON, no other text.`;
                 <div className="space-y-1">
                   <Label className="text-xs">{t('email')}</Label>
                   <Input
-                    type="email"
                     value={newEmployee.email}
                     onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
                     placeholder={t('enter_email')}
@@ -1468,7 +1447,6 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('email')}</Label>
                     <Input
-                      type="email"
                       value={selectedEmployee.email}
                       onChange={e => setSelectedEmployee({...selectedEmployee, email: e.target.value})}
                       placeholder={t('enter_email')}
