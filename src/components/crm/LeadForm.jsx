@@ -12,17 +12,21 @@ import { usePermissions } from "@/hooks/usePermissions";
 import apiClient from "@/api/client";
 import { leadsService } from "@/api/services/leads";
 import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
+import { pipelineStagesService } from "@/api/services/crm";
+import { useCompany } from "@/components/contexts/CompanyContext";
 
 export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
   const { user } = useAuth();
   const { MODULES, canDelete } = usePermissions();
+  const { activeCompany } = useCompany();
   // canDelete on CUSTOMERS = "grant" level = sales head / admin
   const canChangeAssignment = canDelete(MODULES.CUSTOMERS);
 
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [leadStages, setLeadStages] = useState([]);
 
   const [formData, setFormData] = useState({
     contact_name: lead?.contact_name || "",
@@ -47,6 +51,21 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     };
     fetchUsers();
   }, []);
+
+  // Load lead pipeline stages from API
+  useEffect(() => {
+    const fetchStages = async () => {
+      try {
+        const stages = await pipelineStagesService.list(activeCompany?.id, 'lead');
+        if (stages && stages.length > 0) {
+          setLeadStages(stages.sort((a, b) => a.sequence - b.sequence));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch lead stages:', err);
+      }
+    };
+    fetchStages();
+  }, [activeCompany?.id]);
 
   useEffect(() => {
     if (lead?.id) {
@@ -170,11 +189,19 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new">{t('new')}</SelectItem>
-                    <SelectItem value="contacted">{t('contacted')}</SelectItem>
-                    <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
-                    <SelectItem value="qualified">{t('qualified')}</SelectItem>
-                    <SelectItem value="lost">{t('lost')}</SelectItem>
+                    {leadStages.length > 0 ? (
+                      leadStages.map(stage => (
+                        <SelectItem key={stage.id} value={stage.code}>{stage.name}</SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="new">{t('new')}</SelectItem>
+                        <SelectItem value="contacted">{t('contacted')}</SelectItem>
+                        <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
+                        <SelectItem value="qualified">{t('qualified')}</SelectItem>
+                        <SelectItem value="lost">{t('lost')}</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

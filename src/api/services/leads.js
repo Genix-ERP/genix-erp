@@ -64,9 +64,14 @@ export const leadsService = {
         return response.data.data;
       }
     } catch (error) {
-      console.warn('Failed to create lead via API, saving locally:', error);
+      // Re-throw API errors (409 duplicate, 400 validation, etc.) so the caller can handle them
+      if (error.response) {
+        throw error;
+      }
+      // Only fall back to localStorage for network/connection errors
+      console.warn('Failed to create lead via API (network error), saving locally:', error);
     }
-    // Fallback: save locally
+    // Fallback: save locally (only reached if backend is unavailable)
     const localLead = {
       id: `lead_${Date.now()}`,
       ...leadData,
@@ -89,9 +94,13 @@ export const leadsService = {
         return response.data.data || { id: leadId, ...updates };
       }
     } catch (error) {
-      console.warn('Failed to update lead via API, updating locally:', error);
+      // Re-throw API errors so the caller can handle them
+      if (error.response) {
+        throw error;
+      }
+      console.warn('Failed to update lead via API (network error), updating locally:', error);
     }
-    // Fallback: update localStorage
+    // Fallback: update localStorage (only reached if backend is unavailable)
     const leads = getLocalLeads(companyId);
     const index = leads.findIndex(l => l.id === leadId);
     if (index !== -1) {
