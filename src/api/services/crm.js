@@ -204,75 +204,26 @@ export const opportunitiesService = {
 // =====================================================
 export const pipelineStagesService = {
   async list(companyId, pipelineType = 'opportunity') {
-    try {
-      const isBackendAvailable = await checkBackendHealth();
-      if (isBackendAvailable) {
-        const response = await apiClient.get(`/pipeline-stages?type=${pipelineType}`);
-        return response.data.data || [];
-      }
-    } catch (error) {
-      console.warn('Failed to fetch pipeline stages from API:', error);
-    }
-    const stages = getLocalData(PIPELINE_STAGES_KEY, companyId);
-    return stages.length > 0 ? stages : defaultPipelineStages;
+    // Always try API first — no localStorage fallback for stages
+    const response = await apiClient.get(`/pipeline-stages?type=${pipelineType}`);
+    return response.data.data || [];
   },
 
   async create(data, companyId) {
-    try {
-      const isBackendAvailable = await checkBackendHealth();
-      if (isBackendAvailable) {
-        const response = await apiClient.post('/pipeline-stages', data);
-        return response.data.data;
-      }
-    } catch (error) {
-      console.warn('Failed to create pipeline stage via API:', error);
-    }
-    const localItem = {
-      id: `stage_${Date.now()}`,
-      ...data,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    const items = getLocalData(PIPELINE_STAGES_KEY, companyId);
-    items.push(localItem);
-    saveLocalData(PIPELINE_STAGES_KEY, items, companyId);
-    return localItem;
+    // Always go to API — no localStorage fallback
+    const response = await apiClient.post('/pipeline-stages', data);
+    return response.data.data;
   },
 
   async update(id, updates, companyId) {
-    try {
-      const isBackendAvailable = await checkBackendHealth();
-      if (isBackendAvailable) {
-        const response = await apiClient.put(`/pipeline-stages/${id}`, updates);
-        return response.data.data || { id, ...updates };
-      }
-    } catch (error) {
-      console.warn('Failed to update pipeline stage via API:', error);
-    }
-    const items = getLocalData(PIPELINE_STAGES_KEY, companyId);
-    const index = items.findIndex(s => s.id === id);
-    if (index !== -1) {
-      items[index] = { ...items[index], ...updates, updated_at: new Date().toISOString() };
-      saveLocalData(PIPELINE_STAGES_KEY, items, companyId);
-      return items[index];
-    }
-    return null;
+    // Always go to API — no localStorage fallback
+    const response = await apiClient.put(`/pipeline-stages/${id}`, updates);
+    return response.data.data || { id, ...updates };
   },
 
   async delete(id, companyId) {
-    try {
-      const isBackendAvailable = await checkBackendHealth();
-      if (isBackendAvailable) {
-        await apiClient.delete(`/pipeline-stages/${id}`);
-        return true;
-      }
-    } catch (error) {
-      console.warn('Failed to delete pipeline stage via API:', error);
-    }
-    const items = getLocalData(PIPELINE_STAGES_KEY, companyId);
-    const filtered = items.filter(s => s.id !== id);
-    saveLocalData(PIPELINE_STAGES_KEY, filtered, companyId);
+    // Always go to API — no localStorage fallback
+    await apiClient.delete(`/pipeline-stages/${id}`);
     return true;
   }
 };

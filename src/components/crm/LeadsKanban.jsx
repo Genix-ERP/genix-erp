@@ -138,11 +138,41 @@ export default function LeadsKanban({
   const [addModal, setAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', color: 'blue', is_won: false, is_lost: false });
 
+  // Seed defaults for this org if none exist (handles new orgs created after migrations)
+  const seedDefaultsForOrg = useCallback(async () => {
+    const results = [];
+    for (const stage of DEFAULT_STAGES) {
+      try {
+        const result = await pipelineStagesService.create({
+          name: stage.name,
+          code: stage.id,
+          color: stage.color,
+          sequence: stage.sequence,
+          is_won: stage.is_won,
+          is_lost: stage.is_lost,
+          pipeline_type: 'lead',
+          organization_id: companyId,
+          probability: stage.is_won ? 100 : (stage.is_lost ? 0 : 50),
+        }, companyId);
+        if (result) results.push(result);
+      } catch (e) {
+        // Ignore duplicate key errors — stage already exists
+      }
+    }
+    return results;
+  }, [companyId]);
+
   // Load stages from backend
   const loadStagesFromAPI = useCallback(async () => {
     setStagesLoading(true);
     try {
-      const data = await pipelineStagesService.list(companyId, 'lead');
+      let data = await pipelineStagesService.list(companyId, 'lead');
+      if (!data || data.length === 0) {
+        // No lead stages for this org — seed defaults via API
+        await seedDefaultsForOrg();
+        // Re-fetch to get the actual DB records with real UUIDs
+        try { data = await pipelineStagesService.list(companyId, 'lead'); } catch (_) { /* ignore */ }
+      }
       if (data && data.length > 0) {
         setStageList(data.map(s => ({
           ...s,
@@ -159,7 +189,7 @@ export default function LeadsKanban({
     } finally {
       setStagesLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, seedDefaultsForOrg]);
 
   useEffect(() => {
     loadStagesFromAPI();
@@ -245,7 +275,14 @@ export default function LeadsKanban({
 
   const saveAddModal = useCallback(async () => {
     if (!addForm.name.trim()) return;
-    const code = generateCode(addForm.name);
+    // Generate a unique code — append suffix if code already exists
+    let code = generateCode(addForm.name);
+    const existingCodes = new Set(stageList.map(s => s.code));
+    if (existingCodes.has(code)) {
+      let suffix = 2;
+      while (existingCodes.has(code + '_' + suffix)) suffix++;
+      code = code + '_' + suffix;
+    }
     const maxSeq = Math.max(...stageList.map(s => s.sequence), -1);
     const newStage = {
       name: addForm.name.trim(),
@@ -255,6 +292,7 @@ export default function LeadsKanban({
       is_won: addForm.is_won,
       is_lost: addForm.is_lost,
       pipeline_type: 'lead',
+      organization_id: companyId,
       probability: addForm.is_won ? 100 : (addForm.is_lost ? 0 : 50),
     };
     setAddModal(false);
@@ -265,7 +303,7 @@ export default function LeadsKanban({
       }
     } catch (e) {
       console.warn('Failed to create stage:', e);
-      setKanbanState(prev => ({ ...prev, error: 'Failed to create stage' }));
+      setKanbanState(prev => ({ ...prev, error: 'Failed to create stage: ' + (e.response?.data?.error?.message || e.message) }));
     }
   }, [addForm, stageList, companyId]);
 
