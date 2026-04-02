@@ -285,12 +285,7 @@ export default function ProfileSettings() {
               <Label htmlFor="phone_number">{t('phone_number')}</Label>
               <Input id="phone_number" value={formatPhoneInput(formData.phone_number)} onChange={(e) => setFormData(prev => ({ ...prev, phone_number: parsePhoneInput(e.target.value) }))} placeholder="+998 XX XXX XXXX" />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bio">{t('bio')}</Label>
-            <Textarea id="bio" value={formData.bio} onChange={handleChange} placeholder={t('bio_placeholder')} />
-          </div>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="bio">{t('bio')}</Label>
