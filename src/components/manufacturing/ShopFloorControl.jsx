@@ -154,15 +154,15 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
 
 function KanbanColumn({ title, count, headerColor, titleColor, countColor, workOrders, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials }) {
   return (
-    <div className="w-72 shrink-0 flex flex-col gap-3">
+    <div className="w-72 shrink-0 flex flex-col gap-3 h-full">
       {/* Column header */}
-      <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl border ${headerColor}`}>
+      <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl border shrink-0 ${headerColor}`}>
         <span className={`font-semibold text-sm ${titleColor}`}>{title}</span>
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${countColor}`}>{count}</span>
       </div>
 
-      {/* Cards */}
-      <div className="space-y-3 min-h-24">
+      {/* Cards — scrollable within the fixed column height */}
+      <div className="space-y-3 overflow-y-auto flex-1 pr-1">
         {workOrders.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-slate-400 text-xs bg-slate-50/50">
             —
@@ -673,8 +673,8 @@ export default function ShopFloorControl({ isActive }) {
             </CardContent>
           </Card>
         ) : (
-          <div className="overflow-x-auto pb-4">
-            <div className="flex gap-4 min-w-max">
+          <div className="overflow-x-auto" style={{ height: 'calc(100vh - 420px)', minHeight: '400px' }}>
+            <div className="flex gap-4 min-w-max h-full">
               {kanbanColumns.map(col => (
                 <KanbanColumn
                   key={col.id}
