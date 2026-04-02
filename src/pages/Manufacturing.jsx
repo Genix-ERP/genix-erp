@@ -44,7 +44,7 @@ export default function Manufacturing() {
 
   const tabLabels = {
     en: { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' },
-    uz: { categories: 'Kategoriyalar', report: 'Hisobot', shop_floor: 'Sex boshqaruvi' },
+    uz: { categories: 'Kategoriyalar', report: 'Hisobot', shop_floor: 'Ustaxona nazorati' },
     ru: { categories: 'Категории', report: 'Отчёт', shop_floor: 'Управление цехом' },
   }[language] || { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' };
 
