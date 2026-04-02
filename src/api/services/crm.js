@@ -204,25 +204,21 @@ export const opportunitiesService = {
 // =====================================================
 export const pipelineStagesService = {
   async list(companyId, pipelineType = 'opportunity') {
-    // Always try API first — no localStorage fallback for stages
     const response = await apiClient.get(`/pipeline-stages?type=${pipelineType}`);
     return response.data.data || [];
   },
 
   async create(data, companyId) {
-    // Always go to API — no localStorage fallback
     const response = await apiClient.post('/pipeline-stages', data);
     return response.data.data;
   },
 
   async update(id, updates, companyId) {
-    // Always go to API — no localStorage fallback
     const response = await apiClient.put(`/pipeline-stages/${id}`, updates);
     return response.data.data || { id, ...updates };
   },
 
   async delete(id, companyId) {
-    // Always go to API — no localStorage fallback
     await apiClient.delete(`/pipeline-stages/${id}`);
     return true;
   }

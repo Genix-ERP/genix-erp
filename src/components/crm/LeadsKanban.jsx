@@ -91,6 +91,11 @@ const DEFAULT_STAGES = [
   { id: 'lost', name: 'Lost', color: 'red', sequence: 4, is_won: false, is_lost: true, is_folded: false },
 ];
 
+// Default stage codes that have translations available.
+// If a stage has a default code AND no custom_name override, we show the translated version.
+// If the user edited the name (custom_name is set), we show their custom name in all languages.
+const DEFAULT_STAGE_CODES = new Set(['new', 'contacted', 'in_progress', 'qualified', 'lost']);
+
 function getColor(colorId) {
   return STAGE_COLORS.find(c => c.id === colorId) || STAGE_COLORS[0];
 }
@@ -212,16 +217,23 @@ export default function LeadsKanban({
     }
   }, [leads]);
 
-  // Enriched stages
+  // Enriched stages with translation support
   const stages = useMemo(() =>
     [...stageList]
       .sort((a, b) => a.sequence - b.sequence)
       .map(stage => {
         const color = resolveColor(stage.color);
         const Icon = STAGE_ICONS[stage.code] || STAGE_ICONS[stage.id] || Target;
-        return { ...stage, displayName: stage.name, cc: color, icon: Icon };
+        const code = stage.code || stage.id;
+        // If stage has a custom_name (user edited), always show that.
+        // If it's a known default code with no custom name, use translation.
+        // Otherwise fall back to the name field.
+        const hasCustomName = !!stage.custom_name;
+        const isTranslatable = DEFAULT_STAGE_CODES.has(code);
+        const displayName = hasCustomName ? stage.custom_name : (isTranslatable ? t(code) : stage.name);
+        return { ...stage, displayName, cc: color, icon: Icon };
       }),
-    [stageList]
+    [stageList, t]
   );
 
   // Match leads to stages by code (leads have status field that matches stage code)
@@ -252,7 +264,19 @@ export default function LeadsKanban({
 
   const saveEditModal = useCallback(async () => {
     if (!editForm.name.trim() || !editModal.stage) return;
-    const updates = { name: editForm.name.trim(), color: editForm.color, is_won: editForm.is_won, is_lost: editForm.is_lost };
+    const trimmedName = editForm.name.trim();
+    const code = editModal.stage.code || editModal.stage.id;
+    // If user changed the name on a default stage, store as custom_name.
+    // If they cleared it back or it's a non-default stage, custom_name tracks the display name.
+    const isDefaultCode = DEFAULT_STAGE_CODES.has(code);
+    const customName = isDefaultCode ? trimmedName : null;
+    const updates = {
+      name: trimmedName,
+      custom_name: customName,
+      color: editForm.color,
+      is_won: editForm.is_won,
+      is_lost: editForm.is_lost,
+    };
     // Optimistic update
     setStageList(prev => prev.map(s =>
       s.id === editModal.stage.id ? { ...s, ...updates } : s
@@ -263,8 +287,10 @@ export default function LeadsKanban({
       await pipelineStagesService.update(editModal.stage.id, updates, companyId);
     } catch (e) {
       console.warn('Failed to update stage:', e);
+      // Revert optimistic update on failure
+      loadStagesFromAPI();
     }
-  }, [editForm, editModal.stage, companyId]);
+  }, [editForm, editModal.stage, companyId, loadStagesFromAPI]);
 
   const openAddModal = useCallback(() => {
     const usedColors = new Set(stageList.map(s => s.color));
@@ -303,7 +329,9 @@ export default function LeadsKanban({
       }
     } catch (e) {
       console.warn('Failed to create stage:', e);
-      setKanbanState(prev => ({ ...prev, error: 'Failed to create stage: ' + (e.response?.data?.error?.message || e.message) }));
+      setKanbanState(prev => ({ ...prev, error: t('failed_to_create_stage') || 'Failed to create stage' }));
+      // Reload stages from backend to stay in sync
+      loadStagesFromAPI();
     }
   }, [addForm, stageList, companyId]);
 
@@ -329,6 +357,8 @@ export default function LeadsKanban({
       await pipelineStagesService.delete(stageId, companyId);
     } catch (e) {
       console.warn('Failed to delete stage:', e);
+      // Revert on failure — reload from backend
+      loadStagesFromAPI();
     }
   }, [kanbanState.leads, stageList, onUpdateLead, companyId]);
 

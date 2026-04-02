@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
+import { Switch } from "@/components/ui/switch";
 import {
   Plus,
   Search,
@@ -36,6 +37,7 @@ import {
   Trash2,
   Receipt,
   ChevronDown,
+  Package,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -135,6 +137,8 @@ export default function PurchaseOrders() {
     tax_percent: 0,
     tax_rate_id: '',
     payment_terms: 'net_30',
+    vehicle_number: '',
+    requires_shipping: true,
     lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
   });
 
@@ -473,6 +477,8 @@ export default function PurchaseOrders() {
         tax_percent: defaultTaxPercent,
         shipping_cost: 0,
         payment_terms: 'net_30',
+        vehicle_number: '',
+        requires_shipping: true,
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
       setIsDeliveryDateManual(false);
@@ -807,6 +813,8 @@ export default function PurchaseOrders() {
             tax_percent: defaultTaxPercent || 0,
             shipping_cost: 0,
             payment_terms: 'net_30',
+            vehicle_number: '',
+            requires_shipping: true,
             lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
           });
         }
@@ -912,6 +920,34 @@ export default function PurchaseOrders() {
                     setIsDeliveryDateManual(true);
                   }}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">{t('vehicle_number') || 'Vehicle Number'}</label>
+                <div className="relative">
+                  <Truck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    value={newPO.vehicle_number || ''}
+                    onChange={(e) => setNewPO({...newPO, vehicle_number: e.target.value})}
+                    placeholder="01 A 123 AA"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end pb-1">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="requires-shipping"
+                    checked={newPO.requires_shipping}
+                    onCheckedChange={(checked) => setNewPO({...newPO, requires_shipping: checked})}
+                  />
+                  <label htmlFor="requires-shipping" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+                    <Package className="w-4 h-4 text-slate-500" />
+                    {t('requires_shipping') || 'Requires Shipping'}
+                  </label>
+                </div>
               </div>
             </div>
 

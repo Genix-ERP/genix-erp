@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
-  Send, Mail, MessageCircle, ChevronDown, Link2, Check, Copy, Bell
+  Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
+  Package, Truck
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -58,6 +59,7 @@ export default function ActSverka() {
   const [selectedAct, setSelectedAct] = useState(null);
   const [actDetail, setActDetail] = useState(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({});
 
   // Send state
   const [showSendModal, setShowSendModal] = useState(false);
@@ -218,6 +220,7 @@ export default function ActSverka() {
 
   const openActDetail = useCallback(async (act) => {
     setSelectedAct(act);
+    setExpandedRows({});
     setIsLoadingDetail(true);
     try {
       const detail = await financeService.getReconciliationAct(act.id);
@@ -665,27 +668,92 @@ export default function ActSverka() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    lines.map((line, idx) => (
-                      <TableRow key={idx} className="hover:bg-slate-50/50">
-                        <TableCell className="text-center text-xs text-slate-500">{idx + 1}</TableCell>
-                        <TableCell className="text-xs text-slate-600">{line.date}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-600">{line.document || '-'}</TableCell>
-                        <TableCell className="text-xs text-slate-700">{line.description || '-'}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {line.debit > 0 ? (
-                            <span className="text-blue-600 font-medium">{formatCurrency(line.debit)}</span>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-xs">
-                          {line.credit > 0 ? (
-                            <span className="text-red-600 font-medium">{formatCurrency(line.credit)}</span>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-medium">
-                          {formatCurrency(line.running_balance)}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    lines.map((line, idx) => {
+                      const hasDetails = line.items && line.items.length > 0;
+                      const isExpanded = expandedRows[idx];
+                      return (
+                        <React.Fragment key={idx}>
+                          <TableRow
+                            className={`hover:bg-slate-50/50 ${hasDetails ? 'cursor-pointer' : ''}`}
+                            onClick={() => hasDetails && setExpandedRows(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                          >
+                            <TableCell className="text-center text-xs text-slate-500">
+                              <div className="flex items-center justify-center gap-1">
+                                {hasDetails && (
+                                  <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                )}
+                                {idx + 1}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">{line.date}</TableCell>
+                            <TableCell className="text-xs font-mono text-slate-600">{line.document || '-'}</TableCell>
+                            <TableCell className="text-xs text-slate-700">
+                              <div className="flex items-center gap-1.5">
+                                <span>{line.description || '-'}</span>
+                                {line.vehicle_number && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded border border-amber-200">
+                                    <Truck className="w-2.5 h-2.5" />
+                                    {line.vehicle_number}
+                                  </span>
+                                )}
+                                {hasDetails && !isExpanded && (
+                                  <span className="text-[10px] text-slate-400">
+                                    ({line.items.length} {t('products') || 'mahsulot'})
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right text-xs">
+                              {line.debit > 0 ? (
+                                <span className="text-blue-600 font-medium">{formatCurrency(line.debit)}</span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs">
+                              {line.credit > 0 ? (
+                                <span className="text-red-600 font-medium">{formatCurrency(line.credit)}</span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs font-medium">
+                              {formatCurrency(line.running_balance)}
+                            </TableCell>
+                          </TableRow>
+                          {hasDetails && isExpanded && (
+                            <TableRow className="bg-slate-50/80">
+                              <TableCell></TableCell>
+                              <TableCell colSpan={6} className="py-2 px-3">
+                                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-100/80 text-slate-600">
+                                        <th className="text-left py-1.5 px-3 font-medium">
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3" />
+                                            {t('product') || 'Mahsulot'}
+                                          </div>
+                                        </th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[80px]">{t('quantity') || 'Miqdor'}</th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[100px]">{t('unit_price') || 'Narx'}</th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[110px]">{t('total') || 'Jami'}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {line.items.map((item, itemIdx) => (
+                                        <tr key={itemIdx} className="border-t border-slate-100 hover:bg-slate-50/50">
+                                          <td className="py-1.5 px-3 text-slate-700">{item.product_name || '-'}</td>
+                                          <td className="py-1.5 px-3 text-right text-slate-600">{item.quantity}</td>
+                                          <td className="py-1.5 px-3 text-right text-slate-600">{formatCurrency(item.unit_price)}</td>
+                                          <td className="py-1.5 px-3 text-right font-medium text-slate-700">{formatCurrency(item.line_total)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
 
                   {/* Totals Row */}
