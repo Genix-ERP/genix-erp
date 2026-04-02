@@ -83,20 +83,14 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
         </Badge>
       </div>
 
-      {/* Production order + work center */}
-      <div className="space-y-1">
-        {po && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <Package className="w-3.5 h-3.5 shrink-0 text-blue-400" />
-            <span className="truncate font-medium text-slate-600">{po.code || po.product_name}</span>
-            {po.product_name && po.code && <span className="truncate text-slate-400">— {po.product_name}</span>}
-          </div>
-        )}
+      {/* Production order */}
+      {po && (
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <Hammer className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-          <span className="truncate">{wcName}</span>
+          <Package className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+          <span className="truncate font-medium text-slate-600">{po.code || po.product_name}</span>
+          {po.product_name && po.code && <span className="truncate text-slate-400">— {po.product_name}</span>}
         </div>
-      </div>
+      )}
 
       {/* Progress */}
       <div className="space-y-1">
@@ -308,14 +302,29 @@ export default function ShopFloorControl({ isActive }) {
     return () => clearInterval(interval);
   }, [availableWorkOrders, completeWorkOrder, refreshData]);
 
-  // Kanban columns: split available work orders by status
+  // Kanban columns: group active work orders by work center (operation stage)
   const kanbanColumns = useMemo(() => {
-    const pending = filteredWorkOrders.filter(wo => wo.status === 'pending' || wo.status === 'ready');
-    const inProgress = filteredWorkOrders.filter(wo => wo.status === 'in_progress');
-    const paused = filteredWorkOrders.filter(wo => wo.status === 'paused');
-    const completed = filteredWorkOrders.filter(wo => wo.status === 'completed').slice(0, 10);
-    return { pending, inProgress, paused, completed };
-  }, [filteredWorkOrders]);
+    const active = filteredWorkOrders.filter(wo =>
+      wo.status === 'pending' || wo.status === 'ready' ||
+      wo.status === 'in_progress' || wo.status === 'paused'
+    );
+    // Collect unique work centers preserving first-seen order (sorted by sequence)
+    const seen = new Map(); // id -> { id, name }
+    active.forEach(wo => {
+      const id = wo.work_center_id || '__none__';
+      if (!seen.has(id)) {
+        seen.set(id, {
+          id,
+          name: wo.work_center_name || workCenters.find(wc => wc.id === id)?.name || (language === 'uz' ? 'Belgilanmagan' : language === 'ru' ? 'Не назначен' : 'Unassigned'),
+        });
+      }
+    });
+    return Array.from(seen.values()).map(wc => ({
+      ...wc,
+      workOrders: active.filter(wo => (wo.work_center_id || '__none__') === wc.id)
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
+    }));
+  }, [filteredWorkOrders, workCenters, language]);
 
   // Calculate time spent using backend actual_start / actual_duration_minutes
   const calculateTimeSpent = (workOrder) => {
@@ -649,7 +658,7 @@ export default function ShopFloorControl({ isActive }) {
         </Card>
       </div>
 
-      {/* Kanban Board */}
+      {/* Kanban Board — columns per work center / operation stage */}
       <div>
         <div className="flex items-center gap-2 px-1 mb-4">
           <Activity className="w-5 h-5 text-slate-600" />
@@ -657,91 +666,39 @@ export default function ShopFloorControl({ isActive }) {
           <span className="text-sm text-slate-400">({availableWorkOrders.length})</span>
         </div>
 
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-max">
-
-            {/* Pending Column */}
-            <KanbanColumn
-              title={labels.pending}
-              count={kanbanColumns.pending.length}
-              headerColor="bg-blue-50 border-blue-200"
-              titleColor="text-blue-700"
-              countColor="bg-blue-100 text-blue-600"
-              workOrders={kanbanColumns.pending}
-              labels={labels}
-              language={language}
-              workCenters={workCenters}
-              productionOrders={productionOrders}
-              currentTimer={currentTimer}
-              calculateTimeSpent={calculateTimeSpent}
-              onStart={handleStartWorkOrder}
-              onPause={handlePauseWorkOrder}
-              onComplete={handleCompleteWorkOrder}
-              onMaterials={handleOpenMaterials}
-            />
-
-            {/* In Progress Column */}
-            <KanbanColumn
-              title={labels.in_progress}
-              count={kanbanColumns.inProgress.length}
-              headerColor="bg-amber-50 border-amber-200"
-              titleColor="text-amber-700"
-              countColor="bg-amber-100 text-amber-600"
-              workOrders={kanbanColumns.inProgress}
-              labels={labels}
-              language={language}
-              workCenters={workCenters}
-              productionOrders={productionOrders}
-              currentTimer={currentTimer}
-              calculateTimeSpent={calculateTimeSpent}
-              onStart={handleStartWorkOrder}
-              onPause={handlePauseWorkOrder}
-              onComplete={handleCompleteWorkOrder}
-              onMaterials={handleOpenMaterials}
-            />
-
-            {/* Paused Column */}
-            <KanbanColumn
-              title={labels.paused}
-              count={kanbanColumns.paused.length}
-              headerColor="bg-orange-50 border-orange-200"
-              titleColor="text-orange-700"
-              countColor="bg-orange-100 text-orange-600"
-              workOrders={kanbanColumns.paused}
-              labels={labels}
-              language={language}
-              workCenters={workCenters}
-              productionOrders={productionOrders}
-              currentTimer={currentTimer}
-              calculateTimeSpent={calculateTimeSpent}
-              onStart={handleStartWorkOrder}
-              onPause={handlePauseWorkOrder}
-              onComplete={handleCompleteWorkOrder}
-              onMaterials={handleOpenMaterials}
-            />
-
-            {/* Completed Column */}
-            <KanbanColumn
-              title={labels.completed}
-              count={kanbanColumns.completed.length}
-              headerColor="bg-green-50 border-green-200"
-              titleColor="text-green-700"
-              countColor="bg-green-100 text-green-600"
-              workOrders={kanbanColumns.completed}
-              labels={labels}
-              language={language}
-              workCenters={workCenters}
-              productionOrders={productionOrders}
-              currentTimer={currentTimer}
-              calculateTimeSpent={calculateTimeSpent}
-              onStart={handleStartWorkOrder}
-              onPause={handlePauseWorkOrder}
-              onComplete={handleCompleteWorkOrder}
-              onMaterials={handleOpenMaterials}
-            />
-
+        {kanbanColumns.length === 0 ? (
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardContent className="py-12 text-center text-slate-500">
+              {labels.no_active_work_orders}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max">
+              {kanbanColumns.map(col => (
+                <KanbanColumn
+                  key={col.id}
+                  title={col.name}
+                  count={col.workOrders.length}
+                  headerColor="bg-slate-50 border-slate-200"
+                  titleColor="text-slate-700"
+                  countColor="bg-slate-200 text-slate-600"
+                  workOrders={col.workOrders}
+                  labels={labels}
+                  language={language}
+                  workCenters={workCenters}
+                  productionOrders={productionOrders}
+                  currentTimer={currentTimer}
+                  calculateTimeSpent={calculateTimeSpent}
+                  onStart={handleStartWorkOrder}
+                  onPause={handlePauseWorkOrder}
+                  onComplete={handleCompleteWorkOrder}
+                  onMaterials={handleOpenMaterials}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Pause Work Order Modal */}
