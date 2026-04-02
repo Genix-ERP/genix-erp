@@ -164,8 +164,9 @@ export function EmployeePermissionsProvider({ children }) {
   }, [isAdmin, isSiteAdmin, isOwner, organizationIds]);
 
   // Admin functions: Get permissions for a specific employee
-  const getEmployeePermissions = useCallback(async (empId) => {
-    if (!backendAvailable) return {};
+  // Returns { permissions, role_id, role_name } or just permissions for backward compat
+  const getEmployeePermissions = useCallback(async (empId, { withRoleInfo = false } = {}) => {
+    if (!backendAvailable) return withRoleInfo ? { permissions: {}, role_id: null, role_name: '' } : {};
 
     try {
       const result = await hrService.getEmployeePermissions(empId);
@@ -180,10 +181,13 @@ export function EmployeePermissionsProvider({ children }) {
           };
         });
       }
+      if (withRoleInfo) {
+        return { permissions: perms, role_id: result.role_id || null, role_name: result.role_name || '' };
+      }
       return perms;
     } catch (err) {
       console.error('Failed to get employee permissions:', err);
-      return {};
+      return withRoleInfo ? { permissions: {}, role_id: null, role_name: '' } : {};
     }
   }, [backendAvailable]);
 
