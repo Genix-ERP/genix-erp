@@ -348,3 +348,33 @@ export const manufacturingCategoriesService = {
     return true;
   }
 };
+
+// =====================================================
+// COST CALCULATIONS SERVICE
+// =====================================================
+export const costCalculationsService = {
+  async list() {
+    const response = await apiClient.get('/cost-calculations');
+    return response.data.data || [];
+  },
+
+  async get(id) {
+    const response = await apiClient.get(`/cost-calculations/${id}`);
+    return response.data.data;
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/cost-calculations', data);
+    return response.data.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/cost-calculations/${id}`, data);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/cost-calculations/${id}`);
+    return true;
+  }
+};

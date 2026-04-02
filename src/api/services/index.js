@@ -35,7 +35,8 @@ export {
   bomsService,
   manufacturingTransfersService,
   equipmentService,
-  manufacturingCategoriesService
+  manufacturingCategoriesService,
+  costCalculationsService
 } from './manufacturing';
 
 // Re-export the API client

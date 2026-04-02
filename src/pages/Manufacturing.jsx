@@ -17,7 +17,8 @@ import {
   Wrench,
   Settings2,
   Tag,
-  BarChart3
+  BarChart3,
+  Calculator
 } from 'lucide-react';
 
 import ManufacturingDashboard from '@/components/manufacturing/ManufacturingDashboard';
@@ -31,6 +32,7 @@ import RoutingManagement from '@/components/manufacturing/RoutingManagement';
 import EquipmentMaintenance from '@/components/manufacturing/EquipmentMaintenance';
 import ManufacturingCategories from '@/components/manufacturing/ManufacturingCategories';
 import ManufacturingReport from '@/components/manufacturing/ManufacturingReport';
+import CostCalculation from '@/components/manufacturing/CostCalculation';
 
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -43,10 +45,10 @@ export default function Manufacturing() {
   const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true });
 
   const tabLabels = {
-    en: { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' },
-    uz: { categories: 'Kategoriyalar', report: 'Hisobot', shop_floor: 'Ustaxona nazorati' },
-    ru: { categories: 'Категории', report: 'Отчёт', shop_floor: 'Управление цехом' },
-  }[language] || { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor' };
+    en: { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor', cost_calc: 'Cost Calc' },
+    uz: { categories: 'Kategoriyalar', report: 'Hisobot', shop_floor: 'Ustaxona nazorati', cost_calc: 'Kalkulyatsiya' },
+    ru: { categories: 'Категории', report: 'Отчёт', shop_floor: 'Управление цехом', cost_calc: 'Калькуляция' },
+  }[language] || { categories: 'Categories', report: 'Report', shop_floor: 'Shop Floor', cost_calc: 'Cost Calc' };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
@@ -86,6 +88,10 @@ export default function Manufacturing() {
             <TabsTrigger value="categories" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <Tag className="w-4 h-4" />
               <span className="hidden sm:inline">{tabLabels.categories}</span>
+            </TabsTrigger>
+            <TabsTrigger value="cost-calc" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <Calculator className="w-4 h-4" />
+              <span className="hidden sm:inline">{tabLabels.cost_calc}</span>
             </TabsTrigger>
             <TabsTrigger value="report" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
               <BarChart3 className="w-4 h-4" />
@@ -169,6 +175,10 @@ export default function Manufacturing() {
 
           <TabsContent value="categories" className="mt-6">
             <ManufacturingCategories />
+          </TabsContent>
+
+          <TabsContent value="cost-calc" className="mt-6">
+            <CostCalculation />
           </TabsContent>
 
           <TabsContent value="report" className="mt-6">
