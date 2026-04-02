@@ -623,6 +623,8 @@ export function ProcurementProvider({ children }) {
           expected_date: poData.expected_delivery_date || poData.expected_date || '',
           payment_terms: poData.payment_terms || 'net_30',
           warehouse_id: poData.warehouse_id || undefined,
+          vehicle_number: poData.vehicle_number || undefined,
+          requires_shipping: poData.requires_shipping !== undefined ? poData.requires_shipping : true,
           notes: poData.notes || '',
           lines: validLines.map(line => ({
             product_id: line.product_id || '',
@@ -714,6 +716,12 @@ export function ProcurementProvider({ children }) {
         }
         if (updates.vendor_reference !== undefined) {
           backendUpdates.vendor_reference = updates.vendor_reference;
+        }
+        if (updates.vehicle_number !== undefined) {
+          backendUpdates.vehicle_number = updates.vehicle_number;
+        }
+        if (updates.requires_shipping !== undefined) {
+          backendUpdates.requires_shipping = updates.requires_shipping;
         }
 
         // Debug: log what we're sending
