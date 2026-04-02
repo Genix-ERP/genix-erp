@@ -7,8 +7,9 @@ import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
   Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
-  Package, Truck
+  Package, Truck, FileSpreadsheet
 } from "lucide-react";
+import { exportReconciliationToExcel } from '@/utils/exportReconciliationExcel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -383,6 +384,36 @@ export default function ActSverka() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!actDetail) return;
+    try {
+      await exportReconciliationToExcel({
+        act: actDetail,
+        formatCurrency,
+        labels: {
+          reconciliation_act: t('reconciliation_act') || 'Akt sverka',
+          period: t('period') || 'Davr',
+          opening_balance: t('opening_balance') || 'Davr boshi qoldiq',
+          total_debit: t('total_debit') || 'Jami debet',
+          total_credit: t('total_credit') || 'Jami kredit',
+          closing_balance: t('closing_balance') || 'Davr oxiri qoldiq',
+          date: t('date') || 'Sana',
+          document: t('document') || 'Hujjat',
+          description: t('description') || 'Tavsif',
+          debit: t('debit') || 'Debet',
+          credit: t('credit') || 'Kredit',
+          balance: t('balance') || 'Balans',
+          period_turnover: t('period_turnover') || "Davr bo'yicha aylanma",
+          on_behalf_org: t('print_on_behalf_org') || 'Tashkilot nomidan',
+          on_behalf_partner: t('print_on_behalf_partner') || 'Kontragent nomidan',
+          signature_hint: t('print_sig_hint') || 'F.I.O. / imzo / muhr',
+        },
+      });
+    } catch (err) {
+      console.error('Excel export failed:', err);
+    }
+  };
+
   const openSendModal = (method) => {
     setSendMethod(method);
     setSendResult(null);
@@ -515,6 +546,15 @@ export default function ActSverka() {
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-1" />
               {t('print') || 'Chop etish'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={handleExportExcel}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-1" />
+              Excel
             </Button>
             {/* Send dropdown */}
             <div className="relative">
