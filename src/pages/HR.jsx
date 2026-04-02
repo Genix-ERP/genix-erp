@@ -39,6 +39,7 @@ import {
   Send,
   ChevronsUpDown,
   FolderTree,
+  AlertTriangle,
 } from "lucide-react";
 
 // Import universal ERP components
@@ -632,6 +633,7 @@ Only return the JSON, no other text.`;
   // Local state for editing permissions before saving
   const [editingPermissions, setEditingPermissions] = useState({});
   const [permissionsSaved, setPermissionsSaved] = useState(false);
+  const [employeeRoleInfo, setEmployeeRoleInfo] = useState({ role_id: null, role_name: '' });
   const permSavedTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -693,10 +695,13 @@ Only return the JSON, no other text.`;
       setSelectedEmployee(employee);
       setEditingPermissions({});
       setPermissionsSaved(false);
+      setEmployeeRoleInfo({ role_id: null, role_name: '' });
       setShowPermissionsModal(true);
 
-      // Load current permissions from backend
-      const currentPerms = await getEmployeePermissions(employee.id);
+      // Load current permissions from backend (with role info)
+      const result = await getEmployeePermissions(employee.id, { withRoleInfo: true });
+      const currentPerms = result.permissions || {};
+      setEmployeeRoleInfo({ role_id: result.role_id, role_name: result.role_name });
 
       // If no permissions set yet, initialize based on employee's permission level
       if (Object.keys(currentPerms).length === 0 && employee.permission) {
@@ -707,10 +712,10 @@ Only return the JSON, no other text.`;
       }
     } catch (error) {
       console.error('Error opening permissions modal:', error);
-      // Still open the modal even if there's an error initializing permissions
       setSelectedEmployee(employee);
       setEditingPermissions({});
       setPermissionsSaved(false);
+      setEmployeeRoleInfo({ role_id: null, role_name: '' });
       setShowPermissionsModal(true);
     }
   };
@@ -885,7 +890,7 @@ Only return the JSON, no other text.`;
       filtered = filtered.filter(e => e.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || e.job_title.toLowerCase().includes(searchQuery.toLowerCase()));
     }
     if (departmentFilter !== "all") {
-      filtered = filtered.filter(e => e.department === departmentFilter);
+      filtered = filtered.filter(e => (e.department || '').toLowerCase() === departmentFilter.toLowerCase());
     }
     if (statusFilter !== "all") {
       filtered = filtered.filter(e => e.status === statusFilter);
@@ -1623,13 +1628,29 @@ Only return the JSON, no other text.`;
                   </div>
                   <div>
                     <span className="text-xl">{t('manage_permissions') || 'Manage Permissions'}</span>
-                    <p className="text-sm font-normal text-slate-500 mt-0.5">{selectedEmployee?.full_name} - {selectedEmployee?.job_title}</p>
+                    <p className="text-sm font-normal text-slate-500 mt-0.5">
+                      {selectedEmployee?.full_name} - {selectedEmployee?.job_title}
+                      {employeeRoleInfo.role_name && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          {t('role')}: {employeeRoleInfo.role_name}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </DialogTitle>
               </div>
             </DialogHeader>
             {selectedEmployee && (
               <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Role sync warning */}
+                {employeeRoleInfo.role_name && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mx-1 mt-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>
+                      {t('role_sync_warning') || `Bu xodim "${employeeRoleInfo.role_name}" roliga ega. Ruxsatlarni o'zgartirish shu roldagi barcha xodimlarga ta'sir qiladi.`}
+                    </span>
+                  </div>
+                )}
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-between py-4 bg-gradient-to-r from-slate-50 to-white px-1">
                   <div className="flex items-center gap-2">

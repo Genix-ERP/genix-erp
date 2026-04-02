@@ -7,7 +7,7 @@ import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
   Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
-  Package, Truck, FileSpreadsheet
+  Package, Truck, Download
 } from "lucide-react";
 import { exportReconciliationToExcel } from '@/utils/exportReconciliationExcel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -400,6 +400,12 @@ export default function ActSverka() {
           date: t('date') || 'Sana',
           document: t('document') || 'Hujjat',
           description: t('description') || 'Tavsif',
+          vehicle_number: t('vehicle_number') || 'Mashina raqami',
+          product: t('product') || 'Mahsulot',
+          products: t('products') || 'mahsulot',
+          quantity: t('quantity') || 'Miqdor',
+          unit_price: t('unit_price') || 'Narx',
+          item_total: t('total') || 'Jami',
           debit: t('debit') || 'Debet',
           credit: t('credit') || 'Kredit',
           balance: t('balance') || 'Balans',
@@ -553,8 +559,8 @@ export default function ActSverka() {
               className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
               onClick={handleExportExcel}
             >
-              <FileSpreadsheet className="w-4 h-4 mr-1" />
-              Excel
+              <Download className="w-4 h-4 mr-1" />
+              Export
             </Button>
             {/* Send dropdown */}
             <div className="relative">
@@ -1306,7 +1312,7 @@ export default function ActSverka() {
                       setFormData(prev => ({ ...prev, partner_name: e.target.value, partner_id: '' }));
                       setShowContactDropdown(true);
                     }}
-                    onFocus={() => setShowContactDropdown(true)}
+                    onClick={() => setShowContactDropdown(true)}
                     className="bg-slate-50 border-slate-200"
                   />
                   {showContactDropdown && filteredContacts.length > 0 && (

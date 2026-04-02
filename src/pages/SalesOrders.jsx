@@ -33,6 +33,7 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
 import { inventoryService } from '@/api/services/inventory';
+import { projectsService } from '@/api/services/projects';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
@@ -241,6 +242,8 @@ export default function SalesOrders() {
     warehouse_id: '',
     carrier: '',
     vehicle_number: '',
+    project_id: '',
+    project_name: '',
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
@@ -308,6 +311,10 @@ export default function SalesOrders() {
 
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
+
+  // Intercompany projects (loaded when customer has source_organization_id)
+  const [intercompanyProjects, setIntercompanyProjects] = useState([]);
+  const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
 
   // Track if delivery date was manually set (for new order)
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
@@ -704,6 +711,8 @@ export default function SalesOrders() {
       warehouse_id: newOrder.warehouse_id || undefined,
       carrier: newOrder.carrier || undefined,
       vehicle_number: newOrder.vehicle_number || undefined,
+      project_id: newOrder.project_id || undefined,
+      project_name: newOrder.project_name || undefined,
       subtotal,
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
@@ -830,6 +839,9 @@ export default function SalesOrders() {
       delivery_date: new Date().toISOString().split('T')[0], // Default to today
       warehouse_id: warehouses.length === 1 ? warehouses[0].id : '',
       carrier: '',
+      vehicle_number: '',
+      project_id: '',
+      project_name: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
       tax_percent: defaultTaxPercent,
@@ -846,6 +858,7 @@ export default function SalesOrders() {
     setDiscountCodeInput('');
     setDiscountValidation({ valid: false, message: '' });
     setIsDeliveryDateManual(false);
+    setIntercompanyProjects([]);
   };
 
   // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
@@ -1498,13 +1511,30 @@ export default function SalesOrders() {
                   <Label>{t('customer')} *</Label>
                   <Select
                     value={newOrder.customer_id || ''}
-                    onValueChange={(value) => {
+                    onValueChange={async (value) => {
                       const customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
                         customer_id: value,
-                        customer_name: customer?.company_name || customer?.name || ''
+                        customer_name: customer?.company_name || customer?.name || '',
+                        project_id: '',
+                        project_name: '',
                       });
+                      // If customer is intercompany (has source_organization_id), fetch their projects
+                      setIntercompanyProjects([]);
+                      if (customer?.source_organization_id) {
+                        setLoadingIntercompanyProjects(true);
+                        try {
+                          const res = await apiClient.get('/projects/by-organization', {
+                            params: { organization_id: customer.source_organization_id }
+                          });
+                          setIntercompanyProjects(res.data?.data || []);
+                        } catch (err) {
+                          console.error('Failed to fetch intercompany projects:', err);
+                        } finally {
+                          setLoadingIntercompanyProjects(false);
+                        }
+                      }
                     }}
                   >
                     <SelectTrigger>
@@ -1594,6 +1624,51 @@ export default function SalesOrders() {
                   />
                 </div>
               </div>
+
+              {/* Intercompany Project Selection */}
+              {(() => {
+                const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                if (!selectedCustomer?.source_organization_id) return null;
+                return (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="w-4 h-4 text-blue-600" />
+                      <Label className="text-sm font-semibold text-blue-800">
+                        {t('intercompany_project') || 'Kompaniyalararo loyiha'}
+                      </Label>
+                    </div>
+                    <p className="text-xs text-blue-600 mb-2">
+                      {t('intercompany_project_hint') || "Buyurtma qaysi loyihaga tegishli ekanligini tanlang"}
+                    </p>
+                    <Select
+                      value={newOrder.project_id || ''}
+                      onValueChange={(value) => {
+                        const project = intercompanyProjects.find(p => p.id === value);
+                        setNewOrder({
+                          ...newOrder,
+                          project_id: value,
+                          project_name: project?.project_name || '',
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          loadingIntercompanyProjects
+                            ? (t('loading') || 'Loading...')
+                            : (t('select_project') || 'Loyihani tanlang')
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {intercompanyProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.project_code} — {project.project_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })()}
 
               {/* Order Lines */}
               <div className="border-t pt-4">
@@ -2032,6 +2107,27 @@ export default function SalesOrders() {
                       {t(selectedOrder.payment_status) || selectedOrder.payment_status || t('unpaid') || 'Unpaid'}
                     </Badge>
                   </div>
+                  {selectedOrder.carrier && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('carrier') || 'Tashuvchi'}</p>
+                      <p className="font-medium">{selectedOrder.carrier}</p>
+                    </div>
+                  )}
+                  {selectedOrder.vehicle_number && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('vehicle_number') || 'Moshina raqami'}</p>
+                      <p className="font-medium">{selectedOrder.vehicle_number}</p>
+                    </div>
+                  )}
+                  {selectedOrder.project_name && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('project') || 'Loyiha'}</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                        {selectedOrder.project_name}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {selectedOrder.lines && selectedOrder.lines.length > 0 && (
