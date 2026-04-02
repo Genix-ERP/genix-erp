@@ -1748,7 +1748,7 @@ export const translations = {
 
     // Bill of Materials (BOM)
     "bom": "BOM",
-    "bom_routing": "BOM & Routing",
+    "bom_routing": "Texnologiya",
     "resources": "Resources",
     "routing": "Routing",
     "equipment": "Equipment",
@@ -12026,7 +12026,7 @@ export const translations = {
     "production": "Ishlab chiqarish",
     "schedule": "Jadval",
     "bom": "BOM",
-    "bom_routing": "BOM va Marshrut",
+    "bom_routing": "Texnologiya",
     "resources": "Resurslar",
     "routing": "Marshrut",
     "work_centers": "Ish markazlari",
@@ -15553,7 +15553,7 @@ export const translations = {
 
     // Bill of Materials (BOM)
     "bom": "Спецификация",
-    "bom_routing": "Спецификация и Маршрут",
+    "bom_routing": "Texnologiya",
     "resources": "Ресурсы",
     "routing": "Маршрут",
     "equipment": "Оборудование",
