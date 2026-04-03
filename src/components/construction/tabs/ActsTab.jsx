@@ -47,7 +47,18 @@ const ActsTab = ({ project }) => {
   const TYPE_LABELS = {
     acceptance: t('acceptance') || 'Qabul qilish',
     defect: t('defect') || 'Nuqson',
+    ks2: t('ks2') || 'KS-2',
+    ks3: t('ks3') || 'KS-3',
+    hidden_work: t('hidden_work') || 'Yashirin ish',
   };
+
+  const ACT_TYPES = [
+    { value: 'acceptance', label: TYPE_LABELS.acceptance },
+    { value: 'defect', label: TYPE_LABELS.defect },
+    { value: 'ks2', label: TYPE_LABELS.ks2 },
+    { value: 'ks3', label: TYPE_LABELS.ks3 },
+    { value: 'hidden_work', label: TYPE_LABELS.hidden_work },
+  ];
 
   const STATE_LABELS = {
     draft: t('draft') || 'Qoralama',
@@ -121,9 +132,9 @@ const ActsTab = ({ project }) => {
   // ---- Handlers ----
 
   const handleCreate = async () => {
-    if (!form.act_type.trim()) { setError(t('act_type_required') || 'Akt turini kiriting'); return; }
-    if (!form.subcontract.trim()) { setError(t('subcontract_required') || 'Subpudratni kiriting'); return; }
-    if (!form.period_from || !form.period_to) { setError(t('period_required') || 'Davrni kiriting'); return; }
+    if (!form.act_type.trim()) { setError(t('validation_type_required') || 'Akt turini tanlang'); return; }
+    if (!form.subcontract.trim()) { setError(t('validation_subcontract_required') || 'Subpudratni tanlang'); return; }
+    if (!form.period_from || !form.period_to) { setError(t('validation_period_required') || 'Davrni kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
@@ -399,6 +410,9 @@ const ActsTab = ({ project }) => {
                 <SelectItem value="all">{t('all_types') || 'Barcha turlar'}</SelectItem>
                 <SelectItem value="acceptance">{t('acceptance') || 'Qabul qilish'}</SelectItem>
                 <SelectItem value="defect">{t('defect') || 'Nuqson'}</SelectItem>
+                <SelectItem value="ks2">{t('ks2') || 'KS-2'}</SelectItem>
+                <SelectItem value="ks3">{t('ks3') || 'KS-3'}</SelectItem>
+                <SelectItem value="hidden_work">{t('hidden_work') || 'Yashirin ish'}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filters.state || 'all'} onValueChange={v => setFilters(f => ({ ...f, state: v === 'all' ? '' : v }))}>
@@ -474,11 +488,14 @@ const ActsTab = ({ project }) => {
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
             <div><Label>{t('act_type') || 'Akt turi'} *</Label>
-              <Input
-                value={form.act_type}
-                onChange={e => setForm(f => ({ ...f, act_type: e.target.value }))}
-                placeholder={t('act_type_placeholder') || 'Masalan: Qabul qilish, Nuqson...'}
-              />
+              <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
+                <SelectTrigger className="w-full"><SelectValue placeholder={t('select_act_type') || 'Akt turini tanlang'} /></SelectTrigger>
+                <SelectContent>
+                  {ACT_TYPES.map(type => (
+                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
               <Input
