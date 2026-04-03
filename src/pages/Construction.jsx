@@ -2479,21 +2479,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
               <div>
-                <Label>{t('building_purpose') || 'Maqsad'}</Label>
-                <Select value={buildingForm.building_purpose} onValueChange={(v) => setBuildingForm({ ...buildingForm, building_purpose: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select') || 'Tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="living">{t('living') || 'Yashash uchun'}</SelectItem>
-                    <SelectItem value="non_living">{t('non_living') || 'Yashash uchun emas'}</SelectItem>
-                    <SelectItem value="mixed">{t('mixed') || 'Aralash'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
                 <Label>{t('floors_count') || 'Qavatlar soni'}</Label>
                 <Input
                   type="number"
@@ -2502,6 +2487,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   placeholder="16"
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
                 <Input
@@ -2523,13 +2510,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{t('estimated_cost') || 'Taxminiy narx'}</Label>
+                <Label>{t('estimated_cost') || 'Taxminiy xarajat'}</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
                   value={formatPriceInput(buildingForm.estimated_cost)}
                   onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: parsePriceInput(e.target.value) })}
-                  placeholder="5000000000"
+                  placeholder="5 000 000 000"
                 />
               </div>
               {buildingForm.id && (
@@ -3859,7 +3846,7 @@ export default function Construction() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
                 <Input
@@ -3874,15 +3861,6 @@ export default function Construction() {
                   type="number"
                   value={projectForm.floors_count}
                   onChange={(e) => setProjectForm({ ...projectForm, floors_count: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatPriceInput(projectForm.contract_amount)}
-                  onChange={(e) => setProjectForm({ ...projectForm, contract_amount: parsePriceInput(e.target.value) })}
                 />
               </div>
             </div>

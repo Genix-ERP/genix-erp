@@ -42,6 +42,7 @@ import {
   Settings,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
@@ -83,20 +84,67 @@ export const parseSpreadsheetFile = (file) => {
   });
 };
 
-// Export to Excel
-export const exportToExcel = (data, columns, filename) => {
-  const exportData = data.map((row) => {
-    const obj = {};
-    columns.forEach((col) => {
-      obj[col.label] = col.render ? col.render(row[col.key]) : row[col.key];
-    });
-    return obj;
+// Export to Excel (styled with ExcelJS)
+export const exportToExcel = async (data, columns, filename) => {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'GenixERP';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Data');
+
+  // Header row
+  const headerRow = ws.addRow(columns.map(col => col.label));
+  headerRow.height = 28;
+  headerRow.eachCell((cell, colNumber) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF2563EB' } },
+      bottom: { style: 'thin', color: { argb: 'FF2563EB' } },
+      left: { style: 'thin', color: { argb: 'FF2563EB' } },
+      right: { style: 'thin', color: { argb: 'FF2563EB' } },
+    };
   });
 
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Data");
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  // Data rows
+  data.forEach((row, rowIdx) => {
+    const values = columns.map(col => {
+      const val = col.render ? col.render(row[col.key]) : row[col.key];
+      return val ?? '';
+    });
+    const dataRow = ws.addRow(values);
+    dataRow.height = 22;
+    const isEven = rowIdx % 2 === 0;
+    dataRow.eachCell((cell) => {
+      cell.alignment = { vertical: 'middle' };
+      cell.border = {
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (isEven) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      }
+    });
+  });
+
+  // Auto-fit column widths
+  columns.forEach((col, i) => {
+    const colData = data.map(row => {
+      const val = col.render ? col.render(row[col.key]) : row[col.key];
+      return String(val ?? '');
+    });
+    const maxLen = Math.max(col.label.length, ...colData.map(v => v.length));
+    ws.getColumn(i + 1).width = Math.min(Math.max(maxLen + 4, 12), 40);
+  });
+
+  // Auto-filter
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}.xlsx`;
+  link.click();
 };
 
 // Export to CSV
@@ -273,13 +321,77 @@ export function ImportModal({
     onClose();
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const templateCols = templateColumns || columns;
-    const headers = templateCols.map((col) => col.label);
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, `${entityName}_template.xlsx`);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Template');
+
+    // Header row with styling
+    const headerRow = ws.addRow(templateCols.map(col => col.label));
+    headerRow.height = 30;
+    headerRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF2563EB' } },
+        bottom: { style: 'thin', color: { argb: 'FF2563EB' } },
+        left: { style: 'thin', color: { argb: 'FF2563EB' } },
+        right: { style: 'thin', color: { argb: 'FF2563EB' } },
+      };
+    });
+
+    // Add example row with light gray styling
+    const exampleValues = templateCols.map(col => {
+      if (col.key === 'name') return 'Misol mahsulot';
+      if (col.key === 'barcode') return '4901234567890';
+      if (col.key === 'category') return 'Elektronika';
+      if (col.key === 'tags') return 'yangi, mashhur';
+      if (col.key === 'cost_price') return 50000;
+      if (col.key === 'list_price') return 75000;
+      return '';
+    });
+    const exRow = ws.addRow(exampleValues);
+    exRow.height = 22;
+    exRow.eachCell((cell) => {
+      cell.font = { italic: true, color: { argb: 'FF94A3B8' }, size: 10 };
+      cell.alignment = { vertical: 'middle' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    });
+
+    // Add a few empty rows with light borders for user to fill
+    for (let i = 0; i < 10; i++) {
+      const row = ws.addRow(templateCols.map(() => ''));
+      row.height = 22;
+      row.eachCell((cell) => {
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FFF1F5F9' } } };
+        if (i % 2 === 0) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        }
+      });
+    }
+
+    // Auto-fit column widths
+    templateCols.forEach((col, i) => {
+      ws.getColumn(i + 1).width = Math.max(col.label.length + 6, 16);
+    });
+
+    // Required fields note
+    const requiredCols = templateCols.filter(c => c.required).map(c => c.label);
+    if (requiredCols.length > 0) {
+      ws.addRow([]);
+      const noteRow = ws.addRow([`* Majburiy maydonlar: ${requiredCols.join(', ')}`]);
+      noteRow.getCell(1).font = { italic: true, color: { argb: 'FFEF4444' }, size: 9 };
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${entityName}_template.xlsx`;
+    link.click();
   };
 
   return (
@@ -514,7 +626,7 @@ export function ExportModal({
 
       switch (format) {
         case "xlsx":
-          exportToExcel(data, exportColumns, filename);
+          await exportToExcel(data, exportColumns, filename);
           break;
         case "csv":
           exportToCSV(data, exportColumns, filename);

@@ -372,6 +372,7 @@ export default function Products() {
   const importColumns = [
     { key: 'name', label: 'Nomi', required: true },
     { key: 'barcode', label: 'Shtrix kod' },
+    { key: 'category', label: 'Kategoriya' },
     { key: 'tags', label: 'Teglar' },
     { key: 'cost_price', label: 'Tan narxi' },
     { key: 'list_price', label: 'Sotish narxi', required: true },
@@ -380,10 +381,19 @@ export default function Products() {
   const handleImport = async (data) => {
     for (const row of data) {
       const generatedCode = row.barcode || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+
+      // Resolve category by name (case-insensitive)
+      let categoryId = '';
+      if (row.category) {
+        const cat = categories.find(c => c.name?.toLowerCase() === row.category?.toString().toLowerCase());
+        if (cat) categoryId = cat.id;
+      }
+
       const productData = {
         name: row.name,
         code: generatedCode,
         barcode: row.barcode || '',
+        category_id: categoryId || undefined,
         tags: row.tags ? row.tags.split(',').map(t => t.trim()) : [],
         type: 'product',
         cost_price: parseFloat(row.cost_price) || 0,
@@ -393,8 +403,9 @@ export default function Products() {
         is_purchasable: true,
         is_sellable: true,
         is_active: true,
+        organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       };
-      createProduct(productData);
+      await createProduct(productData);
     }
     addAuditLog('create', 'batch', `${data.length} products imported`);
   };
