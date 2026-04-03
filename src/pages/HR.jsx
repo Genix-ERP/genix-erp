@@ -330,6 +330,7 @@ Only return the JSON, no other text.`;
         email: emp.email || '',
         phone: emp.phone || '',
         job_title: emp.job_title || '',
+        department_id: emp.department_id || '',
         department: emp.department || 'other',
         hire_date: emp.hire_date,
         salary: emp.salary || 0,
@@ -890,7 +891,12 @@ Only return the JSON, no other text.`;
       filtered = filtered.filter(e => e.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || e.job_title.toLowerCase().includes(searchQuery.toLowerCase()));
     }
     if (departmentFilter !== "all") {
-      filtered = filtered.filter(e => (e.department || '').toLowerCase() === departmentFilter.toLowerCase());
+      const selectedDept = departments.find(d => d.id === departmentFilter);
+      const selectedDeptName = selectedDept?.name?.toLowerCase() || '';
+      filtered = filtered.filter(e =>
+        e.department_id === departmentFilter ||
+        (selectedDeptName && (e.department || '').toLowerCase() === selectedDeptName)
+      );
     }
     if (statusFilter !== "all") {
       filtered = filtered.filter(e => e.status === statusFilter);
@@ -992,7 +998,7 @@ Only return the JSON, no other text.`;
                 <SelectContent>
                   <SelectItem value="all">{t('all_departments')}</SelectItem>
                   {departments.map(dept => (
-                    <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1198,7 +1204,7 @@ Only return the JSON, no other text.`;
                     <SelectTrigger><SelectValue placeholder={t('select_department') || 'Select dept'} /></SelectTrigger>
                     <SelectContent>
                       {departments.map(dept => (
-                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1327,7 +1333,7 @@ Only return the JSON, no other text.`;
                       <Briefcase className="w-4 h-4" />
                       {t('department') || 'Department'}
                     </div>
-                    <Badge variant="outline">{selectedEmployee.department || '-'}</Badge>
+                    <Badge variant="outline">{departments.find(d => d.id === selectedEmployee.department_id || d.id === selectedEmployee.department)?.name || selectedEmployee.department || '-'}</Badge>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
@@ -1471,13 +1477,13 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('department')}</Label>
                     <Select
-                      value={selectedEmployee.department}
-                      onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value})}
+                      value={selectedEmployee.department_id || selectedEmployee.department || ''}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, department: value, department_id: value})}
                     >
                       <SelectTrigger><SelectValue placeholder={t('select_department') || "Bo'limni tanlang"} /></SelectTrigger>
                       <SelectContent>
                         {departments.map(dept => (
-                          <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                          <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
