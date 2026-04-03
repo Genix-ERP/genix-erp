@@ -11267,6 +11267,8 @@ export const translations = {
     "no_acts": "Aktlar yo'q",
     "create_first_act": "Birinchi aktni yarating",
     "hidden_work": "Yashirin ish",
+    "ks2": "KS-2",
+    "ks3": "KS-3",
     "acceptance": "Qabul qilish",
     "defect": "Nuqson",
     "act_type": "Akt turi",
