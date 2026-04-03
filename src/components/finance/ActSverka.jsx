@@ -1292,48 +1292,50 @@ export default function ActSverka() {
               <label className="text-sm font-medium text-slate-700 mb-1 block">
                 {t('counterparty') || 'Kontragent'} *
               </label>
-              {formData.partner_id ? (
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="flex-1 text-sm font-medium">{formData.partner_name}</span>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }));
+              <Input
+                placeholder={t('search_or_enter_name') || "Kontragentni qidiring yoki nom kiriting..."}
+                value={formData.partner_id ? formData.partner_name : contactSearch}
+                onChange={(e) => {
+                  setContactSearch(e.target.value);
+                  setFormData(prev => ({ ...prev, partner_name: e.target.value, partner_id: '' }));
+                  setShowContactDropdown(true);
+                }}
+                onClick={() => {
+                  if (formData.partner_id) {
                     setContactSearch('');
-                  }}>
-                    &times;
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Input
-                    placeholder={t('search_or_enter_name') || "Kontragentni qidiring yoki nom kiriting..."}
-                    value={contactSearch}
-                    onChange={(e) => {
-                      setContactSearch(e.target.value);
-                      setFormData(prev => ({ ...prev, partner_name: e.target.value, partner_id: '' }));
-                      setShowContactDropdown(true);
-                    }}
-                    onClick={() => setShowContactDropdown(true)}
-                    className="bg-slate-50 border-slate-200"
-                  />
-                  {showContactDropdown && filteredContacts.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
-                      {filteredContacts.map(c => (
-                        <div
-                          key={c.id}
-                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center justify-between"
-                          onClick={() => {
+                  }
+                  setShowContactDropdown(true);
+                }}
+                className="bg-slate-50 border-slate-200"
+              />
+              {showContactDropdown && filteredContacts.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
+                  {filteredContacts.map(c => {
+                    const isSelected = formData.partner_id === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center justify-between ${isSelected ? 'bg-blue-50' : ''}`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }));
+                            setContactSearch('');
+                          } else {
                             setFormData(prev => ({ ...prev, partner_id: c.id, partner_name: c.name }));
                             setContactSearch(c.name);
-                            setShowContactDropdown(false);
-                          }}
-                        >
-                          <span className="font-medium">{c.name}</span>
+                          }
+                          setShowContactDropdown(false);
+                        }}
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-400">{c.code}</span>
+                          {isSelected && <span className="text-blue-500 text-xs">✓</span>}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
