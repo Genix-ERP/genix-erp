@@ -70,7 +70,7 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 border-0">
       <Card className="w-full max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{customer ? `${t('edit')} ${t('customer')}` : t('add_customer')}</CardTitle>

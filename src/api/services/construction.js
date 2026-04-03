@@ -469,8 +469,8 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines });
+  async bulkCreateEstimateLines(estimateId, lines, { replace = false } = {}) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace });
     return response.data.data;
   },
 

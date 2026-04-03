@@ -94,8 +94,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         (buildingId === 0 ? !e.building_id : e.building_id === buildingId)
       );
       let estId;
+      let isExisting = false;
       if (est) {
         estId = est.id;
+        isExisting = true;
       } else {
         const createData = {
           name: estimateName,
@@ -110,12 +112,11 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estId = created.id;
       }
 
-      // Bulk create all lines
-      await constructionService.bulkCreateEstimateLines(estId, lines);
+      // Bulk create all lines (replace existing if re-importing to same estimate)
+      await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
 
       // Auto-create construction stages from BOP section headers
       if (sourceType === 'vor' && sectionNames?.length > 0) {
-        // Get existing stages to avoid duplicates
         let existingStages = [];
         try {
           existingStages = await constructionService.listStages(project.id);
