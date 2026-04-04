@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import subscriptionService from '@/api/services/subscription';
 
 const SUBSCRIPTION_KEY = 'genix_company_subscription';
 const AI_USAGE_KEY = 'genix_ai_usage';
@@ -182,11 +183,31 @@ const FEATURE_DESCRIPTIONS = {
 const SubscriptionContext = createContext();
 
 export function SubscriptionProvider({ children }) {
-  const { user: authUser } = useAuth();
+  const { user: authUser, backendAvailable } = useAuth();
   const [subscription, setSubscription] = useState(null);
   const [aiUsage, setAiUsage] = useState({ count: 0, month: null });
   const [companyUsers, setCompanyUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Backend trial status (real data from server)
+  const [trialStatus, setTrialStatus] = useState(null); // { status, plan, trial_ends_at, account_clear_at, trial_days_remaining, days_until_clear }
+
+  const fetchTrialStatus = useCallback(async () => {
+    if (!backendAvailable || !authUser) return;
+    try {
+      const data = await subscriptionService.getStatus();
+      setTrialStatus(data);
+    } catch {
+      // silently ignore — UI degrades gracefully
+    }
+  }, [backendAvailable, authUser]);
+
+  useEffect(() => {
+    fetchTrialStatus();
+    // Re-check every 10 minutes in case the trial expired while the tab was open
+    const interval = setInterval(fetchTrialStatus, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchTrialStatus]);
 
   // Check if current user is a site admin (full system access)
   const isSystemAdmin = useCallback(() => {
@@ -537,6 +558,38 @@ export function SubscriptionProvider({ children }) {
   const isSystemAdminVal = isSystemAdmin();
   const isOwnerVal = isOwner();
 
+  // Activate subscription after payment and re-fetch status
+  const activateSubscription = useCallback(async (plan = 'starter') => {
+    try {
+      await subscriptionService.activate(plan);
+      await fetchTrialStatus();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err?.response?.data?.message || 'Activation failed' };
+    }
+  }, [fetchTrialStatus]);
+
+  // Derived helpers backed by real backend data (with localStorage fallback)
+  const isTrialExpiredReal = useCallback(() => {
+    if (trialStatus) {
+      return trialStatus.status === 'past_due' || trialStatus.status === 'expired';
+    }
+    // fallback to localStorage-based check
+    if (subscription?.status !== 'trial') return false;
+    if (!subscription?.trialEndsAt) return false;
+    return new Date(subscription.trialEndsAt) < new Date();
+  }, [trialStatus, subscription]);
+
+  const getTrialDaysRemainingReal = useCallback(() => {
+    if (trialStatus?.trial_days_remaining !== undefined) {
+      return trialStatus.trial_days_remaining;
+    }
+    // fallback
+    if (subscription?.status !== 'trial' || !subscription?.trialEndsAt) return 0;
+    const remaining = Math.ceil((new Date(subscription.trialEndsAt) - new Date()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, remaining);
+  }, [trialStatus, subscription]);
+
   const value = useMemo(() => ({
     subscription,
     aiUsage,
@@ -546,6 +599,8 @@ export function SubscriptionProvider({ children }) {
     featureDescriptions: FEATURE_DESCRIPTIONS,
     isSystemAdmin: isSystemAdminVal,
     isOwner: isOwnerVal,
+    // Real backend trial status
+    trialStatus,
     // Methods
     getPlanLimits,
     hasFeature,
@@ -556,11 +611,13 @@ export function SubscriptionProvider({ children }) {
     incrementAIUsage,
     updateSubscription,
     upgradePlan,
-    isTrialExpired,
-    getTrialDaysRemaining,
+    activateSubscription,
+    isTrialExpired: isTrialExpiredReal,
+    getTrialDaysRemaining: getTrialDaysRemainingReal,
     getAIUsagePercentage,
     getUpgradeRecommendation,
     refreshSubscription: loadSubscription,
+    refreshTrialStatus: fetchTrialStatus,
     // User Management
     addUser,
     updateUser,
@@ -568,7 +625,7 @@ export function SubscriptionProvider({ children }) {
     getUser,
     toggleUserStatus,
     changeUserRole
-  }), [subscription, aiUsage, companyUsers, isLoading, isSystemAdminVal, isOwnerVal, getPlanLimits, hasFeature, canAddUser, canAddCompany, canMakeAIRequest, getRemainingAIRequests, incrementAIUsage, updateSubscription, upgradePlan, isTrialExpired, getTrialDaysRemaining, getAIUsagePercentage, getUpgradeRecommendation, loadSubscription, addUser, updateUser, deleteUser, getUser, toggleUserStatus, changeUserRole]);
+  }), [subscription, aiUsage, companyUsers, isLoading, isSystemAdminVal, isOwnerVal, trialStatus, getPlanLimits, hasFeature, canAddUser, canAddCompany, canMakeAIRequest, getRemainingAIRequests, incrementAIUsage, updateSubscription, upgradePlan, activateSubscription, isTrialExpiredReal, getTrialDaysRemainingReal, getAIUsagePercentage, getUpgradeRecommendation, loadSubscription, fetchTrialStatus, addUser, updateUser, deleteUser, getUser, toggleUserStatus, changeUserRole]);
 
   return (
     <SubscriptionContext.Provider value={value}>
