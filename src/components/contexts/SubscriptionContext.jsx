@@ -204,10 +204,21 @@ export function SubscriptionProvider({ children }) {
 
   useEffect(() => {
     fetchTrialStatus();
-    // Re-check every 10 minutes in case the trial expired while the tab was open
     const interval = setInterval(fetchTrialStatus, 10 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchTrialStatus]);
+
+  // Listen for 402 responses from any API call — force payment wall immediately
+  useEffect(() => {
+    const handle402 = () => {
+      setTrialStatus(prev => {
+        if (prev?.status === 'active') return prev; // don't override paid accounts
+        return { ...(prev || {}), status: 'past_due' };
+      });
+    };
+    window.addEventListener('genix:payment-required', handle402);
+    return () => window.removeEventListener('genix:payment-required', handle402);
+  }, []);
 
   // Check if current user is a site admin (full system access)
   const isSystemAdmin = useCallback(() => {
