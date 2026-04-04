@@ -280,10 +280,12 @@ export default function Register() {
       <div className="absolute top-4 right-4"><LanguageSelector /></div>
 
       <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-xl">
-        <CardHeader className="text-center pt-4 pb-2">
+        <CardHeader className="text-center pt-5 pb-2">
           <img
             src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-            alt="Genix Logo" className="h-28 w-auto object-contain mx-auto mb-2"
+            alt="Genix Logo"
+            className="w-32 object-contain mx-auto"
+            style={{ height: '56px', marginBottom: '12px' }}
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
             {googleStep ? 'Complete Registration' : step === 1 ? L.create_account : L.verify_phone}
