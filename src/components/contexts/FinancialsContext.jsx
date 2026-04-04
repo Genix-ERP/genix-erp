@@ -197,6 +197,7 @@ export function FinancialsProvider({ children }) {
   const [accounts, setAccounts] = useState([]);
   const [accountTypes, setAccountTypes] = useState([]);
   const [journals, setJournals] = useState([]);
+  const [paymentJournals, setPaymentJournals] = useState([]);
   const [payments, setPayments] = useState([]);
   const [taxRates, setTaxRates] = useState([]);
   const [bankAccounts, setBankAccounts] = useState([]);
@@ -335,7 +336,7 @@ export function FinancialsProvider({ children }) {
       setBackendAvailable(isAvailable);
       if (isAvailable) {
         try {
-          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData] = await Promise.all([
+          const [entries, invoicesResponse, accountsData, paymentsData, taxRatesData, accountTypesData, vendorBillsData, bankAccountsData, cashTransactionsData, currenciesData, exchangeRatesData, fiscalYearsData, fiscalPeriodsData, budgetsData, budgetLinesData, fixedAssetsData, journalsData, cashRegistersData, cashOrdersData, reconciliationActsData, exchangeDiffsData, paymentJournalsData] = await Promise.all([
             financeService.listJournalEntries({ limit: 1000 }).catch(() => []),
             salesService.listInvoices().catch(() => []),
             financeService.listAccounts({ organization_id: activeCompany.id }).catch(() => []),
@@ -356,7 +357,8 @@ export function FinancialsProvider({ children }) {
             financeService.listCashRegisters().catch(() => []),
             financeService.listCashOrders().catch(() => []),
             financeService.listReconciliationActs().catch(() => []),
-            financeService.listExchangeDiffs().catch(() => [])
+            financeService.listExchangeDiffs().catch(() => []),
+            financeService.listPaymentJournals().catch(() => [])
           ]);
           setJournalEntries(entries || []);
           // Handle paginated response - could be array directly or { items: [...] }
@@ -382,6 +384,7 @@ export function FinancialsProvider({ children }) {
           setTaxRates(taxRatesData || []);
           setAccountTypes(accountTypesData || []);
           setJournals(journalsData || []);
+          setPaymentJournals(paymentJournalsData || []);
           // Map backend vendor bills to frontend format
           const rawBills = Array.isArray(vendorBillsData?.data) ? vendorBillsData.data : Array.isArray(vendorBillsData) ? vendorBillsData : [];
           const mappedBills = rawBills.map(b => ({
@@ -1681,7 +1684,7 @@ export function FinancialsProvider({ children }) {
     accounts, accountTypes, createAccount, updateAccount, deleteAccount, getAccountTransactions,
     payments, createPayment, confirmPayment,
     taxRates, createTaxRate, updateTaxRate, deleteTaxRate,
-    journals, createJournal, updateJournal, deleteJournal,
+    journals, paymentJournals, createJournal, updateJournal, deleteJournal,
     bankAccounts, createBankAccount, updateBankAccount, deleteBankAccount,
     bankTransactions, loadBankTransactions, getBankTransactionsByAccount, createBankTransaction, reconcileBankTransaction,
     cashTransactions, createCashTransaction, updateCashTransaction, deleteCashTransaction, getCashBalance,

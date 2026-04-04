@@ -60,7 +60,14 @@ const getPeriodLabel = (period, language) => {
 };
 
 // Collapsible P&L section component (Odoo-style)
-function PnLSection({ title, items, total, formatCurrency, isCollapsible }) {
+// Helper to pick translated account name
+const pickAccountName = (account, language) => {
+  if (language === 'uz' && account.account_name_uz) return account.account_name_uz;
+  if (language === 'en' && account.account_name_en) return account.account_name_en;
+  return account.account_name;
+};
+
+function PnLSection({ title, items, total, formatCurrency, isCollapsible, language }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -86,7 +93,7 @@ function PnLSection({ title, items, total, formatCurrency, isCollapsible }) {
       {expanded && items.map((item, idx) => (
         <tr key={item.account_id || idx} className="border-b border-slate-100 bg-slate-50/50">
           <td className="py-2 px-4 pl-12 text-slate-600">
-            {item.account_code} {item.account_name}
+            {item.account_code} {pickAccountName(item, language)}
           </td>
           <td className="py-2 px-4 text-right font-mono text-slate-600 tabular-nums">
             {formatCurrency(item.amount)}
@@ -123,7 +130,7 @@ function BalanceSheetSection({ title, sections, total, formatCurrency, colorClas
               <tr key={acc.account_id || idx} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="py-2.5 px-4 pl-10 text-slate-700">
                   <span className="font-mono text-xs text-slate-400 mr-2">{acc.account_code}</span>
-                  {acc.account_name}
+                  {pickAccountName(acc, language)}
                 </td>
                 <td className="py-2.5 px-4 text-right font-mono text-slate-700 tabular-nums w-48">
                   {formatCurrency(acc.balance)}
@@ -254,7 +261,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           <tr><th>Account</th><th class="amount">Debit</th><th class="amount">Credit</th></tr>
           ${trialBalance.accounts?.map(a => `
             <tr>
-              <td>${a.account_code} - ${a.account_name}</td>
+              <td>${a.account_code} - ${pickAccountName(a, language)}</td>
               <td class="amount">${formatCurrency(a.debit_balance)}</td>
               <td class="amount">${formatCurrency(a.credit_balance)}</td>
             </tr>
@@ -273,25 +280,25 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
           <tr><th></th><th class="amount">${getPeriodLabel(period, language)}</th></tr>
           ${incomeStatement.revenue?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Daromad' : 'Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.total_revenue)}</strong></td></tr>
-            ${incomeStatement.revenue.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.revenue.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           ${incomeStatement.cost_of_sales?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Sotish tannarxi' : 'Less Costs of Revenue'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.cost_of_sales.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.cost_of_sales.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.cost_of_sales.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Yalpi foyda' : 'Gross Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.gross_profit)}</strong></td></tr>
           ${incomeStatement.operating_expenses?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Operatsion xarajatlar' : 'Less Operating Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.operating_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.operating_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Operatsion foyda' : 'Operating Income (or Loss)'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.operating_profit)}</strong></td></tr>
           ${incomeStatement.other_income?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa daromadlar' : 'Plus Other Income'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_income.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.other_income.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.other_income.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           ${incomeStatement.other_expenses?.length > 0 ? `
             <tr class="total-row"><td><strong>${language === 'uz' ? 'Boshqa xarajatlar' : 'Less Other Expenses'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.other_expenses.reduce((s,a) => s + a.amount, 0))}</strong></td></tr>
-            ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
+            ${incomeStatement.other_expenses.map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.amount)}</td></tr>`).join('')}
           ` : ''}
           <tr style="background:#e2e8f0;font-weight:bold"><td><strong>${language === 'uz' ? 'Soliqdan oldingi foyda' : 'Pre-tax Profit'}</strong></td><td class="amount"><strong>${formatCurrency(incomeStatement.pre_tax_profit || 0)}</strong></td></tr>
           <tr><td style="padding-left:30px">${language === 'uz' ? "Daromad solig'i (15%)" : 'Income Tax (15%)'}</td><td class="amount negative">-${formatCurrency(incomeStatement.income_tax || 0)}</td></tr>
@@ -305,11 +312,11 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
         <table>
           <tr><th></th><th class="amount">${language === 'uz' ? 'Balans' : 'Balance'}</th></tr>
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Aktivlar' : 'Assets'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_assets)}</strong></td></tr>
-          ${balanceSheet.assets?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.assets?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Majburiyatlar' : 'Liabilities'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_liabilities)}</strong></td></tr>
-          ${balanceSheet.liabilities?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.liabilities?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr class="total-row"><td><strong>${language === 'uz' ? 'Kapital' : 'Equity'}</strong></td><td class="amount"><strong>${formatCurrency(balanceSheet.total_equity)}</strong></td></tr>
-          ${balanceSheet.equity?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${a.account_name}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
+          ${balanceSheet.equity?.flatMap(s => s.accounts || []).map(a => `<tr><td style="padding-left:30px">${a.account_code} ${pickAccountName(a, language)}</td><td class="amount">${formatCurrency(a.balance)}</td></tr>`).join('') || ''}
           <tr style="background:#cbd5e1;font-weight:bold;font-size:1.1em"><td><strong>${language === 'uz' ? 'Majburiyatlar + Kapital' : 'Liabilities + Equity'}</strong></td><td class="amount"><strong>${formatCurrency((balanceSheet.total_liabilities || 0) + (balanceSheet.total_equity || 0))}</strong></td></tr>
         </table>
         ` : ''}
@@ -347,13 +354,29 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
   const getCategoryColor = (category) => {
     const colors = {
       asset: 'bg-blue-100 text-blue-800',
+      contra_asset: 'bg-blue-50 text-blue-600',
       liability: 'bg-red-100 text-red-800',
       equity: 'bg-purple-100 text-purple-800',
       revenue: 'bg-green-100 text-green-800',
-      expense: 'bg-orange-100 text-orange-800'
+      contra_revenue: 'bg-green-50 text-green-600',
+      expense: 'bg-orange-100 text-orange-800',
+      contra_expense: 'bg-orange-50 text-orange-600',
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
+
+  // Translate category name
+  const getCategoryLabel = (category) => {
+    const labels = {
+      uz: { asset: 'Aktiv', contra_asset: 'Kontra aktiv', liability: 'Majburiyat', equity: 'Kapital', revenue: 'Daromad', contra_revenue: 'Kontra daromad', expense: 'Xarajat', contra_expense: 'Kontra xarajat' },
+      ru: { asset: 'Актив', contra_asset: 'Контра актив', liability: 'Обязательство', equity: 'Капитал', revenue: 'Доход', contra_revenue: 'Контра доход', expense: 'Расход', contra_expense: 'Контра расход' },
+      en: { asset: 'Asset', contra_asset: 'Contra Asset', liability: 'Liability', equity: 'Equity', revenue: 'Revenue', contra_revenue: 'Contra Revenue', expense: 'Expense', contra_expense: 'Contra Expense' },
+    };
+    return labels[language]?.[category] || category;
+  };
+
+  // Get translated account name based on language (uses top-level pickAccountName helper)
+  const getAccountName = (account) => pickAccountName(account, language);
 
   return (
     <div className="space-y-6" ref={reportRef}>
@@ -470,10 +493,10 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                       {trialBalance.accounts.map((account, idx) => (
                         <TableRow key={account.account_id || idx}>
                           <TableCell className="font-mono text-sm">{account.account_code}</TableCell>
-                          <TableCell>{account.account_name}</TableCell>
+                          <TableCell>{getAccountName(account)}</TableCell>
                           <TableCell>
                             <Badge className={getCategoryColor(account.category)} variant="secondary">
-                              {account.category}
+                              {getCategoryLabel(account.category)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right font-mono">
@@ -546,6 +569,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.total_revenue}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -557,6 +581,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.cost_of_sales.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -578,6 +603,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.operating_expenses.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -599,6 +625,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.other_income.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
@@ -610,6 +637,7 @@ export default function FinancialReports({ defaultTab = 'trial-balance' }) {
                           total={incomeStatement.other_expenses.reduce((s, a) => s + a.amount, 0)}
                           formatCurrency={formatCurrency}
                           isCollapsible
+                          language={language}
                         />
                       )}
 
