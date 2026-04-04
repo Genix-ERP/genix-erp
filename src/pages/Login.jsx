@@ -5,12 +5,13 @@ import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import LanguageSelector from '@/components/ui/language-selector';
 import GoogleSignInButton from '@/components/ui/GoogleSignInButton';
-import { Loader2, Mail, Lock, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, Phone, Building2, ArrowLeft } from 'lucide-react';
 import './Login.scss';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [usePhone, setUsePhone] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tenants, setTenants] = useState(null);
@@ -22,18 +23,34 @@ export default function Login() {
   const { t } = useTranslation(language);
   const navigate = useNavigate();
 
+  // Translation helpers for phone-specific strings
+  const T = {
+    phone: { uz: 'Telefon raqam', ru: 'Номер телефона', en: 'Phone number' },
+    enter_phone: { uz: 'Telefon raqamingizni kiriting', ru: 'Введите номер телефона', en: 'Enter your phone number' },
+    use_email: { uz: 'Email bilan kirish', ru: 'Войти с email', en: 'Sign in with email' },
+    use_phone: { uz: 'Telefon bilan kirish', ru: 'Войти с телефоном', en: 'Sign in with phone' },
+  };
+  const tr = (key) => T[key]?.[language] || T[key]?.en || key;
+
   useEffect(() => {
     if (shouldNavigate && isAuthenticated && user) {
       navigate('/');
     }
   }, [shouldNavigate, isAuthenticated, user, navigate]);
 
+  // Reset identifier when toggling input type
+  const toggleInputType = () => {
+    setUsePhone(prev => !prev);
+    setIdentifier('');
+    setError('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password, selectedTenantId);
+    const result = await login(identifier, password, selectedTenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -52,10 +69,9 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(email, password, tenantId);
+      : await login(identifier, password, tenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -79,7 +95,6 @@ export default function Login() {
       setError('');
       setIsLoading(false);
     } else if (result.needsCompletion) {
-      // New Google user — redirect to register page (they'll need to provide company name)
       navigate('/register?google=1');
       setIsLoading(false);
     } else {
@@ -178,15 +193,37 @@ export default function Login() {
             )}
 
             <div className="login-form__field">
-              <label htmlFor="email" className="login-form__label">{t('email')}</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label htmlFor="identifier" className="login-form__label">
+                  {usePhone ? tr('phone') : t('email')}
+                </label>
+                <button
+                  type="button"
+                  onClick={toggleInputType}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '0.75rem',
+                    color: '#0EA5E9',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontWeight: 500,
+                  }}
+                >
+                  {usePhone ? tr('use_email') : tr('use_phone')}
+                </button>
+              </div>
               <div className="login-form__input-wrap">
-                <Mail className="login-form__icon" />
+                {usePhone
+                  ? <Phone className="login-form__icon" />
+                  : <Mail className="login-form__icon" />
+                }
                 <input
-                  id="email"
-                  type="email"
-                  placeholder={t('enter_email')}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="identifier"
+                  type={usePhone ? 'tel' : 'email'}
+                  placeholder={usePhone ? tr('enter_phone') : t('enter_email')}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   className="login-form__input"
                   required
                 />
