@@ -38,6 +38,8 @@ const Construction = React.lazy(() => import('./Construction'));
 const OperationTypeDetail = React.lazy(() => import('./OperationTypeDetail'));
 const ForgotPassword = React.lazy(() => import('./ForgotPassword'));
 const ResetPassword = React.lazy(() => import('./ResetPassword'));
+const PaymentSuccess = React.lazy(() => import('./PaymentSuccess'));
+const PaymentError = React.lazy(() => import('./PaymentError'));
 
 const SuspenseFallback = (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -181,6 +183,8 @@ function PagesContent() {
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-error" element={<PaymentError />} />
             <Route path="/shared/reconciliation/:token" element={<SharedReconciliation />} />
             <Route
                 path="/"

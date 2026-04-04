@@ -1,128 +1,96 @@
-import { useState } from 'react';
-import { CreditCard, Lock, AlertTriangle, CheckCircle, Phone, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CreditCard, Lock, AlertTriangle, CheckCircle, Phone, Mail, Loader2 } from 'lucide-react';
 import { useSubscription } from '@/components/contexts/SubscriptionContext';
 import { useAuth } from '@/components/contexts/AuthContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
+import subscriptionService from '@/api/services/subscription';
 
 const T = {
-  title: {
-    uz: 'Sinov muddati tugadi',
-    ru: 'Пробный период истёк',
-    en: 'Your trial has ended',
-  },
-  subtitle: {
-    uz: 'Genix ERP\'dan foydalanishda davom etish uchun tarifni tanlang.',
-    ru: 'Выберите тарифный план для продолжения работы с Genix ERP.',
-    en: 'Choose a plan to continue using Genix ERP.',
-  },
-  days_warning: {
-    uz: (d) => `Diqqat: hisob ${d} kunda o'chiriladi.`,
-    ru: (d) => `Внимание: аккаунт будет удалён через ${d} дней.`,
-    en: (d) => `Warning: your account will be deleted in ${d} day${d === 1 ? '' : 's'}.`,
-  },
-  contact_sales: {
-    uz: 'Sotuvchilar bilan bog\'lanish',
-    ru: 'Связаться с отделом продаж',
-    en: 'Contact sales',
-  },
-  logout: { uz: 'Chiqish', ru: 'Выйти', en: 'Log out' },
-  per_month: { uz: '/oy', ru: '/мес', en: '/mo' },
+  title:    { uz: 'Sinov muddati tugadi', ru: 'Пробный период истёк', en: 'Your trial has ended' },
+  subtitle: { uz: 'Genix ERP\'dan foydalanishda davom etish uchun tarifni tanlang.', ru: 'Выберите тариф для продолжения работы.', en: 'Choose a plan to continue using Genix ERP.' },
+  days_warning: { uz: (d) => `Hisob ${d} kunda o'chiriladi`, ru: (d) => `Аккаунт удалят через ${d} дней`, en: (d) => `Account deleted in ${d} day${d===1?'':'s'}` },
+  per_month:    { uz: '/oy', ru: '/мес', en: '/mo' },
   most_popular: { uz: 'Mashhur', ru: 'Популярный', en: 'Most popular' },
-  select: { uz: 'Tanlash', ru: 'Выбрать', en: 'Select' },
-  activating: { uz: 'Faollashtirish...', ru: 'Активация...', en: 'Activating...' },
-  success: { uz: 'Muvaffaqiyatli! Yuklanmoqda...', ru: 'Успешно! Загрузка...', en: 'Success! Loading...' },
-  contact_info: {
-    uz: 'To\'lov yoki savollar bo\'yicha biz bilan bog\'laning:',
-    ru: 'По вопросам оплаты свяжитесь с нами:',
-    en: 'For payment or questions, contact us:',
-  },
+  pay:          { uz: 'To\'lov qilish', ru: 'Оплатить', en: 'Pay now' },
+  redirecting:  { uz: 'Yo\'naltirilmoqda...', ru: 'Перенаправление...', en: 'Redirecting...' },
+  contact_info: { uz: 'Savol yoki to\'lov uchun:', ru: 'По вопросам оплаты:', en: 'Questions or payment help:' },
+  logout:       { uz: 'Chiqish', ru: 'Выйти', en: 'Log out' },
+  close:        { uz: 'Yopish', ru: 'Закрыть', en: 'Close' },
+  per_month_label: { uz: '/oy', ru: '/мес', en: '/mo' },
 };
 
 const tr = (key, lang, arg) => {
-  const entry = T[key]?.[lang] || T[key]?.en;
-  if (!entry) return key;
-  return typeof entry === 'function' ? entry(arg) : entry;
+  const e = T[key]?.[lang] || T[key]?.en;
+  if (!e) return key;
+  return typeof e === 'function' ? e(arg) : e;
 };
 
-const PLANS = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    price: 299,
-    users: '1-10',
-    features: ['Barcha asosiy modullar', 'Email yordam', '5 GB saqlash', '10 foydalanuvchi'],
-  },
-  {
-    key: 'professional',
-    name: 'Professional',
-    price: 499,
-    users: '1-50',
-    popular: true,
-    features: ['Barcha modullar', 'Ustun yordam', '50 GB saqlash', '50 foydalanuvchi', 'Kengaytirilgan AI'],
-  },
-  {
-    key: 'enterprise',
-    name: 'Enterprise',
-    price: 999,
-    users: 'Cheksiz',
-    features: ['Barcha modullar', '24/7 Premium yordam', 'Cheksiz saqlash', 'Cheksiz foydalanuvchi', 'White-label'],
-  },
+const DEFAULT_PLANS = [
+  { key: 'starter',      name: 'Starter',      amountUZS: 299000, popular: false,
+    features: ['Barcha asosiy modullar', 'Email yordam', '5 GB saqlash', '10 foydalanuvchi'] },
+  { key: 'professional', name: 'Professional',  amountUZS: 499000, popular: true,
+    features: ['Barcha modullar', 'Ustun yordam', '50 GB saqlash', '50 foydalanuvchi', 'Kengaytirilgan AI'] },
+  { key: 'enterprise',   name: 'Enterprise',    amountUZS: 999000, popular: false,
+    features: ['Barcha modullar', '24/7 yordam', 'Cheksiz saqlash', 'Cheksiz foydalanuvchi', 'White-label'] },
 ];
 
-// visible = force open (e.g. from TrialBanner "Pay Now" click)
-// onClose = callback to close when forced open (otherwise wall stays until payment)
+function fmt(n) {
+  return n?.toLocaleString('uz-UZ') ?? n;
+}
+
 export default function PaymentWall({ visible = false, onClose }) {
-  const { trialStatus, activateSubscription, isSystemAdmin } = useSubscription();
+  const { trialStatus, isSystemAdmin } = useSubscription();
   const { logout } = useAuth();
   const { language } = useLanguage();
+
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [loading, setLoading] = useState(null);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  if (!trialStatus || isSystemAdmin) return null;
-  const { status, days_until_clear: daysClear } = trialStatus;
+  // Fetch real prices from backend
+  useEffect(() => {
+    subscriptionService.getPlans().then((data) => {
+      if (!data) return;
+      setPlans(DEFAULT_PLANS.map((p) => {
+        const found = data.find((d) => d.key === p.key);
+        return found ? { ...p, amountUZS: found.amount_uzs } : p;
+      }));
+    }).catch(() => {});
+  }, []);
 
+  if (!trialStatus || isSystemAdmin) return null;
+
+  const { status, days_until_clear: daysClear } = trialStatus;
   const isHardBlock = status === 'past_due' || status === 'expired';
-  // Show if hard block OR if explicitly opened from "Pay Now"
   if (!isHardBlock && !visible) return null;
 
-  const handleSelect = async (planKey) => {
+  const handlePay = async (planKey) => {
     setLoading(planKey);
     setError('');
-    const result = await activateSubscription(planKey);
-    if (result.success) {
-      setSuccess(true);
-      setTimeout(() => window.location.reload(), 1500);
-    } else {
-      setError(result.error);
+    try {
+      const data = await subscriptionService.createCheckout(planKey);
+      // Redirect to Multicard payment page
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Payment failed');
       setLoading(null);
     }
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15,23,42,0.92)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '1rem',
-        overflow: 'auto',
-      }}
-    >
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: 20,
-          maxWidth: 860,
-          width: '100%',
-          padding: '2.5rem 2rem',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
-        }}
-      >
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(15,23,42,0.92)',
+      zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '1rem', overflow: 'auto',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 20,
+        maxWidth: 880, width: '100%',
+        padding: '2.5rem 2rem',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
+      }}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
@@ -150,18 +118,13 @@ export default function PaymentWall({ visible = false, onClose }) {
         </div>
 
         {/* Plans */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-          {PLANS.map((plan) => (
-            <div
-              key={plan.key}
-              style={{
-                border: plan.popular ? '2px solid #0EA5E9' : '1px solid #e2e8f0',
-                borderRadius: 14,
-                padding: '1.25rem',
-                position: 'relative',
-                background: plan.popular ? '#f0f9ff' : '#fff',
-              }}
-            >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {plans.map((plan) => (
+            <div key={plan.key} style={{
+              border: plan.popular ? '2px solid #0EA5E9' : '1px solid #e2e8f0',
+              borderRadius: 14, padding: '1.25rem', position: 'relative',
+              background: plan.popular ? '#f0f9ff' : '#fff',
+            }}>
               {plan.popular && (
                 <div style={{
                   position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
@@ -172,8 +135,11 @@ export default function PaymentWall({ visible = false, onClose }) {
                 </div>
               )}
               <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{plan.name}</div>
-              <div style={{ margin: '0.5rem 0', color: '#0EA5E9', fontWeight: 800, fontSize: '1.375rem' }}>
-                ${plan.price}<span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#64748b' }}>{tr('per_month', language)}</span>
+              <div style={{ margin: '0.5rem 0', fontWeight: 800, fontSize: '1.25rem', color: '#0EA5E9' }}>
+                {fmt(plan.amountUZS)}{' '}
+                <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b' }}>
+                  UZS{tr('per_month', language)}
+                </span>
               </div>
               <ul style={{ padding: 0, margin: '0.75rem 0 1rem', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {plan.features.map((f) => (
@@ -184,22 +150,21 @@ export default function PaymentWall({ visible = false, onClose }) {
                 ))}
               </ul>
               <button
-                onClick={() => handleSelect(plan.key)}
-                disabled={!!loading || success}
+                onClick={() => handlePay(plan.key)}
+                disabled={!!loading}
                 style={{
-                  width: '100%', height: 38, border: 'none', borderRadius: 8,
+                  width: '100%', height: 40, border: 'none', borderRadius: 8,
                   background: plan.popular ? 'linear-gradient(135deg,#0EA5E9,#8B5CF6)' : '#0f172a',
                   color: '#fff', fontWeight: 600, fontSize: '0.875rem',
-                  cursor: loading || success ? 'not-allowed' : 'pointer',
-                  opacity: loading && loading !== plan.key ? 0.5 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading && loading !== plan.key ? 0.45 : 1,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  transition: 'opacity 0.2s',
                 }}
               >
-                {success && loading === plan.key
-                  ? tr('success', language)
-                  : loading === plan.key
-                    ? tr('activating', language)
-                    : <><CreditCard style={{ width: 14, height: 14 }} />{tr('select', language)}</>
+                {loading === plan.key
+                  ? <><Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} />{tr('redirecting', language)}</>
+                  : <><CreditCard style={{ width: 14, height: 14 }} />{tr('pay', language)}</>
                 }
               </button>
             </div>
@@ -212,9 +177,9 @@ export default function PaymentWall({ visible = false, onClose }) {
           </div>
         )}
 
-        {/* Contact info */}
+        {/* Contact */}
         <div style={{
-          background: '#f8fafc', borderRadius: 12, padding: '1rem 1.25rem',
+          background: '#f8fafc', borderRadius: 12, padding: '0.875rem 1.25rem',
           display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center',
           justifyContent: 'space-between', marginBottom: '1rem',
         }}>
@@ -229,20 +194,14 @@ export default function PaymentWall({ visible = false, onClose }) {
           </div>
         </div>
 
-        {/* Footer actions */}
+        {/* Footer */}
         <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
           {!isHardBlock && onClose && (
-            <button
-              onClick={onClose}
-              style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.8125rem', cursor: 'pointer' }}
-            >
-              ✕ Close
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.8125rem', cursor: 'pointer' }}>
+              {tr('close', language)}
             </button>
           )}
-          <button
-            onClick={logout}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.8125rem', cursor: 'pointer' }}
-          >
+          <button onClick={logout} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.8125rem', cursor: 'pointer' }}>
             {tr('logout', language)}
           </button>
         </div>
