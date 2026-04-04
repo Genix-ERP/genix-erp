@@ -1024,6 +1024,24 @@ export const constructionService = {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/journal-entries`, { params });
     return response.data.data;
   },
+
+  // =====================================================
+  // ACT TYPES (user-manageable)
+  // =====================================================
+
+  async listActTypes() {
+    const response = await apiClient.get('/construction/act-types');
+    return response.data.data;
+  },
+
+  async createActType(data) {
+    const response = await apiClient.post('/construction/act-types', data);
+    return response.data.data;
+  },
+
+  async deleteActType(id) {
+    await apiClient.delete(`/construction/act-types/${id}`);
+  },
 };
 
 export default constructionService;

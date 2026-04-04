@@ -229,7 +229,6 @@ const FormsTab = ({ project }) => {
 
   const handleCreate = async () => {
     if (!form.act_type) { setError('Akt turini tanlang'); return; }
-    if (!form.subcontract_id) { setError('Subpudratni tanlang'); return; }
     if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
     const linesWithQty = selectedLines.filter(l => l.qty_period > 0);
     if (linesWithQty.length === 0) { setError('Kamida bitta qator tanlang va miqdor kiriting'); return; }
@@ -238,7 +237,7 @@ const FormsTab = ({ project }) => {
     try {
       const payload = {
         act_type: 'ks2',
-        subcontract_id: Number(form.subcontract_id),
+        subcontract_id: form.subcontract_id ? Number(form.subcontract_id) : 0,
         period_from: form.period_from,
         period_to: form.period_to,
         notes: form.notes,
@@ -374,13 +373,13 @@ const FormsTab = ({ project }) => {
   };
 
   const handleAutoGenerate = async () => {
-    if (!autoGenForm.subcontract_id || !autoGenForm.period_from || !autoGenForm.period_to) {
-      toast.error("Barcha maydonlarni to'ldiring"); return;
+    if (!autoGenForm.period_from || !autoGenForm.period_to) {
+      toast.error("Davrni kiriting"); return;
     }
     setAutoGenSaving(true);
     try {
       await constructionService.autoGenerateKS2(project.id, {
-        subcontract_id: Number(autoGenForm.subcontract_id),
+        subcontract_id: autoGenForm.subcontract_id ? Number(autoGenForm.subcontract_id) : 0,
         period_from: autoGenForm.period_from,
         period_to: autoGenForm.period_to,
       });
@@ -395,13 +394,13 @@ const FormsTab = ({ project }) => {
   };
 
   const handleGenerateF3 = async () => {
-    if (!genF3Form.subcontract_id || !genF3Form.period_from || !genF3Form.period_to) {
-      toast.error("Barcha maydonlarni to'ldiring"); return;
+    if (!genF3Form.period_from || !genF3Form.period_to) {
+      toast.error("Davrni kiriting"); return;
     }
     setGenF3Saving(true);
     try {
       await constructionService.generateF3(project.id, {
-        subcontract_id: Number(genF3Form.subcontract_id),
+        subcontract_id: genF3Form.subcontract_id ? Number(genF3Form.subcontract_id) : 0,
         period_from: genF3Form.period_from,
         period_to: genF3Form.period_to,
       });
@@ -1302,10 +1301,13 @@ const FormsTab = ({ project }) => {
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
-              <Select value={form.subcontract_id || ''} onValueChange={v => { setForm(f => ({ ...f, subcontract_id: v })); loadEstimateLines(v); }}>
+            <div><Label>{t('subcontract') || 'Subpudrat'}</Label>
+              <Select value={form.subcontract_id || 'own'} onValueChange={v => { setForm(f => ({ ...f, subcontract_id: v === 'own' ? '' : v })); loadEstimateLines(v); }}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
-                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="own">{language === 'ru' ? 'Без субподрядчика' : 'Subpudratchisiz'}</SelectItem>
+                  {(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1436,10 +1438,13 @@ const FormsTab = ({ project }) => {
         <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('auto_generate_ks2') || 'KS-2 avtomatik yaratish'}</DialogTitle><DialogDescription className="sr-only">Auto KS-2</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div><Label>{t('subcontractor') || 'Subpudratchi'} *</Label>
-              <Select value={autoGenForm.subcontract_id || ''} onValueChange={v => setAutoGenForm(f => ({ ...f, subcontract_id: v }))}>
+            <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
+              <Select value={autoGenForm.subcontract_id || 'own'} onValueChange={v => setAutoGenForm(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
-                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="own">{language === 'ru' ? 'Без субподрядчика' : 'Subpudratchisiz'}</SelectItem>
+                  {(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1460,10 +1465,13 @@ const FormsTab = ({ project }) => {
           <DialogHeader><DialogTitle>{t('gen_ks3') || 'KS-3 (Forma 3) yaratish'}</DialogTitle><DialogDescription className="sr-only">Generate KS-3</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-500">{t('gen_ks3_desc') || "Imzolangan KS-2 aktlar asosida KS-3 hisoboti yaratiladi"}</p>
-            <div><Label>{t('subcontractor') || 'Subpudratchi'} *</Label>
-              <Select value={genF3Form.subcontract_id || ''} onValueChange={v => setGenF3Form(f => ({ ...f, subcontract_id: v }))}>
+            <div><Label>{t('subcontractor') || 'Subpudratchi'}</Label>
+              <Select value={genF3Form.subcontract_id || 'own'} onValueChange={v => setGenF3Form(f => ({ ...f, subcontract_id: v === 'own' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder="Tanlang" /></SelectTrigger>
-                <SelectContent>{(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="own">{language === 'ru' ? 'Без субподрядчика' : 'Subpudratchisiz'}</SelectItem>
+                  {(subcontracts || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name || s.partner_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
