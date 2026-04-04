@@ -381,12 +381,6 @@ export default function Register() {
                 {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{L.sending}</> : L.continue_btn}
               </Button>
 
-              <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', margin:'1rem 0', color:'#94a3b8', fontSize:'0.75rem' }}>
-                <span style={{ flex:1, height:1, background:'#e2e8f0' }} />
-                <span>{L.or}</span>
-                <span style={{ flex:1, height:1, background:'#e2e8f0' }} />
-              </div>
-              <GoogleSignInButton onSuccess={handleGoogleRegister} />
             </form>
 
           ) : (
