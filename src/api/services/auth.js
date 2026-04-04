@@ -196,9 +196,11 @@ export const authService = {
   },
 
   // Send OTP to email for verification
-  async sendOTP(email, purpose = 'registration', language = 'uz') {
+  // Send OTP — to phone (SMS) if phone provided, otherwise to email
+  async sendOTP(emailOrPhone, purpose = 'registration', language = 'uz') {
+    const isPhone = /^\+?[\d\s\-()]{7,}$/.test(emailOrPhone) && !emailOrPhone.includes('@');
     const response = await apiClient.post('/auth/send-otp', {
-      email,
+      ...(isPhone ? { phone: emailOrPhone } : { email: emailOrPhone }),
       purpose,
       language,
     });
@@ -206,9 +208,10 @@ export const authService = {
   },
 
   // Verify OTP code
-  async verifyOTP(email, otpCode, purpose = 'registration') {
+  async verifyOTP(emailOrPhone, otpCode, purpose = 'registration') {
+    const isPhone = /^\+?[\d\s\-()]{7,}$/.test(emailOrPhone) && !emailOrPhone.includes('@');
     const response = await apiClient.post('/auth/verify-otp', {
-      email,
+      ...(isPhone ? { phone: emailOrPhone } : { email: emailOrPhone }),
       otp_code: otpCode,
       purpose,
     });
@@ -223,7 +226,8 @@ export const authService = {
     const tenantCode = data.tenantCode || `${baseCode}_${randomSuffix}`;
 
     const response = await apiClient.post('/auth/register-with-otp', {
-      email: data.email,
+      phone: data.phone || undefined,
+      email: data.email || undefined,
       password: data.password,
       first_name: data.firstName,
       last_name: data.lastName,
