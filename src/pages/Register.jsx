@@ -283,7 +283,7 @@ export default function Register() {
         <CardHeader className="text-center pb-2">
           <img
             src="https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/68d244cb8a392237a5acfbd9/a049d6898_Logo.png"
-            alt="Genix Logo" className="h-20 w-auto object-contain mx-auto mb-4"
+            alt="Genix Logo" className="h-36 w-auto object-contain mx-auto mb-4"
           />
           <CardTitle className="text-2xl font-bold text-[var(--genix-navy)]">
             {googleStep ? 'Complete Registration' : step === 1 ? L.create_account : L.verify_phone}
