@@ -62,6 +62,8 @@ import { FinancialsProvider } from "@/components/contexts/FinancialsContext";
 import { ModulesProvider } from "@/components/contexts/ModulesContext";
 import { AIProvider } from "@/components/contexts/AIContext";
 import { SubscriptionProvider } from "@/components/contexts/SubscriptionContext";
+import TrialBanner from "@/components/ui/TrialBanner";
+import PaymentWall from "@/components/ui/PaymentWall";
 import { CompanyProvider } from "@/components/contexts/CompanyContext";
 import { RolesProvider } from "@/components/contexts/RolesContext";
 import { ProcurementProvider } from "@/components/contexts/ProcurementContext";
@@ -129,6 +131,7 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
+  const [paymentWallOpen, setPaymentWallOpen] = React.useState(false);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
 
@@ -455,6 +458,7 @@ function LayoutContent({ children, currentPageName }) {
         </Sidebar>
 
         <main className="flex-1 flex flex-col min-w-0" aria-label="Main content">
+          <TrialBanner onPayClick={() => setPaymentWallOpen(true)} />
           <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-6 py-4 shadow-sm" role="banner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -513,6 +517,9 @@ function LayoutContent({ children, currentPageName }) {
           </div>
         </main>
       </div>
+
+      {/* Payment Wall (auto-shows when trial expires; can also be opened early) */}
+      <PaymentWall visible={paymentWallOpen} onClose={() => setPaymentWallOpen(false)} />
 
       {/* Phone Widget */}
       <PhoneWidget
