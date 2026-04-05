@@ -8172,7 +8172,7 @@ export const translations = {
     "inventory_uom": "Ombor o'lchov birligi",
     "sales_uom": "Sotuv o'lchov birligi",
     "purchase_uom": "Xarid o'lchov birligi",
-    "uom_conversion": "Konvertatsiya koeffitsienti",
+    "uom_conversion": "Nisbat",
     "uom_unit": "Dona (pc)",
     "uom_kg": "Kilogramm (kg)",
     "uom_g": "Gramm (g)",
