@@ -609,7 +609,10 @@ export default function Products() {
     totalProducts: products.length,
     activeProducts: products.filter(p => p.is_active).length,
     stockableProducts: products.filter(p => p.is_stockable).length,
-    serviceProducts: products.filter(p => p.type === 'service').length
+    lowStockProducts: products.filter(p => {
+      const stock = items.filter(i => i.product_id === p.id).reduce((s, i) => s + (i.current_stock || 0), 0);
+      return p.min_stock_level > 0 && stock <= p.min_stock_level;
+    }).length
   };
 
   useEffect(() => {
@@ -1239,6 +1242,22 @@ export default function Products() {
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <Box className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={`bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm ${summaryStats.lowStockProducts > 0 ? 'border-amber-200' : ''}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">{t('low_stock')}</p>
+                <p className={`text-2xl font-bold ${summaryStats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-900'}`}>
+                  {summaryStats.lowStockProducts}
+                </p>
+              </div>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${summaryStats.lowStockProducts > 0 ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                <AlertCircle className={`w-6 h-6 ${summaryStats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
               </div>
             </div>
           </CardContent>
