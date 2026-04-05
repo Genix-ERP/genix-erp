@@ -358,11 +358,6 @@ export default function Inventory() {
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${metrics.lowStockCount > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
                     <AlertTriangle className={`w-5 h-5 ${metrics.lowStockCount > 0 ? 'text-amber-500' : 'text-slate-400'}`} />
                   </div>
-                  {metrics.lowStockCount > 0 && (
-                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                      {t('action_needed')}
-                    </span>
-                  )}
                 </div>
                 <p className="text-xs font-medium text-slate-500 mb-1">{t('low_stock')}</p>
                 <p className={`text-xl font-bold ${metrics.lowStockCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{metrics.lowStockCount}</p>
