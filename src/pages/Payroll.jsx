@@ -45,6 +45,9 @@ export default function Payroll() {
   const [editPayroll, setEditPayroll] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState(null);
+  const [showPayMethodDialog, setShowPayMethodDialog] = useState(false);
+  const [payingPayrollId, setPayingPayrollId] = useState(null);
+  const [selectedPayMethod, setSelectedPayMethod] = useState('cash');
   const [pendingDeductions, setPendingDeductions] = useState([]);
   const [totalPendingDeduction, setTotalPendingDeduction] = useState(0);
   const [deductionPercent, setDeductionPercent] = useState(0);
@@ -179,8 +182,22 @@ export default function Payroll() {
     setDeductionPercent(0);
   };
 
-  const updatePayrollStatus = (payrollId, newStatus) => {
-    updatePayroll(payrollId, { status: newStatus });
+  const updatePayrollStatus = (payrollId, newStatus, paymentMethod) => {
+    const data = { status: newStatus };
+    if (paymentMethod) data.payment_method = paymentMethod;
+    updatePayroll(payrollId, data);
+  };
+
+  const handlePayClick = (payrollId) => {
+    setPayingPayrollId(payrollId);
+    setSelectedPayMethod('cash');
+    setShowPayMethodDialog(true);
+  };
+
+  const handleConfirmPay = () => {
+    updatePayrollStatus(payingPayrollId, 'paid', selectedPayMethod);
+    setShowPayMethodDialog(false);
+    setPayingPayrollId(null);
   };
 
   const handleEditPayroll = (payroll) => {
@@ -589,7 +606,7 @@ export default function Payroll() {
                                 </Button>
                               )}
                               {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) && (
-                                <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
+                                <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handlePayClick(payroll.id)}>
                                   {t('pay')}
                                 </Button>
                               )}
@@ -639,6 +656,39 @@ export default function Payroll() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Payment Method Dialog */}
+        <Dialog open={showPayMethodDialog} onOpenChange={setShowPayMethodDialog}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{t('select_payment_method') || "To'lov usulini tanlang"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-4">
+              <button
+                onClick={() => setSelectedPayMethod('cash')}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'cash' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <span className="text-2xl">💵</span>
+                <span className="font-medium">{t('cash') || 'Naqd pul'}</span>
+              </button>
+              <button
+                onClick={() => setSelectedPayMethod('card')}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'card' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <CreditCard className="w-6 h-6 text-slate-600" />
+                <span className="font-medium">{t('plastic_card') || 'Plastik karta'}</span>
+              </button>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowPayMethodDialog(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleConfirmPay}>
+                {t('confirm_payment') || 'Tasdiqlash'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Create Payroll Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
