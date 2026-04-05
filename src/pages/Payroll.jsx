@@ -150,7 +150,7 @@ export default function Payroll() {
 
     const payrollData = {
       ...newPayroll,
-      payroll_number: newPayroll.payroll_number || `PAY-${Date.now()}`,
+      payroll_number: '',
       basic_salary: parseFloat(newPayroll.basic_salary),
       overtime_hours: parseFloat(newPayroll.overtime_hours),
       bonuses: parseFloat(newPayroll.bonuses),
