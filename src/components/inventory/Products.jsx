@@ -413,7 +413,6 @@ export default function Products() {
 
   const categoryImportColumns = [
     { key: 'name', label: 'Nomi', required: true },
-    { key: 'code', label: 'Kod' },
     { key: 'description', label: 'Tavsif' },
   ];
 
