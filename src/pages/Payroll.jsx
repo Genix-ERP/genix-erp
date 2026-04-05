@@ -650,14 +650,6 @@ export default function Payroll() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
-                  <Input
-                    placeholder={t('auto_generated')}
-                    value={newPayroll.payroll_number}
-                    onChange={(e) => setNewPayroll({...newPayroll, payroll_number: e.target.value})}
-                  />
-                </div>
-                <div>
                   <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
                   <Select value={newPayroll.employee_name} onValueChange={(value) => {
                     const selectedEmployee = employees.find(emp => emp.full_name === value);
@@ -861,14 +853,6 @@ export default function Payroll() {
             {editPayroll && (
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
-                    <Input
-                      value={editPayroll.payroll_number}
-                      disabled
-                      className="bg-slate-50"
-                    />
-                  </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
                     <Select value={editPayroll.employee_name} onValueChange={(value) => {
