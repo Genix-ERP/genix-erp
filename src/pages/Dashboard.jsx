@@ -324,15 +324,18 @@ export default function Dashboard() {
                 <QuickStat
                   icon={Briefcase}
                   label={t('active_projects')}
-                  value={projects.filter(p => p.status === 'active').length}
+                  value={projects.filter(p => {
+                    const s = typeof p.status === 'string' ? p.status : (p.status?.String || '');
+                    return s === 'active' || s === 'planning' || s === 'in_progress';
+                  }).length}
                   sub={`${projects.length} ${t('total')}`}
                   color="emerald"
                 />
                 <QuickStat
                   icon={UserCheck}
                   label={t('employees')}
-                  value={employees.length}
-                  sub={`${hrAnalysis.metrics?.highRiskCount || 0} ${t('at_risk')}`}
+                  value={employees.filter(e => e.employment_status === 'active' || !e.employment_status).length}
+                  sub={`${employees.filter(e => e.employment_status === 'on_leave').length} ${t('on_leave')}`}
                   color="violet"
                 />
                 <QuickStat
