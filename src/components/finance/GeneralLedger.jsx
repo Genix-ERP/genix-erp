@@ -22,6 +22,36 @@ import { MODULES } from "@/config/permissions";
 import financeService from "@/api/services/finance";
 import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
 
+const JE_DESC_PATTERNS = [
+  { en: /^Stock Operation:\s*(.+)$/, key: 'je_stock_op' },
+  { en: /^Vendor Bill\s+(.+)$/, key: 'je_vendor_bill' },
+  { en: /^Sales Invoice\s+(.+)\s+\(repair\)$/, key: 'je_sales_invoice_repair' },
+  { en: /^Sales Invoice\s+(.+)$/, key: 'je_sales_invoice' },
+  { en: /^Fixed Asset Acquisition:\s*(.+)$/, key: 'je_fixed_asset' },
+  { en: /^Expense:\s*(.+)$/, key: 'je_expense' },
+];
+
+const JE_DESC_LABELS = {
+  je_stock_op:            { en: 'Stock Operation', uz: 'Ombor operatsiyasi', ru: 'Складская операция' },
+  je_vendor_bill:         { en: 'Vendor Bill', uz: 'Yetkazib beruvchi hisob-fakturasi', ru: 'Счёт поставщика' },
+  je_sales_invoice:       { en: 'Sales Invoice', uz: 'Sotuv hisob-fakturasi', ru: 'Счёт-фактура продажи' },
+  je_sales_invoice_repair:{ en: 'Sales Invoice (repair)', uz: "Sotuv hisob-fakturasi (ta'mirlash)", ru: 'Счёт-фактура (ремонт)' },
+  je_fixed_asset:         { en: 'Fixed Asset Acquisition', uz: 'Asosiy vosita sotib olish', ru: 'Приобретение ОС' },
+  je_expense:             { en: 'Expense', uz: 'Xarajat', ru: 'Расход' },
+};
+
+function translateJEDescription(description, language) {
+  if (!description) return description;
+  for (const { en, key } of JE_DESC_PATTERNS) {
+    const match = description.match(en);
+    if (match) {
+      const label = JE_DESC_LABELS[key]?.[language] || JE_DESC_LABELS[key]?.en || '';
+      return `${label}: ${match[match.length - 1]}`;
+    }
+  }
+  return description;
+}
+
 export default function GeneralLedger() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
@@ -543,7 +573,7 @@ export default function GeneralLedger() {
                         </TableCell>
                         <TableCell className="font-mono text-sm text-slate-600 whitespace-nowrap">{entry.entry_number}</TableCell>
                         <TableCell className="text-slate-700 whitespace-nowrap">
-                          {entry.description || entry.reference || '-'}
+                          {translateJEDescription(entry.description || entry.reference, language) || '-'}
                         </TableCell>
                         <TableCell className="text-slate-600 whitespace-nowrap">
                           {entry.journal?.name || '-'}
