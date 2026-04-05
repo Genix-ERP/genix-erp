@@ -419,8 +419,8 @@ Only return the JSON, no other text.`;
             phone: newEmployee.phone || '',
           });
         } catch (userErr) {
-          // 409 = user already exists, that's fine — just continue
-          if (userErr?.response?.status !== 409) throw userErr;
+          // 409 = user already exists, 403 = no permission — both are fine, just continue
+          if (userErr?.response?.status !== 409 && userErr?.response?.status !== 403) throw userErr;
         }
 
         // Auto-send credentials via email
