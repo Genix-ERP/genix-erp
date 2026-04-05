@@ -640,14 +640,6 @@ export default function Projects() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('project_code')}</label>
-                  <Input
-                    placeholder={t('auto_generated')}
-                    value={newProject.project_code}
-                    onChange={(e) => setNewProject({...newProject, project_code: e.target.value})}
-                  />
-                </div>
               </div>
 
               <div>
