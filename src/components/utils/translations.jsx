@@ -8530,7 +8530,7 @@ export const translations = {
     // Import Modal (Uzbek)
     "select_excel_or_csv": "Excel yoki CSV fayl tanlang",
     "at_risk": "Xavf ostida",
-    "pipeline": "Savdo quvuri",
+    "pipeline": "Rejalashtirilgan savdolar",
     "opportunities": "Imkoniyatlar",
     "your_top_customer": "Sizning asosiy mijozingiz {name} {amount} daromad keltiradi. Sodiqlik dasturlarini ko'rib chiqing.",
     "send_payment_reminders": "{count} ta to'lanmagan buyurtma uchun eslatmalar yuboring",
