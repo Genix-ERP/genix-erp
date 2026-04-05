@@ -190,16 +190,18 @@ export default function Login() {
                   value={identifier}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    // Detect phone: starts with +998, 998, or is purely digits
-                    const looksLikePhone = /^[\+\d]/.test(raw) && !raw.includes('@');
-                    if (looksLikePhone) {
+                    // Empty field → always reset to email mode
+                    if (raw === '' || raw === '+') {
+                      setIsPhone(false);
+                      setIdentifier('');
+                      return;
+                    }
+                    // If already in phone mode OR first char is digit/+
+                    if (isPhone || (/^[\+\d]/.test(raw) && !raw.includes('@'))) {
                       setIsPhone(true);
-                      // Keep only digits
                       const digits = raw.replace(/\D/g, '');
-                      // Remove leading 998 if present, limit to 12 digits (998 + 9)
                       const local = digits.startsWith('998') ? digits.slice(3) : digits;
                       const limited = local.slice(0, 9);
-                      // Format: +998 XX XXX XX XX
                       let formatted = '+998';
                       if (limited.length > 0) formatted += ' ' + limited.slice(0, 2);
                       if (limited.length > 2) formatted += ' ' + limited.slice(2, 5);
