@@ -206,6 +206,7 @@ export default function Products() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCategoryImportModal, setShowCategoryImportModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showCategoryManageModal, setShowCategoryManageModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
@@ -408,6 +409,24 @@ export default function Products() {
       await createProduct(productData);
     }
     addAuditLog('create', 'batch', `${data.length} products imported`);
+  };
+
+  const categoryImportColumns = [
+    { key: 'name', label: 'Nomi', required: true },
+    { key: 'code', label: 'Kod' },
+    { key: 'description', label: 'Tavsif' },
+  ];
+
+  const handleCategoryImport = async (data) => {
+    for (const row of data) {
+      const categoryData = {
+        name: row.name,
+        code: row.code || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 20),
+        description: row.description || '',
+        is_active: true,
+      };
+      await createCategory(categoryData);
+    }
   };
 
   const [formData, setFormData] = useState({
@@ -1501,13 +1520,23 @@ export default function Products() {
                   </div>
                 </div>
                 {canCreate(MODULES.INVENTORY) && (
-                  <Button
-                    onClick={() => setShowCategoryModal(true)}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    {t('add_category')}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCategoryImportModal(true)}
+                      className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {t('import')}
+                    </Button>
+                    <Button
+                      onClick={() => setShowCategoryModal(true)}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('add_category')}
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardHeader>
@@ -3439,6 +3468,15 @@ export default function Products() {
         onImport={handleImport}
         columns={importColumns}
         entityName="Mahsulotlar"
+      />
+
+      {/* Category Import Modal */}
+      <ImportModal
+        open={showCategoryImportModal}
+        onClose={() => setShowCategoryImportModal(false)}
+        onImport={handleCategoryImport}
+        columns={categoryImportColumns}
+        entityName="Kategoriyalar"
       />
 
       {/* Export Modal */}
