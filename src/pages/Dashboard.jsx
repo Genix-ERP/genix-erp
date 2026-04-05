@@ -196,7 +196,7 @@ export default function Dashboard() {
           <MetricCard
             title={t("low_stock_items")}
             value={metrics.lowStockItems.toString()}
-            change={metrics.lowStockItems > 0 ? t("action_needed") : t("all_good")}
+            change={metrics.lowStockItems > 0 ? `${metrics.lowStockItems} ${t("items")}` : t("all_good")}
             trend={metrics.lowStockItems > 0 ? "warning" : "up"}
             icon={Package}
             color={metrics.lowStockItems > 0 ? "orange" : "green"}
