@@ -725,6 +725,13 @@ export default function SalesOrders() {
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
 
+    // Validate: intercompany orders must have a project selected
+    const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+    if (selectedCustomer?.source_organization_id && !newOrder.project_id) {
+      alert(t('intercompany_project_required') || 'Kompaniyalararo buyurtma uchun loyihani tanlash majburiy');
+      return;
+    }
+
     try {
       const createdOrder = await createSalesOrder(orderData);
 
@@ -1634,7 +1641,7 @@ export default function SalesOrders() {
                     <div className="flex items-center gap-2 mb-2">
                       <Building2 className="w-4 h-4 text-blue-600" />
                       <Label className="text-sm font-semibold text-blue-800">
-                        {t('intercompany_project') || 'Kompaniyalararo loyiha'}
+                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
                       </Label>
                     </div>
                     <p className="text-xs text-blue-600 mb-2">
