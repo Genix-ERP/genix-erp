@@ -398,45 +398,7 @@ Only return the JSON, no other text.`;
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
-      // Auto-generate 8-character alphanumeric password
-      const password = generatePassword();
-
-      // Create user account only if email is provided
-      const nameParts = (newEmployee.full_name || '').trim().split(' ').filter(Boolean);
-      const firstName = nameParts[0] || 'User';
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
-
-      const hasEmail = newEmployee.email && newEmployee.email.trim();
-      const hasPhone = newEmployee.phone && newEmployee.phone.trim() && newEmployee.phone.trim() !== '+998';
-
-      if (hasEmail) {
-        try {
-          await apiClient.post('/users', {
-            email: newEmployee.email.trim(),
-            password: password,
-            first_name: firstName,
-            last_name: lastName,
-            phone: newEmployee.phone || '',
-          });
-        } catch (userErr) {
-          // 409 = user already exists, 403 = no permission — both are fine, just continue
-          if (userErr?.response?.status !== 409 && userErr?.response?.status !== 403) throw userErr;
-        }
-
-        // Auto-send credentials via email
-        try {
-          await apiClient.post('/users/send-credentials', {
-            email: newEmployee.email.trim(),
-            password: password,
-            method: hasPhone ? 'sms' : 'email',
-            phone: newEmployee.phone || '',
-          });
-        } catch (credErr) {
-          console.error("Error sending credentials:", credErr);
-        }
-      }
-
-      // User created successfully, now create employee record
+      // Backend auto-creates user account when employee is created
       const employeeData = {
         full_name: newEmployee.full_name,
         email: newEmployee.email || '',
