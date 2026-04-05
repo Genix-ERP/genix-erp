@@ -1225,21 +1225,6 @@ export default function Products() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">{t('services')}</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {summaryStats.serviceProducts}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <ShoppingCart className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Products Table */}
