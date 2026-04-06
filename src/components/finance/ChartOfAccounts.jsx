@@ -238,6 +238,7 @@ export default function ChartOfAccounts() {
     setIsSaving(true);
     try {
       await updateAccount(selectedAccount.id, {
+        code: formData.code,
         name: formData.name,
         type: formData.type,
         internal_type: formData.internal_type,
@@ -754,7 +755,7 @@ export default function ChartOfAccounts() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('code') || 'Code'}</label>
-                <Input value={formData.code} disabled className="bg-slate-100" />
+                <Input value={formData.code} onChange={(e) => setFormData({...formData, code: e.target.value})} />
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 mb-1 block">{t('name') || 'Name'} *</label>

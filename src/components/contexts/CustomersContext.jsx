@@ -196,7 +196,8 @@ export function CustomersProvider({ children }) {
                 annual_revenue: customFields.annual_revenue || c.annual_revenue || 0,
                 employee_count: customFields.employee_count || c.employee_count || 0,
                 address: address,
-                created_date: c.created_at || new Date().toISOString()
+                created_date: c.created_at || new Date().toISOString(),
+                source_organization_id: c.source_organization_id || null,
               };
             });
             setCustomers(mappedCustomers);
