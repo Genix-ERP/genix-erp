@@ -50,7 +50,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(identifier, password, selectedTenantId);
+    const result = await login(identifier, password, selectedTenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -71,7 +71,7 @@ export default function Login() {
 
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(identifier, password, tenantId);
+      : await login(identifier, password, tenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);

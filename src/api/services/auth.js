@@ -46,8 +46,7 @@ export const authService = {
   },
 
   // Login with optional tenant_id for multi-tenant scenarios
-  async login(email, password, tenantId = null) {
-    const isPhone = /^\+?[\d\s]{7,}$/.test(email) && !email.includes('@');
+  async login(email, password, tenantId = null, isPhone = false) {
     const payload = isPhone
       ? { phone: email.replace(/\s/g, ''), password }
       : { email, password };
