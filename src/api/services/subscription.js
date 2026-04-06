@@ -12,8 +12,9 @@ export const subscriptionService = {
   },
 
   // Create a Multicard checkout session → returns { checkout_url, invoice_id, uuid }
-  async createCheckout(plan) {
-    const response = await apiClient.post('/subscription/checkout', { plan });
+  // users: number of users, billing: 'monthly' | 'yearly'
+  async createCheckout(users, billing) {
+    const response = await apiClient.post('/subscription/checkout', { users, billing });
     return response.data.data;
   },
 
