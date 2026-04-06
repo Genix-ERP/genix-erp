@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useSubscription, PLAN_LIMITS } from '@/components/contexts/SubscriptionContext';
+import React, { useState, useEffect } from 'react';
+import { useSubscription } from '@/components/contexts/SubscriptionContext';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,124 +7,51 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
-  Crown,
-  Sparkles,
-  Users,
-  HardDrive,
-  Check,
-  X,
-  Zap,
-  Clock,
-  AlertTriangle,
-  ArrowRight,
-  Star
+  Crown, Sparkles, Users, HardDrive,
+  Minus, Plus, CreditCard, Loader2, AlertTriangle, Clock
 } from 'lucide-react';
+import subscriptionService from '@/api/services/subscription';
 
 export default function SubscriptionSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
-    subscription,
-    aiUsage,
-    getPlanLimits,
-    getRemainingAIRequests,
-    getAIUsagePercentage,
-    getTrialDaysRemaining,
-    upgradePlan
+    subscription, aiUsage,
+    getPlanLimits, getRemainingAIRequests, getAIUsagePercentage, getTrialDaysRemaining,
   } = useSubscription();
 
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [pricing, setPricing] = useState({ price_per_user_monthly: 199000, price_per_user_yearly: 169000 });
+  const [users, setUsers] = useState(1);
+  const [billing, setBilling] = useState('monthly');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    subscriptionService.getPlans().then((data) => {
+      if (data?.price_per_user_monthly) setPricing(data);
+    }).catch(() => {});
+  }, []);
 
   const currentLimits = getPlanLimits();
   const aiRemaining = getRemainingAIRequests();
   const aiPercentage = getAIUsagePercentage();
   const trialDays = getTrialDaysRemaining();
 
-  const plans = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: 299,
-      description: t('starter_description') || 'Kichik bizneslar uchun',
-      userLabel: '10 gacha foydalanuvchi',
-      icon: Sparkles,
-      color: 'from-blue-500 to-blue-600',
-      highlights: [
-        'AI yordamida ma\'lumot kiritish',
-        'Asosiy moliyaviy boshqaruv',
-        'Oddiy inventar kuzatuvi',
-        'Standart hisobotlar (15+ hisobot)',
-        'Email yordam (24s javob)',
-        '5 GB Cloud xotira',
-        'Mobil kirish',
-        'Bitta kompaniya profili'
-      ]
-    },
-    {
-      id: 'professional',
-      name: 'Professional',
-      price: 499,
-      description: t('professional_description') || "O'sib borayotgan kompaniyalar uchun",
-      userLabel: '50 gacha foydalanuvchi',
-      icon: Zap,
-      color: 'from-purple-500 to-purple-600',
-      popular: true,
-      highlights: [
-        "Starter'dagi hamma narsa, qo'shimcha:",
-        'AI tahlil va prognozlash',
-        'Avtomatlashtirilgan ish oqimi mexanizmi',
-        'Maxsus hisobot qurish',
-        'Ustuvor yordam (8s javob)',
-        'API kirish (5,000 chaqiruv/oy)',
-        '50 GB Cloud xotira',
-        '3 tagacha kompaniya profili',
-        'Xavfsizlik va ruxsatlar'
-      ]
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: 999,
-      description: t('enterprise_description') || 'Katta korxonalar uchun',
-      userLabel: 'Cheksiz foydalanuvchilar',
-      icon: Crown,
-      color: 'from-amber-500 to-orange-500',
-      highlights: [
-        "Professional'dagi hamma narsa, qo'shimcha:",
-        "To'liq AI to'plami (Chatbot, Prognoz AI)",
-        "AI asosida ta'minot zanjirini optimallashtirish",
-        "Maxsus AI model o'qitish",
-        'Maxsus hisob menejeri',
-        'White-Label variantlar',
-        '24/7 Premium yordam (1s javob)',
-        'Cheksiz API chaqiruvlar',
-        'Cheksiz Cloud xotira',
-        'Cheksiz kompaniya profillari',
-        'On-Premise joylashtirilish varianti',
-        'Muvofiqlik (SOC2, GDPR)',
-        'Maxsus integratsiyalar'
-      ]
+  const pricePerUser = billing === 'yearly' ? pricing.price_per_user_yearly : pricing.price_per_user_monthly;
+  const total = billing === 'yearly' ? pricePerUser * 12 * users : pricePerUser * users;
+
+  const fmt = (n) => n?.toLocaleString('uz-UZ');
+
+  const handleCheckout = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await subscriptionService.createCheckout(users, billing);
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Payment failed');
+      setLoading(false);
     }
-  ];
-
-  const handleUpgrade = async (planId) => {
-    setIsUpgrading(true);
-    // Simulate upgrade process
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    upgradePlan(planId);
-    setIsUpgrading(false);
-    setSelectedPlan(null);
-  };
-
-  const getPlanBadgeColor = (planId) => {
-    const colors = {
-      free_trial: 'bg-slate-100 text-slate-700',
-      starter: 'bg-blue-100 text-blue-700',
-      professional: 'bg-purple-100 text-purple-700',
-      enterprise: 'bg-gradient-to-r from-amber-400 to-orange-400 text-white'
-    };
-    return colors[planId] || colors.free_trial;
   };
 
   return (
@@ -137,14 +64,13 @@ export default function SubscriptionSettings() {
               <Crown className="w-5 h-5 text-purple-600" />
               {t('current_subscription')}
             </CardTitle>
-            <Badge className={`${getPlanBadgeColor(subscription?.plan)} px-3 py-1`}>
-              {currentLimits.name}
+            <Badge className="px-3 py-1">
+              {subscription?.status === 'trialing' ? t('trial_period') || 'Sinov' : subscription?.plan || 'Free Trial'}
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="p-6">
-          {/* Trial Warning */}
-          {subscription?.status === 'trial' && trialDays > 0 && (
+          {subscription?.status === 'trialing' && trialDays > 0 && (
             <div className={`flex items-start gap-3 p-4 rounded-lg mb-6 ${
               trialDays <= 3 ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'
             }`}>
@@ -153,15 +79,12 @@ export default function SubscriptionSettings() {
                 <p className={`font-medium ${trialDays <= 3 ? 'text-red-700' : 'text-amber-700'}`}>
                   {t('trial_period')}: {trialDays} {t('days_remaining')}
                 </p>
-                <p className="text-sm text-slate-600 mt-1">
-                  {t('trial_end_warning')}
-                </p>
+                <p className="text-sm text-slate-600 mt-1">{t('trial_end_warning')}</p>
               </div>
             </div>
           )}
 
           <div className="grid md:grid-cols-3 gap-6">
-            {/* AI Usage */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-slate-600">
                 <Sparkles className="w-4 h-4 text-purple-500" />
@@ -171,33 +94,21 @@ export default function SubscriptionSettings() {
                 <p className="text-2xl font-bold text-green-600">{t('unlimited')}</p>
               ) : (
                 <>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {aiUsage.count} / {currentLimits.aiRequestsPerMonth}
-                  </p>
-                  <Progress
-                    value={aiPercentage}
-                    className={`h-2 ${aiPercentage >= 80 ? '[&>div]:bg-orange-500' : '[&>div]:bg-purple-500'}`}
-                  />
+                  <p className="text-2xl font-bold text-slate-900">{aiUsage.count} / {currentLimits.aiRequestsPerMonth}</p>
+                  <Progress value={aiPercentage} className="h-2" />
                   <p className="text-xs text-slate-500">{aiRemaining} {t('requests_remaining')}</p>
                 </>
               )}
             </div>
-
-            {/* Users */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-slate-600">
                 <Users className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium">{t('users')}</span>
               </div>
               <p className="text-2xl font-bold text-slate-900">
-                {currentLimits.maxUsers === -1 ? t('unlimited') : `${subscription?.currentUsers || 1} / ${currentLimits.maxUsers}`}
+                {subscription?.currentUsers || 1} / {subscription?.paid_users || currentLimits.maxUsers || '∞'}
               </p>
-              {currentLimits.maxUsers !== -1 && (
-                <Progress value={((subscription?.currentUsers || 1) / currentLimits.maxUsers) * 100} className="h-2" />
-              )}
             </div>
-
-            {/* Storage */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-slate-600">
                 <HardDrive className="w-4 h-4 text-green-500" />
@@ -211,150 +122,100 @@ export default function SubscriptionSettings() {
         </CardContent>
       </Card>
 
-      {/* Available Plans */}
-      <div>
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('available_plans')}</h3>
-        <div className="grid md:grid-cols-3 gap-6">
-          {plans.map((plan) => {
-            const isCurrentPlan = subscription?.plan === plan.id;
-            const PlanIcon = plan.icon;
-
-            return (
-              <Card
-                key={plan.id}
-                className={`relative overflow-hidden transition-all duration-300 ${
-                  isCurrentPlan ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-lg'
-                } ${plan.popular ? 'border-purple-300' : ''}`}
-              >
-                {plan.popular && (
-                  <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                    <Star className="w-3 h-3 inline mr-1" />
-                    {t('popular') || 'Mashhur'}
-                  </div>
-                )}
-
-                <CardHeader className={`bg-gradient-to-r ${plan.color} text-white pb-8`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <PlanIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl">{plan.name}</CardTitle>
-                      <p className="text-white/80 text-sm">{plan.description}</p>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-6 -mt-4">
-                  <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold text-slate-900">${plan.price}</span>
-                      <span className="text-slate-500">/oy</span>
-                    </div>
-                    {plan.userLabel && (
-                      <Badge variant="secondary" className="mt-2 font-normal">
-                        {plan.userLabel}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <ul className="space-y-3 mb-6">
-                    {plan.highlights.map((feature, index) => (
-                      <li key={index} className="flex items-start gap-2 text-sm">
-                        <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-slate-600">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {isCurrentPlan ? (
-                    <Button disabled className="w-full bg-slate-100 text-slate-500">
-                      <Check className="w-4 h-4 mr-2" />
-                      {t('current_plan')}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => handleUpgrade(plan.id)}
-                      disabled={isUpgrading}
-                      className={`w-full bg-gradient-to-r ${plan.color} hover:opacity-90`}
-                    >
-                      {isUpgrading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          {t('upgrade') || "O'tish"}
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Feature Comparison */}
+      {/* Purchase / Upgrade */}
       <Card>
         <CardHeader>
-          <CardTitle>{t('feature_comparison')}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-blue-500" />
+            {t('available_plans') || "To'lov"}
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4">{t('feature')}</th>
-                  <th className="text-center py-3 px-4">Starter</th>
-                  <th className="text-center py-3 px-4 bg-purple-50">Professional</th>
-                  <th className="text-center py-3 px-4">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  [t('price') || 'Narx', '$299/oy', '$499/oy', '$999/oy'],
-                  [t('users') || 'Foydalanuvchilar', '10 gacha', '50 gacha', t('unlimited') || 'Cheksiz'],
-                  [t('cloud_storage') || 'Cloud xotira', '5 GB', '50 GB', t('unlimited') || 'Cheksiz'],
-                  [t('ai_requests') || 'AI so\'rovlar', '500/oy', '2,500/oy', t('unlimited') || 'Cheksiz'],
-                  [t('api_access') || 'API kirish', <X className="w-4 h-4 text-red-400 mx-auto" />, '5,000/oy', t('unlimited') || 'Cheksiz'],
-                  [t('company_profiles') || 'Kompaniya profillari', '1', '3', t('unlimited') || 'Cheksiz'],
-                  ['AI tahlil va prognozlash', <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  ['Ish oqimi avtomatizatsiya', <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  ['Maxsus AI model', <X className="w-4 h-4 text-red-400 mx-auto" />, <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  ['White-Label', <X className="w-4 h-4 text-red-400 mx-auto" />, <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  ['On-Premise', <X className="w-4 h-4 text-red-400 mx-auto" />, <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  ['SOC2, GDPR', <X className="w-4 h-4 text-red-400 mx-auto" />, <X className="w-4 h-4 text-red-400 mx-auto" />, <Check className="w-4 h-4 text-green-500 mx-auto" />],
-                  [t('support') || 'Yordam', 'Email (24s)', 'Ustuvor (8s)', '24/7 Premium (1s)'],
-                ].map(([feature, starter, professional, enterprise], index) => (
-                  <tr key={index} className="border-b last:border-0">
-                    <td className="py-3 px-4 font-medium text-slate-700">{feature}</td>
-                    <td className="py-3 px-4 text-center text-slate-600">{starter}</td>
-                    <td className="py-3 px-4 text-center text-slate-600 bg-purple-50">{professional}</td>
-                    <td className="py-3 px-4 text-center text-slate-600">{enterprise}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <CardContent className="p-6 space-y-6">
+          {/* Billing toggle */}
+          <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+            {[
+              { key: 'monthly', label: language === 'uz' ? 'Oylik' : language === 'ru' ? 'Ежемесячно' : 'Monthly' },
+              { key: 'yearly',  label: language === 'uz' ? 'Yillik' : language === 'ru' ? 'Ежегодно' : 'Yearly' },
+            ].map((b) => (
+              <button
+                key={b.key}
+                onClick={() => setBilling(b.key)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                  billing === b.key ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {b.label}
+                {b.key === 'yearly' && (
+                  <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {language === 'uz' ? '15% tejash' : language === 'ru' ? 'Экономия 15%' : 'Save 15%'}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Contact for Enterprise */}
-      <Card className="bg-gradient-to-r from-slate-900 to-slate-800 text-white">
-        <CardContent className="p-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold mb-2">{t('custom_requirements')}</h3>
-              <p className="text-slate-300">
-                {t('custom_requirements_description')}
+          {/* Pricing display */}
+          <div className="text-center py-2">
+            <span className="text-4xl font-bold text-slate-900">{fmt(pricePerUser)}</span>
+            <span className="text-slate-500 ml-1">
+              UZS {language === 'uz' ? '/foydalanuvchi/oy' : language === 'ru' ? '/польз./мес' : '/user/month'}
+            </span>
+            {billing === 'yearly' && (
+              <p className="text-sm text-slate-500 mt-1">
+                ({fmt(pricing.price_per_user_monthly)} → {fmt(pricing.price_per_user_yearly)}{' '}
+                {language === 'uz' ? 'yillik to\'lovda' : language === 'ru' ? 'при оплате за год' : 'when billed yearly'})
               </p>
-            </div>
-            <Button className="bg-white text-slate-900 hover:bg-slate-100">
-              {t('contact_us')}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            )}
           </div>
+
+          {/* User count selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">
+              {language === 'uz' ? 'Foydalanuvchilar soni' : language === 'ru' ? 'Количество пользователей' : 'Number of users'}
+            </label>
+            <p className="text-xs text-slate-400">
+              {language === 'uz' ? '1 egasi + qolgan xodimlar (masalan, 4 ta xarisangiz — 3 ta xodim qo\'sha olasiz)' :
+               language === 'ru' ? '1 владелец + остальные сотрудники' :
+               '1 owner + remaining employees (e.g. buying 4 lets you add 3 employees)'}
+            </p>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setUsers(u => Math.max(1, u - 1))}
+                className="w-10 h-10 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="text-3xl font-bold text-slate-900 min-w-[3rem] text-center">{users}</span>
+              <button
+                onClick={() => setUsers(u => u + 1)}
+                className="w-10 h-10 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <div className="ml-auto text-right">
+                <div className="text-2xl font-bold text-slate-900">{fmt(total)} UZS</div>
+                <div className="text-xs text-slate-500">
+                  {billing === 'yearly'
+                    ? (language === 'uz' ? 'yillik to\'lov' : language === 'ru' ? 'в год' : 'per year')
+                    : (language === 'uz' ? 'oylik to\'lov' : language === 'ru' ? 'в месяц' : 'per month')
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <Button
+            onClick={handleCheckout}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 text-white h-12 text-base font-semibold"
+          >
+            {loading
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{language === 'uz' ? "Yo'naltirilmoqda..." : 'Redirecting...'}</>
+              : <><CreditCard className="w-4 h-4 mr-2" />{language === 'uz' ? "To'lov qilish" : language === 'ru' ? 'Оплатить' : 'Pay now'}</>
+            }
+          </Button>
         </CardContent>
       </Card>
     </div>
