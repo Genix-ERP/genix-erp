@@ -136,6 +136,7 @@ export default function JournalManagement() {
         auto_check_on_post: detail.auto_check_on_post || false,
         number_prefix: detail.number_prefix || '',
         is_active: detail.is_active !== false,
+        is_payroll_journal: detail.is_payroll_journal || false,
         default_debit_account_id: detail.default_debit_account_id || '',
         default_credit_account_id: detail.default_credit_account_id || '',
         bank_account_id: detail.bank_account_id || '',
@@ -940,6 +941,18 @@ export default function JournalManagement() {
                         <span className="text-xs text-slate-500">{t('can_be_used_in_transactions')}</span>
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 items-center">
+                      <label className="text-sm font-medium text-slate-700">{t('payroll_journal') || 'Ish haqi jurnali'}</label>
+                      <div className="md:col-span-2 flex items-center gap-2">
+                        <Switch
+                          checked={editForm.is_payroll_journal}
+                          onCheckedChange={(checked) => handleUpdateField('is_payroll_journal', checked)}
+                          disabled={!canUpdate(MODULES.FINANCIALS)}
+                        />
+                        <span className="text-xs text-slate-500">{t('payroll_journal_hint') || 'Ish haqi to\'lovlari shu jurnalga yoziladi'}</span>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -1136,12 +1149,19 @@ export default function JournalManagement() {
                           })()}
                         </TableCell>
                         <TableCell>
-                          <Badge className={journal.is_active
-                            ? 'bg-green-100 text-green-800 border-green-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }>
-                            {journal.is_active ? t('active') : t('inactive')}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={journal.is_active
+                              ? 'bg-green-100 text-green-800 border-green-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }>
+                              {journal.is_active ? t('active') : t('inactive')}
+                            </Badge>
+                            {journal.is_payroll_journal && (
+                              <Badge className="bg-orange-100 text-orange-800 border-orange-200 w-fit text-xs">
+                                {t('payroll_journal') || 'Ish haqi'}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>

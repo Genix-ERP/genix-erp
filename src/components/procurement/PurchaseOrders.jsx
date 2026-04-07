@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,9 @@ import {
   Receipt,
   ChevronDown,
   Package,
+  ScanLine,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -125,6 +128,11 @@ export default function PurchaseOrders() {
 
   // Track which POs already have vendor bills
   const [poBillMap, setPoBillMap] = useState({});
+
+  // Receipt scan
+  const receiptInputRef = useRef(null);
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
+  const [unmatchedProducts, setUnmatchedProducts] = useState([]);
 
   const [newPO, setNewPO] = useState({
     po_number: '',
@@ -292,6 +300,67 @@ export default function PurchaseOrders() {
       setNewPO({ ...newPO, lines: updatedLines, expected_delivery_date: newDeliveryDate, total_amount: calculateOrderTotal(updatedLines) });
     } else {
       setNewPO({ ...newPO, lines: updatedLines, total_amount: calculateOrderTotal(updatedLines) });
+    }
+  };
+
+  // Scan a receipt/check image and add matched products to order lines
+  const handleScanReceipt = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so the same file can be re-uploaded if needed
+    e.target.value = '';
+
+    setIsScanningReceipt(true);
+    setUnmatchedProducts([]);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await apiClient.post('/purchase-orders/scan-receipt', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const { matched = [], unmatched = [] } = res.data?.data || res.data || {};
+
+      if (matched.length > 0) {
+        // Build new lines from matched products, appended to existing non-empty lines
+        const existingLines = newPO.lines.filter(l => l.product_id || l.product_name);
+        const scannedLines = matched.map(item => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          quantity: item.quantity || 1,
+          unit_price: item.unit_price || 0,
+          lead_time_days: 0,
+        }));
+        const mergedLines = existingLines.length > 0
+          ? [...existingLines, ...scannedLines]
+          : scannedLines;
+        setNewPO(prev => ({
+          ...prev,
+          lines: mergedLines,
+          total_amount: calculateOrderTotal(mergedLines),
+        }));
+        toast({
+          title: t('receipt_scanned') || 'Check skanerlandi',
+          description: `${matched.length} ta mahsulot qo'shildi`,
+        });
+      } else {
+        toast({
+          title: t('no_products_found') || 'Mahsulot topilmadi',
+          description: t('no_matching_products') || 'Checkdagi mahsulotlar katalogda topilmadi',
+          variant: 'destructive',
+        });
+      }
+
+      if (unmatched.length > 0) {
+        setUnmatchedProducts(unmatched);
+      }
+    } catch (err) {
+      toast({
+        title: t('error') || 'Xato',
+        description: err.response?.data?.message || err.message || 'Check skanerlanmadi',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsScanningReceipt(false);
     }
   };
 
@@ -482,6 +551,7 @@ export default function PurchaseOrders() {
         lines: [{ product_id: '', product_name: '', quantity: 1, unit_price: 0, lead_time_days: 0 }]
       });
       setIsDeliveryDateManual(false);
+      setUnmatchedProducts([]);
     } catch (error) {
       console.error('Error creating PO:', error);
     } finally {
@@ -953,12 +1023,61 @@ export default function PurchaseOrders() {
 
             {/* Order Lines */}
             <div className="border-t pt-4">
+              {/* Hidden file input for receipt scan */}
+              <input
+                ref={receiptInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleScanReceipt}
+              />
               <div className="flex justify-between items-center mb-3">
                 <label className="text-base font-semibold">{t('order_items') || 'Order Items'}</label>
-                <Button size="sm" variant="outline" onClick={handleAddLine}>
-                  <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => receiptInputRef.current?.click()}
+                    disabled={isScanningReceipt}
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                  >
+                    {isScanningReceipt
+                      ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      : <ScanLine className="w-4 h-4 mr-1" />}
+                    {isScanningReceipt
+                      ? (t('scanning') || 'Skanerlanmoqda...')
+                      : (t('scan_receipt') || 'Check yuklash')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleAddLine}>
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_line') || 'Add Line'}
+                  </Button>
+                </div>
               </div>
+
+              {/* Unmatched products warning */}
+              {unmatchedProducts.length > 0 && (
+                <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-orange-800">
+                        {t('products_not_in_catalog') || 'Quyidagi mahsulotlar bizda yo\'q:'}
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {unmatchedProducts.map((name, i) => (
+                          <li key={i} className="text-sm text-orange-700 truncate">• {name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <button
+                      onClick={() => setUnmatchedProducts([])}
+                      className="text-orange-400 hover:text-orange-600 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {newPO.lines.map((line, index) => {
                   const selectedProduct = products.find(p => p.id === line.product_id);
@@ -1189,7 +1308,7 @@ export default function PurchaseOrders() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+              <Button variant="outline" onClick={() => { setShowCreateModal(false); setUnmatchedProducts([]); }} className="flex-1">
                 {t('cancel') || 'Cancel'}
               </Button>
               <Button
