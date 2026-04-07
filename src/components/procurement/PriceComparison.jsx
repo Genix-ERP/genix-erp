@@ -26,57 +26,15 @@ import {
 import { useProcurement } from "@/components/contexts/ProcurementContext";
 import { useInventory } from "@/components/contexts/InventoryContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
+import { useTranslation } from "@/components/utils/translations";
 import { useCurrencyFormatter } from "@/hooks/useCurrencyFormatter";
-
-const LABELS = {
-  uz: {
-    title: "Narx solishtirish",
-    product: "Mahsulot",
-    selectProduct: "Mahsulot tanlang...",
-    supplier: "Postavchik",
-    selectSupplier: "Postavchik tanlang...",
-    price: "Narx",
-    quality: "Sifat %",
-    addRow: "Qator qo'shish",
-    best: "Eng yaxshi",
-    noRows: "Qator qo'shish uchun yuqoridagi tugmani bosing",
-    priceChart: "Narx diagrammasi",
-  },
-  ru: {
-    title: "Сравнение цен",
-    product: "Продукт",
-    selectProduct: "Выберите продукт...",
-    supplier: "Поставщик",
-    selectSupplier: "Выберите поставщика...",
-    price: "Цена",
-    quality: "Качество %",
-    addRow: "Добавить строку",
-    best: "Лучшая цена",
-    noRows: "Нажмите кнопку выше чтобы добавить строку",
-    priceChart: "График цен",
-  },
-  en: {
-    title: "Price Comparison",
-    product: "Product",
-    selectProduct: "Select product...",
-    supplier: "Supplier",
-    selectSupplier: "Select supplier...",
-    price: "Price",
-    quality: "Quality %",
-    addRow: "Add row",
-    best: "Best price",
-    noRows: "Click the button above to add a row",
-    priceChart: "Price chart",
-  },
-};
 
 export default function PriceComparison() {
   const { language } = useLanguage();
+  const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
   const { suppliers } = useProcurement();
   const { products } = useInventory();
-
-  const L = LABELS[language] || LABELS.en;
 
   const [selectedProduct, setSelectedProduct] = useState("");
   const [rows, setRows] = useState([]);
@@ -104,14 +62,13 @@ export default function PriceComparison() {
   };
 
   const enrichedRows = useMemo(() => {
-    const prices = rows
-      .map((r) => parseFloat(r.price))
-      .filter((p) => p > 0);
+    const prices = rows.map((r) => parseFloat(r.price)).filter((p) => p > 0);
     const minPrice = prices.length ? Math.min(...prices) : null;
+    const hasMultiple = prices.length > 1;
 
     return rows.map((r) => {
       const price = parseFloat(r.price) || 0;
-      const isBest = minPrice !== null && price === minPrice && price > 0 && rows.filter(x => parseFloat(x.price) > 0).length > 1;
+      const isBest = hasMultiple && minPrice !== null && price === minPrice;
       const priceDiff =
         minPrice && price > 0 && !isBest
           ? (((price - minPrice) / minPrice) * 100).toFixed(1)
@@ -125,9 +82,9 @@ export default function PriceComparison() {
     .sort((a, b) => a.price - b.price)
     .map((r) => ({
       name:
-        (r.supplier_name || r.supplier_id || "—").length > 14
-          ? (r.supplier_name || r.supplier_id).slice(0, 14) + "…"
-          : r.supplier_name || r.supplier_id || "—",
+        (r.supplier_name || "—").length > 14
+          ? (r.supplier_name).slice(0, 14) + "…"
+          : r.supplier_name || "—",
       price: r.price,
       isBest: r.isBest,
     }));
@@ -136,9 +93,11 @@ export default function PriceComparison() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-900">{L.title}</h2>
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">{t("price_comparison")}</h2>
+          <p className="text-sm text-slate-500 mt-0.5">{t("price_comparison_desc")}</p>
+        </div>
       </div>
 
       <Card className="bg-white/80 backdrop-blur-sm">
@@ -151,11 +110,9 @@ export default function PriceComparison() {
               value={selectedProduct}
               onChange={(e) => setSelectedProduct(e.target.value)}
             >
-              <option value="">{L.selectProduct}</option>
+              <option value="">{t("select_product")}</option>
               {(products || []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
             {selectedProductName && (
@@ -170,12 +127,10 @@ export default function PriceComparison() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">{L.supplier}</TableHead>
-                  <TableHead className="text-xs font-semibold text-right w-40">{L.price}</TableHead>
-                  <TableHead className="text-xs font-semibold text-center w-28">{L.quality}</TableHead>
-                  <TableHead className="text-xs font-semibold text-center w-32">
-                    {language === "uz" ? "Holat" : language === "ru" ? "Статус" : "Status"}
-                  </TableHead>
+                  <TableHead className="text-xs font-semibold">{t("supplier")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-right w-40">{t("price")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-28">{t("quality_pct")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-32">{t("status")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -183,7 +138,7 @@ export default function PriceComparison() {
                 {enrichedRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-10 text-center text-slate-400 text-sm">
-                      {L.noRows}
+                      {t("no_comparison_rows")}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -196,7 +151,6 @@ export default function PriceComparison() {
                     })
                     .map((row) => (
                       <TableRow key={row.id} className={row.isBest ? "bg-green-50/60" : ""}>
-                        {/* Supplier */}
                         <TableCell className="py-2">
                           <div className="flex items-center gap-2">
                             {row.isBest && (
@@ -207,17 +161,14 @@ export default function PriceComparison() {
                               value={row.supplier_id}
                               onChange={(e) => updateRow(row.id, "supplier_id", e.target.value)}
                             >
-                              <option value="">{L.selectSupplier}</option>
+                              <option value="">{t("select_supplier")}</option>
                               {(suppliers || []).map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
+                                <option key={s.id} value={s.id}>{s.name}</option>
                               ))}
                             </select>
                           </div>
                         </TableCell>
 
-                        {/* Price */}
                         <TableCell className="py-2 text-right">
                           <div className="flex flex-col items-end gap-0.5">
                             <Input
@@ -235,7 +186,6 @@ export default function PriceComparison() {
                           </div>
                         </TableCell>
 
-                        {/* Quality */}
                         <TableCell className="py-2 text-center">
                           <div className="flex items-center gap-1 justify-center">
                             <Input
@@ -253,20 +203,18 @@ export default function PriceComparison() {
                           </div>
                         </TableCell>
 
-                        {/* Status */}
                         <TableCell className="py-2 text-center">
                           {row.isBest ? (
                             <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
-                              {L.best}
+                              {t("best_price")}
                             </Badge>
                           ) : row.price > 0 ? (
                             <Badge variant="outline" className="text-slate-500 text-xs">
-                              {language === "uz" ? "Muqobil" : language === "ru" ? "Альтернатива" : "Alternative"}
+                              {t("alternative")}
                             </Badge>
                           ) : null}
                         </TableCell>
 
-                        {/* Remove */}
                         <TableCell className="py-2">
                           <Button
                             variant="ghost"
@@ -284,7 +232,6 @@ export default function PriceComparison() {
             </Table>
           </div>
 
-          {/* Add row button */}
           <Button
             variant="outline"
             size="sm"
@@ -292,15 +239,15 @@ export default function PriceComparison() {
             className="w-full border-dashed border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
           >
             <Plus className="w-4 h-4 mr-2" />
-            {L.addRow}
+            {t("add_comparison_row")}
           </Button>
 
-          {/* Bar chart — only when there's data */}
+          {/* Bar chart — only when 2+ rows have prices */}
           {chartData.length >= 2 && (
             <div className="border-t border-slate-100 pt-4">
               <p className="text-xs font-medium text-slate-500 mb-3 flex items-center gap-1.5">
                 <BarChart3 className="w-4 h-4" />
-                {L.priceChart}
+                {t("price_by_supplier")}
               </p>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart
@@ -319,27 +266,18 @@ export default function PriceComparison() {
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) =>
-                      v >= 1000000
-                        ? `${(v / 1000000).toFixed(1)}m`
-                        : v >= 1000
-                        ? `${(v / 1000).toFixed(0)}k`
+                      v >= 1000000 ? `${(v / 1000000).toFixed(1)}m`
+                        : v >= 1000 ? `${(v / 1000).toFixed(0)}k`
                         : v
                     }
                   />
                   <Tooltip
-                    formatter={(value) => [formatCurrency(value), L.price]}
-                    contentStyle={{
-                      fontSize: 12,
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                    }}
+                    formatter={(value) => [formatCurrency(value), t("price")]}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
                   />
                   <Bar dataKey="price" radius={[4, 4, 0, 0]}>
                     {chartData.map((entry, index) => (
-                      <Cell
-                        key={index}
-                        fill={entry.isBest ? "#22c55e" : "#818cf8"}
-                      />
+                      <Cell key={index} fill={entry.isBest ? "#22c55e" : "#818cf8"} />
                     ))}
                   </Bar>
                 </BarChart>
