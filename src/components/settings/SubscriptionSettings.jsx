@@ -26,15 +26,34 @@ export default function SubscriptionSettings() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [payments, setPayments] = useState([]);
+  const [verifying, setVerifying] = useState(false);
+
+  const loadPayments = () =>
+    subscriptionService.getPayments().then((data) => {
+      if (Array.isArray(data)) setPayments(data);
+    }).catch(() => {});
 
   useEffect(() => {
     subscriptionService.getPlans().then((data) => {
       if (data?.price_per_user_monthly) setPricing(data);
     }).catch(() => {});
-    subscriptionService.getPayments().then((data) => {
-      if (Array.isArray(data)) setPayments(data);
-    }).catch(() => {});
+    loadPayments();
   }, []);
+
+  const handleVerifyPayment = async (invoiceId) => {
+    setVerifying(true);
+    try {
+      const result = await subscriptionService.verifyPayment(invoiceId);
+      await loadPayments();
+      if (result?.status === 'success') {
+        window.location.reload();
+      }
+    } catch (e) {
+      // silent
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const currentLimits = getPlanLimits();
   const aiRemaining = getRemainingAIRequests();
@@ -231,6 +250,23 @@ export default function SubscriptionSettings() {
               </div>
             </div>
           </div>
+
+          {/* If there's a recent pending payment, show a verify button */}
+          {payments.filter(p => p.status === 'pending').slice(0, 1).map(p => (
+            <div key={p.invoice_id} className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-700">
+                {language === 'uz' ? 'Kutilayotgan to\'lov mavjud' : language === 'ru' ? 'Есть незавершённый платёж' : 'Pending payment found'}
+              </p>
+              <button
+                onClick={() => handleVerifyPayment(p.invoice_id)}
+                disabled={verifying}
+                className="text-sm font-semibold text-amber-700 underline flex items-center gap-1"
+              >
+                {verifying ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                {language === 'uz' ? 'Tekshirish' : language === 'ru' ? 'Проверить' : 'Check status'}
+              </button>
+            </div>
+          ))}
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 

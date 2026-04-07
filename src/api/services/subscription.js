@@ -23,6 +23,11 @@ export const subscriptionService = {
     return response.data.data;
   },
 
+  async verifyPayment(invoiceId) {
+    const response = await apiClient.post('/subscription/verify-payment', { invoice_id: invoiceId });
+    return response.data.data;
+  },
+
   // Manual activation (admin / testing only)
   async activate(plan = 'starter') {
     const response = await apiClient.post('/subscription/activate', { plan });
