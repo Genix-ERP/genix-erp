@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
-  Crown, Sparkles, Users, HardDrive,
-  Minus, Plus, CreditCard, Loader2, AlertTriangle, Clock
+  Crown, Sparkles, Users,
+  Minus, Plus, CreditCard, Loader2, AlertTriangle, CheckCircle, XCircle, Clock
 } from 'lucide-react';
 import subscriptionService from '@/api/services/subscription';
 
@@ -16,7 +16,7 @@ export default function SubscriptionSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const {
-    subscription, aiUsage,
+    subscription, aiUsage, trialStatus,
     getPlanLimits, getRemainingAIRequests, getAIUsagePercentage, getTrialDaysRemaining,
   } = useSubscription();
 
@@ -25,10 +25,14 @@ export default function SubscriptionSettings() {
   const [billing, setBilling] = useState('monthly');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [payments, setPayments] = useState([]);
 
   useEffect(() => {
     subscriptionService.getPlans().then((data) => {
       if (data?.price_per_user_monthly) setPricing(data);
+    }).catch(() => {});
+    subscriptionService.getPayments().then((data) => {
+      if (Array.isArray(data)) setPayments(data);
     }).catch(() => {});
   }, []);
 
@@ -84,41 +88,59 @@ export default function SubscriptionSettings() {
             </div>
           )}
 
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-600">
-                <Sparkles className="w-4 h-4 text-purple-500" />
-                <span className="text-sm font-medium">{t('ai_requests')}</span>
+          {(() => {
+            // Compute next payment date from last successful payment
+            const lastPaid = payments.find(p => p.status === 'success');
+            let nextPaymentDate = null;
+            if (lastPaid?.paid_at) {
+              const d = new Date(lastPaid.paid_at);
+              const planStr = lastPaid.plan || '';
+              if (planStr.includes('yearly')) d.setFullYear(d.getFullYear() + 1);
+              else d.setMonth(d.getMonth() + 1);
+              nextPaymentDate = d;
+            }
+            return (
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <span className="text-sm font-medium">{t('ai_requests')}</span>
+                  </div>
+                  {currentLimits.aiRequestsPerMonth === -1 ? (
+                    <p className="text-2xl font-bold text-green-600">{t('unlimited')}</p>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-bold text-slate-900">{aiUsage.count} / {currentLimits.aiRequestsPerMonth}</p>
+                      <Progress value={aiPercentage} className="h-2" />
+                      <p className="text-xs text-slate-500">{aiRemaining} {t('requests_remaining')}</p>
+                    </>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Users className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium">{t('users')}</span>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {subscription?.currentUsers || 1} / {trialStatus?.paid_users || subscription?.paid_users || currentLimits.maxUsers || '∞'}
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Clock className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm font-medium">
+                      {language === 'uz' ? 'Keyingi to\'lov' : language === 'ru' ? 'Следующий платёж' : 'Next payment'}
+                    </span>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {nextPaymentDate
+                      ? nextPaymentDate.toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </p>
+                </div>
               </div>
-              {currentLimits.aiRequestsPerMonth === -1 ? (
-                <p className="text-2xl font-bold text-green-600">{t('unlimited')}</p>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold text-slate-900">{aiUsage.count} / {currentLimits.aiRequestsPerMonth}</p>
-                  <Progress value={aiPercentage} className="h-2" />
-                  <p className="text-xs text-slate-500">{aiRemaining} {t('requests_remaining')}</p>
-                </>
-              )}
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-600">
-                <Users className="w-4 h-4 text-blue-500" />
-                <span className="text-sm font-medium">{t('users')}</span>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {subscription?.currentUsers || 1} / {subscription?.paid_users || currentLimits.maxUsers || '∞'}
-              </p>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-600">
-                <HardDrive className="w-4 h-4 text-green-500" />
-                <span className="text-sm font-medium">{t('cloud_storage')}</span>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {currentLimits.cloudStorageGB === -1 ? t('unlimited') : `${currentLimits.cloudStorageGB} GB`}
-              </p>
-            </div>
-          </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -218,6 +240,58 @@ export default function SubscriptionSettings() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Payment history */}
+      {payments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-slate-500" />
+              {language === 'uz' ? "To'lov tarixi" : language === 'ru' ? 'История платежей' : 'Payment history'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-100">
+              {payments.map((p) => {
+                const isSuccess = p.status === 'success';
+                const date = new Date(p.paid_at || p.created_at);
+                let usersCount = 1;
+                let billingType = 'monthly';
+                const match = (p.plan || '').match(/^(\d+)users_(.+)$/);
+                if (match) { usersCount = parseInt(match[1]); billingType = match[2]; }
+                return (
+                  <div key={p.invoice_id} className="flex items-center justify-between px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      {isSuccess
+                        ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                        : <XCircle className="w-4 h-4 text-slate-300 shrink-0" />}
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          {usersCount} {language === 'uz' ? 'foydalanuvchi' : language === 'ru' ? 'пользов.' : 'user(s)'} ·{' '}
+                          {billingType === 'yearly'
+                            ? (language === 'uz' ? 'Yillik' : language === 'ru' ? 'Годовой' : 'Yearly')
+                            : (language === 'uz' ? 'Oylik' : language === 'ru' ? 'Месячный' : 'Monthly')}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {date.toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-slate-900">{fmt(p.amount_uzs)} UZS</p>
+                      <Badge variant={isSuccess ? 'default' : 'secondary'} className="text-xs mt-1">
+                        {isSuccess
+                          ? (language === 'uz' ? 'Muvaffaqiyatli' : language === 'ru' ? 'Оплачено' : 'Paid')
+                          : p.status}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

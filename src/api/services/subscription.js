@@ -18,6 +18,11 @@ export const subscriptionService = {
     return response.data.data;
   },
 
+  async getPayments() {
+    const response = await apiClient.get('/subscription/payments');
+    return response.data.data;
+  },
+
   // Manual activation (admin / testing only)
   async activate(plan = 'starter') {
     const response = await apiClient.post('/subscription/activate', { plan });
