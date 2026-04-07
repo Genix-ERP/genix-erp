@@ -1,34 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2 } from 'lucide-react';
-import { useSubscription } from '@/components/contexts/SubscriptionContext';
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams();
-  const { refreshTrialStatus } = useSubscription();
-  const [checking, setChecking] = useState(true);
+  const [done, setDone] = useState(false);
 
   const users = params.get('users') || '1';
   const billing = params.get('billing') || 'monthly';
 
   useEffect(() => {
-    // Poll subscription status — webhook may arrive shortly after redirect
-    let attempts = 0;
-    const poll = async () => {
-      await refreshTrialStatus();
-      attempts++;
-      if (attempts >= 6) {
-        setChecking(false);
-        // Notify the original tab and close this one
-        try {
-          window.opener?.postMessage({ type: 'payment_success' }, '*');
-        } catch (_) {}
-        setTimeout(() => window.close(), 1500);
-      } else {
-        setTimeout(poll, 2000);
-      }
+    // Notify the original tab that payment succeeded, then close
+    const notify = () => {
+      try {
+        window.opener?.postMessage({ type: 'payment_success' }, '*');
+      } catch (_) {}
+      setDone(true);
+      setTimeout(() => window.close(), 1500);
     };
-    poll();
+
+    // Give the webhook a moment to land before notifying
+    setTimeout(notify, 3000);
   }, []);
 
   return (
@@ -45,7 +37,7 @@ export default function PaymentSuccess() {
           width: 72, height: 72, borderRadius: '50%', background: '#dcfce7',
           display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem',
         }}>
-          {checking
+          {!done
             ? <Loader2 style={{ width: 32, height: 32, color: '#16a34a', animation: 'spin 1s linear infinite' }} />
             : <CheckCircle style={{ width: 32, height: 32, color: '#16a34a' }} />
           }
@@ -57,7 +49,7 @@ export default function PaymentSuccess() {
           <strong>{users}</strong> foydalanuvchi · <strong style={{ textTransform: 'capitalize' }}>{billing}</strong> tarif faollashtirildi.
         </p>
         <p style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>
-          {checking ? 'Faollashtirish tekshirilmoqda...' : 'Bu oyna yopilmoqda...'}
+          {!done ? 'Faollashtirish tekshirilmoqda...' : 'Bu oyna yopilmoqda...'}
         </p>
       </div>
     </div>
