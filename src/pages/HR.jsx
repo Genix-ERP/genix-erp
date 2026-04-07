@@ -228,7 +228,7 @@ export default function HR() {
   const handleSendCredentials = async (employee, method) => {
     try {
       const password = generatePassword();
-      await apiClient.post('/users/send-credentials', {
+      await apiClient.post('/send-credentials', {
         email: employee.email,
         password: password,
         method: method === 'phone' ? 'sms' : 'email',
