@@ -28,7 +28,7 @@ import { Trash2 } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
-import { workOrdersService } from '@/api/services/manufacturing';
+import { workOrdersService, productionOrdersService } from '@/api/services/manufacturing';
 import { toast } from 'sonner';
 import { format, differenceInMinutes, parseISO } from 'date-fns';
 
@@ -225,6 +225,12 @@ export default function ShopFloorControl({ isActive }) {
   const [productSearch, setProductSearch] = useState('');
   const [productSearchFocused, setProductSearchFocused] = useState(false);
 
+  // Split output modal state
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [splitPoId, setSplitPoId] = useState(null);
+  const [splitItems, setSplitItems] = useState([{ product_id: '', quantity: '', warehouse_id: '' }]);
+  const [splitSubmitting, setSplitSubmitting] = useState(false);
+
   // Load time logs from localStorage
   useEffect(() => {
     const stored = localStorage.getItem('genix_work_order_time_logs');
@@ -391,6 +397,8 @@ export default function ShopFloorControl({ isActive }) {
   const confirmCompleteWorkOrder = async () => {
     if (!activeWorkOrder) return;
 
+    const poId = activeWorkOrder.production_order_id;
+
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
 
@@ -401,8 +409,20 @@ export default function ShopFloorControl({ isActive }) {
         notes: completionData.notes,
       });
 
-      refreshData(); // sync backend state (next WO may have been auto-started)
-      refreshInventory(); // sync inventory (finished goods may have been added)
+      refreshData();
+      refreshInventory();
+
+      // Check if the production order moved to "packaging" (split output)
+      if (poId) {
+        try {
+          const po = await productionOrdersService.get(poId);
+          if (po && po.status === 'packaging') {
+            setSplitPoId(poId);
+            setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
+            setShowSplitModal(true);
+          }
+        } catch { /* non-critical */ }
+      }
     } catch (error) {
       console.error('Failed to complete work order:', error);
     }
@@ -411,6 +431,35 @@ export default function ShopFloorControl({ isActive }) {
     setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
     setActiveWorkOrder(null);
   };
+
+  // Split output handlers
+  const handleSplitSubmit = async () => {
+    const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
+    if (!validItems.length) return;
+
+    setSplitSubmitting(true);
+    try {
+      await productionOrdersService.completeSplitOutput(splitPoId, {
+        items: validItems.map(it => ({
+          product_id: it.product_id,
+          quantity: parseFloat(it.quantity),
+          ...(it.warehouse_id ? { warehouse_id: it.warehouse_id } : {}),
+        })),
+      });
+      toast.success(language === 'uz' ? 'Chiqish yakunlandi' : language === 'ru' ? 'Упаковка завершена' : 'Split output completed');
+      setShowSplitModal(false);
+      setSplitPoId(null);
+      refreshData();
+      refreshInventory();
+    } catch (err) {
+      toast.error('Failed: ' + (err.response?.data?.error || err.message));
+    }
+    setSplitSubmitting(false);
+  };
+
+  const addSplitItem = () => setSplitItems(prev => [...prev, { product_id: '', quantity: '', warehouse_id: '' }]);
+  const removeSplitItem = (idx) => setSplitItems(prev => prev.filter((_, i) => i !== idx));
+  const updateSplitItem = (idx, field, value) => setSplitItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
 
   // Materials handlers
   const handleOpenMaterials = async (workOrder) => {
@@ -986,6 +1035,91 @@ export default function ShopFloorControl({ isActive }) {
             <Button variant="outline" onClick={() => setShowMaterialsModal(false)} className="w-full">
               {language === 'uz' ? 'Yopish' : language === 'ru' ? 'Закрыть' : 'Close'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Split Output Modal */}
+      <Dialog open={showSplitModal} onOpenChange={setShowSplitModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {language === 'uz' ? 'Mahsulotlarga bo\'lish' : language === 'ru' ? 'Разделить на продукты' : 'Split Output — Packaging'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-500">
+              {language === 'uz'
+                ? 'Ommaviy mahsulot qanday qadoq mahsulotlarga bo\'linganini kiriting.'
+                : language === 'ru'
+                ? 'Укажите, на какие упакованные продукты разделяется выпуск.'
+                : 'Enter how the bulk output is split into packaged products.'}
+            </p>
+
+            {splitItems.map((item, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-end border border-slate-100 rounded-lg p-3">
+                <div className="col-span-5 space-y-1">
+                  <Label className="text-xs">{language === 'uz' ? 'Mahsulot' : language === 'ru' ? 'Продукт' : 'Product'} *</Label>
+                  <select
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white"
+                    value={item.product_id}
+                    onChange={(e) => updateSplitItem(idx, 'product_id', e.target.value)}
+                  >
+                    <option value="">— {language === 'uz' ? 'tanlang' : language === 'ru' ? 'выбрать' : 'select'} —</option>
+                    {(products || []).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} {p.weight ? `(${p.weight} kg)` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <Label className="text-xs">{language === 'uz' ? 'Dona soni' : language === 'ru' ? 'Кол-во шт.' : 'Quantity (pcs)'} *</Label>
+                  <Input
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    value={item.quantity}
+                    onChange={(e) => updateSplitItem(idx, 'quantity', e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <Label className="text-xs">{language === 'uz' ? 'Sklad' : language === 'ru' ? 'Склад' : 'Warehouse'}</Label>
+                  <Input
+                    placeholder="optional ID"
+                    value={item.warehouse_id}
+                    onChange={(e) => updateSplitItem(idx, 'warehouse_id', e.target.value)}
+                    className="text-xs"
+                  />
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  {splitItems.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => removeSplitItem(idx)} className="text-red-500 hover:text-red-700 p-1 h-auto">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <Button variant="outline" size="sm" onClick={addSplitItem} className="w-full border-dashed">
+              + {language === 'uz' ? 'Qator qo\'shish' : language === 'ru' ? 'Добавить строку' : 'Add row'}
+            </Button>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowSplitModal(false)} className="flex-1">
+                {language === 'uz' ? 'Bekor qilish' : language === 'ru' ? 'Отмена' : 'Cancel'}
+              </Button>
+              <Button
+                onClick={handleSplitSubmit}
+                disabled={splitSubmitting || !splitItems.some(it => it.product_id && parseFloat(it.quantity) > 0)}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                {splitSubmitting
+                  ? (language === 'uz' ? 'Saqlanmoqda...' : language === 'ru' ? 'Сохранение...' : 'Saving...')
+                  : (language === 'uz' ? 'Yakunlash' : language === 'ru' ? 'Завершить' : 'Complete Packaging')}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

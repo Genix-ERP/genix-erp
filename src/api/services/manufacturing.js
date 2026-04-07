@@ -129,6 +129,16 @@ export const productionOrdersService = {
   async getSchedule(params = {}) {
     const response = await apiClient.get('/production-orders/schedule', { params });
     return response.data.data || [];
+  },
+
+  async completeSplitOutput(id, data) {
+    const response = await apiClient.post(`/production-orders/${id}/complete-split`, data);
+    return response.data.data;
+  },
+
+  async getSplitOutputs(id) {
+    const response = await apiClient.get(`/production-orders/${id}/split-outputs`);
+    return response.data.data || [];
   }
 };
 

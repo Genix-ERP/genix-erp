@@ -114,7 +114,8 @@ export default function ProductionOrders() {
     scheduled_end: '',
     // Manufacturing-specific fields
     shift: '',
-    manufacturing_category_id: ''
+    manufacturing_category_id: '',
+    has_split_output: false
   });
 
   // Load products and BOMs
@@ -203,7 +204,8 @@ export default function ProductionOrders() {
         scheduled_end: '',
         // Manufacturing-specific fields
         shift: '',
-        manufacturing_category_id: ''
+        manufacturing_category_id: '',
+        has_split_output: false
       });
       setProductBoms([]);
     } catch (error) {
@@ -719,6 +721,19 @@ export default function ProductionOrders() {
                   onChange={(e) => setNewOrder({...newOrder, scheduled_end: e.target.value})}
                 />
               </div>
+            </div>
+
+            <div className="flex items-center gap-3 py-2">
+              <input
+                type="checkbox"
+                id="has_split_output"
+                checked={newOrder.has_split_output}
+                onChange={(e) => setNewOrder({...newOrder, has_split_output: e.target.checked})}
+                className="w-4 h-4 accent-slate-700 cursor-pointer"
+              />
+              <label htmlFor="has_split_output" className="text-sm font-medium cursor-pointer select-none">
+                {t('split_output') || 'Split output (bulk → packaged products)'}
+              </label>
             </div>
 
             <div className="flex gap-3 pt-4">
