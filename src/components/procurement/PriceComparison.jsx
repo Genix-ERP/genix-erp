@@ -62,28 +62,54 @@ export default function PriceComparison() {
   };
 
   const enrichedRows = useMemo(() => {
-    const prices = rows.map((r) => parseFloat(r.price)).filter((p) => p > 0);
-    const minPrice = prices.length ? Math.min(...prices) : null;
-    const hasMultiple = prices.length > 1;
+    const activeRows = rows.filter((r) => parseFloat(r.price) > 0);
+    const hasMultiple = activeRows.length > 1;
+
+    // Use quality/price score when at least one row has quality filled in
+    const anyQuality = activeRows.some((r) => parseFloat(r.quality) > 0);
+
+    // Calculate score for each active row
+    // score = quality / price * 10000 (quality per unit cost, scaled)
+    // If no quality entered, score = 1/price (just cheapest wins)
+    const scored = activeRows.map((r) => {
+      const price = parseFloat(r.price);
+      const quality = parseFloat(r.quality) || 0;
+      const score = anyQuality && quality > 0 ? quality / price : 1 / price;
+      return { id: r.id, score };
+    });
+
+    const maxScore = scored.length ? Math.max(...scored.map((s) => s.score)) : null;
+    const minPrice = activeRows.length ? Math.min(...activeRows.map((r) => parseFloat(r.price))) : null;
 
     return rows.map((r) => {
       const price = parseFloat(r.price) || 0;
-      const isBest = hasMultiple && minPrice !== null && price === minPrice;
+      const quality = parseFloat(r.quality) || 0;
+      const scoreEntry = scored.find((s) => s.id === r.id);
+      const score = scoreEntry?.score ?? 0;
+      const isBest = hasMultiple && maxScore !== null && score === maxScore && price > 0;
+
+      // Price diff vs cheapest (for reference)
       const priceDiff =
-        minPrice && price > 0 && !isBest
+        minPrice && price > 0 && price !== minPrice
           ? (((price - minPrice) / minPrice) * 100).toFixed(1)
           : null;
-      return { ...r, price, isBest, priceDiff };
+
+      // Normalized score 0–100 for display
+      const scoreDisplay = maxScore && price > 0
+        ? Math.round((score / maxScore) * 100)
+        : null;
+
+      return { ...r, price, quality, isBest, priceDiff, scoreDisplay, anyQuality };
     });
   }, [rows]);
 
   const chartData = enrichedRows
     .filter((r) => r.price > 0 && (r.supplier_name || r.supplier_id))
-    .sort((a, b) => a.price - b.price)
+    .sort((a, b) => (b.scoreDisplay ?? 0) - (a.scoreDisplay ?? 0))
     .map((r) => ({
       name:
         (r.supplier_name || "—").length > 14
-          ? (r.supplier_name).slice(0, 14) + "…"
+          ? r.supplier_name.slice(0, 14) + "…"
           : r.supplier_name || "—",
       price: r.price,
       isBest: r.isBest,
@@ -122,6 +148,13 @@ export default function PriceComparison() {
             )}
           </div>
 
+          {/* Score hint — shown when quality data is entered */}
+          {enrichedRows.some((r) => r.anyQuality) && (
+            <p className="text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">
+              ⚡ {t("score_hint")}
+            </p>
+          )}
+
           {/* Comparison table */}
           <div className="overflow-x-auto">
             <Table>
@@ -130,6 +163,7 @@ export default function PriceComparison() {
                   <TableHead className="text-xs font-semibold">{t("supplier")}</TableHead>
                   <TableHead className="text-xs font-semibold text-right w-40">{t("price")}</TableHead>
                   <TableHead className="text-xs font-semibold text-center w-28">{t("quality_pct")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-28">{t("value_score")}</TableHead>
                   <TableHead className="text-xs font-semibold text-center w-32">{t("status")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -137,7 +171,7 @@ export default function PriceComparison() {
               <TableBody>
                 {enrichedRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-slate-400 text-sm">
+                    <TableCell colSpan={6} className="py-10 text-center text-slate-400 text-sm">
                       {t("no_comparison_rows")}
                     </TableCell>
                   </TableRow>
@@ -203,10 +237,28 @@ export default function PriceComparison() {
                           </div>
                         </TableCell>
 
+                        {/* Value score */}
+                        <TableCell className="py-2 text-center">
+                          {row.scoreDisplay !== null && row.price > 0 ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`text-sm font-bold ${row.isBest ? "text-green-600" : "text-slate-600"}`}>
+                                {row.scoreDisplay}
+                              </span>
+                              <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${row.isBest ? "bg-green-500" : "bg-indigo-400"}`}
+                                  style={{ width: `${row.scoreDisplay}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : <span className="text-slate-300">—</span>}
+                        </TableCell>
+
+                        {/* Status */}
                         <TableCell className="py-2 text-center">
                           {row.isBest ? (
                             <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
-                              {t("best_price")}
+                              {t("best_value")}
                             </Badge>
                           ) : row.price > 0 ? (
                             <Badge variant="outline" className="text-slate-500 text-xs">
