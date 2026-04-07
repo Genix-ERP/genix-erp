@@ -55,6 +55,7 @@ import PriceHistory from '@/components/procurement/PriceHistory';
 import PurchaseRequisitions from '@/components/procurement/PurchaseRequisitions';
 import GoodsReceipt from '@/components/procurement/GoodsReceipt';
 import PurchaseOrders from '@/components/procurement/PurchaseOrders';
+import PriceComparison from '@/components/procurement/PriceComparison';
 
 export default function Procurement() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -585,6 +586,15 @@ export default function Procurement() {
               <span className="sm:hidden">GR</span>
             </TabsTrigger>
 
+            <TabsTrigger
+              value="price-comparison"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100"
+            >
+              <Award className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('price_comparison') || 'Narx solishtirish'}</span>
+              <span className="sm:hidden">PC</span>
+            </TabsTrigger>
+
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -815,6 +825,11 @@ export default function Procurement() {
           {/* Goods Receipt Tab */}
           <TabsContent value="goods-receipt" className="mt-6">
             <GoodsReceipt />
+          </TabsContent>
+
+          {/* Price Comparison Tab */}
+          <TabsContent value="price-comparison" className="mt-6">
+            <PriceComparison />
           </TabsContent>
 
         </Tabs>
