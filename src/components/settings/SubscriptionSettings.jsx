@@ -45,6 +45,11 @@ export default function SubscriptionSettings() {
   const total = billing === 'yearly' ? pricePerUser * 12 * users : pricePerUser * users;
 
   const fmt = (n) => n?.toLocaleString('uz-UZ');
+  const fmtDate = (d) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
 
   const handleCheckout = async () => {
     setLoading(true);
@@ -68,8 +73,12 @@ export default function SubscriptionSettings() {
               <Crown className="w-5 h-5 text-purple-600" />
               {t('current_subscription')}
             </CardTitle>
-            <Badge className="px-3 py-1">
-              {subscription?.status === 'trialing' ? t('trial_period') || 'Sinov' : subscription?.plan || 'Free Trial'}
+            <Badge className={`px-3 py-1 ${trialStatus?.status === 'active' ? 'bg-green-500 hover:bg-green-500' : ''}`}>
+              {trialStatus?.status === 'active'
+                ? (language === 'uz' ? 'Faol' : language === 'ru' ? 'Активный' : 'Active')
+                : trialStatus?.status === 'trialing' || subscription?.status === 'trialing'
+                  ? (t('trial_period') || 'Sinov')
+                  : (trialStatus?.status || subscription?.plan || 'Free Trial')}
             </Badge>
           </div>
         </CardHeader>
@@ -89,11 +98,10 @@ export default function SubscriptionSettings() {
           )}
 
           {(() => {
-            // Compute next payment date from last successful payment
             const lastPaid = payments.find(p => p.status === 'success');
             let nextPaymentDate = null;
-            if (lastPaid?.paid_at) {
-              const d = new Date(lastPaid.paid_at);
+            if (lastPaid) {
+              const d = new Date(lastPaid.paid_at || lastPaid.created_at);
               const planStr = lastPaid.plan || '';
               if (planStr.includes('yearly')) d.setFullYear(d.getFullYear() + 1);
               else d.setMonth(d.getMonth() + 1);
@@ -133,9 +141,7 @@ export default function SubscriptionSettings() {
                     </span>
                   </div>
                   <p className="text-2xl font-bold text-slate-900">
-                    {nextPaymentDate
-                      ? nextPaymentDate.toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })
-                      : '—'}
+                    {nextPaymentDate ? fmtDate(nextPaymentDate) : '—'}
                   </p>
                 </div>
               </div>
@@ -241,8 +247,8 @@ export default function SubscriptionSettings() {
         </CardContent>
       </Card>
 
-      {/* Payment history */}
-      {payments.length > 0 && (
+      {/* Payment history — only successful payments */}
+      {payments.filter(p => p.status === 'success').length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -252,9 +258,8 @@ export default function SubscriptionSettings() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-slate-100">
-              {payments.map((p) => {
-                const isSuccess = p.status === 'success';
-                const date = new Date(p.paid_at || p.created_at);
+              {payments.filter(p => p.status === 'success').map((p) => {
+                const date = p.paid_at || p.created_at;
                 let usersCount = 1;
                 let billingType = 'monthly';
                 const match = (p.plan || '').match(/^(\d+)users_(.+)$/);
@@ -262,9 +267,7 @@ export default function SubscriptionSettings() {
                 return (
                   <div key={p.invoice_id} className="flex items-center justify-between px-6 py-4">
                     <div className="flex items-center gap-3">
-                      {isSuccess
-                        ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                        : <XCircle className="w-4 h-4 text-slate-300 shrink-0" />}
+                      <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                       <div>
                         <p className="text-sm font-medium text-slate-900">
                           {usersCount} {language === 'uz' ? 'foydalanuvchi' : language === 'ru' ? 'пользов.' : 'user(s)'} ·{' '}
@@ -272,17 +275,13 @@ export default function SubscriptionSettings() {
                             ? (language === 'uz' ? 'Yillik' : language === 'ru' ? 'Годовой' : 'Yearly')
                             : (language === 'uz' ? 'Oylik' : language === 'ru' ? 'Месячный' : 'Monthly')}
                         </p>
-                        <p className="text-xs text-slate-400">
-                          {date.toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
+                        <p className="text-xs text-slate-400">{fmtDate(date)}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold text-slate-900">{fmt(p.amount_uzs)} UZS</p>
-                      <Badge variant={isSuccess ? 'default' : 'secondary'} className="text-xs mt-1">
-                        {isSuccess
-                          ? (language === 'uz' ? 'Muvaffaqiyatli' : language === 'ru' ? 'Оплачено' : 'Paid')
-                          : p.status}
+                      <Badge className="text-xs mt-1 bg-green-100 text-green-700 hover:bg-green-100">
+                        {language === 'uz' ? 'To\'langan' : language === 'ru' ? 'Оплачено' : 'Paid'}
                       </Badge>
                     </div>
                   </div>
