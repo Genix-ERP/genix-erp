@@ -327,7 +327,8 @@ export default function SalesOrders() {
       setProductsLoading(true);
       try {
         const data = await inventoryService.listProducts({ limit: 1000 });
-        setProducts(Array.isArray(data) ? data : data?.items || []);
+        const all = Array.isArray(data) ? data : data?.items || [];
+        setProducts(all.filter(p => p.can_be_sold !== false && p.is_sellable !== false));
       } catch (error) {
         console.error('Failed to fetch products:', error);
       } finally {
