@@ -3450,6 +3450,14 @@ export const translations = {
 
     // Price History
     "price_history": "Price History",
+    "price_comparison": "Price Comparison",
+    "price_comparison_desc": "Compare supplier prices for a product",
+    "add_comparison_row": "Add row",
+    "quality_pct": "Quality %",
+    "best_price": "Best price",
+    "alternative": "Alternative",
+    "price_by_supplier": "Price chart",
+    "no_comparison_rows": "Click the button above to add a row",
     "track_supplier_prices": "Track supplier prices",
     "search_product": "Search product...",
     "all_suppliers": "All Suppliers",
@@ -10500,6 +10508,14 @@ export const translations = {
 
     // Price History
     "price_history": "Narxlar tarixi",
+    "price_comparison": "Narx solishtirish",
+    "price_comparison_desc": "Mahsulot bo'yicha yetkazib beruvchilar narxlarini solishtiring",
+    "add_comparison_row": "Qator qo'shish",
+    "quality_pct": "Sifat %",
+    "best_price": "Eng yaxshi narx",
+    "alternative": "Muqobil",
+    "price_by_supplier": "Narx diagrammasi",
+    "no_comparison_rows": "Qator qo'shish uchun yuqoridagi tugmani bosing",
     "track_supplier_prices": "Yetkazib beruvchilar narxlarini kuzatib boring",
     "search_product": "Mahsulot qidirish...",
     "all_suppliers": "Barcha yetkazib beruvchilar",
@@ -17314,6 +17330,14 @@ export const translations = {
 
     // Price History
     "price_history": "История цен",
+    "price_comparison": "Сравнение цен",
+    "price_comparison_desc": "Сравните цены поставщиков на продукт",
+    "add_comparison_row": "Добавить строку",
+    "quality_pct": "Качество %",
+    "best_price": "Лучшая цена",
+    "alternative": "Альтернатива",
+    "price_by_supplier": "График цен",
+    "no_comparison_rows": "Нажмите кнопку выше чтобы добавить строку",
     "track_supplier_prices": "Отслеживайте цены поставщиков",
     "search_product": "Поиск товара...",
     "all_suppliers": "Все поставщики",
