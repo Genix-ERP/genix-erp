@@ -47,7 +47,7 @@ export default function SubscriptionSettings() {
     setError('');
     try {
       const data = await subscriptionService.createCheckout(users, billing);
-      window.open(data.checkout_url, '_blank');
+      window.location.href = data.checkout_url;
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Payment failed');
       setLoading(false);
