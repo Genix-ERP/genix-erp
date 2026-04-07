@@ -456,6 +456,8 @@ export default function Products() {
     is_overhead_expense: false,
     is_manufacturable: false,
     auto_manufacture: false,
+    has_delivery: false,
+    delivery_price: '',
     organization_ids: [],
     tags: [],
     // New advanced fields
@@ -701,6 +703,8 @@ export default function Products() {
       is_overhead_expense: false,
       is_manufacturable: false,
       auto_manufacture: false,
+      has_delivery: false,
+      delivery_price: '',
       organization_ids: activeCompany?.id ? [activeCompany.id] : [],
       tags: [],
       // Advanced fields
@@ -788,6 +792,8 @@ export default function Products() {
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
         wholesale_price: parseFloat(formData.wholesale_price) || 0,
+        has_delivery: formData.has_delivery,
+        delivery_price: parseFloat(formData.delivery_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
         reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
@@ -850,6 +856,8 @@ export default function Products() {
       list_price: product.list_price ? product.list_price.toString() : '',
       min_price: product.min_price ? product.min_price.toString() : '',
       wholesale_price: product.wholesale_price ? product.wholesale_price.toString() : '',
+      has_delivery: product.has_delivery || false,
+      delivery_price: product.delivery_price ? product.delivery_price.toString() : '',
       is_stockable: product.is_stockable !== false,
       track_inventory: product.track_inventory !== false,
       min_stock_level: product.min_stock_level?.toString() || '',
@@ -992,6 +1000,8 @@ export default function Products() {
         list_price: parseFloat(formData.list_price) || 0,
         min_price: parseFloat(formData.min_price) || 0,
         wholesale_price: parseFloat(formData.wholesale_price) || 0,
+        has_delivery: formData.has_delivery,
+        delivery_price: parseFloat(formData.delivery_price) || 0,
         min_stock_level: parseFloat(formData.min_stock_level) || 0,
         reorder_point: parseFloat(formData.reorder_point) || 0,
         reorder_quantity: parseFloat(formData.reorder_quantity) || 0,
@@ -2148,6 +2158,38 @@ export default function Products() {
                     <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Delivery price */}
+              <div className="mt-4 flex items-start gap-3">
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="checkbox"
+                    id="has_delivery"
+                    checked={formData.has_delivery}
+                    onChange={(e) => setFormData({...formData, has_delivery: e.target.checked})}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer"
+                  />
+                  <label htmlFor="has_delivery" className="text-sm font-medium text-slate-700 cursor-pointer whitespace-nowrap">
+                    {t('has_delivery') || 'Yetkazib berish bor'}
+                  </label>
+                </div>
+                {formData.has_delivery && (
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        className="pr-14"
+                        value={formatPriceDisplay(formData.delivery_price)}
+                        onChange={(e) => handlePriceChange('delivery_price', e.target.value)}
+                      />
+                      <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-slate-400">{currency_symbol}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{t('delivery_price_desc') || 'Yetkazib berish narxi'}</p>
+                  </div>
+                )}
               </div>
             </div>
 

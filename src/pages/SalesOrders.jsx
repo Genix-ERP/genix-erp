@@ -1835,6 +1835,11 @@ export default function SalesOrders() {
                           {t('variant')}: {line.variant_name}
                         </div>
                       )}
+                      {line.product?.has_delivery && (
+                        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
+                          <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
+                        </div>
+                      )}
                       {(() => {
                         const warning = getStockWarning(line, newOrder.warehouse_id);
                         if (!warning) return null;
@@ -2518,6 +2523,11 @@ export default function SalesOrders() {
                         {line.packaging_name && (
                           <div className="text-xs text-slate-500 pl-1">
                             {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
+                          </div>
+                        )}
+                        {line.product?.has_delivery && (
+                          <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
+                            <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                           </div>
                         )}
                         {(() => {
