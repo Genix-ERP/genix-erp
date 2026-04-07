@@ -64,7 +64,7 @@ export default function PaymentWall({ visible = false, onClose }) {
     setError('');
     try {
       const data = await subscriptionService.createCheckout(users, billing);
-      window.location.href = data.checkout_url;
+      window.open(data.checkout_url, '_blank');
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Payment failed');
       setLoading(false);
