@@ -1,26 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Loader2 } from 'lucide-react';
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [done, setDone] = useState(false);
 
   const users = params.get('users') || '1';
   const billing = params.get('billing') || 'monthly';
 
   useEffect(() => {
-    // Notify the original tab that payment succeeded, then close
-    const notify = () => {
-      try {
-        window.opener?.postMessage({ type: 'payment_success' }, '*');
-      } catch (_) {}
+    // Give the webhook a moment to land, then go back to the app
+    setTimeout(() => {
       setDone(true);
-      setTimeout(() => window.close(), 1500);
-    };
-
-    // Give the webhook a moment to land before notifying
-    setTimeout(notify, 3000);
+      setTimeout(() => navigate('/settings'), 1500);
+    }, 3000);
   }, []);
 
   return (
@@ -49,7 +44,7 @@ export default function PaymentSuccess() {
           <strong>{users}</strong> foydalanuvchi · <strong style={{ textTransform: 'capitalize' }}>{billing}</strong> tarif faollashtirildi.
         </p>
         <p style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>
-          {!done ? 'Faollashtirish tekshirilmoqda...' : 'Bu oyna yopilmoqda...'}
+          {!done ? 'Faollashtirish tekshirilmoqda...' : "Sozlamalarga o'tilmoqda..."}
         </p>
       </div>
     </div>
