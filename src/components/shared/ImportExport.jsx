@@ -271,7 +271,9 @@ export function ImportModal({
         const mappedHeader = Object.entries(mapping).find(
           ([, value]) => value === field.key
         )?.[0];
-        if (mappedHeader && !row[mappedHeader]) {
+        const cellValue = mappedHeader ? row[mappedHeader] : undefined;
+        const isEmpty = cellValue == null || cellValue.toString().trim() === '';
+        if (isEmpty) {
           validationErrors.push(
             `${t('row')} ${index + 2}: "${field.label}" ${t('field_is_empty')}`
           );

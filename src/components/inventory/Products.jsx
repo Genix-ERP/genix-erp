@@ -376,12 +376,13 @@ export default function Products() {
     { key: 'category', label: 'Kategoriya' },
     { key: 'tags', label: 'Teglar' },
     { key: 'cost_price', label: 'Tan narxi' },
-    { key: 'list_price', label: 'Sotish narxi', required: true },
+    { key: 'list_price', label: 'Sotish narxi' },
   ];
 
   const handleImport = async (data) => {
     for (const row of data) {
-      const generatedCode = row.barcode || row.name.toUpperCase().replace(/\s+/g, '-').substring(0, 50);
+      if (!row.name || !row.name.toString().trim()) continue;
+      const generatedCode = row.barcode || row.name.toString().toUpperCase().replace(/\s+/g, '-').substring(0, 50);
 
       // Resolve category by name (case-insensitive)
       let categoryId = '';
