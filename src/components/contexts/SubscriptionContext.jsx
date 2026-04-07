@@ -208,6 +208,17 @@ export function SubscriptionProvider({ children }) {
     return () => clearInterval(interval);
   }, [fetchTrialStatus]);
 
+  // Listen for payment_success message from the Multicard tab
+  useEffect(() => {
+    const handlePaymentMessage = (e) => {
+      if (e.data?.type === 'payment_success') {
+        fetchTrialStatus();
+      }
+    };
+    window.addEventListener('message', handlePaymentMessage);
+    return () => window.removeEventListener('message', handlePaymentMessage);
+  }, [fetchTrialStatus]);
+
   // Listen for 402 responses from any API call — force payment wall immediately
   useEffect(() => {
     const handle402 = () => {

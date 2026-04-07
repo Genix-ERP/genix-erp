@@ -1,24 +1,29 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { useSubscription } from '@/components/contexts/SubscriptionContext';
 
 export default function PaymentSuccess() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { refreshTrialStatus } = useSubscription();
   const [checking, setChecking] = useState(true);
-  const plan = params.get('plan') || 'starter';
+
+  const users = params.get('users') || '1';
+  const billing = params.get('billing') || 'monthly';
 
   useEffect(() => {
-    // Poll subscription status a few times — webhook may arrive shortly after redirect
+    // Poll subscription status — webhook may arrive shortly after redirect
     let attempts = 0;
     const poll = async () => {
       await refreshTrialStatus();
       attempts++;
-      if (attempts >= 5) {
+      if (attempts >= 6) {
         setChecking(false);
-        setTimeout(() => navigate('/'), 2000);
+        // Notify the original tab and close this one
+        try {
+          window.opener?.postMessage({ type: 'payment_success' }, '*');
+        } catch (_) {}
+        setTimeout(() => window.close(), 1500);
       } else {
         setTimeout(poll, 2000);
       }
@@ -49,10 +54,10 @@ export default function PaymentSuccess() {
           To'lov muvaffaqiyatli!
         </h1>
         <p style={{ color: '#64748b', margin: '0 0 0.25rem' }}>
-          <strong style={{ textTransform: 'capitalize' }}>{plan}</strong> tarifi faollashtirildi.
+          <strong>{users}</strong> foydalanuvchi · <strong style={{ textTransform: 'capitalize' }}>{billing}</strong> tarif faollashtirildi.
         </p>
         <p style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>
-          {checking ? 'Faollashtirish tekshirilmoqda...' : 'Bosh sahifaga yo\'naltirilmoqda...'}
+          {checking ? 'Faollashtirish tekshirilmoqda...' : 'Bu oyna yopilmoqda...'}
         </p>
       </div>
     </div>
