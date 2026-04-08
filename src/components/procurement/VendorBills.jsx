@@ -66,7 +66,8 @@ export default function VendorBills() {
   const { t } = useTranslation(language);
   const { canCreate } = usePermissions();
   const { formatCurrency } = useCurrencyFormatter();
-  const { currencies = [], exchangeRates = [], getLatestExchangeRate, taxRates = [] } = useFinancials();
+  const { currencies = [], exchangeRates = [], getLatestExchangeRate, taxRates = [], journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
   const { suppliers, purchaseOrders: contextPOs } = useProcurement();
 
   const baseCurrency = currencies.find(c => c.is_base) || { code: 'UZS' };
@@ -91,6 +92,8 @@ export default function VendorBills() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [paymentJournalId, setPaymentJournalId] = useState('');
   const [vendorFilter, setVendorFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -311,11 +314,12 @@ export default function VendorBills() {
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) return;
     try {
-      await financeService.updatePurchaseInvoice(paymentBill.id, { amount_paid: amount });
+      await financeService.payPurchaseInvoice(paymentBill.id, amount, paymentMethod);
       fetchBills();
       setShowPaymentDialog(false);
       setPaymentBill(null);
       setPaymentAmount('');
+      setPaymentJournalId('');
     } catch (error) {
       console.error('Failed to record payment:', error);
     }
@@ -1627,8 +1631,40 @@ export default function VendorBills() {
                   <span className="text-orange-600">{formatCurrency((paymentBill.total_amount || 0) - (paymentBill.amount_paid || 0))}</span>
                 </div>
               </div>
+              {/* Payment method / journal */}
               <div>
-                <Label>{t('payment_amount') || 'Payment Amount'} *</Label>
+                <Label>{t('payment_method') || "To'lov usuli"} *</Label>
+                {bankCashJournals.length > 0 ? (
+                  <Select value={paymentJournalId} onValueChange={(value) => {
+                    setPaymentJournalId(value);
+                    const j = bankCashJournals.find(j => j.id === value);
+                    if (j) setPaymentMethod(j.type === 'cash' ? 'cash' : 'bank');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div>
+                <Label>{t('payment_amount') || "To'lov summasi"} *</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
