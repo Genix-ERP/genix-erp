@@ -74,7 +74,8 @@ export default function SalesOrders() {
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const { getSetting } = useAdminSettings();
-  const { taxRates = [] } = useFinancials();
+  const { taxRates = [], journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
   const { getProductStock } = useInventory();
 
   // Get default tax from settings
@@ -724,6 +725,7 @@ export default function SalesOrders() {
       total_amount: total,
       status: 'draft',
       payment_status: 'unpaid',
+      payment_journal_id: newOrder.payment_journal_id || undefined,
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
 
@@ -862,7 +864,8 @@ export default function SalesOrders() {
       max_discount_amount: null,
       tax_amount: 0,
       shipping_cost: 0,
-      total_amount: 0
+      total_amount: 0,
+      payment_journal_id: '',
     });
     setDiscountCodeInput('');
     setDiscountValidation({ valid: false, message: '' });
@@ -1962,6 +1965,28 @@ export default function SalesOrders() {
                   </p>
                 )}
               </div>
+
+              {/* Payment Journal */}
+              {bankCashJournals.length > 0 && (
+                <div>
+                  <Label>{t('payment_journal') || "To'lov jurnali"}</Label>
+                  <Select
+                    value={newOrder.payment_journal_id || ''}
+                    onValueChange={(value) => setNewOrder({...newOrder, payment_journal_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Totals */}
               <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">

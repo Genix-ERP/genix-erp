@@ -45,6 +45,7 @@ export const translations = {
     "is_active": "Active",
     "payroll_journal": "Payroll journal",
     "payroll_journal_hint": "Salary payments will be recorded in this journal",
+    "payment_journal": "Payment journal",
     "has_delivery": "Has delivery",
     "delivery_price": "Delivery price",
 
@@ -6909,6 +6910,7 @@ export const translations = {
     "is_active": "Faol",
     "payroll_journal": "Ish haqi jurnali",
     "payroll_journal_hint": "Ish haqi to'lovlari shu jurnalga yoziladi",
+    "payment_journal": "To'lov jurnali",
     "has_delivery": "Yetkazib berish bor",
     "delivery_price": "Yetkazib berish narxi",
 
@@ -13981,6 +13983,7 @@ export const translations = {
     "is_active": "Активный",
     "payroll_journal": "Журнал зарплаты",
     "payroll_journal_hint": "Выплаты зарплаты будут записываться в этот журнал",
+    "payment_journal": "Журнал оплаты",
     "has_delivery": "Есть доставка",
     "delivery_price": "Стоимость доставки",
 
