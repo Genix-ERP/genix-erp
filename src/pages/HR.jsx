@@ -1463,60 +1463,10 @@ Only return the JSON, no other text.`;
                   </div>
                 </div>
 
-                {organizations.length > 0 && (
+                {activeCompany && (
                   <div className="space-y-2">
-                    <Label>{t('companies') || 'Kompaniyalar'}</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal h-auto min-h-[40px]">
-                          <span className="truncate">
-                            {(selectedEmployee.organization_ids || []).length === 0
-                              ? (t('select_companies') || 'Kompaniyalarni tanlang')
-                              : (selectedEmployee.organization_ids || []).length <= 2
-                                ? organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')
-                                : (() => { const translated = t('companies_selected'); return `${(selectedEmployee.organization_ids || []).length} ${translated === 'companies_selected' ? 'companies selected' : translated}`; })()}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                        <div className="max-h-48 overflow-y-auto">
-                          {organizations.map(org => (
-                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={(selectedEmployee.organization_ids || []).includes(org.id)}
-                                onChange={(e) => {
-                                  const ids = e.target.checked
-                                    ? [...(selectedEmployee.organization_ids || []), org.id]
-                                    : (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
-                                  setSelectedEmployee({...selectedEmployee, organization_ids: ids});
-                                }}
-                                className="rounded border-slate-300"
-                              />
-                              <span className="text-sm">{org.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    {(selectedEmployee.organization_ids || []).length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {organizations.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(org => (
-                          <span key={org.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs border border-blue-200">
-                            {org.name}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const ids = (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
-                                setSelectedEmployee({...selectedEmployee, organization_ids: ids});
-                              }}
-                              className="ml-0.5 hover:text-blue-900 font-bold"
-                            >×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <Label>{t('company') || 'Kompaniya'}</Label>
+                    <Input value={activeCompany.name} disabled className="bg-slate-50" />
                   </div>
                 )}
 
