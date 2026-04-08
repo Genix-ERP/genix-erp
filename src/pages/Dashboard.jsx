@@ -201,14 +201,6 @@ export default function Dashboard() {
             icon={Package}
             color={metrics.lowStockItems > 0 ? "orange" : "green"}
           />
-          <MetricCard
-            title={t("cost_savings")}
-            value={`${formatCurrency(metrics.automationSavings)}${t("per_month")}`}
-            change={t("from_ai_automation")}
-            trend="up"
-            icon={Zap}
-            color="purple"
-          />
         </div>
 
         {/* Charts + Inventory */}
