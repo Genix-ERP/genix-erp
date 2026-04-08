@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,13 +36,20 @@ export default function PriceComparison() {
   const { suppliers } = useProcurement();
   const { products } = useInventory();
 
-  const [selectedProduct, setSelectedProduct] = useState("");
+  const [productSearch, setProductSearch] = useState("");
   const [rows, setRows] = useState([]);
+
+  const filteredProducts = useMemo(() => {
+    if (!productSearch) return products || [];
+    return (products || []).filter((p) =>
+      p.name.toLowerCase().includes(productSearch.toLowerCase())
+    );
+  }, [products, productSearch]);
 
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { id: Date.now(), supplier_id: "", supplier_name: "", price: "", quality: "" },
+      { id: Date.now(), supplier_id: "", supplier_name: "", product_id: "", price: "", quality: "" },
     ]);
   };
 
@@ -115,7 +122,6 @@ export default function PriceComparison() {
       isBest: r.isBest,
     }));
 
-  const selectedProductName = products?.find((p) => p.id === selectedProduct)?.name || "";
 
   return (
     <div className="space-y-5">
@@ -128,24 +134,15 @@ export default function PriceComparison() {
 
       <Card className="bg-white/80 backdrop-blur-sm">
         <CardContent className="p-5 space-y-5">
-          {/* Product selector */}
+          {/* Product search */}
           <div className="flex items-center gap-3">
             <Package className="w-5 h-5 text-indigo-500 shrink-0" />
-            <select
-              className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-            >
-              <option value="">{t("select_product")}</option>
-              {(products || []).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            {selectedProductName && (
-              <Badge variant="outline" className="text-indigo-600 border-indigo-200 shrink-0">
-                {selectedProductName}
-              </Badge>
-            )}
+            <Input
+              className="flex-1"
+              placeholder={t("search_product") || "Mahsulotni qidirish..."}
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+            />
           </div>
 
           {/* Score hint — shown when quality data is entered */}
@@ -160,18 +157,19 @@ export default function PriceComparison() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-semibold">{t("supplier")}</TableHead>
-                  <TableHead className="text-xs font-semibold text-right w-40">{t("price")}</TableHead>
-                  <TableHead className="text-xs font-semibold text-center w-28">{t("quality_pct")}</TableHead>
-                  <TableHead className="text-xs font-semibold text-center w-28">{t("value_score")}</TableHead>
-                  <TableHead className="text-xs font-semibold text-center w-32">{t("status")}</TableHead>
+                  <TableHead className="text-xs font-semibold min-w-[180px]">{t("supplier")}</TableHead>
+                  <TableHead className="text-xs font-semibold min-w-[180px]">{t("product")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-right w-32">{t("price")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-24">{t("quality_pct")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-24">{t("value_score")}</TableHead>
+                  <TableHead className="text-xs font-semibold text-center w-28">{t("status")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {enrichedRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-slate-400 text-sm">
+                    <TableCell colSpan={7} className="py-10 text-center text-slate-400 text-sm">
                       {t("no_comparison_rows")}
                     </TableCell>
                   </TableRow>
@@ -191,7 +189,7 @@ export default function PriceComparison() {
                               <Award className="w-4 h-4 text-green-600 shrink-0" />
                             )}
                             <select
-                              className="border border-slate-200 rounded-md px-2 py-1 text-sm bg-white w-44"
+                              className="border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white w-full"
                               value={row.supplier_id}
                               onChange={(e) => updateRow(row.id, "supplier_id", e.target.value)}
                             >
@@ -203,6 +201,19 @@ export default function PriceComparison() {
                           </div>
                         </TableCell>
 
+                        <TableCell className="py-2">
+                          <select
+                            className="border border-slate-200 rounded-md px-2 py-1.5 text-sm bg-white w-full"
+                            value={row.product_id || ""}
+                            onChange={(e) => updateRow(row.id, "product_id", e.target.value)}
+                          >
+                            <option value="">{t("select_product")}</option>
+                            {filteredProducts.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </TableCell>
+
                         <TableCell className="py-2 text-right">
                           <div className="flex flex-col items-end gap-0.5">
                             <Input
@@ -212,7 +223,7 @@ export default function PriceComparison() {
                               placeholder="0"
                               value={row.price === 0 ? "" : row.price}
                               onChange={(e) => updateRow(row.id, "price", e.target.value)}
-                              className={`w-36 text-right text-sm font-semibold ${row.isBest ? "border-green-300 text-green-700" : ""}`}
+                              className={`w-full text-right text-sm font-semibold ${row.isBest ? "border-green-300 text-green-700" : ""}`}
                             />
                             {row.priceDiff && (
                               <span className="text-xs text-red-400">+{row.priceDiff}%</span>
@@ -229,7 +240,7 @@ export default function PriceComparison() {
                               placeholder="—"
                               value={row.quality}
                               onChange={(e) => updateRow(row.id, "quality", e.target.value)}
-                              className="w-16 text-center text-sm"
+                              className="w-14 text-center text-sm"
                             />
                             {row.quality !== "" && (
                               <span className="text-xs text-slate-500">%</span>
