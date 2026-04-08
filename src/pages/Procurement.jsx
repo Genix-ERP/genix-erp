@@ -37,7 +37,7 @@ import {
   MessageSquareWarning,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { analyzeProcurement } from '@/api/services/aiAnalytics';
 import { formatAxisTick } from '@/utils/formatCurrency';
 
@@ -745,13 +745,17 @@ export default function Procurement() {
                     <CardTitle>{t('purchases_by_supplier') || 'Purchases by Supplier'}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="vendor" fontSize={11} angle={-45} textAnchor="end" height={80} />
-                        <YAxis fontSize={12} width={55} tickFormatter={formatAxisTick} />
+                    <ResponsiveContainer width="100%" height={Math.max(250, chartData.length * 45)}>
+                      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" fontSize={12} tickFormatter={formatAxisTick} />
+                        <YAxis dataKey="vendor" type="category" fontSize={12} width={140} tick={{ fill: '#334155' }} />
                         <Tooltip formatter={(value) => [formatCurrency(value), t('amount') || 'Amount']} />
-                        <Bar dataKey="value" name={t('amount') || 'Amount'} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                        <Bar dataKey="value" name={t('amount') || 'Amount'} radius={[0, 6, 6, 0]}>
+                          {chartData.map((_, i) => (
+                            <Cell key={i} fill={['#8b5cf6', '#6366f1', '#a78bfa', '#7c3aed', '#818cf8'][i % 5]} />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
