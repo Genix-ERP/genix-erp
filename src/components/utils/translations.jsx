@@ -614,6 +614,7 @@ export const translations = {
     "advertisement": "Advertisement",
     "notes": "Notes",
     "enter_name": "Enter name",
+    "enter_position_name": "Enter position name",
     "enter_company": "Enter company name",
     "add_notes": "Add notes about this lead...",
 
@@ -7483,6 +7484,7 @@ export const translations = {
     "advertisement": "Reklama",
     "notes": "Eslatmalar",
     "enter_name": "Ism kiriting",
+    "enter_position_name": "Lavozim nomini kiriting",
     "enter_company": "Kompaniya nomini kiriting",
     "add_notes": "Ushbu lid haqida eslatma qo'shing...",
 
@@ -14552,6 +14554,7 @@ export const translations = {
     "advertisement": "Реклама",
     "notes": "Заметки",
     "enter_name": "Введите имя",
+    "enter_position_name": "Введите название должности",
     "enter_company": "Введите название компании",
     "add_notes": "Добавьте заметки об этом лиде...",
     "no_opportunities": "Возможностей пока нет",
