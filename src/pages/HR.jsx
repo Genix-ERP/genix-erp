@@ -1213,7 +1213,7 @@ Only return the JSON, no other text.`;
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs">{t('companies') || 'Kompaniyalar'}</Label>
                     {userCompanies.length === 1 ? (
-                      <Input value={userCompanies[0].name} disabled className="bg-slate-50" />
+                      <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
                     ) : (
                       <>
                         <Popover>
@@ -1221,7 +1221,7 @@ Only return the JSON, no other text.`;
                             <Button variant="outline" className="w-full justify-between font-normal">
                               <span className="truncate">
                                 {newEmployee.organization_ids.length > 0
-                                  ? userCompanies.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
+                                  ? userCompanies.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.company_name || o.name).join(', ')
                                   : (t('select_companies') || 'Kompaniyalarni tanlang')}
                               </span>
                               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -1242,7 +1242,7 @@ Only return the JSON, no other text.`;
                                     }}
                                     className="rounded border-slate-300"
                                   />
-                                  <span className="text-sm">{org.name}</span>
+                                  <span className="text-sm">{org.company_name || org.name}</span>
                                 </label>
                               ))}
                             </div>
@@ -1504,7 +1504,7 @@ Only return the JSON, no other text.`;
                   <div className="space-y-2">
                     <Label>{t('companies') || 'Kompaniyalar'}</Label>
                     {userCompanies.length === 1 ? (
-                      <Input value={userCompanies[0].name} disabled className="bg-slate-50" />
+                      <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
                     ) : (
                       <>
                         <Popover>
@@ -1513,7 +1513,7 @@ Only return the JSON, no other text.`;
                               <span className="truncate">
                                 {(selectedEmployee.organization_ids || []).length === 0
                                   ? (t('select_companies') || 'Kompaniyalarni tanlang')
-                                  : userCompanies.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.name).join(', ')}
+                                  : userCompanies.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.company_name || o.name).join(', ')}
                               </span>
                               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
@@ -1533,7 +1533,7 @@ Only return the JSON, no other text.`;
                                     }}
                                     className="rounded border-slate-300"
                                   />
-                                  <span className="text-sm">{org.name}</span>
+                                  <span className="text-sm">{org.company_name || org.name}</span>
                                 </label>
                               ))}
                             </div>
@@ -1543,7 +1543,7 @@ Only return the JSON, no other text.`;
                           <div className="flex flex-wrap gap-1.5">
                             {userCompanies.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(org => (
                               <span key={org.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs border border-blue-200">
-                                {org.name}
+                                {org.company_name || org.name}
                                 <button
                                   type="button"
                                   onClick={() => {
