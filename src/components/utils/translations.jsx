@@ -13578,7 +13578,7 @@ export const translations = {
     "partial_delivery_desc": "Skladda bor mahsulotlar hozir yuboriladi, qolgan mahsulotlar uchun yangi yetkazma buyurtmasi yaratiladi va mahsulot kelguncha kutadi.",
     "partial_delivery_success": "Mavjud mahsulotlar yuborildi",
     "backorder_created": "Qoldiq uchun yangi yetkazma yaratildi",
-    "waiting": "Kutadi",
+    "waiting": "Kutilmoqda",
     "available_stock": "Mavjud",
     "stock_not_available": "Bu mahsulot omborda mavjud emas",
     "stock_exceeded": "Omborda faqat {qty} ta mavjud",
