@@ -74,6 +74,7 @@ import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/components/contexts/ModulesContext";
+import { useCompany } from "@/components/contexts/CompanyContext";
 import { useInstalledApps } from "@/components/contexts/InstalledAppsContext";
 import { useEmployeePermissions, AVAILABLE_MODULES } from "@/components/contexts/EmployeePermissionsContext";
 import { PERMISSION_MATRIX } from "@/config/permissions";
@@ -88,6 +89,7 @@ export default function HR() {
   const { canCreate, canUpdate, canDelete, MODULES } = usePermissions();
   const { getEmployeePermissions, updateEmployeePermissions } = useEmployeePermissions();
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { activeCompany } = useCompany();
 
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -193,7 +195,7 @@ export default function HR() {
     performance_score: 3,
     turnover_risk: 'low',
     permission: 'important',
-    organization_ids: []
+    organization_ids: [],
   });
   const [organizations, setOrganizations] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -441,7 +443,7 @@ Only return the JSON, no other text.`;
         job_position_id: '', role_id: '',
         department: '', hire_date: new Date().toISOString().split('T')[0],
         salary: '', status: 'active', performance_score: 3,
-        turnover_risk: 'low', permission: 'important', organization_ids: []
+        turnover_risk: 'low', permission: 'important', organization_ids: activeCompany?.id ? [activeCompany.id] : []
       });
       await loadEmployees();
     } catch (error) {
@@ -976,7 +978,12 @@ Only return the JSON, no other text.`;
               <div className="flex gap-2">
                 {canCreate(MODULES.HR) && (
                   <Button
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => {
+                      if (activeCompany?.id) {
+                        setNewEmployee(prev => ({...prev, organization_ids: [activeCompany.id]}));
+                      }
+                      setShowAddModal(true);
+                    }}
                     className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] text-white hover:opacity-90"
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -1202,41 +1209,10 @@ Only return the JSON, no other text.`;
                     </SelectContent>
                   </Select>
                 </div>
-                {organizations.length > 0 && (
+                {activeCompany && (
                   <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">{t('companies') || 'Companies'}</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between font-normal">
-                          <span className="truncate">
-                            {newEmployee.organization_ids.length > 0
-                              ? organizations.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.name).join(', ')
-                              : (t('select_companies') || 'Select companies')}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                        <div className="max-h-36 overflow-y-auto">
-                          {organizations.map(org => (
-                            <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={newEmployee.organization_ids.includes(org.id)}
-                                onChange={(e) => {
-                                  const ids = e.target.checked
-                                    ? [...newEmployee.organization_ids, org.id]
-                                    : newEmployee.organization_ids.filter(id => id !== org.id);
-                                  setNewEmployee({...newEmployee, organization_ids: ids});
-                                }}
-                                className="rounded border-slate-300"
-                              />
-                              <span className="text-sm">{org.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Label className="text-xs">{t('company') || 'Kompaniya'}</Label>
+                    <Input value={activeCompany.name} disabled className="bg-slate-50" />
                   </div>
                 )}
               </div>
