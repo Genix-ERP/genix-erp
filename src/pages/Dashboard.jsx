@@ -152,7 +152,7 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* Health Score + Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Health Score */}
           <div className={`${healthBg} rounded-2xl border border-slate-100 p-5 flex flex-col items-center justify-center`}>
             <div className="relative w-20 h-20 mb-3">
