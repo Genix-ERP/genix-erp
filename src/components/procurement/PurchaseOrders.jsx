@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inventoryService } from '@/api/services/inventory';
 import apiClient from '@/api/client';
@@ -1088,21 +1089,13 @@ export default function PurchaseOrders() {
                     <div className="flex gap-2 items-end">
                       <div className="flex-[2] min-w-0">
                         {index === 0 && <label className="text-xs text-slate-500 mb-1 block">{t('product')}</label>}
-                        <Select
+                        <ProductCombobox
+                          products={products}
                           value={line.product_id || ''}
                           onValueChange={(value) => handleLineChange(index, 'product_id', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('select_product') || 'Select product'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder={t('select_product') || 'Mahsulot tanlang'}
+                          t={t}
+                        />
                       </div>
                       {hasVariants && (
                         <div className="flex-[2] min-w-0">
