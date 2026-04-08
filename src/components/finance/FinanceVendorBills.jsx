@@ -21,7 +21,8 @@ export default function FinanceVendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { vendorBills, isLoading } = useFinancials();
+  const { vendorBills, isLoading, journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -31,6 +32,7 @@ export default function FinanceVendorBills() {
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("bank");
+  const [paymentJournalId, setPaymentJournalId] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [backendStats, setBackendStats] = useState(null);
 
@@ -199,6 +201,10 @@ export default function FinanceVendorBills() {
   };
 
   const getJournalForMethod = (method) => {
+    if (paymentJournalId) {
+      const j = bankCashJournals.find(j => j.id === paymentJournalId);
+      if (j) return j.name;
+    }
     switch (method) {
       case 'cash': return 'CASH';
       case 'bank': return 'BANK';
@@ -214,6 +220,18 @@ export default function FinanceVendorBills() {
       case 'card': return 'Dt 2000 Kreditor / Kt 1010 Bank';
       default: return 'Dt 2000 Kreditor / Kt 1010 Bank';
     }
+  };
+
+  // Format number with spaces: 7000000 -> 7 000 000
+  const formatAmountWithSpaces = (val) => {
+    const num = String(val).replace(/\s/g, '').replace(/[^0-9.]/g, '');
+    const parts = num.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const parseAmountFromFormatted = (val) => {
+    return val.replace(/\s/g, '');
   };
 
   return (
@@ -693,25 +711,44 @@ export default function FinanceVendorBills() {
               {/* Payment method */}
               <div>
                 <label className="text-sm font-medium">{t('payment_method') || "To'lov usuli"} *</label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
-                    <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
-                    <SelectItem value="card">{t('credit_card') || 'Kredit karta'}</SelectItem>
-                  </SelectContent>
-                </Select>
+                {bankCashJournals.length > 0 ? (
+                  <Select value={paymentJournalId} onValueChange={(value) => {
+                    setPaymentJournalId(value);
+                    const j = bankCashJournals.find(j => j.id === value);
+                    if (j) setPaymentMethod(j.type === 'cash' ? 'cash' : 'bank');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Amount */}
               <div>
                 <label className="text-sm font-medium">{t('amount') || 'Summa'} *</label>
                 <Input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatAmountWithSpaces(paymentAmount)}
+                  onChange={(e) => setPaymentAmount(parseAmountFromFormatted(e.target.value))}
                   placeholder="0"
                 />
               </div>
