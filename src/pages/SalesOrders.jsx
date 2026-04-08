@@ -38,6 +38,7 @@ import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
@@ -1696,21 +1697,13 @@ export default function SalesOrders() {
                       <div className="flex gap-2 items-end">
                         <div className="flex-[2] min-w-0">
                           {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
-                          <Select
+                          <ProductCombobox
+                            products={products}
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={t('select_product')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={t('select_product')}
+                            t={t}
+                          />
                         </div>
                         {hasVariants && (
                           <div className="flex-[2] min-w-0">
@@ -2386,21 +2379,13 @@ export default function SalesOrders() {
                         <div className="flex gap-2 items-end">
                           <div className="flex-[2] min-w-0">
                             {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
-                            <Select
+                            <ProductCombobox
+                              products={products}
                               value={line.product_id || ''}
                               onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={line.product_name || t('select_product')} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {products.map((product) => (
-                                  <SelectItem key={product.id} value={product.id}>
-                                    {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              placeholder={line.product_name || t('select_product')}
+                              t={t}
+                            />
                           </div>
                           {hasVariants && (
                             <div className="flex-[2] min-w-0">
