@@ -579,7 +579,9 @@ export default function FinanceVendorBills() {
                   const draftTotal = allocations
                     .filter(a => a.status === 'draft')
                     .reduce((sum, a) => sum + (a.amount || 0), 0);
-                  const remainingDebt = (selectedBill.total_amount || 0) - confirmedTotal;
+                  // Use amount_paid as fallback when no payment_allocations exist
+                  const totalPaid = confirmedTotal > 0 ? confirmedTotal : (selectedBill.amount_paid || 0);
+                  const remainingDebt = (selectedBill.total_amount || 0) - totalPaid;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
@@ -588,7 +590,7 @@ export default function FinanceVendorBills() {
                           {t('confirmed_payments') || "To'langan"}
                         </span>
                         <span className="font-medium text-green-600">
-                          {formatCurrency(confirmedTotal)}
+                          {formatCurrency(totalPaid)}
                         </span>
                       </div>
                       {draftTotal > 0 && (
