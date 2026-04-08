@@ -43,6 +43,10 @@ export const translations = {
     "active": "Active",
     "inactive": "Inactive",
     "is_active": "Active",
+    "payroll_journal": "Payroll journal",
+    "payroll_journal_hint": "Salary payments will be recorded in this journal",
+    "has_delivery": "Has delivery",
+    "delivery_price": "Delivery price",
 
     // Navigation & Layout
     "dashboard": "Dashboard",
@@ -6903,6 +6907,10 @@ export const translations = {
     "active": "Faol",
     "inactive": "Nofaol",
     "is_active": "Faol",
+    "payroll_journal": "Ish haqi jurnali",
+    "payroll_journal_hint": "Ish haqi to'lovlari shu jurnalga yoziladi",
+    "has_delivery": "Yetkazib berish bor",
+    "delivery_price": "Yetkazib berish narxi",
 
     // Navigation & Layout
     "dashboard": "Asosiy panel",
@@ -13971,6 +13979,10 @@ export const translations = {
     "active": "Активный",
     "inactive": "Неактивный",
     "is_active": "Активный",
+    "payroll_journal": "Журнал зарплаты",
+    "payroll_journal_hint": "Выплаты зарплаты будут записываться в этот журнал",
+    "has_delivery": "Есть доставка",
+    "delivery_price": "Стоимость доставки",
 
     // Navigation & Layout
     "dashboard": "Панель управления",
