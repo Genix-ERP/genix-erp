@@ -10537,7 +10537,7 @@ export const translations = {
     "price_comparison": "Narx solishtirish",
     "price_comparison_desc": "Mahsulot bo'yicha yetkazib beruvchilar narxlarini solishtiring",
     "add_comparison_row": "Qator qo'shish",
-    "quality_pct": "Sifat %",
+    "quality_pct": "Mahsulot sifati",
     "value_score": "Qiymat balli",
     "best_price": "Eng yaxshi narx",
     "best_value": "Eng yaxshi qiymat",
