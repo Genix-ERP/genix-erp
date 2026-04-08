@@ -366,18 +366,6 @@ export function ImportModal({
       cell.border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
     });
 
-    // Add a few empty rows with light borders for user to fill
-    for (let i = 0; i < 10; i++) {
-      const row = ws.addRow(templateCols.map(() => ''));
-      row.height = 22;
-      row.eachCell((cell) => {
-        cell.border = { bottom: { style: 'thin', color: { argb: 'FFF1F5F9' } } };
-        if (i % 2 === 0) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-        }
-      });
-    }
-
     // Auto-fit column widths
     templateCols.forEach((col, i) => {
       ws.getColumn(i + 1).width = Math.max(col.label.length + 6, 16);
