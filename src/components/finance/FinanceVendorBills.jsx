@@ -177,7 +177,7 @@ export default function FinanceVendorBills() {
     } finally {
       setIsPaying(false);
     }
-  }, [paymentBill, paymentAmount]);
+  }, [paymentBill, paymentAmount, paymentMethod]);
 
   const renderStatusBadge = (bill) => {
     let payStatus = getPaymentStatus(bill);
