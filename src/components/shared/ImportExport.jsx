@@ -267,6 +267,9 @@ export function ImportModal({
     const requiredFields = columns.filter((col) => col.required);
 
     parsedData?.rows.forEach((row, index) => {
+      // Skip completely empty rows
+      if (!Object.values(row).some((v) => v != null && v !== "")) return;
+
       requiredFields.forEach((field) => {
         const mappedHeader = Object.entries(mapping).find(
           ([, value]) => value === field.key
