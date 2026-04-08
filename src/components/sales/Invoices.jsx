@@ -56,7 +56,7 @@ import {
   ChevronUp,
   Printer,
 } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, startOfDay } from "date-fns";
 import { useSales } from "@/components/contexts/SalesContext";
 import { useCustomers } from "@/components/contexts/CustomersContext";
 import { useLanguage } from "@/components/contexts/LanguageContext";
@@ -760,7 +760,11 @@ export default function Invoices({ openInvoiceId = null, onInvoiceOpened = null 
   };
 
   const getDaysUntilDue = (dueDate) => {
-    const days = differenceInDays(new Date(dueDate), new Date());
+    // Parse due_date as local date (YYYY-MM-DD) to avoid timezone issues
+    const [y, m, d] = String(dueDate).split('T')[0].split('-').map(Number);
+    const due = startOfDay(new Date(y, m - 1, d));
+    const today = startOfDay(new Date());
+    const days = differenceInDays(due, today);
     if (days < 0) return { text: `${Math.abs(days)} ${t("days_ago")}`, isOverdue: true };
     if (days === 0) return { text: t("today"), isOverdue: false };
     return { text: `${days} ${t("days_left")}`, isOverdue: false };
