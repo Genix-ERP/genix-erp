@@ -613,7 +613,7 @@ export default function ProductionOrders() {
                       ...newOrder,
                       product_id: value,
                       product_name: product?.name || '',
-                      uom: product?.unit_of_measure || product?.uom || 'units',
+                      uom: product?.unit_name || product?.unit_code || product?.unit_of_measure || product?.uom || 'units',
                       bom_id: '' // Reset BOM when product changes
                     });
                   }}
