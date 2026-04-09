@@ -1215,25 +1215,26 @@ Only return the JSON, no other text.`;
                     {userCompanies.length === 1 ? (
                       <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
                     ) : (
-                      <>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between font-normal">
-                              <span className="truncate">
-                                {newEmployee.organization_ids.length > 0
-                                  ? userCompanies.filter(o => newEmployee.organization_ids.includes(o.id)).map(o => o.company_name || o.name).join(', ')
-                                  : (t('select_companies') || 'Kompaniyalarni tanlang')}
-                              </span>
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                            <div className="max-h-36 overflow-y-auto">
-                              {userCompanies.map(org => (
-                                <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between font-normal h-10">
+                            <span className="truncate text-sm">
+                              {newEmployee.organization_ids.length === 0
+                                ? (t('select_companies') || 'Kompaniyalarni tanlang')
+                                : `${newEmployee.organization_ids.length} / ${userCompanies.length} ${t('companies_selected') || 'kompaniya tanlangan'}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                          <div className="max-h-56 overflow-y-auto">
+                            {userCompanies.map(org => {
+                              const checked = newEmployee.organization_ids.includes(org.id);
+                              return (
+                                <label key={org.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${checked ? 'bg-blue-50' : 'hover:bg-slate-100'}`}>
                                   <input
                                     type="checkbox"
-                                    checked={newEmployee.organization_ids.includes(org.id)}
+                                    checked={checked}
                                     onChange={(e) => {
                                       const ids = e.target.checked
                                         ? [...newEmployee.organization_ids, org.id]
@@ -1242,13 +1243,13 @@ Only return the JSON, no other text.`;
                                     }}
                                     className="rounded border-slate-300"
                                   />
-                                  <span className="text-sm">{org.company_name || org.name}</span>
+                                  <span className="text-sm truncate">{org.company_name || org.name}</span>
                                 </label>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     )}
                   </div>
                 )}
@@ -1506,25 +1507,26 @@ Only return the JSON, no other text.`;
                     {userCompanies.length === 1 ? (
                       <Input value={userCompanies[0].company_name || userCompanies[0].name} disabled className="bg-slate-50" />
                     ) : (
-                      <>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between font-normal h-auto min-h-[40px]">
-                              <span className="truncate">
-                                {(selectedEmployee.organization_ids || []).length === 0
-                                  ? (t('select_companies') || 'Kompaniyalarni tanlang')
-                                  : userCompanies.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(o => o.company_name || o.name).join(', ')}
-                              </span>
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
-                            <div className="max-h-48 overflow-y-auto">
-                              {userCompanies.map(org => (
-                                <label key={org.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-100 cursor-pointer">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between font-normal h-10">
+                            <span className="truncate text-sm">
+                              {(selectedEmployee.organization_ids || []).length === 0
+                                ? (t('select_companies') || 'Kompaniyalarni tanlang')
+                                : `${(selectedEmployee.organization_ids || []).length} / ${userCompanies.length} ${t('companies_selected') || 'kompaniya tanlangan'}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                          <div className="max-h-56 overflow-y-auto">
+                            {userCompanies.map(org => {
+                              const checked = (selectedEmployee.organization_ids || []).includes(org.id);
+                              return (
+                                <label key={org.id} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${checked ? 'bg-blue-50' : 'hover:bg-slate-100'}`}>
                                   <input
                                     type="checkbox"
-                                    checked={(selectedEmployee.organization_ids || []).includes(org.id)}
+                                    checked={checked}
                                     onChange={(e) => {
                                       const ids = e.target.checked
                                         ? [...(selectedEmployee.organization_ids || []), org.id]
@@ -1533,30 +1535,13 @@ Only return the JSON, no other text.`;
                                     }}
                                     className="rounded border-slate-300"
                                   />
-                                  <span className="text-sm">{org.company_name || org.name}</span>
+                                  <span className="text-sm truncate">{org.company_name || org.name}</span>
                                 </label>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                        {(selectedEmployee.organization_ids || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {userCompanies.filter(o => (selectedEmployee.organization_ids || []).includes(o.id)).map(org => (
-                              <span key={org.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs border border-blue-200">
-                                {org.company_name || org.name}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const ids = (selectedEmployee.organization_ids || []).filter(id => id !== org.id);
-                                    setSelectedEmployee({...selectedEmployee, organization_ids: ids});
-                                  }}
-                                  className="ml-0.5 hover:text-blue-900 font-bold"
-                                >×</button>
-                              </span>
-                            ))}
+                              );
+                            })}
                           </div>
-                        )}
-                      </>
+                        </PopoverContent>
+                      </Popover>
                     )}
                   </div>
                 )}
