@@ -34,8 +34,17 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const cleanIdentifier = identifier.replace(/\s/g, '');
-    const result = await login(cleanIdentifier, password, selectedTenantId);
+    // Read directly from DOM to handle browser/Google autofill
+    // (autofill may not trigger React onChange events)
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
+    // Sync React state if autofill provided different values
+    if (domIdentifier !== identifier) setIdentifier(domIdentifier);
+    if (domPassword !== password) setPassword(domPassword);
+
+    const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const result = await login(cleanIdentifier, domPassword, selectedTenantId);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -54,10 +63,14 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
+    // Read from DOM in case autofill was used
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
     // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(identifier.replace(/\s/g, ''), password, tenantId);
+      : await login(domIdentifier.replace(/\s/g, ''), domPassword, tenantId);
 
     if (result.success) {
       setShouldNavigate(true);
