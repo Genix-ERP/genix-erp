@@ -519,7 +519,7 @@ export default function Payroll() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
-                {canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR) && (
+                {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
                   <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                     <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
                   </Button>
@@ -560,7 +560,7 @@ export default function Payroll() {
                 <div className="text-center py-16">
                   <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_payroll_records_yet')}</p>
-                  {canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR) && (
+                  {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
                     <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('process_first_payroll')}</Button>
                   )}
                 </div>
