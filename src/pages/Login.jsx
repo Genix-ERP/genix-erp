@@ -198,7 +198,9 @@ export default function Login() {
                 <User className="login-form__icon" />
                 <input
                   id="identifier"
+                  name="email"
                   type="text"
+                  autoComplete="username"
                   placeholder={isPhone ? '+998 XX XXX XX XX' : t('enter_email_or_phone')}
                   value={identifier}
                   onChange={(e) => {
@@ -238,7 +240,9 @@ export default function Login() {
                 <Lock className="login-form__icon" />
                 <input
                   id="password"
+                  name="password"
                   type="password"
+                  autoComplete="current-password"
                   placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
