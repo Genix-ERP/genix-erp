@@ -20,6 +20,7 @@ import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Payroll() {
@@ -33,6 +34,7 @@ export default function Payroll() {
     refreshData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { getSetting } = useAdminSettings();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -113,6 +115,11 @@ export default function Payroll() {
 
   const shortageDeductionAmount = Math.round(totalPendingDeduction * deductionPercent / 100);
 
+  // Payroll tax rates from settings (defaults: Uzbekistan 2024-2026 rates)
+  const incomeTaxRate = parseFloat(getSetting('payroll.tax.income_tax_rate', '12')) / 100;
+  const socialInsuranceRate = parseFloat(getSetting('payroll.tax.social_insurance_rate', '1')) / 100;
+  const taxFreeMinimum = parseFloat(getSetting('payroll.tax.tax_free_minimum', '0'));
+
   const calculatePayroll = (data, shortageAmount = 0) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
@@ -123,14 +130,15 @@ export default function Payroll() {
 
     const grossPay = basicSalary + overtimePay + bonuses + allowances;
 
-    const taxableAmount = Math.max(0, grossPay - 3000);
-    const taxDeduction = taxableAmount * 0.20;
+    // Income tax (НДФЛ / JSHSHO): default 12% in Uzbekistan
+    const taxableAmount = Math.max(0, grossPay - taxFreeMinimum);
+    const taxDeduction = Math.round(taxableAmount * incomeTaxRate);
 
-    const socialSecurity = grossPay * 0.062;
-    const healthInsurance = 200;
+    // Social insurance (INPS): default 1% employee side
+    const socialSecurity = Math.round(grossPay * socialInsuranceRate);
+
     const otherDeductions = shortageAmount;
-
-    const totalDeductions = taxDeduction + socialSecurity + healthInsurance + otherDeductions;
+    const totalDeductions = taxDeduction + socialSecurity + otherDeductions;
     const netPay = grossPay - totalDeductions;
 
     return {
@@ -138,7 +146,7 @@ export default function Payroll() {
       gross_pay: grossPay,
       tax_deduction: taxDeduction,
       social_security: socialSecurity,
-      health_insurance: healthInsurance,
+      health_insurance: 0,
       other_deductions: otherDeductions,
       total_deductions: totalDeductions,
       net_pay: netPay
