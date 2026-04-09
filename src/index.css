@@ -166,3 +166,46 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* Genix Brand Variables */
+:root {
+  --genix-purple: #6C5CE7;
+  --genix-purple-light: #A29BFE;
+  --genix-teal: #00CEC9;
+  --genix-teal-light: #81ECEC;
+  --genix-amber: #FDCB6E;
+  --genix-amber-light: #FFEAA7;
+  --genix-coral: #E17055;
+  --genix-coral-light: #FAB1A0;
+}
+
+/* Glassmorphism card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+.glass-card:hover {
+  box-shadow: 0 8px 32px rgba(108, 92, 231, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+/* Pulsing live badge */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-live {
+  animation: pulse-live 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Glow effect for AI section */
+@keyframes glow-purple {
+  0%, 100% { box-shadow: 0 0 20px rgba(108, 92, 231, 0.15), 0 0 60px rgba(108, 92, 231, 0.05); }
+  50% { box-shadow: 0 0 30px rgba(108, 92, 231, 0.25), 0 0 80px rgba(108, 92, 231, 0.1); }
+}
+.glow-purple {
+  animation: glow-purple 3s ease-in-out infinite;
+}
