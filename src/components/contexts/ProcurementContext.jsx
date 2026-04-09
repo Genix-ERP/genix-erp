@@ -614,8 +614,6 @@ export function ProcurementProvider({ children }) {
           throw new Error('At least one product line is required');
         }
 
-        const orderTaxPercent = parseFloat(poData.tax_percent) || 0;
-
         const backendPayload = {
           order_number: poData.po_number || '',
           vendor_id: poData.supplier_id || poData.vendor_id,
@@ -625,6 +623,9 @@ export function ProcurementProvider({ children }) {
           warehouse_id: poData.warehouse_id || undefined,
           vehicle_number: poData.vehicle_number || undefined,
           requires_shipping: poData.requires_shipping !== undefined ? poData.requires_shipping : true,
+          subtotal: poData.subtotal || 0,
+          tax_amount: poData.tax_amount || 0,
+          total_amount: poData.total_amount || 0,
           notes: poData.notes || '',
           lines: validLines.map(line => ({
             product_id: line.product_id || '',
@@ -633,7 +634,7 @@ export function ProcurementProvider({ children }) {
             unit_price: parseFloat(line.unit_price) || 0,
             unit_id: line.unit_id || '',
             discount_amount: parseFloat(line.discount_amount) || 0,
-            tax_percent: parseFloat(line.tax_percent) || orderTaxPercent,
+            tax_percent: 0, // Tax is calculated at order level, not per line
             notes: line.notes || '',
             packaging_id: line.packaging_id || undefined,
             packaging_qty: line.packaging_id ? (parseFloat(line.packaging_qty) || 1) : undefined,
