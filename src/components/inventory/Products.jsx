@@ -911,9 +911,9 @@ export default function Products() {
       meta_description: product.meta_description || '',
       url_slug: product.url_slug || '',
       // Units of Measure
-      inventory_uom: product.inventory_uom || 'unit',
-      sales_uom: product.sales_uom || 'unit',
-      purchase_uom: product.purchase_uom || 'unit',
+      inventory_uom: product.unit_code || product.inventory_uom || 'unit',
+      sales_uom: product.unit_code || product.sales_uom || 'unit',
+      purchase_uom: product.unit_code || product.purchase_uom || 'unit',
       uom_conversion_factor: product.uom_conversion_factor?.toString() || '1',
       // Customer Lead Time
       customer_lead_time_days: product.customer_lead_time_days?.toString() || '',
