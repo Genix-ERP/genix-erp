@@ -407,6 +407,8 @@ Only return the JSON, no other text.`;
         phone: newEmployee.phone || '',
         job_title: newEmployee.job_title,
         department: newEmployee.department,
+        department_id: newEmployee.department || '',
+        job_position_id: newEmployee.job_position_id || '',
         hire_date: newEmployee.hire_date,
         salary: parseFloat(newEmployee.salary) || 0,
         status: newEmployee.status,
@@ -532,6 +534,8 @@ Only return the JSON, no other text.`;
         phone: selectedEmployee.phone || '',
         job_title: selectedEmployee.job_title,
         department: selectedEmployee.department,
+        department_id: selectedEmployee.department_id || selectedEmployee.department || '',
+        job_position_id: selectedEmployee.job_position_id || '',
         hire_date: selectedEmployee.hire_date,
         salary: parseFloat(selectedEmployee.salary) || 0,
         status: selectedEmployee.status,
@@ -1465,6 +1469,23 @@ Only return the JSON, no other text.`;
                     </Select>
                   </div>
                   <div className="space-y-2">
+                    <Label>{t('job_position') || 'Lavozim'}</Label>
+                    <Select
+                      value={selectedEmployee.job_position_id || ''}
+                      onValueChange={value => setSelectedEmployee({...selectedEmployee, job_position_id: value})}
+                    >
+                      <SelectTrigger><SelectValue placeholder={t('select_job_position') || 'Lavozimni tanlang'} /></SelectTrigger>
+                      <SelectContent>
+                        {jobPositions.map(jp => (
+                          <SelectItem key={jp.id} value={jp.id}>{jp.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                     <Label>{t('hire_date')}</Label>
                     <Input
                       type="date"
@@ -1472,9 +1493,6 @@ Only return the JSON, no other text.`;
                       onChange={e => setSelectedEmployee({...selectedEmployee, hire_date: e.target.value})}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t('salary')}</Label>
                     <Input
