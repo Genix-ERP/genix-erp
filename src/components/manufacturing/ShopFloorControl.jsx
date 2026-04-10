@@ -416,12 +416,15 @@ export default function ShopFloorControl({ isActive }) {
       if (poId) {
         try {
           const po = await productionOrdersService.get(poId);
-          if (po && po.status === 'packaging') {
+          console.log('Split output check: PO status =', po?.status, 'has_split_output =', po?.has_split_output);
+          if (po && (po.status === 'packaging' || (po.status === 'completed' && po.has_split_output))) {
             setSplitPoId(poId);
             setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
             setShowSplitModal(true);
           }
-        } catch { /* non-critical */ }
+        } catch (splitErr) {
+          console.error('Failed to check split output status:', splitErr);
+        }
       }
     } catch (error) {
       console.error('Failed to complete work order:', error);
