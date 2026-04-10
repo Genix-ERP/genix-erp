@@ -12,31 +12,57 @@ const STAGE_COLORS = [
   { bg: "#10b981", light: "rgba(16,185,129,0.1)" },
 ];
 
-export default function SalesFunnel({ leads, opportunities, salesOrders, customers }) {
+export default function SalesFunnel({ leads, opportunities, salesOrders }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const stages = useMemo(() => {
-    const leadCount = (leads || []).length;
-    const offerCount = (opportunities || []).filter(
-      (o) => o.stage === "proposal" || o.stage === "qualification"
-    ).length || Math.ceil(leadCount * 0.6);
-    const negotiationCount = (opportunities || []).filter(
-      (o) => o.stage === "negotiation"
-    ).length || Math.ceil(leadCount * 0.35);
-    const contractCount = (salesOrders || []).filter(
-      (o) => o.status === "confirmed" || o.status === "completed"
-    ).length || Math.ceil(leadCount * 0.2);
-    const paidCount = (salesOrders || []).filter(
-      (o) => o.status === "completed"
-    ).length || Math.ceil(leadCount * 0.12);
+    const allOpps = opportunities || [];
+    const allOrders = salesOrders || [];
+    const allLeads = leads || [];
 
-    const leadValue = leadCount * 5000000;
-    const offerValue = offerCount * 8000000;
-    const negotiationValue = negotiationCount * 12000000;
-    const contractValue = contractCount * 15000000;
-    const paidValue = paidCount * 15000000;
+    // Count by actual stage from real data
+    const leadCount = allLeads.length;
+
+    const offerCount = allOpps.filter(
+      (o) => o.stage === "proposal" || o.stage === "qualification" || o.stage === "prospecting"
+    ).length;
+
+    const negotiationCount = allOpps.filter(
+      (o) => o.stage === "negotiation" || o.stage === "value_proposition"
+    ).length;
+
+    const contractCount = allOrders.filter(
+      (o) => o.status === "confirmed" || o.status === "processing"
+    ).length;
+
+    const paidCount = allOrders.filter(
+      (o) => o.status === "completed" || o.status === "delivered"
+    ).length;
+
+    // Real values from actual opportunity/order data
+    const offerValue = allOpps
+      .filter((o) => o.stage === "proposal" || o.stage === "qualification" || o.stage === "prospecting")
+      .reduce((s, o) => s + (o.expected_value || o.amount || 0), 0);
+
+    const negotiationValue = allOpps
+      .filter((o) => o.stage === "negotiation" || o.stage === "value_proposition")
+      .reduce((s, o) => s + (o.expected_value || o.amount || 0), 0);
+
+    const contractValue = allOrders
+      .filter((o) => o.status === "confirmed" || o.status === "processing")
+      .reduce((s, o) => s + (o.total_amount || o.total || 0), 0);
+
+    const paidValue = allOrders
+      .filter((o) => o.status === "completed" || o.status === "delivered")
+      .reduce((s, o) => s + (o.total_amount || o.total || 0), 0);
+
+    // Lead value estimated from average opportunity value
+    const avgOppValue = allOpps.length > 0
+      ? allOpps.reduce((s, o) => s + (o.expected_value || 0), 0) / allOpps.length
+      : 0;
+    const leadValue = leadCount * avgOppValue;
 
     const data = [
       { name: "Lead", count: leadCount, value: leadValue },
@@ -77,7 +103,7 @@ export default function SalesFunnel({ leads, opportunities, salesOrders, custome
           {stages.map((stage, i) => {
             const widthPct = Math.max((stage.count / maxCount) * 100, 12);
             return (
-              <div key={i}>
+              <div key={stage.name}>
                 {stage.conversion && (
                   <div className="flex items-center justify-center mb-1">
                     <span className="text-[10px] font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
@@ -103,7 +129,7 @@ export default function SalesFunnel({ leads, opportunities, salesOrders, custome
                     </div>
                   </div>
                   <span className="text-[11px] text-slate-400 w-24 shrink-0 text-right">
-                    {formatCurrency(stage.value)}
+                    {stage.value > 0 ? formatCurrency(stage.value) : "—"}
                   </span>
                 </div>
               </div>
@@ -116,7 +142,7 @@ export default function SalesFunnel({ leads, opportunities, salesOrders, custome
             <Filter className="w-7 h-7 text-slate-300" />
           </div>
           <p className="text-sm font-medium text-slate-500">
-            {t("no_data") || "Ma'lumot yo'q"}
+            Ma'lumot yo'q
           </p>
         </div>
       )}
