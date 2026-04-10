@@ -7,53 +7,74 @@ import { ArrowUpRight, ArrowDownLeft, Receipt } from "lucide-react";
 const STATUS_MAP = {
   paid: { label: "To'langan", color: "bg-emerald-100 text-emerald-700" },
   completed: { label: "To'langan", color: "bg-emerald-100 text-emerald-700" },
+  confirmed: { label: "Tasdiqlangan", color: "bg-blue-100 text-blue-700" },
+  partial: { label: "Qisman", color: "bg-violet-100 text-violet-700" },
   pending: { label: "Kutilmoqda", color: "bg-amber-100 text-amber-700" },
-  draft: { label: "Kutilmoqda", color: "bg-amber-100 text-amber-700" },
+  draft: { label: "Qoralama", color: "bg-slate-100 text-slate-500" },
   overdue: { label: "Muddati o'tgan", color: "bg-red-100 text-red-700" },
   cancelled: { label: "Bekor qilingan", color: "bg-slate-100 text-slate-500" },
 };
 
-export default function RecentTransactions({ financialTransactions, customerInvoices }) {
+export default function RecentTransactions({ financialTransactions, customerInvoices, vendorBills }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const transactions = useMemo(() => {
-    const all = [
-      ...(financialTransactions || []).map((tx) => ({
+    const now = new Date();
+    const all = [];
+
+    // Customer invoices — income
+    (customerInvoices || []).forEach((inv) => {
+      const dueDate = new Date(inv.due_date);
+      let status = inv.status || "pending";
+      if (status === "pending" && dueDate < now) status = "overdue";
+
+      all.push({
+        id: inv.id,
+        name: inv.customer_name || inv.partner_name || `Hisob-faktura #${inv.invoice_number || inv.id?.toString().slice(-6)}`,
+        type: "income",
+        amount: inv.total_amount || inv.amount || 0,
+        status,
+        date: inv.invoice_date || inv.date || inv.created_date,
+      });
+    });
+
+    // Vendor bills — expense
+    (vendorBills || []).forEach((bill) => {
+      const dueDate = new Date(bill.due_date);
+      let status = bill.status || "pending";
+      if (status === "pending" && dueDate < now) status = "overdue";
+
+      all.push({
+        id: bill.id,
+        name: bill.vendor_name || bill.partner_name || `Xarajat #${bill.invoice_number || bill.id?.toString().slice(-6)}`,
+        type: "expense",
+        amount: bill.total_amount || bill.amount || 0,
+        status,
+        date: bill.invoice_date || bill.date || bill.created_date,
+      });
+    });
+
+    // Financial transactions
+    (financialTransactions || []).forEach((tx) => {
+      // Skip if already covered by invoices/bills
+      if (all.some((a) => a.id === tx.id)) return;
+
+      all.push({
         id: tx.id,
-        name: tx.description || tx.category || "Tranzaksiya",
+        name: tx.description || tx.category || (tx.transaction_type === "income" ? "Kirim" : "Chiqim"),
         type: tx.transaction_type,
         amount: tx.amount || 0,
         status: tx.status || (tx.transaction_type === "income" ? "paid" : "completed"),
         date: tx.date,
-      })),
-      ...(customerInvoices || []).map((inv) => ({
-        id: inv.id,
-        name: inv.customer_name || inv.description || "Hisob-faktura",
-        type: "income",
-        amount: inv.total_amount || inv.amount || 0,
-        status: inv.status || "pending",
-        date: inv.date || inv.invoice_date,
-      })),
-    ];
+      });
+    });
 
-    // Check for overdue
-    const now = new Date();
     return all
-      .map((tx) => {
-        if (
-          tx.status === "pending" &&
-          tx.date &&
-          new Date(tx.date) < new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        ) {
-          return { ...tx, status: "overdue" };
-        }
-        return tx;
-      })
       .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
       .slice(0, 8);
-  }, [financialTransactions, customerInvoices]);
+  }, [financialTransactions, customerInvoices, vendorBills]);
 
   return (
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
@@ -90,7 +111,7 @@ export default function RecentTransactions({ financialTransactions, customerInvo
                   </p>
                 </div>
                 <span
-                  className={`text-sm font-semibold ${
+                  className={`text-sm font-semibold whitespace-nowrap ${
                     isIncome ? "text-emerald-600" : "text-red-500"
                   }`}
                 >

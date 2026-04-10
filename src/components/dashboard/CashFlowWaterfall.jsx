@@ -24,90 +24,131 @@ function CustomTooltip({ active, payload, formatCurrency }) {
     <div className="bg-white/95 backdrop-blur-lg border border-slate-200/60 rounded-xl shadow-xl p-3">
       <p className="text-xs font-semibold text-slate-700 mb-1">{d.name}</p>
       <p className="text-sm font-bold" style={{ color: d.color }}>
-        {formatCurrency(Math.abs(d.value))}
+        {d.value >= 0 ? "+" : ""}{formatCurrency(d.value)}
       </p>
     </div>
   );
 }
 
-export default function CashFlowWaterfall({ transactions }) {
+export default function CashFlowWaterfall({ transactions, customerInvoices, vendorBills }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
   const chartData = useMemo(() => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // Gather all money movements from multiple sources
+    const allMovements = [];
 
-    const recent = (transactions || []).filter((tx) => {
-      const d = new Date(tx.date);
-      return d >= thirtyDaysAgo && d <= now;
+    // From financial transactions
+    (transactions || []).forEach((tx) => {
+      allMovements.push({
+        date: new Date(tx.date || 0),
+        type: tx.transaction_type, // income or expense
+        amount: tx.amount || 0,
+      });
     });
 
-    const weeklyData = [];
+    // From customer invoices (paid = inflow)
+    (customerInvoices || []).forEach((inv) => {
+      if (inv.status === "paid" || inv.status === "completed" || inv.amount_paid > 0) {
+        allMovements.push({
+          date: new Date(inv.invoice_date || inv.date || inv.created_date || 0),
+          type: "income",
+          amount: inv.amount_paid || inv.total_amount || inv.amount || 0,
+        });
+      }
+    });
+
+    // From vendor bills (paid = outflow)
+    (vendorBills || []).forEach((bill) => {
+      if (bill.status === "paid" || bill.status === "completed" || bill.amount_paid > 0) {
+        allMovements.push({
+          date: new Date(bill.invoice_date || bill.date || bill.created_date || 0),
+          type: "expense",
+          amount: bill.amount_paid || bill.total_amount || bill.amount || 0,
+        });
+      }
+    });
+
+    if (allMovements.length === 0) return [];
+
+    // Group into last 4 weeks
+    const now = new Date();
+    const weekLabels = ["1-hafta", "2-hafta", "3-hafta", "4-hafta"];
+    const result = [];
+
     for (let i = 0; i < 4; i++) {
-      const weekStart = new Date(thirtyDaysAgo.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+      const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const weekTxs = recent.filter((tx) => {
-        const d = new Date(tx.date);
-        return d >= weekStart && d < weekEnd;
-      });
+      const weekMovements = allMovements.filter(
+        (m) => m.date >= weekStart && m.date < weekEnd
+      );
 
-      const inflow = weekTxs
-        .filter((tx) => tx.transaction_type === "income")
-        .reduce((s, tx) => s + (tx.amount || 0), 0);
-      const outflow = weekTxs
-        .filter((tx) => tx.transaction_type === "expense")
-        .reduce((s, tx) => s + (tx.amount || 0), 0);
+      const inflow = weekMovements
+        .filter((m) => m.type === "income")
+        .reduce((s, m) => s + m.amount, 0);
 
-      weeklyData.push({
-        name: `${i + 1}-hafta`,
+      const outflow = weekMovements
+        .filter((m) => m.type === "expense")
+        .reduce((s, m) => s + m.amount, 0);
+
+      result.unshift({
+        weekLabel: weekLabels[3 - i],
         inflow,
-        outflow: -outflow,
-        net: inflow - outflow,
+        outflow,
       });
     }
 
-    return [
-      ...weeklyData.map((w) => [
-        { name: `${w.name} +`, value: w.inflow, color: "#10b981", type: "inflow" },
-        { name: `${w.name} -`, value: w.outflow, color: "#ef4444", type: "outflow" },
-      ]).flat(),
-      {
-        name: "Balans",
-        value: weeklyData.reduce((s, w) => s + w.net, 0),
-        color: "#6C5CE7",
-        type: "net",
-      },
-    ];
-  }, [transactions]);
+    // Build waterfall bars
+    const bars = [];
+    result.forEach((w) => {
+      if (w.inflow > 0) {
+        bars.push({ name: `${w.weekLabel} +`, value: w.inflow, color: "#10b981", type: "inflow" });
+      }
+      if (w.outflow > 0) {
+        bars.push({ name: `${w.weekLabel} -`, value: -w.outflow, color: "#ef4444", type: "outflow" });
+      }
+    });
 
-  const hasData = chartData.some((d) => d.value !== 0);
+    // Net balance
+    const totalInflow = result.reduce((s, w) => s + w.inflow, 0);
+    const totalOutflow = result.reduce((s, w) => s + w.outflow, 0);
+    bars.push({
+      name: "Balans",
+      value: totalInflow - totalOutflow,
+      color: "#6C5CE7",
+      type: "net",
+    });
+
+    return bars;
+  }, [transactions, customerInvoices, vendorBills]);
+
+  const hasData = chartData.length > 0 && chartData.some((d) => d.value !== 0);
 
   return (
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">
-            {t("cash_flow") || "Pul oqimi"}
+            {t("cash_flow") || "Naqd pul oqimi"}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            {t("last_30_days") || "Oxirgi 30 kun"}
+            Oxirgi 30 kun
           </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-[10px] text-slate-400">{t("income") || "Kirim"}</span>
+            <span className="text-[10px] text-slate-400">{t("income") || "Daromad"}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-[10px] text-slate-400">{t("expense") || "Chiqim"}</span>
+            <span className="text-[10px] text-slate-400">{t("expense") || "Xarajat"}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-[#6C5CE7]" />
-            <span className="text-[10px] text-slate-400">{t("balance") || "Balans"}</span>
+            <span className="text-[10px] text-slate-400">Balans</span>
           </div>
         </div>
       </div>
@@ -132,7 +173,7 @@ export default function CashFlowWaterfall({ transactions }) {
           <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-3">
             <ArrowDownUp className="w-7 h-7 text-slate-300" />
           </div>
-          <p className="text-sm font-medium text-slate-500">{t("no_data") || "Ma'lumot yo'q"}</p>
+          <p className="text-sm font-medium text-slate-500">Ma'lumotlar yo'q</p>
         </div>
       )}
     </div>
