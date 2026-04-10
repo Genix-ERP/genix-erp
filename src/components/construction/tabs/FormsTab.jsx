@@ -125,6 +125,9 @@ const FormsTab = ({ project }) => {
   // Delete dialog state
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Form-2 detail tab state (smeta lines vs actual materials)
+  const [f2DetailTab, setF2DetailTab] = useState('smeta');
+
   const FORMS_TYPES = ['ks2', 'ks3', 'hidden_work'];
 
   const load = useCallback(async () => {
@@ -157,6 +160,7 @@ const FormsTab = ({ project }) => {
 
   const loadActDetail = async (actId, actType) => {
     setDetailLoading(true);
+    setF2DetailTab('smeta');
     try {
       if (actType === 'hidden_work') {
         const detail = await constructionService.getF19Detail(project.id, actId);
@@ -1041,8 +1045,162 @@ const FormsTab = ({ project }) => {
         {/* Signing panel - only show when pending */}
         {selectedAct.state === 'pending' && <SignaturePanel act={selectedAct} />}
 
-        {/* Lines table */}
-        {(selectedAct.lines || []).length > 0 && (
+        {/* KS-2 Detail Tabs: Smeta lines + Actual materials */}
+        {selectedAct.act_type === 'ks2' && (
+          <>
+            {/* Tab switcher */}
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setF2DetailTab('smeta')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${f2DetailTab === 'smeta' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t('smeta_lines') || 'Smeta ishlar'} ({(selectedAct.lines || []).length})
+              </button>
+              <button
+                onClick={() => setF2DetailTab('materials')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${f2DetailTab === 'materials' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t('actual_materials') || 'Fakt materiallar'} ({(selectedAct.material_usage || []).length})
+              </button>
+            </div>
+
+            {/* Tab content: Smeta lines */}
+            {f2DetailTab === 'smeta' && (selectedAct.lines || []).length > 0 && (
+              <Card>
+                <CardHeader><CardTitle>{t('smeta_lines') || 'Smeta ishlar'}</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-slate-500">
+                          <th className="text-left py-2 px-3">№</th>
+                          <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
+                          <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
+                          <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta miqdori'}</th>
+                          <th className="text-right py-2 px-3">{t('qty_period') || 'Davr miqdori'}</th>
+                          <th className="text-right py-2 px-3">{t('unit_rate') || 'Birlik narxi'}</th>
+                          <th className="text-right py-2 px-3">{t('total_amount') || 'Jami'}</th>
+                          <th className="text-left py-2 px-3">{t('note') || 'Izoh'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedAct.lines || []).map((line, idx) => {
+                          const isEditing = editingLineId === line.id;
+                          const isDraft = selectedAct.state === 'draft';
+                          return (
+                            <tr
+                              key={line.id || idx}
+                              className={`border-b hover:bg-slate-50 ${isDraft ? 'cursor-pointer' : ''} ${isEditing ? 'bg-blue-50' : ''}`}
+                              onClick={() => { if (isDraft && !isEditing) startEditLine(line); }}
+                            >
+                              <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
+                              <td className="py-2 px-3">{line.name}</td>
+                              <td className="py-2 px-3">{line.uom || '—'}</td>
+                              <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>
+                              <td className="py-2 px-3 text-right">
+                                {isEditing ? (
+                                  <Input
+                                    type="number"
+                                    step="0.0001"
+                                    value={editLineForm.qty_period}
+                                    onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                    className="w-28 h-7 text-right text-sm"
+                                    autoFocus
+                                    onClick={e => e.stopPropagation()}
+                                  />
+                                ) : line.quantity}
+                              </td>
+                              <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
+                              <td className="py-2 px-3 text-right font-medium">
+                                {isEditing
+                                  ? formatCurrency((parseFloat(editLineForm.qty_period) || 0) * (line.unit_rate || 0))
+                                  : formatCurrency(line.total_amount || 0)}
+                              </td>
+                              <td className="py-2 px-3 text-slate-500">
+                                {isEditing ? (
+                                  <Input
+                                    value={editLineForm.note}
+                                    onChange={e => setEditLineForm(f => ({ ...f, note: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
+                                    className="h-7 text-sm"
+                                    placeholder="Izoh..."
+                                    onClick={e => e.stopPropagation()}
+                                  />
+                                ) : (line.note || '')}
+                              </td>
+                              {isEditing && (
+                                <td className="py-2 px-3">
+                                  <div className="flex gap-1">
+                                    <Button size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); saveEditLine(selectedAct.id, line.id); }}>
+                                      <CheckCircle className="w-3 h-3" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); cancelEditLine(); }}>
+                                      <XCircle className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {f2DetailTab === 'smeta' && (selectedAct.lines || []).length === 0 && (
+              <Card>
+                <CardContent className="py-8 text-center text-slate-400">
+                  {t('no_smeta_lines') || 'Smeta qatorlari topilmadi'}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tab content: Actual materials used */}
+            {f2DetailTab === 'materials' && (
+              <Card>
+                <CardHeader><CardTitle>{t('actual_materials') || 'Fakt ishlatilgan materiallar'}</CardTitle></CardHeader>
+                <CardContent>
+                  {(selectedAct.material_usage || []).length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-slate-500">
+                            <th className="text-left py-2 px-3">№</th>
+                            <th className="text-left py-2 px-3">{t('material_name') || 'Material nomi'}</th>
+                            <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
+                            <th className="text-right py-2 px-3">{t('quantity_used') || 'Ishlatilgan miqdor'}</th>
+                            <th className="text-left py-2 px-3">{t('notes') || 'Izoh'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(selectedAct.material_usage || []).map((mu, idx) => (
+                            <tr key={mu.id || idx} className="border-b hover:bg-slate-50">
+                              <td className="py-2 px-3 text-slate-400">{idx + 1}</td>
+                              <td className="py-2 px-3 font-medium">{mu.product_name}</td>
+                              <td className="py-2 px-3">{mu.uom || '—'}</td>
+                              <td className="py-2 px-3 text-right font-semibold">{mu.quantity_used}</td>
+                              <td className="py-2 px-3 text-slate-500">{mu.notes || ''}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-slate-400">
+                      {t('no_materials_used') || 'Bu davr uchun ishlatilgan materiallar topilmadi'}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Non-KS2 lines table (KS-3, etc.) */}
+        {selectedAct.act_type !== 'ks2' && (selectedAct.lines || []).length > 0 && (
           <Card>
             <CardHeader><CardTitle>{t('act_lines') || 'Akt qatorlari'}</CardTitle></CardHeader>
             <CardContent>
@@ -1053,77 +1211,22 @@ const FormsTab = ({ project }) => {
                       <th className="text-left py-2 px-3">№</th>
                       <th className="text-left py-2 px-3">{t('name') || 'Nomi'}</th>
                       <th className="text-left py-2 px-3">{t('uom') || "O'lchov"}</th>
-                      {selectedAct.act_type === 'ks2' && <th className="text-right py-2 px-3">{t('qty_smeta') || 'Smeta miqdori'}</th>}
-                      <th className="text-right py-2 px-3">{selectedAct.act_type === 'ks2' ? (t('qty_period') || 'Davr miqdori') : (t('quantity') || 'Miqdor')}</th>
+                      <th className="text-right py-2 px-3">{t('quantity') || 'Miqdor'}</th>
                       <th className="text-right py-2 px-3">{t('unit_rate') || 'Birlik narxi'}</th>
                       <th className="text-right py-2 px-3">{t('total_amount') || 'Jami'}</th>
-                      {selectedAct.act_type === 'ks2' && <th className="text-left py-2 px-3">{t('note') || 'Izoh'}</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedAct.lines || []).map((line, idx) => {
-                      const isEditing = editingLineId === line.id;
-                      const isDraft = selectedAct.state === 'draft';
-                      const isKs2 = selectedAct.act_type === 'ks2';
-                      return (
-                        <tr
-                          key={line.id || idx}
-                          className={`border-b hover:bg-slate-50 ${isDraft && isKs2 ? 'cursor-pointer' : ''} ${isEditing ? 'bg-blue-50' : ''}`}
-                          onClick={() => { if (isDraft && isKs2 && !isEditing) startEditLine(line); }}
-                        >
-                          <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
-                          <td className="py-2 px-3">{line.name}</td>
-                          <td className="py-2 px-3">{line.uom || '—'}</td>
-                          {isKs2 && <td className="py-2 px-3 text-right text-slate-500">{line.qty_smeta || '—'}</td>}
-                          <td className="py-2 px-3 text-right">
-                            {isEditing ? (
-                              <Input
-                                type="number"
-                                step="0.0001"
-                                value={editLineForm.qty_period}
-                                onChange={e => setEditLineForm(f => ({ ...f, qty_period: e.target.value }))}
-                                onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
-                                className="w-28 h-7 text-right text-sm"
-                                autoFocus
-                                onClick={e => e.stopPropagation()}
-                              />
-                            ) : line.quantity}
-                          </td>
-                          <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
-                          <td className="py-2 px-3 text-right font-medium">
-                            {isEditing
-                              ? formatCurrency((parseFloat(editLineForm.qty_period) || 0) * (line.unit_rate || 0))
-                              : formatCurrency(line.total_amount || 0)}
-                          </td>
-                          {isKs2 && (
-                            <td className="py-2 px-3 text-slate-500">
-                              {isEditing ? (
-                                <Input
-                                  value={editLineForm.note}
-                                  onChange={e => setEditLineForm(f => ({ ...f, note: e.target.value }))}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveEditLine(selectedAct.id, line.id); if (e.key === 'Escape') cancelEditLine(); }}
-                                  className="h-7 text-sm"
-                                  placeholder="Izoh..."
-                                  onClick={e => e.stopPropagation()}
-                                />
-                              ) : (line.note || '')}
-                            </td>
-                          )}
-                          {isEditing && (
-                            <td className="py-2 px-3">
-                              <div className="flex gap-1">
-                                <Button size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); saveEditLine(selectedAct.id, line.id); }}>
-                                  <CheckCircle className="w-3 h-3" />
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); cancelEditLine(); }}>
-                                  <XCircle className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
+                    {(selectedAct.lines || []).map((line, idx) => (
+                      <tr key={line.id || idx} className="border-b hover:bg-slate-50">
+                        <td className="py-2 px-3 text-slate-400">{line.sort_order || idx + 1}</td>
+                        <td className="py-2 px-3">{line.name}</td>
+                        <td className="py-2 px-3">{line.uom || '—'}</td>
+                        <td className="py-2 px-3 text-right">{line.quantity}</td>
+                        <td className="py-2 px-3 text-right">{formatCurrency(line.unit_rate || 0)}</td>
+                        <td className="py-2 px-3 text-right font-medium">{formatCurrency(line.total_amount || 0)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

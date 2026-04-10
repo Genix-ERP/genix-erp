@@ -2508,33 +2508,21 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {buildingForm.id && (
               <div>
-                <Label>{t('estimated_cost') || 'Taxminiy xarajat'}</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatPriceInput(buildingForm.estimated_cost)}
-                  onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: parsePriceInput(e.target.value) })}
-                  placeholder="5 000 000 000"
-                />
+                <Label>{t('status') || 'Holat'}</Label>
+                <Select value={buildingForm.status} onValueChange={(v) => setBuildingForm({ ...buildingForm, status: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
+                    <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
+                    <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              {buildingForm.id && (
-                <div>
-                  <Label>{t('status') || 'Holat'}</Label>
-                  <Select value={buildingForm.status} onValueChange={(v) => setBuildingForm({ ...buildingForm, status: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('select_status') || 'Holatni tanlang'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">{t('draft') || 'Qoralama'}</SelectItem>
-                      <SelectItem value="in_progress">{t('in_progress') || 'Jarayonda'}</SelectItem>
-                      <SelectItem value="completed">{t('completed') || 'Tugallangan'}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowBuildingModal(false)}>
                 {t('cancel') || 'Bekor qilish'}
@@ -3821,7 +3809,7 @@ export default function Construction() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>{t('project_type') || 'Loyiha turi'}</Label>
                 <Select value={projectForm.project_type} onValueChange={(v) => setProjectForm({ ...projectForm, project_type: v })}>
@@ -3836,17 +3824,6 @@ export default function Construction() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>{t('building_type') || 'Bino turi'}</Label>
-                <Input
-                  value={projectForm.building_type}
-                  onChange={(e) => setProjectForm({ ...projectForm, building_type: e.target.value })}
-                  placeholder="9-qavatli turar-joy"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
                 <Input
