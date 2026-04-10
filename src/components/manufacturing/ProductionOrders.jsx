@@ -358,25 +358,9 @@ export default function ProductionOrders() {
       const nextStage = stages[currentIndex + 1].key;
 
       // When advancing to the last stage ('done'), check if split output is needed
+      console.log('Advance stage:', { nextStage, has_split_output: order.has_split_output, status: order.status, orderId });
       if (nextStage === 'done' && order.has_split_output) {
-        try {
-          // Move PO to 'packaging' status so the split output endpoint accepts it
-          await updateProductionOrder(orderId, {
-            current_stage: 'packaging',
-            status: 'packaging',
-            progress_percent: 95
-          });
-          if (selectedOrder?.id === orderId) {
-            setSelectedOrder(prev => ({ ...prev, current_stage: 'packaging', status: 'packaging' }));
-          }
-        } catch (error) {
-          console.error('Error moving to packaging:', error);
-          toast.error(t('error_advancing_stage') || 'Failed to advance stage');
-          return;
-        }
-        setSplitPoId(orderId);
-        setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
-        setShowSplitModal(true);
+        openSplitModal(orderId);
         return;
       }
 
@@ -393,13 +377,38 @@ export default function ProductionOrders() {
     }
   };
 
-  // Split output handlers
+  // Split output helpers
+  const openSplitModal = async (orderId) => {
+    // Ensure the PO is in 'packaging' status before showing the modal
+    try {
+      await updateProductionOrder(orderId, {
+        current_stage: 'packaging',
+        status: 'packaging',
+        progress_percent: 95
+      });
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder(prev => ({ ...prev, current_stage: 'packaging', status: 'packaging' }));
+      }
+    } catch (error) {
+      console.error('Error moving to packaging:', error);
+      // Even if the status update fails, still try to show the modal
+    }
+    setSplitPoId(orderId);
+    setSplitItems([{ product_id: '', quantity: '', warehouse_id: '' }]);
+    setShowSplitModal(true);
+  };
+
   const handleSplitSubmit = async () => {
     const validItems = splitItems.filter(it => it.product_id && parseFloat(it.quantity) > 0);
     if (!validItems.length) return;
 
     setSplitSubmitting(true);
     try {
+      // Make sure PO is in packaging status before calling completeSplitOutput
+      try {
+        await updateProductionOrder(splitPoId, { status: 'packaging' });
+      } catch (e) { /* ignore - might already be in packaging */ }
+
       await productionOrdersService.completeSplitOutput(splitPoId, {
         items: validItems.map(it => ({
           product_id: it.product_id,
@@ -415,6 +424,7 @@ export default function ProductionOrders() {
       refreshData();
       refreshInventory();
     } catch (err) {
+      console.error('Split output error:', err);
       toast.error('Failed: ' + (err.response?.data?.error || err.message));
     }
     setSplitSubmitting(false);
@@ -910,7 +920,7 @@ export default function ProductionOrders() {
                   </div>
                 )}
                 {/* Advance Stage Button */}
-                {selectedOrder.current_stage !== 'done' && selectedOrder.status === 'in_progress' && (
+                {selectedOrder.current_stage !== 'done' && selectedOrder.current_stage !== 'packaging' && selectedOrder.status === 'in_progress' && (
                   <div className="mt-4 flex justify-center">
                     <Button
                       onClick={() => handleAdvanceStage(selectedOrder.id, selectedOrder.current_stage, selectedOrder)}
@@ -918,6 +928,22 @@ export default function ProductionOrders() {
                     >
                       <ArrowRight className="w-4 h-4 mr-2" />
                       {t('advance_to_next_stage') || "Keyingi bosqichga o'tish"}
+                    </Button>
+                  </div>
+                )}
+                {/* Split Output Button - shows when order has split output and reached final stages */}
+                {selectedOrder.has_split_output && selectedOrder.status !== 'completed' && (
+                  selectedOrder.current_stage === 'done' ||
+                  selectedOrder.current_stage === 'packaging' ||
+                  selectedOrder.status === 'packaging'
+                ) && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      onClick={() => openSplitModal(selectedOrder.id)}
+                      className="bg-gradient-to-r from-green-600 to-green-700"
+                    >
+                      <Package className="w-4 h-4 mr-2" />
+                      {language === 'uz' ? 'Mahsulotlarga bo\'lish' : language === 'ru' ? 'Разделить на продукты' : 'Split into Products'}
                     </Button>
                   </div>
                 )}
