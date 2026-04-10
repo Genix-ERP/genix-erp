@@ -25,7 +25,7 @@ function CustomTooltip({ active, payload }) {
   );
 }
 
-export default function ClientSegmentsDonut({ customers }) {
+export default function ClientSegmentsDonut({ customers, salesOrders }) {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
 
@@ -34,35 +34,56 @@ export default function ClientSegmentsDonut({ customers }) {
     const total = all.length;
 
     if (total === 0) {
-      return { data: SEGMENTS.map((s) => ({ ...s, value: 0 })), total: 0 };
+      return { data: [], total: 0 };
     }
 
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    const newCustomers = all.filter((c) => {
-      const created = new Date(c.created_at || c.createdAt || c.date_created);
-      return created >= thirtyDaysAgo;
-    }).length || Math.ceil(total * 0.2);
+    // Customers with orders — build lookup from real sales data
+    const customerOrderDates = {};
+    (salesOrders || []).forEach((o) => {
+      const cid = o.customer_id || o.customer || o.partner_id;
+      const date = new Date(o.order_date || o.date || o.created_date || 0);
+      if (cid) {
+        if (!customerOrderDates[cid] || date > customerOrderDates[cid]) {
+          customerOrderDates[cid] = date;
+        }
+      }
+    });
 
-    const lost = all.filter((c) => c.status === "inactive" || c.status === "churned").length || Math.ceil(total * 0.1);
+    // New: created in last 30 days
+    const newCustomers = all.filter((c) => {
+      const created = new Date(c.created_at || c.createdAt || c.date_created || c.created_date || 0);
+      return created >= thirtyDaysAgo;
+    }).length;
+
+    // Lost: status explicitly inactive/churned
+    const lost = all.filter(
+      (c) => c.status === "inactive" || c.status === "churned"
+    ).length;
+
+    // At risk: last order > 90 days ago, but not inactive
     const atRisk = all.filter((c) => {
-      const lastOrder = new Date(c.last_order_date || c.updated_at || 0);
-      return lastOrder < ninetyDaysAgo && c.status !== "inactive";
-    }).length || Math.ceil(total * 0.15);
+      if (c.status === "inactive" || c.status === "churned") return false;
+      const cid = c.id || c._id;
+      const lastOrder = customerOrderDates[cid] || new Date(c.last_order_date || c.updated_at || 0);
+      return lastOrder < ninetyDaysAgo && lastOrder.getTime() > 0;
+    }).length;
+
+    // Regular: everyone else
     const regular = Math.max(total - newCustomers - lost - atRisk, 0);
 
-    return {
-      data: [
-        { ...SEGMENTS[0], value: newCustomers },
-        { ...SEGMENTS[1], value: regular },
-        { ...SEGMENTS[2], value: atRisk },
-        { ...SEGMENTS[3], value: lost },
-      ].filter((s) => s.value > 0),
-      total,
-    };
-  }, [customers]);
+    const result = [
+      { ...SEGMENTS[0], value: newCustomers },
+      { ...SEGMENTS[1], value: regular },
+      { ...SEGMENTS[2], value: atRisk },
+      { ...SEGMENTS[3], value: lost },
+    ].filter((s) => s.value > 0);
+
+    return { data: result, total };
+  }, [customers, salesOrders]);
 
   return (
     <div className="glass-card rounded-2xl p-5 h-full transition-all duration-300">
@@ -91,7 +112,7 @@ export default function ClientSegmentsDonut({ customers }) {
                   strokeWidth={0}
                 >
                   {data.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
+                    <Cell key={entry.key} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
@@ -99,13 +120,13 @@ export default function ClientSegmentsDonut({ customers }) {
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-2xl font-bold text-slate-900">{total}</span>
-              <span className="text-[10px] text-slate-400">{t("total") || "Jami"}</span>
+              <span className="text-[10px] text-slate-400">Jami</span>
             </div>
           </div>
 
           <div className="flex-1 space-y-2.5">
-            {data.map((seg, i) => (
-              <div key={i} className="flex items-center gap-2">
+            {data.map((seg) => (
+              <div key={seg.key} className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: seg.color }} />
                 <span className="text-xs text-slate-600 flex-1">{seg.label}</span>
                 <span className="text-xs font-semibold text-slate-900">{seg.value}</span>
