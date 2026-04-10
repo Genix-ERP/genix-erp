@@ -3,12 +3,10 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
-  Users,
   DollarSign,
   Wallet,
   UserCheck,
   FileWarning,
-  Receipt,
 } from "lucide-react";
 
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -308,7 +306,7 @@ export default function Dashboard() {
         <motion.div custom={6} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <RevenueExpenseChart data={revenueExpenseData} />
-            <CashFlowWaterfall transactions={financialTransactions} />
+            <CashFlowWaterfall transactions={financialTransactions} customerInvoices={customerInvoices} vendorBills={vendorBills} />
           </div>
         </motion.div>
 
@@ -319,7 +317,6 @@ export default function Dashboard() {
               leads={leads}
               opportunities={opportunities}
               salesOrders={salesOrders}
-              customers={customers}
             />
             <TopProductsChart salesOrders={salesOrders} inventory={inventory} />
           </div>
@@ -328,7 +325,7 @@ export default function Dashboard() {
         {/* === Charts Section Row 3: Client Segments + Inventory === */}
         <motion.div custom={8} initial="hidden" animate="visible" variants={fadeIn}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ClientSegmentsDonut customers={customers} />
+            <ClientSegmentsDonut customers={customers} salesOrders={salesOrders} />
             <InventoryStackedBar inventory={inventory} />
           </div>
         </motion.div>
@@ -342,10 +339,11 @@ export default function Dashboard() {
               employees={employees}
               customerInvoices={customerInvoices}
             />
-            <TopClientsList customers={customers} salesOrders={salesOrders} />
+            <TopClientsList customers={customers} salesOrders={salesOrders} customerInvoices={customerInvoices} />
             <RecentTransactions
               financialTransactions={financialTransactions}
               customerInvoices={customerInvoices}
+              vendorBills={vendorBills}
             />
           </div>
         </motion.div>
