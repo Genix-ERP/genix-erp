@@ -182,6 +182,7 @@ export default function ProductionOrders() {
         ...newOrder,
         quantity_planned: parseFloat(newOrder.quantity_planned)
       };
+      console.log('Creating order with has_split_output:', orderData.has_split_output, 'full data:', JSON.stringify(orderData));
       // Only include bom_id if selected
       if (!orderData.bom_id) {
         delete orderData.bom_id;
