@@ -4227,6 +4227,11 @@ export const translations = {
     "smeta_qty": "Estimate Qty",
     "actual_qty": "Actual Qty",
     "quantity_used": "Quantity Used",
+    "smeta_lines": "Estimate works",
+    "actual_materials": "Actual materials",
+    "no_smeta_lines": "No estimate lines found",
+    "no_materials_used": "No materials used for this period",
+    "material_name": "Material name",
     "edit_usage": "Edit Usage",
     "new_usage": "New Usage",
     "usage_date": "Usage Date",
@@ -11292,6 +11297,11 @@ export const translations = {
     "smeta_qty": "Smeta miqdori",
     "actual_qty": "Haqiqiy miqdor",
     "quantity_used": "Sarflangan miqdor",
+    "smeta_lines": "Smeta ishlar",
+    "actual_materials": "Fakt materiallar",
+    "no_smeta_lines": "Smeta qatorlari topilmadi",
+    "no_materials_used": "Bu davr uchun ishlatilgan materiallar topilmadi",
+    "material_name": "Material nomi",
     "edit_usage": "Sarfni tahrirlash",
     "new_usage": "Yangi sarf",
     "usage_date": "Sarf sanasi",
@@ -13960,6 +13970,13 @@ export const translations = {
   },
 
   ru: {
+    // Construction Form-2 tabs
+    "smeta_lines": "Сметные работы",
+    "actual_materials": "Фактические материалы",
+    "no_smeta_lines": "Сметные строки не найдены",
+    "no_materials_used": "За этот период материалы не использовались",
+    "material_name": "Наименование материала",
+    "quantity_used": "Использованное количество",
     // General
     "loading": "Загрузка",
     "error": "Ошибка",
