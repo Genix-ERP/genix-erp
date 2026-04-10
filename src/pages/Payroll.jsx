@@ -9,7 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, DollarSign, Users, Calculator, TrendingUp, Brain, Download, AlertTriangle, CheckCircle, Target, Lightbulb, Edit2, Trash2, CreditCard, UserCircle } from 'lucide-react';
+import EmployeeLoans from '@/components/payroll/EmployeeLoans';
+import EmployeePortal from '@/components/payroll/EmployeePortal';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { analyzePayroll } from '@/api/services/aiAnalytics';
@@ -17,6 +20,7 @@ import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
+import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 
 export default function Payroll() {
@@ -30,6 +34,7 @@ export default function Payroll() {
     refreshData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
+  const { getSetting } = useAdminSettings();
 
   // AI Analysis
   const payrollAnalysis = useMemo(() => analyzePayroll(payrolls, employees, language), [payrolls, employees, language]);
@@ -42,6 +47,9 @@ export default function Payroll() {
   const [editPayroll, setEditPayroll] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [payrollToDelete, setPayrollToDelete] = useState(null);
+  const [showPayMethodDialog, setShowPayMethodDialog] = useState(false);
+  const [payingPayrollId, setPayingPayrollId] = useState(null);
+  const [selectedPayMethod, setSelectedPayMethod] = useState('cash');
   const [pendingDeductions, setPendingDeductions] = useState([]);
   const [totalPendingDeduction, setTotalPendingDeduction] = useState(0);
   const [deductionPercent, setDeductionPercent] = useState(0);
@@ -107,6 +115,11 @@ export default function Payroll() {
 
   const shortageDeductionAmount = Math.round(totalPendingDeduction * deductionPercent / 100);
 
+  // Payroll tax rates from settings (defaults: Uzbekistan 2024-2026 rates)
+  const incomeTaxRate = parseFloat(getSetting('payroll.tax.income_tax_rate', '12')) / 100;
+  const socialInsuranceRate = parseFloat(getSetting('payroll.tax.social_insurance_rate', '1')) / 100;
+  const taxFreeMinimum = parseFloat(getSetting('payroll.tax.tax_free_minimum', '0'));
+
   const calculatePayroll = (data, shortageAmount = 0) => {
     const basicSalary = parseFloat(data.basic_salary) || 0;
     const overtimeHours = parseFloat(data.overtime_hours) || 0;
@@ -117,14 +130,15 @@ export default function Payroll() {
 
     const grossPay = basicSalary + overtimePay + bonuses + allowances;
 
-    const taxableAmount = Math.max(0, grossPay - 3000);
-    const taxDeduction = taxableAmount * 0.20;
+    // Income tax (НДФЛ / JSHSHO): default 12% in Uzbekistan
+    const taxableAmount = Math.max(0, grossPay - taxFreeMinimum);
+    const taxDeduction = Math.round(taxableAmount * incomeTaxRate);
 
-    const socialSecurity = grossPay * 0.062;
-    const healthInsurance = 200;
+    // Social insurance (INPS): default 1% employee side
+    const socialSecurity = Math.round(grossPay * socialInsuranceRate);
+
     const otherDeductions = shortageAmount;
-
-    const totalDeductions = taxDeduction + socialSecurity + healthInsurance + otherDeductions;
+    const totalDeductions = taxDeduction + socialSecurity + otherDeductions;
     const netPay = grossPay - totalDeductions;
 
     return {
@@ -132,7 +146,7 @@ export default function Payroll() {
       gross_pay: grossPay,
       tax_deduction: taxDeduction,
       social_security: socialSecurity,
-      health_insurance: healthInsurance,
+      health_insurance: 0,
       other_deductions: otherDeductions,
       total_deductions: totalDeductions,
       net_pay: netPay
@@ -144,7 +158,7 @@ export default function Payroll() {
 
     const payrollData = {
       ...newPayroll,
-      payroll_number: newPayroll.payroll_number || `PAY-${Date.now()}`,
+      payroll_number: '',
       basic_salary: parseFloat(newPayroll.basic_salary),
       overtime_hours: parseFloat(newPayroll.overtime_hours),
       bonuses: parseFloat(newPayroll.bonuses),
@@ -176,8 +190,22 @@ export default function Payroll() {
     setDeductionPercent(0);
   };
 
-  const updatePayrollStatus = (payrollId, newStatus) => {
-    updatePayroll(payrollId, { status: newStatus });
+  const updatePayrollStatus = (payrollId, newStatus, paymentMethod) => {
+    const data = { status: newStatus };
+    if (paymentMethod) data.payment_method = paymentMethod;
+    updatePayroll(payrollId, data);
+  };
+
+  const handlePayClick = (payrollId) => {
+    setPayingPayrollId(payrollId);
+    setSelectedPayMethod('cash');
+    setShowPayMethodDialog(true);
+  };
+
+  const handleConfirmPay = () => {
+    updatePayrollStatus(payingPayrollId, 'paid', selectedPayMethod);
+    setShowPayMethodDialog(false);
+    setPayingPayrollId(null);
   };
 
   const handleEditPayroll = (payroll) => {
@@ -344,6 +372,25 @@ export default function Payroll() {
     <div className="p-4 md:p-6 lg:p-8 bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
       <div className="space-y-6">
 
+        {/* Tabs */}
+        <Tabs defaultValue="payroll" className="w-full">
+          <TabsList className="w-full bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-slate-200/60 shadow-lg flex flex-wrap justify-start gap-1 h-auto">
+            <TabsTrigger value="payroll" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <DollarSign className="w-4 h-4" />
+              {t('payroll') || 'Ish haqi'}
+            </TabsTrigger>
+            <TabsTrigger value="loans" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <CreditCard className="w-4 h-4" />
+              {t('employee_loans')}
+            </TabsTrigger>
+            <TabsTrigger value="portal" className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-slate-600 data-[state=inactive]:hover:bg-slate-100">
+              <UserCircle className="w-4 h-4" />
+              {t('employee_portal')}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="payroll" className="mt-4 space-y-6">
+
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-lg">
@@ -480,7 +527,7 @@ export default function Payroll() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>{t('payroll_records')}</CardTitle>
-                {canCreate(MODULES.PAYROLL) && (
+                {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
                   <Button onClick={() => setShowCreateModal(true)} className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)]">
                     <Plus className="w-4 h-4 mr-2" /> {t('process_payroll')}
                   </Button>
@@ -521,7 +568,7 @@ export default function Payroll() {
                 <div className="text-center py-16">
                   <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">{t('no_payroll_records_yet')}</p>
-                  {canCreate(MODULES.PAYROLL) && (
+                  {(canCreate(MODULES.PAYROLL) || canCreate(MODULES.HR)) && (
                     <Button onClick={() => setShowCreateModal(true)} className="mt-4">{t('process_first_payroll')}</Button>
                   )}
                 </div>
@@ -556,22 +603,22 @@ export default function Payroll() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {payroll.status === 'draft' && canUpdate(MODULES.PAYROLL) && (
+                              {payroll.status === 'draft' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
                                 </Button>
                               )}
-                              {payroll.status === 'calculated' && canUpdate(MODULES.PAYROLL) && (
+                              {payroll.status === 'calculated' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" className="text-blue-600" onClick={() => updatePayrollStatus(payroll.id, 'approved')}>
                                   {t('approve')}
                                 </Button>
                               )}
-                              {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) && (
-                                <Button size="sm" variant="ghost" className="text-green-600" onClick={() => updatePayrollStatus(payroll.id, 'paid')}>
+                              {payroll.status === 'approved' && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
+                                <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handlePayClick(payroll.id)}>
                                   {t('pay')}
                                 </Button>
                               )}
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canUpdate(MODULES.PAYROLL) && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canUpdate(MODULES.PAYROLL) || canUpdate(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleEditPayroll(payroll)} title={t('edit')}>
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
@@ -579,7 +626,7 @@ export default function Payroll() {
                               <Button size="sm" variant="ghost" onClick={() => handleDownloadPayslip(payroll)} title={t('download')}>
                                 <Download className="w-4 h-4" />
                               </Button>
-                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canDelete(MODULES.PAYROLL) && (
+                              {(payroll.status === 'draft' || payroll.status === 'calculated') && canDelete(MODULES.PAYROLL) || canDelete(MODULES.HR) && (
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteClick(payroll)} title={t('delete')}>
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </Button>
@@ -618,6 +665,39 @@ export default function Payroll() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Payment Method Dialog */}
+        <Dialog open={showPayMethodDialog} onOpenChange={setShowPayMethodDialog}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{t('select_payment_method') || "To'lov usulini tanlang"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-4">
+              <button
+                onClick={() => setSelectedPayMethod('cash')}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'cash' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <span className="text-2xl">💵</span>
+                <span className="font-medium">{t('cash') || 'Naqd pul'}</span>
+              </button>
+              <button
+                onClick={() => setSelectedPayMethod('card')}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${selectedPayMethod === 'card' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                <CreditCard className="w-6 h-6 text-slate-600" />
+                <span className="font-medium">{t('plastic_card') || 'Plastik karta'}</span>
+              </button>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowPayMethodDialog(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleConfirmPay}>
+                {t('confirm_payment') || 'Tasdiqlash'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Create Payroll Modal */}
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -627,14 +707,6 @@ export default function Payroll() {
             <div className="space-y-4 py-4">
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
-                  <Input
-                    placeholder={t('auto_generated')}
-                    value={newPayroll.payroll_number}
-                    onChange={(e) => setNewPayroll({...newPayroll, payroll_number: e.target.value})}
-                  />
-                </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
                   <Select value={newPayroll.employee_name} onValueChange={(value) => {
@@ -840,14 +912,6 @@ export default function Payroll() {
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium mb-1 block">{t('payroll_number_label')}</label>
-                    <Input
-                      value={editPayroll.payroll_number}
-                      disabled
-                      className="bg-slate-50"
-                    />
-                  </div>
-                  <div>
                     <label className="text-sm font-medium mb-1 block">{t('employee')} *</label>
                     <Select value={editPayroll.employee_name} onValueChange={(value) => {
                       const selectedEmployee = employees.find(emp => emp.full_name === value);
@@ -998,6 +1062,17 @@ export default function Payroll() {
           </DialogContent>
         </Dialog>
 
+          </TabsContent>
+
+          <TabsContent value="loans" className="mt-4">
+            <EmployeeLoans />
+          </TabsContent>
+
+          <TabsContent value="portal" className="mt-4">
+            <EmployeePortal />
+          </TabsContent>
+
+        </Tabs>
       </div>
     </div>
   );

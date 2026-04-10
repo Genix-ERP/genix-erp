@@ -518,14 +518,6 @@ export default function AccountsReceivable() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">{t('invoice_number_optional') || 'Invoice Number (Optional)'}</label>
-                <Input
-                  placeholder={t('auto_generated') || 'Auto-generated'}
-                  value={newInvoice.invoice_number}
-                  onChange={(e) => setNewInvoice({...newInvoice, invoice_number: e.target.value})}
-                />
-              </div>
-              <div>
                 <label className="text-sm font-medium mb-1 block">{t('customer')} *</label>
                 <Select
                   value={newInvoice.customer_id}

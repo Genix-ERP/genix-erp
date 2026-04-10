@@ -16,9 +16,12 @@ import { useTranslation } from '@/components/utils/translations';
 import { UploadFile } from '@/api/integrations';
 import { toast } from 'sonner';
 
-const TYPE_COLORS = {
+const DEFAULT_TYPE_COLORS = {
   acceptance: 'bg-green-100 text-green-700',
   defect: 'bg-red-100 text-red-700',
+  ks2: 'bg-blue-100 text-blue-700',
+  ks3: 'bg-purple-100 text-purple-700',
+  hidden_work: 'bg-amber-100 text-amber-700',
 };
 
 const STATE_COLORS = {
@@ -44,9 +47,66 @@ const ActsTab = ({ project }) => {
   const { t } = useTranslation(language);
   const { formatCurrency } = useCurrencyFormatter();
 
-  const TYPE_LABELS = {
-    acceptance: t('acceptance') || 'Qabul qilish',
-    defect: t('defect') || 'Nuqson',
+  // Dynamic act types from API
+  const [actTypes, setActTypes] = useState([]);
+  const [actTypesLoading, setActTypesLoading] = useState(true);
+  const [showNewTypeModal, setShowNewTypeModal] = useState(false);
+  const [newTypeLabel, setNewTypeLabel] = useState('');
+  const [newTypeSaving, setNewTypeSaving] = useState(false);
+
+  const loadActTypes = useCallback(async () => {
+    try {
+      const types = await constructionService.listActTypes();
+      setActTypes(types || []);
+    } catch (e) {
+      console.error('Failed to load act types:', e);
+      // Fallback to defaults
+      setActTypes([
+        { value: 'acceptance', label: 'Qabul qilish', color: 'bg-green-100 text-green-700' },
+        { value: 'defect', label: 'Nuqson', color: 'bg-red-100 text-red-700' },
+        { value: 'ks2', label: 'KS-2', color: 'bg-blue-100 text-blue-700' },
+        { value: 'ks3', label: 'KS-3', color: 'bg-purple-100 text-purple-700' },
+        { value: 'hidden_work', label: 'Yashirin ish', color: 'bg-amber-100 text-amber-700' },
+      ]);
+    } finally {
+      setActTypesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadActTypes(); }, [loadActTypes]);
+
+  // Build TYPE_LABELS and TYPE_COLORS from dynamic actTypes
+  const TYPE_LABELS = {};
+  const TYPE_COLORS = {};
+  actTypes.forEach(at => {
+    TYPE_LABELS[at.value] = at.label;
+    TYPE_COLORS[at.value] = at.color || DEFAULT_TYPE_COLORS[at.value] || 'bg-slate-100 text-slate-700';
+  });
+
+  const handleCreateActType = async () => {
+    if (!newTypeLabel.trim()) return;
+    setNewTypeSaving(true);
+    try {
+      await constructionService.createActType({ label: newTypeLabel.trim() });
+      setNewTypeLabel('');
+      setShowNewTypeModal(false);
+      toast.success('Akt turi yaratildi');
+      await loadActTypes();
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
+    } finally {
+      setNewTypeSaving(false);
+    }
+  };
+
+  const handleDeleteActType = async (typeId) => {
+    try {
+      await constructionService.deleteActType(typeId);
+      toast.success("Akt turi o'chirildi");
+      await loadActTypes();
+    } catch (e) {
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.message || 'Xatolik yuz berdi');
+    }
   };
 
   const STATE_LABELS = {
@@ -121,9 +181,8 @@ const ActsTab = ({ project }) => {
   // ---- Handlers ----
 
   const handleCreate = async () => {
-    if (!form.act_type.trim()) { setError(t('act_type_required') || 'Akt turini kiriting'); return; }
-    if (!form.subcontract.trim()) { setError(t('subcontract_required') || 'Subpudratni kiriting'); return; }
-    if (!form.period_from || !form.period_to) { setError(t('period_required') || 'Davrni kiriting'); return; }
+    if (!form.act_type.trim()) { setError('Akt turini tanlang'); return; }
+    if (!form.period_from || !form.period_to) { setError('Davrni kiriting'); return; }
     setSaving(true);
     setError(null);
     try {
@@ -397,8 +456,9 @@ const ActsTab = ({ project }) => {
               <SelectTrigger className="w-40"><SelectValue placeholder={t('all_types') || 'Barcha turlar'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all_types') || 'Barcha turlar'}</SelectItem>
-                <SelectItem value="acceptance">{t('acceptance') || 'Qabul qilish'}</SelectItem>
-                <SelectItem value="defect">{t('defect') || 'Nuqson'}</SelectItem>
+                {actTypes.map(at => (
+                  <SelectItem key={at.value} value={at.value}>{at.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={filters.state || 'all'} onValueChange={v => setFilters(f => ({ ...f, state: v === 'all' ? '' : v }))}>
@@ -474,17 +534,25 @@ const ActsTab = ({ project }) => {
           <div className="space-y-4">
             {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
             <div><Label>{t('act_type') || 'Akt turi'} *</Label>
-              <Input
-                value={form.act_type}
-                onChange={e => setForm(f => ({ ...f, act_type: e.target.value }))}
-                placeholder={t('act_type_placeholder') || 'Masalan: Qabul qilish, Nuqson...'}
-              />
+              <div className="flex gap-2">
+                <Select value={form.act_type || ''} onValueChange={v => setForm(f => ({ ...f, act_type: v }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder={t('select_act_type') || 'Akt turini tanlang'} /></SelectTrigger>
+                  <SelectContent>
+                    {actTypes.map(type => (
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => { setNewTypeLabel(''); setShowNewTypeModal(true); }} title={"Yangi tur qo'shish"}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-            <div><Label>{t('subcontract') || 'Subpudrat'} *</Label>
+            <div><Label>{t('subcontract') || 'Subpudrat'}</Label>
               <Input
                 value={form.subcontract}
                 onChange={e => setForm(f => ({ ...f, subcontract: e.target.value }))}
-                placeholder={t('subcontract_placeholder') || 'Subpudratchi nomi'}
+                placeholder={'Subpudratchi nomi'}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -529,6 +597,46 @@ const ActsTab = ({ project }) => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
             <Button onClick={handleCreate} disabled={saving}>{saving ? 'Saqlanmoqda...' : 'Yaratish'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create New Act Type Modal */}
+      <Dialog open={showNewTypeModal} onOpenChange={setShowNewTypeModal}>
+        <DialogContent className="max-w-sm" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>{"Yangi akt turi qo'shish"}</DialogTitle><DialogDescription className="sr-only">Add new act type</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{'Turi nomi'} *</Label>
+              <Input
+                value={newTypeLabel}
+                onChange={e => setNewTypeLabel(e.target.value)}
+                placeholder={"Masalan: Sinov akti"}
+                onKeyDown={e => { if (e.key === 'Enter') handleCreateActType(); }}
+              />
+            </div>
+            {/* Existing custom types with delete option */}
+            {actTypes.filter(at => !at.is_system).length > 0 && (
+              <div>
+                <Label className="text-slate-500">{"Qo'shilgan turlar"}</Label>
+                <div className="mt-1 space-y-1">
+                  {actTypes.filter(at => !at.is_system).map(at => (
+                    <div key={at.id} className="flex items-center justify-between bg-slate-50 rounded px-3 py-1.5 text-sm">
+                      <span>{at.label}</span>
+                      <button onClick={() => handleDeleteActType(at.id)} className="text-red-400 hover:text-red-600">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewTypeModal(false)}>{t('cancel') || 'Bekor qilish'}</Button>
+            <Button onClick={handleCreateActType} disabled={newTypeSaving || !newTypeLabel.trim()}>
+              {newTypeSaving ? 'Saqlanmoqda...' : "Qo'shish"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

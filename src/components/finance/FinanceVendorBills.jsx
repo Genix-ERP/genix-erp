@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, FileText, Clock, CheckCircle, AlertCircle, AlertTriangle,
-  Building2, Receipt, Ban, DollarSign, CreditCard, Eye
+  Building2, Receipt, Ban, DollarSign, CreditCard, Eye, Calendar, Download, FileSpreadsheet, X
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -21,16 +21,21 @@ export default function FinanceVendorBills() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
   const { formatCurrency, formatCurrencyCompact } = useCurrencyFormatter();
-  const { vendorBills, isLoading } = useFinancials();
+  const { vendorBills, isLoading, journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
   const [selectedBill, setSelectedBill] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentBill, setPaymentBill] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("bank");
+  const [paymentJournalId, setPaymentJournalId] = useState("");
   const [isPaying, setIsPaying] = useState(false);
   const [backendStats, setBackendStats] = useState(null);
 
@@ -76,6 +81,9 @@ export default function FinanceVendorBills() {
     reversed: { color: "bg-purple-100 text-purple-800 border-purple-200", label: t('reversed') || 'Reversed', icon: AlertCircle },
   };
 
+  const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
+  const clearAllFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); setStatusFilter('all'); };
+
   // Filter bills
   const filteredBills = useMemo(() => {
     let filtered = vendorBills || [];
@@ -93,6 +101,27 @@ export default function FinanceVendorBills() {
       );
     }
 
+    if (codeFilter) {
+      const cf = codeFilter.toLowerCase();
+      filtered = filtered.filter(bill =>
+        bill.invoice_number?.toLowerCase().includes(cf) ||
+        bill.bill_number?.toLowerCase().includes(cf)
+      );
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter(bill => {
+        const d = (bill.invoice_date || bill.bill_date || bill.created_at)?.split('T')[0];
+        return d && d >= dateFrom;
+      });
+    }
+    if (dateTo) {
+      filtered = filtered.filter(bill => {
+        const d = (bill.invoice_date || bill.bill_date || bill.created_at)?.split('T')[0];
+        return d && d <= dateTo;
+      });
+    }
+
     if (statusFilter !== "all") {
       filtered = filtered.filter(bill => {
         const payStatus = getPaymentStatus(bill);
@@ -102,7 +131,7 @@ export default function FinanceVendorBills() {
     }
 
     return filtered;
-  }, [vendorBills, searchQuery, statusFilter]);
+  }, [vendorBills, searchQuery, codeFilter, dateFrom, dateTo, statusFilter]);
 
   // Summary stats - use backend stats if available, otherwise compute client-side
   const summaryStats = useMemo(() => {
@@ -175,7 +204,7 @@ export default function FinanceVendorBills() {
     } finally {
       setIsPaying(false);
     }
-  }, [paymentBill, paymentAmount]);
+  }, [paymentBill, paymentAmount, paymentMethod]);
 
   const renderStatusBadge = (bill) => {
     let payStatus = getPaymentStatus(bill);
@@ -199,6 +228,10 @@ export default function FinanceVendorBills() {
   };
 
   const getJournalForMethod = (method) => {
+    if (paymentJournalId) {
+      const j = bankCashJournals.find(j => j.id === paymentJournalId);
+      if (j) return j.name;
+    }
     switch (method) {
       case 'cash': return 'CASH';
       case 'bank': return 'BANK';
@@ -214,6 +247,109 @@ export default function FinanceVendorBills() {
       case 'card': return 'Dt 2000 Kreditor / Kt 1010 Bank';
       default: return 'Dt 2000 Kreditor / Kt 1010 Bank';
     }
+  };
+
+  // Format number with spaces: 7000000 -> 7 000 000
+  const formatAmountWithSpaces = (val) => {
+    const num = String(val).replace(/\s/g, '').replace(/[^0-9.]/g, '');
+    const parts = num.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const parseAmountFromFormatted = (val) => {
+    return val.replace(/\s/g, '');
+  };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+    const sheetName = (t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari').substring(0, 31);
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const HEADER_BG = '1E3A5F';
+    const HEADER_FG = 'FFFFFF';
+    const BORDER_CLR = 'CBD5E1';
+    const STRIPE_BG = 'F8FAFC';
+    const TOTAL_BG = 'EEF2FF';
+    const BRAND_BLUE = '4F46E5';
+    const thin = { style: 'thin', color: { argb: BORDER_CLR } };
+    const borders = { top: thin, bottom: thin, left: thin, right: thin };
+    const thickTop = { style: 'medium', color: { argb: BRAND_BLUE } };
+    ws.columns = [
+      { width: 5.5 }, { width: 26 }, { width: 24 }, { width: 14 }, { width: 14 },
+      { width: 16 }, { width: 18 }, { width: 18 }, { width: 16 },
+    ];
+    const periodText = `${dateFrom || '...'} — ${dateTo || '...'}`;
+    const titleRow = ws.addRow([t('vendor_bills') || 'Yetkazib beruvchi hisob-fakturalari']);
+    ws.mergeCells(`A${titleRow.number}:I${titleRow.number}`);
+    titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: '1E293B' } };
+    titleRow.getCell(1).alignment = { vertical: 'middle' };
+    titleRow.height = 30;
+    const subRow = ws.addRow([`${periodText}  •  ${filteredBills.length} ${t('bills') || 'faktura'}`]);
+    ws.mergeCells(`A${subRow.number}:I${subRow.number}`);
+    subRow.getCell(1).font = { size: 10, color: { argb: '64748B' } };
+    subRow.height = 18;
+    ws.addRow([]);
+    const headers = ['№', t('number') || 'Raqam', t('vendor') || 'Yetkazib beruvchi', t('invoice_date') || 'Sana', t('due_date') || "To'lov muddati", t('tax') || 'Soliq', t('total') || 'Jami', t('amount_due') || "To'lanishi kerak", t('status') || 'Holat'];
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, size: 11, color: { argb: HEADER_FG } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders;
+    });
+    let sumTotal = 0, sumDue = 0;
+    filteredBills.forEach((bill, idx) => {
+      const total = bill.total_amount || 0;
+      const due = bill.amount_due || 0;
+      sumTotal += total;
+      sumDue += due;
+      const isStripe = idx % 2 === 1;
+      const row = ws.addRow([
+        idx + 1,
+        bill.invoice_number || bill.bill_number || '-',
+        bill.vendor_name || bill.partner_name || '-',
+        bill.invoice_date ? format(new Date(bill.invoice_date), 'dd.MM.yyyy') : '-',
+        bill.due_date ? format(new Date(bill.due_date), 'dd.MM.yyyy') : '-',
+        bill.tax_amount || 0,
+        total,
+        due,
+        getPaymentStatus(bill) || '-',
+      ]);
+      row.eachCell((cell, colNumber) => {
+        cell.font = { size: 10 };
+        cell.border = borders;
+        cell.alignment = { vertical: 'middle' };
+        if (isStripe) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE_BG } };
+        if ([6,7,8].includes(colNumber)) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+        if (colNumber === 1) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        if (colNumber === 2) cell.font = { size: 10, name: 'Consolas' };
+      });
+    });
+    const totRow = ws.addRow(['', '', '', '', t('total') || 'Jami:', '', sumTotal, sumDue, '']);
+    totRow.height = 28;
+    totRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+      cell.border = { ...borders, top: { ...thickTop } };
+      cell.font = { bold: true, size: 11, color: { argb: '1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      if ([6,7,8].includes(colNumber)) { cell.numFmt = '#,##0'; cell.alignment = { horizontal: 'right', vertical: 'middle' }; }
+    });
+    ws.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 9 } };
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vendor_bills_${dateFrom || 'all'}_${dateTo || 'all'}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -311,30 +447,91 @@ export default function FinanceVendorBills() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder={t('search') || 'Qidirish...'}
-                  className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+            <div className="flex flex-col gap-3">
+              {/* Search row */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder={t('search') || 'Qidirish...'}
+                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 h-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px] h-10 bg-slate-50">
+                    <SelectValue placeholder={t('payment_status') || 'Barcha holatlar'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('all_status') || 'Barcha holatlar'}</SelectItem>
+                    <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
+                    <SelectItem value="not_paid">{t('not_paid') || "To'lanmagan"}</SelectItem>
+                    <SelectItem value="partial">{t('partially_paid') || 'Qisman'}</SelectItem>
+                    <SelectItem value="paid">{t('paid') || "To'langan"}</SelectItem>
+                    <SelectItem value="overdue">{t('overdue') || "Muddati o'tgan"}</SelectItem>
+                    <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px] bg-slate-50">
-                  <SelectValue placeholder={t('payment_status') || 'Holat'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_status') || 'Barchasi'}</SelectItem>
-                  <SelectItem value="draft">{t('draft') || 'Draft'}</SelectItem>
-                  <SelectItem value="not_paid">{t('not_paid') || "To'lanmagan"}</SelectItem>
-                  <SelectItem value="partial">{t('partially_paid') || 'Qisman'}</SelectItem>
-                  <SelectItem value="paid">{t('paid') || "To'langan"}</SelectItem>
-                  <SelectItem value="overdue">{t('overdue') || "Muddati o'tgan"}</SelectItem>
-                  <SelectItem value="cancelled">{t('cancelled') || 'Bekor qilingan'}</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Always-visible filter row */}
+              <div className="flex flex-wrap items-end gap-3 p-3 bg-gradient-to-r from-slate-50 to-purple-50/40 rounded-xl border border-slate-200/80">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {t('from_date') || 'Dan'}
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                <div className="flex items-end pb-[6px]">
+                  <span className="text-slate-400 text-sm font-medium">—</span>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {t('to_date') || 'Gacha'}
+                  </label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                <div className="w-px h-8 bg-slate-200 mx-1 self-end mb-[2px] hidden sm:block" />
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {t('number') || 'Raqam'}
+                  </label>
+                  <Input
+                    placeholder={t('bill_code') || 'Kod...'}
+                    value={codeFilter}
+                    onChange={e => setCodeFilter(e.target.value)}
+                    className="h-9 w-[160px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-purple)]/20 rounded-lg text-sm"
+                  />
+                </div>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-slate-500 hover:text-red-500 gap-1 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                    {t('clear') || 'Tozalash'}
+                  </Button>
+                )}
+                <div className="flex-1" />
+                <Button
+                  onClick={handleExportExcel}
+                  className="h-9 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-200/50 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-200/60 rounded-lg px-4"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t('export') || 'Export'}</span>
+                  <FileSpreadsheet className="w-4 h-4 opacity-70" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -561,7 +758,9 @@ export default function FinanceVendorBills() {
                   const draftTotal = allocations
                     .filter(a => a.status === 'draft')
                     .reduce((sum, a) => sum + (a.amount || 0), 0);
-                  const remainingDebt = (selectedBill.total_amount || 0) - confirmedTotal;
+                  // Use amount_paid as fallback when no payment_allocations exist
+                  const totalPaid = confirmedTotal > 0 ? confirmedTotal : (selectedBill.amount_paid || 0);
+                  const remainingDebt = (selectedBill.total_amount || 0) - totalPaid;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
@@ -570,7 +769,7 @@ export default function FinanceVendorBills() {
                           {t('confirmed_payments') || "To'langan"}
                         </span>
                         <span className="font-medium text-green-600">
-                          {formatCurrency(confirmedTotal)}
+                          {formatCurrency(totalPaid)}
                         </span>
                       </div>
                       {draftTotal > 0 && (
@@ -693,25 +892,44 @@ export default function FinanceVendorBills() {
               {/* Payment method */}
               <div>
                 <label className="text-sm font-medium">{t('payment_method') || "To'lov usuli"} *</label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
-                    <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
-                    <SelectItem value="card">{t('credit_card') || 'Kredit karta'}</SelectItem>
-                  </SelectContent>
-                </Select>
+                {bankCashJournals.length > 0 ? (
+                  <Select value={paymentJournalId} onValueChange={(value) => {
+                    setPaymentJournalId(value);
+                    const j = bankCashJournals.find(j => j.id === value);
+                    if (j) setPaymentMethod(j.type === 'cash' ? 'cash' : 'bank');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">{t('bank_transfer') || "Bank o'tkazmasi"}</SelectItem>
+                      <SelectItem value="cash">{t('cash') || 'Naqd'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Amount */}
               <div>
                 <label className="text-sm font-medium">{t('amount') || 'Summa'} *</label>
                 <Input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatAmountWithSpaces(paymentAmount)}
+                  onChange={(e) => setPaymentAmount(parseAmountFromFormatted(e.target.value))}
                   placeholder="0"
                 />
               </div>

@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileCheck, AlertTriangle, CheckCircle2, FileText,
   Users, Trash2, RefreshCw, Eye, ArrowLeft, Printer, Loader2,
-  Send, Mail, MessageCircle, ChevronDown, Link2, Check, Copy, Bell
+  Send, Mail, MessageCircle, ChevronDown, ChevronRight, Link2, Check, Copy, Bell,
+  Package, Truck, Download
 } from "lucide-react";
+import { exportReconciliationToExcel } from '@/utils/exportReconciliationExcel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -57,6 +59,7 @@ export default function ActSverka() {
   const [selectedAct, setSelectedAct] = useState(null);
   const [actDetail, setActDetail] = useState(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({});
 
   // Send state
   const [showSendModal, setShowSendModal] = useState(false);
@@ -217,6 +220,7 @@ export default function ActSverka() {
 
   const openActDetail = useCallback(async (act) => {
     setSelectedAct(act);
+    setExpandedRows({});
     setIsLoadingDetail(true);
     try {
       const detail = await financeService.getReconciliationAct(act.id);
@@ -379,6 +383,42 @@ export default function ActSverka() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!actDetail) return;
+    try {
+      await exportReconciliationToExcel({
+        act: actDetail,
+        formatCurrency,
+        labels: {
+          reconciliation_act: t('reconciliation_act') || 'Akt sverka',
+          period: t('period') || 'Davr',
+          opening_balance: t('opening_balance') || 'Davr boshi qoldiq',
+          total_debit: t('total_debit') || 'Jami debet',
+          total_credit: t('total_credit') || 'Jami kredit',
+          closing_balance: t('closing_balance') || 'Davr oxiri qoldiq',
+          date: t('date') || 'Sana',
+          document: t('document') || 'Hujjat',
+          description: t('description') || 'Tavsif',
+          vehicle_number: t('vehicle_number') || 'Mashina raqami',
+          product: t('product') || 'Mahsulot',
+          products: t('products') || 'mahsulot',
+          quantity: t('quantity') || 'Miqdor',
+          unit_price: t('unit_price') || 'Narx',
+          item_total: t('total') || 'Jami',
+          debit: t('debit') || 'Debet',
+          credit: t('credit') || 'Kredit',
+          balance: t('balance') || 'Balans',
+          period_turnover: t('period_turnover') || "Davr bo'yicha aylanma",
+          on_behalf_org: t('print_on_behalf_org') || 'Tashkilot nomidan',
+          on_behalf_partner: t('print_on_behalf_partner') || 'Kontragent nomidan',
+          signature_hint: t('print_sig_hint') || 'F.I.O. / imzo / muhr',
+        },
+      });
+    } catch (err) {
+      console.error('Excel export failed:', err);
+    }
+  };
+
   const openSendModal = (method) => {
     setSendMethod(method);
     setSendResult(null);
@@ -511,6 +551,15 @@ export default function ActSverka() {
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="w-4 h-4 mr-1" />
               {t('print') || 'Chop etish'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={handleExportExcel}
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Export
             </Button>
             {/* Send dropdown */}
             <div className="relative">
@@ -664,27 +713,92 @@ export default function ActSverka() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    lines.map((line, idx) => (
-                      <TableRow key={idx} className="hover:bg-slate-50/50">
-                        <TableCell className="text-center text-xs text-slate-500">{idx + 1}</TableCell>
-                        <TableCell className="text-xs text-slate-600">{line.date}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-600">{line.document || '-'}</TableCell>
-                        <TableCell className="text-xs text-slate-700">{line.description || '-'}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {line.debit > 0 ? (
-                            <span className="text-blue-600 font-medium">{formatCurrency(line.debit)}</span>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-xs">
-                          {line.credit > 0 ? (
-                            <span className="text-red-600 font-medium">{formatCurrency(line.credit)}</span>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-medium">
-                          {formatCurrency(line.running_balance)}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    lines.map((line, idx) => {
+                      const hasDetails = line.items && line.items.length > 0;
+                      const isExpanded = expandedRows[idx];
+                      return (
+                        <React.Fragment key={idx}>
+                          <TableRow
+                            className={`hover:bg-slate-50/50 ${hasDetails ? 'cursor-pointer' : ''}`}
+                            onClick={() => hasDetails && setExpandedRows(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                          >
+                            <TableCell className="text-center text-xs text-slate-500">
+                              <div className="flex items-center justify-center gap-1">
+                                {hasDetails && (
+                                  <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                )}
+                                {idx + 1}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">{line.date}</TableCell>
+                            <TableCell className="text-xs font-mono text-slate-600">{line.document || '-'}</TableCell>
+                            <TableCell className="text-xs text-slate-700">
+                              <div className="flex items-center gap-1.5">
+                                <span>{line.description || '-'}</span>
+                                {line.vehicle_number && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded border border-amber-200">
+                                    <Truck className="w-2.5 h-2.5" />
+                                    {line.vehicle_number}
+                                  </span>
+                                )}
+                                {hasDetails && !isExpanded && (
+                                  <span className="text-[10px] text-slate-400">
+                                    ({line.items.length} {t('products') || 'mahsulot'})
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right text-xs">
+                              {line.debit > 0 ? (
+                                <span className="text-blue-600 font-medium">{formatCurrency(line.debit)}</span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs">
+                              {line.credit > 0 ? (
+                                <span className="text-red-600 font-medium">{formatCurrency(line.credit)}</span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs font-medium">
+                              {formatCurrency(line.running_balance)}
+                            </TableCell>
+                          </TableRow>
+                          {hasDetails && isExpanded && (
+                            <TableRow className="bg-slate-50/80">
+                              <TableCell></TableCell>
+                              <TableCell colSpan={6} className="py-2 px-3">
+                                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-100/80 text-slate-600">
+                                        <th className="text-left py-1.5 px-3 font-medium">
+                                          <div className="flex items-center gap-1">
+                                            <Package className="w-3 h-3" />
+                                            {t('product') || 'Mahsulot'}
+                                          </div>
+                                        </th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[80px]">{t('quantity') || 'Miqdor'}</th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[100px]">{t('unit_price') || 'Narx'}</th>
+                                        <th className="text-right py-1.5 px-3 font-medium w-[110px]">{t('total') || 'Jami'}</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {line.items.map((item, itemIdx) => (
+                                        <tr key={itemIdx} className="border-t border-slate-100 hover:bg-slate-50/50">
+                                          <td className="py-1.5 px-3 text-slate-700">{item.product_name || '-'}</td>
+                                          <td className="py-1.5 px-3 text-right text-slate-600">{item.quantity}</td>
+                                          <td className="py-1.5 px-3 text-right text-slate-600">{formatCurrency(item.unit_price)}</td>
+                                          <td className="py-1.5 px-3 text-right font-medium text-slate-700">{formatCurrency(item.line_total)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
 
                   {/* Totals Row */}
@@ -1177,48 +1291,50 @@ export default function ActSverka() {
               <label className="text-sm font-medium text-slate-700 mb-1 block">
                 {t('counterparty') || 'Kontragent'} *
               </label>
-              {formData.partner_id ? (
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="flex-1 text-sm font-medium">{formData.partner_name}</span>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }));
+              <Input
+                placeholder={t('search_or_enter_name') || "Kontragentni qidiring yoki nom kiriting..."}
+                value={formData.partner_id ? formData.partner_name : contactSearch}
+                onChange={(e) => {
+                  setContactSearch(e.target.value);
+                  setFormData(prev => ({ ...prev, partner_name: e.target.value, partner_id: '' }));
+                  setShowContactDropdown(true);
+                }}
+                onClick={() => {
+                  if (formData.partner_id) {
                     setContactSearch('');
-                  }}>
-                    &times;
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Input
-                    placeholder={t('search_or_enter_name') || "Kontragentni qidiring yoki nom kiriting..."}
-                    value={contactSearch}
-                    onChange={(e) => {
-                      setContactSearch(e.target.value);
-                      setFormData(prev => ({ ...prev, partner_name: e.target.value, partner_id: '' }));
-                      setShowContactDropdown(true);
-                    }}
-                    onFocus={() => setShowContactDropdown(true)}
-                    className="bg-slate-50 border-slate-200"
-                  />
-                  {showContactDropdown && filteredContacts.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
-                      {filteredContacts.map(c => (
-                        <div
-                          key={c.id}
-                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center justify-between"
-                          onClick={() => {
+                  }
+                  setShowContactDropdown(true);
+                }}
+                className="bg-slate-50 border-slate-200"
+              />
+              {showContactDropdown && filteredContacts.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
+                  {filteredContacts.map(c => {
+                    const isSelected = formData.partner_id === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-center justify-between ${isSelected ? 'bg-blue-50' : ''}`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }));
+                            setContactSearch('');
+                          } else {
                             setFormData(prev => ({ ...prev, partner_id: c.id, partner_name: c.name }));
                             setContactSearch(c.name);
-                            setShowContactDropdown(false);
-                          }}
-                        >
-                          <span className="font-medium">{c.name}</span>
+                          }
+                          setShowContactDropdown(false);
+                        }}
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        <div className="flex items-center gap-2">
                           <span className="text-xs text-slate-400">{c.code}</span>
+                          {isSelected && <span className="text-blue-500 text-xs">✓</span>}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 

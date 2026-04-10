@@ -150,10 +150,11 @@ export default function BOMManagement() {
   };
 
   const addComponent = () => {
-    if (newComponent.component_id && newComponent.quantity > 0) {
+    const qty = parseFloat(newComponent.quantity) || 0;
+    if (newComponent.component_id && qty > 0) {
       setNewBom({
         ...newBom,
-        lines: [...newBom.lines, {...newComponent}]
+        lines: [...newBom.lines, {...newComponent, quantity: qty}]
       });
       setNewComponent({
         component_id: '',
@@ -360,10 +361,11 @@ export default function BOMManagement() {
   };
 
   const addEditComponent = () => {
-    if (editComponent.component_id && editComponent.quantity > 0) {
+    const qty = parseFloat(editComponent.quantity) || 0;
+    if (editComponent.component_id && qty > 0) {
       setEditBom({
         ...editBom,
-        lines: [...editBom.lines, {...editComponent}]
+        lines: [...editBom.lines, {...editComponent, quantity: qty}]
       });
       setEditComponent({
         component_id: '',
@@ -657,10 +659,16 @@ export default function BOMManagement() {
                       </SelectContent>
                     </Select>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       placeholder={t('quantity')}
-                      value={newComponent.quantity || ''}
-                      onChange={(e) => setNewComponent({...newComponent, quantity: parseFloat(e.target.value) || 0})}
+                      value={newComponent.quantity}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                          setNewComponent({...newComponent, quantity: val});
+                        }
+                      }}
                     />
                     <div className="h-10 px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm text-slate-700 flex items-center">
                       {newComponent.unit || t('select_component_first') || 'Select component first'}
@@ -827,7 +835,7 @@ export default function BOMManagement() {
               <Button
                 onClick={handleCreateBom}
                 className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800"
-                disabled={!newBom.name || !newBom.product_id || newBom.lines.length === 0 || isSubmitting}
+                disabled={!newBom.name || !newBom.product_id || isSubmitting}
               >
                 {isSubmitting ? t('saving') : t('create_bom')}
               </Button>
@@ -918,10 +926,16 @@ export default function BOMManagement() {
                         </SelectContent>
                       </Select>
                       <Input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder={t('quantity')}
-                        value={editComponent.quantity || ''}
-                        onChange={(e) => setEditComponent({...editComponent, quantity: parseFloat(e.target.value) || 0})}
+                        value={editComponent.quantity}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                            setEditComponent({...editComponent, quantity: val});
+                          }
+                        }}
                       />
                       <div className="h-10 px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm text-slate-700 flex items-center">
                         {editComponent.unit || t('select_component_first') || 'Select component first'}

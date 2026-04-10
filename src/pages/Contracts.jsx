@@ -656,14 +656,6 @@ Provide only analysis results based on the numbers and specific contract data, n
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">{t('contract_number_label')}</label>
-                  <Input
-                    placeholder={t('auto_generated')}
-                    value={newContract.contract_number}
-                    onChange={(e) => setNewContract({...newContract, contract_number: e.target.value})}
-                  />
-                </div>
-                <div>
                   <label className="text-sm font-medium mb-1 block">{t('contract_type')} *</label>
                   <Select value={newContract.contract_type} onValueChange={(value) => setNewContract({...newContract, contract_type: value})}>
                     <SelectTrigger>
