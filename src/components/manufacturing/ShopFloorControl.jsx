@@ -399,14 +399,23 @@ export default function ShopFloorControl({ isActive }) {
 
     const poId = activeWorkOrder.production_order_id;
 
+    // Capture values before closing the modal
+    const produced = parseFloat(completionData.quantity_produced) || 0;
+    const scrapped = parseFloat(completionData.quantity_scrapped) || 0;
+    const notes = completionData.notes;
+
+    // Close the complete modal first to avoid overlap with split modal
+    setShowCompleteModal(false);
+    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
+
     try {
       const timeSpent = calculateTimeSpent(activeWorkOrder);
 
       await completeWorkOrder(activeWorkOrder.id, {
-        quantity_produced: parseFloat(completionData.quantity_produced) || 0,
-        scrap_quantity: parseFloat(completionData.quantity_scrapped) || 0,
+        quantity_produced: produced,
+        scrap_quantity: scrapped,
         actual_duration: timeSpent.totalMinutes,
-        notes: completionData.notes,
+        notes: notes,
       });
 
       refreshData();
@@ -430,8 +439,6 @@ export default function ShopFloorControl({ isActive }) {
       console.error('Failed to complete work order:', error);
     }
 
-    setShowCompleteModal(false);
-    setCompletionData({ quantity_produced: 0, quantity_scrapped: 0, notes: '' });
     setActiveWorkOrder(null);
   };
 
