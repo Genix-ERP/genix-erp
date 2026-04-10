@@ -63,11 +63,15 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // Modals
   const [showEstimateModal, setShowEstimateModal] = useState(false);
+  const [showEditEstimateModal, setShowEditEstimateModal] = useState(false);
   const [showLineModal, setShowLineModal] = useState(false);
 
   // Forms
   const [estimateForm, setEstimateForm] = useState({
     name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', subcontract_id: '', source_type: 'vor'
+  });
+  const [editEstimateForm, setEditEstimateForm] = useState({
+    id: null, name: '', building_id: '', overhead_pct: '0', profit_pct: '0', vat_pct: '12', source_type: 'vor'
   });
   const [lineForm, setLineForm] = useState({
     id: null, estimate_id: null, product_id: '', name: '', uom: '', quantity: '',
@@ -85,7 +89,7 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
 
   // importColumns removed - SmetaImportModal handles parsing directly
 
-  const handleImport = async ({ estimateName, buildingId, lines, sourceType, subcontractId }) => {
+  const handleImport = async ({ estimateName, buildingId, lines, sourceType, sectionNames, subcontractId }) => {
     try {
       // Find existing draft estimate with same name for this building, or create new
       let est = estimates.find(e =>
@@ -94,8 +98,10 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         (buildingId === 0 ? !e.building_id : e.building_id === buildingId)
       );
       let estId;
+      let isExisting = false;
       if (est) {
         estId = est.id;
+        isExisting = true;
       } else {
         const createData = {
           name: estimateName,
@@ -110,8 +116,35 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         estId = created.id;
       }
 
-      // Bulk create all lines
-      await constructionService.bulkCreateEstimateLines(estId, lines);
+      // Bulk create all lines (replace existing if re-importing to same estimate)
+      await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+
+      // Auto-create construction stages from BOP section headers
+      if (sourceType === 'vor' && sectionNames?.length > 0) {
+        let existingStages = [];
+        try {
+          existingStages = await constructionService.listStages(project.id);
+        } catch (e) {
+          // ignore - will create all stages
+        }
+        const existingNames = new Set((existingStages || []).map(s => s.name?.toUpperCase()));
+
+        for (let i = 0; i < sectionNames.length; i++) {
+          const name = sectionNames[i];
+          if (!existingNames.has(name.toUpperCase())) {
+            try {
+              await constructionService.createStage(project.id, {
+                name,
+                status: 'not_started',
+                planned_budget: 0,
+              });
+            } catch (e) {
+              console.error('Failed to create stage:', name, e);
+            }
+          }
+        }
+      }
+
       await loadEstimates();
     } catch (error) {
       console.error('Error importing estimates:', error);
@@ -265,6 +298,44 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         }
       },
     });
+  };
+
+  // Edit estimate (open modal pre-populated)
+  const handleEditEstimate = (est) => {
+    setEditEstimateForm({
+      id: est.id,
+      name: est.name || '',
+      building_id: est.building_id ? String(est.building_id) : '',
+      overhead_pct: String(est.overhead_pct || 0),
+      profit_pct: String(est.profit_pct || 0),
+      vat_pct: String(est.vat_pct || 0),
+      source_type: est.source_type || 'vor',
+    });
+    setShowEditEstimateModal(true);
+  };
+
+  // Update estimate
+  const handleUpdateEstimate = async (e) => {
+    e.preventDefault();
+    try {
+      const buildingId = editEstimateForm.building_id ? parseInt(editEstimateForm.building_id) : 0;
+      const data = {
+        name: editEstimateForm.name,
+        building_id: buildingId,
+        overhead_pct: parseFloat(editEstimateForm.overhead_pct) || 0,
+        profit_pct: parseFloat(editEstimateForm.profit_pct) || 0,
+        vat_pct: parseFloat(editEstimateForm.vat_pct) || 0,
+      };
+      await constructionService.updateEstimate(editEstimateForm.id, data);
+      setShowEditEstimateModal(false);
+      await loadEstimates();
+      // Reload lines if this estimate is expanded
+      if (expandedEstimate === editEstimateForm.id) {
+        await loadEstimateLines(editEstimateForm.id);
+      }
+    } catch (error) {
+      console.error('Error updating estimate:', error);
+    }
   };
 
   // Create/update line
@@ -592,6 +663,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                 {est.state === 'draft' && (
+                                  <DropdownMenuItem onClick={() => handleEditEstimate(est)}>
+                                    <Edit className="w-4 h-4 mr-2 text-blue-600" />
+                                    {t('edit_estimate') || 'Tahrirlash'}
+                                  </DropdownMenuItem>
+                                )}
+                                {est.state === 'draft' && (
                                   <DropdownMenuItem onClick={() => handleApprove(est)}>
                                     <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
                                     {t('approve') || 'Tasdiqlash'}
@@ -900,6 +977,91 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
         </DialogContent>
       </Dialog>
 
+      {/* Edit Estimate Modal */}
+      <Dialog open={showEditEstimateModal} onOpenChange={setShowEditEstimateModal}>
+        <DialogContent aria-describedby={undefined} className="overflow-visible">
+          <DialogHeader>
+            <DialogTitle>{t('edit_estimate') || "Smetani tahrirlash"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateEstimate}>
+            <div className="space-y-4">
+              <div>
+                <Label>{t('name') || 'Nomi'} *</Label>
+                <Input
+                  value={editEstimateForm.name}
+                  onChange={(e) => setEditEstimateForm({ ...editEstimateForm, name: e.target.value })}
+                  placeholder={t('estimate_name_placeholder') || "Asosiy smeta"}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Smeta turi</Label>
+                <p className="mt-1 text-sm font-medium text-slate-600">
+                  {editEstimateForm.source_type === 'vor' ? 'ВОР — Ishlar ro\'yxati' :
+                   editEstimateForm.source_type === 'edinich' ? 'Единич — Batafsil miqdor' :
+                   editEstimateForm.source_type === 'resurs' ? 'Ресурс — Resurslar narxi' : editEstimateForm.source_type}
+                </p>
+              </div>
+              {buildings.length > 0 && (
+                <div>
+                  <Label>{t('buildings_blocks') || 'Bino / Blok'}</Label>
+                  <Select
+                    value={editEstimateForm.building_id || "none"}
+                    onValueChange={(val) => setEditEstimateForm({ ...editEstimateForm, building_id: val === "none" ? '' : val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_building') || "Bino tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('entire_project') || "Butun loyiha"}</SelectItem>
+                      {buildings.map(b => (
+                        <SelectItem key={b.id} value={String(b.id)}>
+                          {b.code ? `${b.code} - ${b.name}` : b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {editEstimateForm.source_type === 'resurs' && (
+                <div className="grid grid-cols-3 gap-4 items-end">
+                  <div>
+                    <Label className="text-xs">{t('overhead') || "Qo'shimcha"}, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={editEstimateForm.overhead_pct}
+                      onChange={(e) => setEditEstimateForm({ ...editEstimateForm, overhead_pct: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('profit') || 'Foyda'}, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={editEstimateForm.profit_pct}
+                      onChange={(e) => setEditEstimateForm({ ...editEstimateForm, profit_pct: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">QQS, %</Label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={editEstimateForm.vat_pct}
+                      onChange={(e) => setEditEstimateForm({ ...editEstimateForm, vat_pct: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={() => setShowEditEstimateModal(false)}>
+                {t('cancel') || 'Bekor qilish'}
+              </Button>
+              <Button type="submit">{t('save') || 'Saqlash'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Create/Edit Line Modal */}
       <Dialog open={showLineModal} onOpenChange={setShowLineModal}>
         <DialogContent className="max-w-2xl" aria-describedby={undefined}>
@@ -909,11 +1071,25 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
           <form onSubmit={handleSaveLine}>
             {lineForm.id ? (
               <div className="space-y-4">
-                <div>
-                  <Label>{t('product') || 'Mahsulot'}</Label>
-                  <p className="mt-1 text-sm font-medium">{lineForm.name}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('name') || 'Nomi'}</Label>
+                    <Input
+                      value={lineForm.name}
+                      onChange={(e) => setLineForm({ ...lineForm, name: e.target.value })}
+                      placeholder={t('line_name') || 'Qator nomi'}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('unit') || "O'lchov birligi"}</Label>
+                    <Input
+                      value={lineForm.uom}
+                      onChange={(e) => setLineForm({ ...lineForm, uom: e.target.value })}
+                      placeholder={t('uom_placeholder') || "шт, м, кг..."}
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{t('quantity') || 'Miqdor'}</Label>
                     <Input
@@ -923,14 +1099,28 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
                     />
                   </div>
                   <div>
-                    <Label>{t('unit') || "O'lchov birligi"}</Label>
-                    <p className="mt-2 text-sm text-slate-600">{lineForm.uom || '—'}</p>
-                  </div>
-                  <div>
                     <Label>{t('material_rate') || 'Material'}</Label>
                     <Input
                       value={lineForm.material_rate}
                       onChange={(e) => setLineForm({ ...lineForm, material_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{t('labor_rate') || 'Ish haqi'}</Label>
+                    <Input
+                      value={lineForm.labor_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, labor_rate: formatPriceInput(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('equipment_rate') || 'Jihozlar'}</Label>
+                    <Input
+                      value={lineForm.equipment_rate}
+                      onChange={(e) => setLineForm({ ...lineForm, equipment_rate: formatPriceInput(e.target.value) })}
                       placeholder="0"
                     />
                   </div>

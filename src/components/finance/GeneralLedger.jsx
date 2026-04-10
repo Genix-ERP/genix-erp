@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight } from "lucide-react";
+import { Plus, Search, FileText, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, Trash2, Pencil, Download, Loader2, ChevronLeft, ChevronRight, RotateCcw, XCircle, Send, ArrowLeftRight, Filter, X, FileSpreadsheet } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -21,6 +21,36 @@ import AccountCombobox from "@/components/shared/AccountCombobox";
 import { MODULES } from "@/config/permissions";
 import financeService from "@/api/services/finance";
 import { generateDocumentPDF } from "@/components/shared/DocumentPrint";
+
+const JE_DESC_PATTERNS = [
+  { en: /^Stock Operation:\s*(.+)$/, key: 'je_stock_op' },
+  { en: /^Vendor Bill\s+(.+)$/, key: 'je_vendor_bill' },
+  { en: /^Sales Invoice\s+(.+)\s+\(repair\)$/, key: 'je_sales_invoice_repair' },
+  { en: /^Sales Invoice\s+(.+)$/, key: 'je_sales_invoice' },
+  { en: /^Fixed Asset Acquisition:\s*(.+)$/, key: 'je_fixed_asset' },
+  { en: /^Expense:\s*(.+)$/, key: 'je_expense' },
+];
+
+const JE_DESC_LABELS = {
+  je_stock_op:            { en: 'Stock Operation', uz: 'Ombor operatsiyasi', ru: 'Складская операция' },
+  je_vendor_bill:         { en: 'Vendor Bill', uz: 'Yetkazib beruvchi hisob-fakturasi', ru: 'Счёт поставщика' },
+  je_sales_invoice:       { en: 'Sales Invoice', uz: 'Sotuv hisob-fakturasi', ru: 'Счёт-фактура продажи' },
+  je_sales_invoice_repair:{ en: 'Sales Invoice (repair)', uz: "Sotuv hisob-fakturasi (ta'mirlash)", ru: 'Счёт-фактура (ремонт)' },
+  je_fixed_asset:         { en: 'Fixed Asset Acquisition', uz: 'Asosiy vosita sotib olish', ru: 'Приобретение ОС' },
+  je_expense:             { en: 'Expense', uz: 'Xarajat', ru: 'Расход' },
+};
+
+function translateJEDescription(description, language) {
+  if (!description) return description;
+  for (const { en, key } of JE_DESC_PATTERNS) {
+    const match = description.match(en);
+    if (match) {
+      const label = JE_DESC_LABELS[key]?.[language] || JE_DESC_LABELS[key]?.en || '';
+      return `${label}: ${match[match.length - 1]}`;
+    }
+  }
+  return description;
+}
 
 export default function GeneralLedger() {
   const { language } = useLanguage();
@@ -44,6 +74,10 @@ export default function GeneralLedger() {
 
   const [filteredEntries, setFilteredEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [codeFilter, setCodeFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
   const [selectedEntry, setSelectedEntry] = useState(null);
@@ -94,7 +128,7 @@ export default function GeneralLedger() {
     let filtered = journalEntries;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      filtered = journalEntries.filter(entry =>
+      filtered = filtered.filter(entry =>
         entry.description?.toLowerCase().includes(q) ||
         entry.entry_number?.toLowerCase().includes(q) ||
         entry.reference?.toLowerCase().includes(q) ||
@@ -102,9 +136,30 @@ export default function GeneralLedger() {
         entry.journal?.name?.toLowerCase().includes(q)
       );
     }
+    if (dateFrom) {
+      filtered = filtered.filter(entry => {
+        const d = entry.entry_date?.split('T')[0];
+        return d && d >= dateFrom;
+      });
+    }
+    if (dateTo) {
+      filtered = filtered.filter(entry => {
+        const d = entry.entry_date?.split('T')[0];
+        return d && d <= dateTo;
+      });
+    }
+    if (codeFilter) {
+      const cf = codeFilter.toLowerCase();
+      filtered = filtered.filter(entry =>
+        entry.entry_number?.toLowerCase().includes(cf)
+      );
+    }
     setFilteredEntries(filtered);
     setCurrentPage(1);
-  }, [searchQuery, journalEntries]);
+  }, [searchQuery, dateFrom, dateTo, codeFilter, journalEntries]);
+
+  const activeFilterCount = (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (codeFilter ? 1 : 0);
+  const clearFilters = () => { setDateFrom(''); setDateTo(''); setCodeFilter(''); setSearchQuery(''); };
 
   const [isLoadingLines, setIsLoadingLines] = useState(false);
 
@@ -394,6 +449,164 @@ export default function GeneralLedger() {
     doc.save(`${selectedEntry.entry_number || 'journal-entry'}.pdf`);
   };
 
+  // Export to Excel with beautiful styling using ExcelJS
+  const handleExportExcel = async () => {
+    const ExcelJS = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'GenixERP';
+    wb.created = new Date();
+
+    const sheetName = (t('journal_entries') || 'Jurnal yozuvlari').substring(0, 31);
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+
+    // Palette
+    const BRAND_BLUE = '4F46E5';
+    const HEADER_BG = '1E3A5F';
+    const HEADER_FG = 'FFFFFF';
+    const BORDER_CLR = 'CBD5E1';
+    const STRIPE_BG = 'F8FAFC';
+    const TOTAL_BG = 'EEF2FF';
+
+    const thin = { style: 'thin', color: { argb: BORDER_CLR } };
+    const borders = { top: thin, bottom: thin, left: thin, right: thin };
+    const thickTop = { style: 'medium', color: { argb: BRAND_BLUE } };
+
+    // Column widths
+    ws.columns = [
+      { width: 5.5 },   // A — №
+      { width: 13 },    // B — Date
+      { width: 24 },    // C — Number/Code
+      { width: 52 },    // D — Description
+      { width: 20 },    // E — Journal
+      { width: 20 },    // F — Debit
+      { width: 20 },    // G — Credit
+      { width: 13 },    // H — Status
+    ];
+
+    const data = filteredEntries;
+    const periodText = `${dateFrom || '...'} — ${dateTo || '...'}`;
+
+    // ── Title row ──
+    const titleRow = ws.addRow([t('journal_entries') || 'Jurnal yozuvlari']);
+    ws.mergeCells(`A${titleRow.number}:H${titleRow.number}`);
+    titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: '1E293B' } };
+    titleRow.getCell(1).alignment = { vertical: 'middle' };
+    titleRow.height = 30;
+
+    // ── Subtitle row ──
+    const subRow = ws.addRow([`${periodText}  •  ${data.length} ${t('entries_total') || 'yozuv'}`]);
+    ws.mergeCells(`A${subRow.number}:H${subRow.number}`);
+    subRow.getCell(1).font = { size: 10, color: { argb: '64748B' } };
+    subRow.height = 18;
+
+    // ── Empty spacer ──
+    ws.addRow([]);
+
+    // ── Header row ──
+    const headers = ['№', t('date') || 'Sana', t('number') || 'Raqam', t('description') || 'Tavsif', t('journal') || 'Jurnal', t('debit') || 'Debet', t('credit') || 'Kredit', t('status') || 'Holat'];
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, size: 11, color: { argb: HEADER_FG } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = borders;
+    });
+    // Debit/Credit headers right-aligned
+    headerRow.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+    headerRow.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+
+    // ── Data rows ──
+    let sumDebit = 0, sumCredit = 0;
+    data.forEach((entry, idx) => {
+      const d = entry.total_debit || 0;
+      const cr = entry.total_credit || 0;
+      sumDebit += d;
+      sumCredit += cr;
+      const isStripe = idx % 2 === 1;
+
+      const row = ws.addRow([
+        idx + 1,
+        entry.entry_date ? format(new Date(entry.entry_date), 'dd.MM.yyyy') : '-',
+        entry.entry_number || '-',
+        translateJEDescription(entry.description || entry.reference, language) || '-',
+        entry.journal?.name || '-',
+        d,
+        cr,
+        entry.reversed_entry_id ? (t('reversed') || 'reversed') : (entry.status || '-'),
+      ]);
+
+      row.eachCell((cell, colNumber) => {
+        cell.font = { size: 10 };
+        cell.border = borders;
+        cell.alignment = { vertical: 'middle' };
+        if (isStripe) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STRIPE_BG } };
+        }
+        // Number formatting for debit/credit
+        if (colNumber === 6 || colNumber === 7) {
+          cell.numFmt = '#,##0';
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          if (cell.value > 0) {
+            cell.font = { size: 10, bold: false };
+          }
+        }
+        // Monospace for entry number
+        if (colNumber === 3) {
+          cell.font = { size: 10, name: 'Consolas' };
+        }
+        // Center for №
+        if (colNumber === 1) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        // Status styling
+        if (colNumber === 8) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          const status = String(cell.value).toLowerCase();
+          if (status === 'posted') {
+            cell.font = { size: 9, bold: true, color: { argb: '166534' } };
+          } else if (status === 'draft') {
+            cell.font = { size: 9, color: { argb: '92400E' } };
+          } else if (status === 'reversed' || status === 'cancelled') {
+            cell.font = { size: 9, color: { argb: 'DC2626' } };
+          }
+        }
+      });
+    });
+
+    // ── Totals row ──
+    const totRow = ws.addRow(['', '', '', '', t('total') || 'Jami:', sumDebit, sumCredit, '']);
+    totRow.height = 28;
+    totRow.eachCell((cell, colNumber) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+      cell.border = { ...borders, top: { ...thickTop } };
+      cell.font = { bold: true, size: 11, color: { argb: '1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      if (colNumber === 5) {
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      }
+      if (colNumber === 6 || colNumber === 7) {
+        cell.numFmt = '#,##0';
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      }
+    });
+
+    // ── Auto-filter on header row ──
+    ws.autoFilter = { from: { row: headerRow.number, column: 1 }, to: { row: headerRow.number, column: 8 } };
+
+    // ── Export ──
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jurnal_yozuvlari_${dateFrom || 'all'}_${dateTo || 'all'}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Calculate totals for display
   const totalDebit = newEntry.lines.reduce((sum, line) => sum + parseFloat(line.debit_amount || 0), 0);
   const totalCredit = newEntry.lines.reduce((sum, line) => sum + parseFloat(line.credit_amount || 0), 0);
@@ -446,28 +659,90 @@ export default function GeneralLedger() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder={t('search') + " " + t('journal_entries').toLowerCase() + "..."}
-                    className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+              <div className="flex flex-col gap-3">
+                {/* Search bar row */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder={t('search') + " " + t('journal_entries').toLowerCase() + "..."}
+                      className="pl-9 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 h-10"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  {canCreate(MODULES.FINANCIALS) && (
+                    <Button
+                      onClick={() => {
+                        resetForm();
+                        setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
+                        setShowCreateModal(true);
+                      }}
+                      className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md h-10"
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
+                    </Button>
+                  )}
                 </div>
-                {canCreate(MODULES.FINANCIALS) && (
+
+                {/* Always-visible filter row */}
+                <div className="flex flex-wrap items-end gap-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50/40 rounded-xl border border-slate-200/80">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('from_date') || 'Dan'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end pb-[6px]">
+                    <span className="text-slate-400 text-sm font-medium">—</span>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {t('to_date') || 'Gacha'}
+                    </label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      className="h-9 w-[155px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="w-px h-8 bg-slate-200 mx-1 self-end mb-[2px] hidden sm:block" />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {t('number') || 'Raqam'}
+                    </label>
+                    <Input
+                      placeholder={t('entry_code') || 'Kod...'}
+                      value={codeFilter}
+                      onChange={e => setCodeFilter(e.target.value)}
+                      className="h-9 w-[160px] bg-white border-slate-200 focus:ring-2 focus:ring-[var(--genix-blue)]/20 rounded-lg text-sm"
+                    />
+                  </div>
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-slate-500 hover:text-red-500 gap-1 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                      {t('clear') || 'Tozalash'}
+                    </Button>
+                  )}
+                  <div className="flex-1" />
                   <Button
-                    onClick={() => {
-                      resetForm();
-                      setNewEntry(prev => ({ ...prev, journal_id: prev.journal_id || defaultJournalId }));
-                      setShowCreateModal(true);
-                    }}
-                    className="bg-gradient-to-r from-[var(--genix-blue)] to-[var(--genix-purple)] hover:opacity-90 transition-opacity shadow-md"
+                    onClick={handleExportExcel}
+                    className="h-9 gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md shadow-emerald-200/50 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-200/60 rounded-lg px-4"
                   >
-                    <Plus className="w-4 h-4 mr-2" /> {t('new_entry')}
+                    <Download className="w-4 h-4" />
+                    <span>{t('export') || 'Export'}</span>
+                    <FileSpreadsheet className="w-4 h-4 opacity-70" />
                   </Button>
-                )}
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -543,7 +818,7 @@ export default function GeneralLedger() {
                         </TableCell>
                         <TableCell className="font-mono text-sm text-slate-600 whitespace-nowrap">{entry.entry_number}</TableCell>
                         <TableCell className="text-slate-700 whitespace-nowrap">
-                          {entry.description || entry.reference || '-'}
+                          {translateJEDescription(entry.description || entry.reference, language) || '-'}
                         </TableCell>
                         <TableCell className="text-slate-600 whitespace-nowrap">
                           {entry.journal?.name || '-'}

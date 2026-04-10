@@ -723,6 +723,69 @@ export default function WorkCenters() {
               )}
             </div>
 
+            {/* Employee Assignment */}
+            <div className="space-y-2 pt-4 border-t border-slate-100">
+              <LabelWithHelp
+                label={language === 'uz' ? 'Xodimlarni tayinlash' : language === 'ru' ? 'Назначить сотрудников' : 'Assign Employees'}
+                helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
+              />
+              <Input
+                placeholder={language === 'uz' ? 'Xodimlarni qidirish...' : language === 'ru' ? 'Поиск сотрудников...' : 'Search employees...'}
+                value={employeeSearch}
+                onChange={(e) => setEmployeeSearch(e.target.value)}
+                className="mb-2"
+              />
+              {allEmployees.length > 0 ? (
+                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {allEmployees
+                    .filter(emp => {
+                      const name = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+                      return name.includes(employeeSearch.toLowerCase()) || (emp.employee_number || '').toLowerCase().includes(employeeSearch.toLowerCase());
+                    })
+                    .map((emp) => (
+                    <div
+                      key={emp.id}
+                      className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedEmployeeIds(prev =>
+                          prev.includes(emp.id)
+                            ? prev.filter(id => id !== emp.id)
+                            : [...prev, emp.id]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        id={`emp-create-${emp.id}`}
+                        checked={selectedEmployeeIds.includes(emp.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={() => {
+                          setSelectedEmployeeIds(prev =>
+                            prev.includes(emp.id)
+                              ? prev.filter(id => id !== emp.id)
+                              : [...prev, emp.id]
+                          );
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                        <p className="text-xs text-slate-500">{emp.employee_number} {emp.job_title ? `• ${emp.job_title}` : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 text-center bg-slate-50">
+                  <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm text-slate-500">{language === 'uz' ? 'Xodimlar mavjud emas' : language === 'ru' ? 'Нет доступных сотрудников' : 'No employees available'}</p>
+                </div>
+              )}
+              {selectedEmployeeIds.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {selectedEmployeeIds.length} {language === 'uz' ? 'xodim tanlangan' : language === 'ru' ? 'сотрудников выбрано' : 'employees selected'}
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowCreateModal(false); resetForm(); }} className="flex-1">
                 {t('cancel')}
@@ -995,6 +1058,72 @@ export default function WorkCenters() {
                 )}
               </div>
             )}
+
+            {/* Employee Assignment for Edit */}
+            {selectedWorkCenter && (
+              <div className="space-y-2 pt-4 border-t border-slate-100">
+                <LabelWithHelp
+                  label={language === 'uz' ? 'Xodimlarni tayinlash' : language === 'ru' ? 'Назначить сотрудников' : 'Assign Employees'}
+                  helpText={t('help_assign_employees') || 'Select employees to assign to this work center'}
+                />
+                <Input
+                  placeholder={language === 'uz' ? 'Xodimlarni qidirish...' : language === 'ru' ? 'Поиск сотрудников...' : 'Search employees...'}
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  className="mb-2"
+                />
+                {allEmployees.length > 0 ? (
+                  <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                    {allEmployees
+                      .filter(emp => {
+                        const name = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+                        return name.includes(employeeSearch.toLowerCase()) || (emp.employee_number || '').toLowerCase().includes(employeeSearch.toLowerCase());
+                      })
+                      .map((emp) => (
+                      <div
+                        key={emp.id}
+                        className="flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                        onClick={() => {
+                          setSelectedEmployeeIds(prev =>
+                            prev.includes(emp.id)
+                              ? prev.filter(id => id !== emp.id)
+                              : [...prev, emp.id]
+                          );
+                        }}
+                      >
+                        <Checkbox
+                          id={`emp-edit-${emp.id}`}
+                          checked={selectedEmployeeIds.includes(emp.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={() => {
+                            setSelectedEmployeeIds(prev =>
+                              prev.includes(emp.id)
+                                ? prev.filter(id => id !== emp.id)
+                                : [...prev, emp.id]
+                            );
+                          }}
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                          <p className="text-xs text-slate-500">{emp.employee_number} {emp.job_title ? `• ${emp.job_title}` : ''}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg p-4 text-center bg-slate-50">
+                    <Users className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm text-slate-500">{language === 'uz' ? 'Xodimlar mavjud emas' : language === 'ru' ? 'Нет доступных сотрудников' : 'No employees available'}</p>
+                  </div>
+                )}
+                {selectedEmployeeIds.length > 0 && (
+                  <p className="text-xs text-slate-500">
+                    {selectedEmployeeIds.length} {language === 'uz' ? 'xodim tanlangan' : language === 'ru' ? 'сотрудников выбрано' : 'employees selected'}
+                  </p>
+                )}
+              </div>
+            )}
+
 
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => { setShowEditModal(false); setSelectedWorkCenter(null); resetForm(); }} className="flex-1">

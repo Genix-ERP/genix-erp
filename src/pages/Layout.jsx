@@ -396,7 +396,7 @@ function LayoutContent({ children, currentPageName }) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-white to-slate-100">
         <style>
           {`
             :root {

@@ -265,6 +265,27 @@ export const authService = {
     return response.data.data;
   },
 
+  // Update email (no verification)
+  async updateEmail(email) {
+    const response = await apiClient.put('/auth/me/email', { email });
+    return response.data.data;
+  },
+
+  // Send phone OTP for phone number change
+  async sendPhoneOTP(phone) {
+    const response = await apiClient.post('/auth/me/phone/send-otp', { phone });
+    return response.data.data;
+  },
+
+  // Verify phone OTP and update phone number
+  async verifyPhoneOTP(phone, otpCode) {
+    const response = await apiClient.post('/auth/me/phone/verify-otp', {
+      phone,
+      otp_code: otpCode,
+    });
+    return response.data.data;
+  },
+
   // Check if user has a valid access token
   hasToken() {
     return !!localStorage.getItem('accessToken');

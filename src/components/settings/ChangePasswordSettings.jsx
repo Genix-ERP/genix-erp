@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Lock, Check, AlertCircle } from "lucide-react";
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";
+import { useAuth } from '@/components/contexts/AuthContext';
 
 export default function ChangePasswordSettings() {
   const { language } = useLanguage();
   const { t } = useTranslation(language);
+  const { changePassword } = useAuth();
 
   const [formData, setFormData] = useState({
     currentPassword: '',
@@ -34,61 +36,45 @@ export default function ChangePasswordSettings() {
 
   const validatePassword = () => {
     if (!formData.currentPassword || !formData.newPassword || !formData.confirmPassword) {
-      setError('All fields are required');
+      setError(t('all_fields_required') || "Barcha maydonlar to'ldirilishi kerak");
       return false;
     }
-
     if (formData.newPassword.length < 8) {
-      setError('New password must be at least 8 characters long');
+      setError(t('password_too_short') || "Yangi parol kamida 8 ta belgidan iborat bo'lishi kerak");
       return false;
     }
-
     if (formData.newPassword !== formData.confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('passwords_dont_match') || "Yangi parollar mos kelmadi");
       return false;
     }
-
     if (formData.currentPassword === formData.newPassword) {
-      setError('New password must be different from current password');
+      setError(t('password_must_differ') || "Yangi parol joriy paroldan farq qilishi kerak");
       return false;
     }
-
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!validatePassword()) {
-      return;
-    }
+    if (!validatePassword()) return;
 
     setIsLoading(true);
     setError('');
-    
+
     try {
-      // Note: This would need to be implemented in the base44 API
-      // For now, simulating the API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // In a real implementation, you would call:
-      // await base44.auth.changePassword({
-      //   currentPassword: formData.currentPassword,
-      //   newPassword: formData.newPassword
-      // });
-      
-      setSuccess(true);
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
-      
-      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
-      successTimeoutRef.current = setTimeout(() => setSuccess(false), 5000);
-    } catch (error) {
-      console.error("Failed to change password", error);
-      setError(error.message || 'Failed to change password. Please check your current password.');
+      const result = await changePassword(formData.currentPassword, formData.newPassword);
+
+      if (result?.success) {
+        setSuccess(true);
+        setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+        successTimeoutRef.current = setTimeout(() => setSuccess(false), 5000);
+      } else {
+        setError(result?.error || t('password_change_failed') || "Parolni o'zgartirishda xatolik yuz berdi");
+      }
+    } catch (err) {
+      const message = err.response?.data?.error?.message || t('password_change_failed') || "Parolni o'zgartirishda xatolik";
+      setError(message);
     }
     setIsLoading(false);
   };
@@ -116,7 +102,7 @@ export default function ChangePasswordSettings() {
           {success && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-sm text-green-800">
               <Check className="w-4 h-4" />
-              {t('password_changed_success')}
+              {t('password_changed_success') || "Parol muvaffaqiyatli o'zgartirildi"}
             </div>
           )}
 
@@ -158,10 +144,10 @@ export default function ChangePasswordSettings() {
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' })}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' }); setError(''); }}
               disabled={isLoading}
             >
               {t('cancel')}

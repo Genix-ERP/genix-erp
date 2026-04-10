@@ -675,7 +675,7 @@ const ProjectDetailView = ({
     ]},
     { key: 'materiallar', label: t('nav_materials') || 'Materiallar', icon: Package, subs: [
       { key: 'materials', label: t('nav_materials') || 'Materiallar' },
-      { key: 'forms', label: 'Forma 19' },
+      { key: 'forms', label: 'Forma' },
       { key: 'material_usage', label: t('nav_material_usage') || 'Material sarfi' },
     ]},
     { key: 'hujjatlar', label: t('nav_documents') || 'Hujjatlar', icon: FileText, subs: [
@@ -887,20 +887,20 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             } catch (e) { setPhotoReports([]); }
             break;
           case 'materials':
-            try {
-              const [materialsData, productsData, warehousesData, projMatsData, subcontractsData] = await Promise.all([
+            {
+              const results = await Promise.allSettled([
                 constructionService.listMaterialRequests(project.id),
-                inventoryService.listProducts({ limit: 500, is_stockable: true }),
+                inventoryService.listProducts({ limit: 100 }),
                 inventoryService.listWarehouses({ limit: 100 }),
                 constructionService.listProjectMaterials(project.id),
                 constructionService.listSubcontracts(project.id)
               ]);
-              setMaterialRequests(materialsData || []);
-              setInventoryProducts(productsData?.items || productsData || []);
-              setInventoryWarehouses(warehousesData?.items || warehousesData || []);
-              setProjectMaterials(projMatsData || []);
-              setProjectSubcontracts(subcontractsData || []);
-            } catch (e) { setMaterialRequests([]); }
+              setMaterialRequests(results[0].status === 'fulfilled' ? (results[0].value || []) : []);
+              setInventoryProducts(results[1].status === 'fulfilled' ? (results[1].value?.items || results[1].value || []) : []);
+              setInventoryWarehouses(results[2].status === 'fulfilled' ? (results[2].value?.items || results[2].value || []) : []);
+              setProjectMaterials(results[3].status === 'fulfilled' ? (results[3].value || []) : []);
+              setProjectSubcontracts(results[4].status === 'fulfilled' ? (results[4].value || []) : []);
+            }
             break;
           case 'estimates':
           case 'daily_journal':
@@ -2479,21 +2479,6 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                 </Select>
               </div>
               <div>
-                <Label>{t('building_purpose') || 'Maqsad'}</Label>
-                <Select value={buildingForm.building_purpose} onValueChange={(v) => setBuildingForm({ ...buildingForm, building_purpose: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('select') || 'Tanlang'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="living">{t('living') || 'Yashash uchun'}</SelectItem>
-                    <SelectItem value="non_living">{t('non_living') || 'Yashash uchun emas'}</SelectItem>
-                    <SelectItem value="mixed">{t('mixed') || 'Aralash'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
                 <Label>{t('floors_count') || 'Qavatlar soni'}</Label>
                 <Input
                   type="number"
@@ -2502,6 +2487,8 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
                   placeholder="16"
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
                 <Input
@@ -2523,13 +2510,13 @@ const [showDailyLogModal, setShowDailyLogModal] = useState(false);
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{t('estimated_cost') || 'Taxminiy narx'}</Label>
+                <Label>{t('estimated_cost') || 'Taxminiy xarajat'}</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
                   value={formatPriceInput(buildingForm.estimated_cost)}
                   onChange={(e) => setBuildingForm({ ...buildingForm, estimated_cost: parsePriceInput(e.target.value) })}
-                  placeholder="5000000000"
+                  placeholder="5 000 000 000"
                 />
               </div>
               {buildingForm.id && (
@@ -3859,7 +3846,7 @@ export default function Construction() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('total_area') || 'Umumiy maydon (m²)'}</Label>
                 <Input
@@ -3874,15 +3861,6 @@ export default function Construction() {
                   type="number"
                   value={projectForm.floors_count}
                   onChange={(e) => setProjectForm({ ...projectForm, floors_count: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>{t('contract_amount') || 'Shartnoma summasi'}</Label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatPriceInput(projectForm.contract_amount)}
-                  onChange={(e) => setProjectForm({ ...projectForm, contract_amount: parsePriceInput(e.target.value) })}
                 />
               </div>
             </div>

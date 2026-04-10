@@ -33,10 +33,12 @@ import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { salesService } from '@/api/services/sales';
 import { inventoryService } from '@/api/services/inventory';
+import { projectsService } from '@/api/services/projects';
 import apiClient from '@/api/client';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useTranslation } from '@/components/utils/translations';
 import { usePermissions } from "@/hooks/usePermissions";
+import ProductCombobox from "@/components/shared/ProductCombobox";
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { useAdminSettings } from '@/components/contexts/AdminSettingsContext';
 import { useFinancials } from '@/components/contexts/FinancialsContext';
@@ -72,7 +74,8 @@ export default function SalesOrders() {
   const { salesOrders = [], createSalesOrder, updateSalesOrder, isLoading: ordersLoading, refreshData: refreshModulesData } = useModules();
   const { customers = [] } = useCustomers();
   const { getSetting } = useAdminSettings();
-  const { taxRates = [] } = useFinancials();
+  const { taxRates = [], journals = [], paymentJournals = [] } = useFinancials();
+  const bankCashJournals = paymentJournals.length > 0 ? paymentJournals : journals.filter(j => j.type === 'bank' || j.type === 'cash');
   const { getProductStock } = useInventory();
 
   // Get default tax from settings
@@ -241,6 +244,8 @@ export default function SalesOrders() {
     warehouse_id: '',
     carrier: '',
     vehicle_number: '',
+    project_id: '',
+    project_name: '',
     lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
     subtotal: 0,
     tax_percent: 0,
@@ -309,6 +314,10 @@ export default function SalesOrders() {
   // Carriers list for selection
   const [carriers, setCarriers] = useState([]);
 
+  // Intercompany projects (loaded when customer has source_organization_id)
+  const [intercompanyProjects, setIntercompanyProjects] = useState([]);
+  const [loadingIntercompanyProjects, setLoadingIntercompanyProjects] = useState(false);
+
   // Track if delivery date was manually set (for new order)
   const [isDeliveryDateManual, setIsDeliveryDateManual] = useState(false);
   // Track if delivery date was manually set (for editing order)
@@ -320,7 +329,8 @@ export default function SalesOrders() {
       setProductsLoading(true);
       try {
         const data = await inventoryService.listProducts({ limit: 1000 });
-        setProducts(Array.isArray(data) ? data : data?.items || []);
+        const all = Array.isArray(data) ? data : data?.items || [];
+        setProducts(all.filter(p => p.can_be_sold !== false && p.is_sellable !== false));
       } catch (error) {
         console.error('Failed to fetch products:', error);
       } finally {
@@ -704,6 +714,8 @@ export default function SalesOrders() {
       warehouse_id: newOrder.warehouse_id || undefined,
       carrier: newOrder.carrier || undefined,
       vehicle_number: newOrder.vehicle_number || undefined,
+      project_id: newOrder.project_id || undefined,
+      project_name: newOrder.project_name || undefined,
       subtotal,
       tax_amount: taxAmount,
       shipping_amount: shippingCost,
@@ -713,8 +725,16 @@ export default function SalesOrders() {
       total_amount: total,
       status: 'draft',
       payment_status: 'unpaid',
+      payment_journal_id: newOrder.payment_journal_id || undefined,
       lines: validLines.length > 0 ? validLines : undefined, // Only send lines if valid
     };
+
+    // Validate: intercompany orders must have a project selected
+    const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+    if (selectedCustomer?.source_organization_id && !newOrder.project_id) {
+      alert(t('intercompany_project_required') || 'Kompaniyalararo buyurtma uchun loyihani tanlash majburiy');
+      return;
+    }
 
     try {
       const createdOrder = await createSalesOrder(orderData);
@@ -830,6 +850,9 @@ export default function SalesOrders() {
       delivery_date: new Date().toISOString().split('T')[0], // Default to today
       warehouse_id: warehouses.length === 1 ? warehouses[0].id : '',
       carrier: '',
+      vehicle_number: '',
+      project_id: '',
+      project_name: '',
       lines: [{ product_name: '', product_id: '', quantity: 1, unit_price: 0, description: '', lead_time_days: 0 }],
       subtotal: 0,
       tax_percent: defaultTaxPercent,
@@ -841,11 +864,13 @@ export default function SalesOrders() {
       max_discount_amount: null,
       tax_amount: 0,
       shipping_cost: 0,
-      total_amount: 0
+      total_amount: 0,
+      payment_journal_id: '',
     });
     setDiscountCodeInput('');
     setDiscountValidation({ valid: false, message: '' });
     setIsDeliveryDateManual(false);
+    setIntercompanyProjects([]);
   };
 
   // Helper: check stock for order lines, returns { issues, inStock, outOfStock }
@@ -1498,13 +1523,30 @@ export default function SalesOrders() {
                   <Label>{t('customer')} *</Label>
                   <Select
                     value={newOrder.customer_id || ''}
-                    onValueChange={(value) => {
+                    onValueChange={async (value) => {
                       const customer = customers.find(c => c.id === value);
                       setNewOrder({
                         ...newOrder,
                         customer_id: value,
-                        customer_name: customer?.company_name || customer?.name || ''
+                        customer_name: customer?.company_name || customer?.name || '',
+                        project_id: '',
+                        project_name: '',
                       });
+                      // If customer is intercompany (has source_organization_id), fetch their projects
+                      setIntercompanyProjects([]);
+                      if (customer?.source_organization_id) {
+                        setLoadingIntercompanyProjects(true);
+                        try {
+                          const res = await apiClient.get('/projects/by-organization', {
+                            params: { organization_id: customer.source_organization_id }
+                          });
+                          setIntercompanyProjects(res.data?.data || []);
+                        } catch (err) {
+                          console.error('Failed to fetch intercompany projects:', err);
+                        } finally {
+                          setLoadingIntercompanyProjects(false);
+                        }
+                      }
                     }}
                   >
                     <SelectTrigger>
@@ -1595,6 +1637,51 @@ export default function SalesOrders() {
                 </div>
               </div>
 
+              {/* Intercompany Project Selection */}
+              {(() => {
+                const selectedCustomer = customers.find(c => c.id === newOrder.customer_id);
+                if (!selectedCustomer?.source_organization_id) return null;
+                return (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="w-4 h-4 text-blue-600" />
+                      <Label className="text-sm font-semibold text-blue-800">
+                        {t('intercompany_project') || 'Kompaniyalararo loyiha'} <span className="text-red-500">*</span>
+                      </Label>
+                    </div>
+                    <p className="text-xs text-blue-600 mb-2">
+                      {t('intercompany_project_hint') || "Buyurtma qaysi loyihaga tegishli ekanligini tanlang"}
+                    </p>
+                    <Select
+                      value={newOrder.project_id || ''}
+                      onValueChange={(value) => {
+                        const project = intercompanyProjects.find(p => p.id === value);
+                        setNewOrder({
+                          ...newOrder,
+                          project_id: value,
+                          project_name: project?.project_name || '',
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={
+                          loadingIntercompanyProjects
+                            ? (t('loading') || 'Loading...')
+                            : (t('select_project') || 'Loyihani tanlang')
+                        } />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {intercompanyProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.project_code} — {project.project_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })()}
+
               {/* Order Lines */}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-3">
@@ -1613,21 +1700,13 @@ export default function SalesOrders() {
                       <div className="flex gap-2 items-end">
                         <div className="flex-[2] min-w-0">
                           {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
-                          <Select
+                          <ProductCombobox
+                            products={products}
                             value={line.product_id || ''}
                             onValueChange={(value) => handleLineChange(newOrder, setNewOrder, index, 'product_id', value, isDeliveryDateManual)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={t('select_product')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={t('select_product')}
+                            t={t}
+                          />
                         </div>
                         {hasVariants && (
                           <div className="flex-[2] min-w-0">
@@ -1751,6 +1830,11 @@ export default function SalesOrders() {
                       {line.variant_name && (
                         <div className="text-xs text-slate-500 pl-1">
                           {t('variant')}: {line.variant_name}
+                        </div>
+                      )}
+                      {line.product?.has_delivery && (
+                        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
+                          <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                         </div>
                       )}
                       {(() => {
@@ -1881,6 +1965,28 @@ export default function SalesOrders() {
                   </p>
                 )}
               </div>
+
+              {/* Payment Journal */}
+              {bankCashJournals.length > 0 && (
+                <div>
+                  <Label>{t('payment_journal') || "To'lov jurnali"}</Label>
+                  <Select
+                    value={newOrder.payment_journal_id || ''}
+                    onValueChange={(value) => setNewOrder({...newOrder, payment_journal_id: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('select_journal') || "Jurnal tanlang"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bankCashJournals.map((j) => (
+                        <SelectItem key={j.id} value={j.id}>
+                          {j.name} ({j.type === 'bank' ? t('bank') || 'Bank' : t('cash') || 'Naqd'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Totals */}
               <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
@@ -2032,6 +2138,27 @@ export default function SalesOrders() {
                       {t(selectedOrder.payment_status) || selectedOrder.payment_status || t('unpaid') || 'Unpaid'}
                     </Badge>
                   </div>
+                  {selectedOrder.carrier && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('carrier') || 'Tashuvchi'}</p>
+                      <p className="font-medium">{selectedOrder.carrier}</p>
+                    </div>
+                  )}
+                  {selectedOrder.vehicle_number && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('vehicle_number') || 'Moshina raqami'}</p>
+                      <p className="font-medium">{selectedOrder.vehicle_number}</p>
+                    </div>
+                  )}
+                  {selectedOrder.project_name && (
+                    <div>
+                      <p className="text-sm text-slate-500">{t('project') || 'Loyiha'}</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                        {selectedOrder.project_name}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {selectedOrder.lines && selectedOrder.lines.length > 0 && (
@@ -2277,21 +2404,13 @@ export default function SalesOrders() {
                         <div className="flex gap-2 items-end">
                           <div className="flex-[2] min-w-0">
                             {index === 0 && <Label className="text-xs text-slate-500 mb-1">{t('product')}</Label>}
-                            <Select
+                            <ProductCombobox
+                              products={products}
                               value={line.product_id || ''}
                               onValueChange={(value) => handleLineChange(editingOrder, setEditingOrder, index, 'product_id', value, isEditDeliveryDateManual)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={line.product_name || t('select_product')} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {products.map((product) => (
-                                  <SelectItem key={product.id} value={product.id}>
-                                    {product.name} {product.has_variants && '(V)'} {product.lead_time_days > 0 && `(${product.lead_time_days} ${t('days') || 'days'})`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              placeholder={line.product_name || t('select_product')}
+                              t={t}
+                            />
                           </div>
                           {hasVariants && (
                             <div className="flex-[2] min-w-0">
@@ -2415,6 +2534,11 @@ export default function SalesOrders() {
                         {line.packaging_name && (
                           <div className="text-xs text-slate-500 pl-1">
                             {t('packaging')}: {line.packaging_name} ({line.packaging_qty || 1} × {line.packaging_unit_qty || 1} = {line.quantity} {t('units') || 'units'})
+                          </div>
+                        )}
+                        {line.product?.has_delivery && (
+                          <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded mt-1 bg-blue-50 text-blue-600 border border-blue-200">
+                            <span>🚚 {t('delivery_price') || 'Yetkazib berish'}: {formatCurrency(line.product.delivery_price || 0)}</span>
                           </div>
                         )}
                         {(() => {

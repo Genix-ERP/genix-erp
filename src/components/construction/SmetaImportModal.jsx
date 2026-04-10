@@ -1056,11 +1056,17 @@ export default function SmetaImportModal({ open, onClose, onImport, onImportSvod
         }
 
         if (allLines.length > 0) {
+          // Collect section names for auto-creating stages
+          const sectionNames = parsedData.sections
+            .filter(s => s.items.length > 0 && s.name)
+            .map(s => s.name);
+
           await onImport({
             estimateName: estimateName || parsedData.objectName || parsedData.sections[0]?.name || 'Imported',
             buildingId,
             sourceType: selectedType,
             lines: allLines,
+            sectionNames,
             subcontractId: selectedSubcontractId ? parseInt(selectedSubcontractId) : undefined,
           });
         }

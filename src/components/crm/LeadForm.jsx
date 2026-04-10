@@ -9,17 +9,32 @@ import { X, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 import { useAuth } from "@/components/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCompany } from "@/components/contexts/CompanyContext";
 import apiClient from "@/api/client";
 import { leadsService } from "@/api/services/leads";
+import { formatPhoneInput, parsePhoneInput } from '@/utils/formatCurrency';
+import { pipelineStagesService } from "@/api/services/crm";
+
+// English defaults — if name matches, show translation; otherwise show custom name
+const DEFAULT_STAGE_NAMES = {
+  new: 'New',
+  contacted: 'Contacted',
+  in_progress: 'In Progress',
+  qualified: 'Qualified',
+  lost: 'Lost',
+};
 
 export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
   const { user } = useAuth();
   const { MODULES, canDelete } = usePermissions();
+  const { activeCompany } = useCompany();
+  const companyId = activeCompany?.id;
   // canDelete on CUSTOMERS = "grant" level = sales head / admin
   const canChangeAssignment = canDelete(MODULES.CUSTOMERS);
 
   const [users, setUsers] = useState([]);
+  const [leadStages, setLeadStages] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -47,11 +62,33 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
     fetchUsers();
   }, []);
 
+  // Load lead pipeline stages from API
+  useEffect(() => {
+    const fetchStages = async () => {
+      try {
+        const stages = await pipelineStagesService.list(activeCompany?.id, 'lead');
+        if (stages && stages.length > 0) {
+          setLeadStages(stages.sort((a, b) => a.sequence - b.sequence));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch lead stages:', err);
+      }
+    };
+    fetchStages();
+  }, [activeCompany?.id]);
+
   useEffect(() => {
     if (lead?.id) {
       leadsService.getAuditLogs(lead.id).then(setAuditLogs).catch(() => {});
     }
   }, [lead?.id]);
+
+  // Load pipeline stages for the status dropdown
+  useEffect(() => {
+    pipelineStagesService.list(companyId, 'lead')
+      .then(data => { if (data && data.length > 0) setLeadStages(data); })
+      .catch(() => {});
+  }, [companyId]);
 
   const fieldLabels = {
     contact_name: t('contact_name'),
@@ -169,11 +206,24 @@ export default function LeadForm({ lead, onSave, onCancel, language = 'en' }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new">{t('new')}</SelectItem>
-                    <SelectItem value="contacted">{t('contacted')}</SelectItem>
-                    <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
-                    <SelectItem value="qualified">{t('qualified')}</SelectItem>
-                    <SelectItem value="lost">{t('lost')}</SelectItem>
+                    {leadStages.length > 0 ? (
+                      leadStages.map(stage => {
+                        const isDefault = DEFAULT_STAGE_NAMES[stage.code] && stage.name === DEFAULT_STAGE_NAMES[stage.code];
+                        return (
+                          <SelectItem key={stage.id} value={stage.code}>
+                            {isDefault ? t(stage.code) : stage.name}
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <SelectItem value="new">{t('new')}</SelectItem>
+                        <SelectItem value="contacted">{t('contacted')}</SelectItem>
+                        <SelectItem value="in_progress">{t('in_progress')}</SelectItem>
+                        <SelectItem value="qualified">{t('qualified')}</SelectItem>
+                        <SelectItem value="lost">{t('lost')}</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

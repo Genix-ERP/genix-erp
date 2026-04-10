@@ -10,6 +10,7 @@ import './Login.scss';
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
+  const [isPhone, setIsPhone] = useState(false);
   const [password, setPassword] = useState('');
   const [usePhone, setUsePhone] = useState(false);
   const [error, setError] = useState('');
@@ -50,7 +51,17 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await login(identifier, password, selectedTenantId, usePhone);
+    // Read directly from DOM to handle browser/Google autofill
+    // (autofill may not trigger React onChange events)
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
+    // Sync React state if autofill provided different values
+    if (domIdentifier !== identifier) setIdentifier(domIdentifier);
+    if (domPassword !== password) setPassword(domPassword);
+
+    const cleanIdentifier = domIdentifier.replace(/\s/g, '');
+    const result = await login(cleanIdentifier, domPassword, selectedTenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -69,9 +80,14 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
+    // Read from DOM in case autofill was used
+    const domIdentifier = document.getElementById('identifier')?.value || identifier;
+    const domPassword = document.getElementById('password')?.value || password;
+
+    // Use Google auth if we have a stored credential
     const result = googleCredential
       ? await loginWithGoogle(googleCredential, tenantId)
-      : await login(identifier, password, tenantId, usePhone);
+      : await login(domIdentifier.replace(/\s/g, ''), domPassword, tenantId, usePhone);
 
     if (result.success) {
       setShouldNavigate(true);
@@ -220,10 +236,36 @@ export default function Login() {
                 }
                 <input
                   id="identifier"
-                  type={usePhone ? 'tel' : 'email'}
-                  placeholder={usePhone ? tr('enter_phone') : t('enter_email')}
+                  name="email"
+                  type={usePhone ? 'tel' : 'text'}
+                  autoComplete="username"
+                  placeholder={usePhone ? tr('enter_phone') : (isPhone ? '+998 XX XXX XX XX' : t('enter_email_or_phone'))}
                   value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // If already in phone mode OR first char is digit/+
+                    if (isPhone || (/^[\+\d]/.test(raw) && !raw.includes('@'))) {
+                      const digits = raw.replace(/\D/g, '');
+                      const local = digits.startsWith('998') ? digits.slice(3) : digits;
+                      const limited = local.slice(0, 9);
+                      // No local digits left → reset to email mode
+                      if (limited.length === 0) {
+                        setIsPhone(false);
+                        setIdentifier('');
+                        return;
+                      }
+                      setIsPhone(true);
+                      let formatted = '+998';
+                      if (limited.length > 0) formatted += ' ' + limited.slice(0, 2);
+                      if (limited.length > 2) formatted += ' ' + limited.slice(2, 5);
+                      if (limited.length > 5) formatted += ' ' + limited.slice(5, 7);
+                      if (limited.length > 7) formatted += ' ' + limited.slice(7, 9);
+                      setIdentifier(formatted);
+                    } else {
+                      setIsPhone(false);
+                      setIdentifier(raw);
+                    }
+                  }}
                   className="login-form__input"
                   required
                 />
@@ -236,7 +278,9 @@ export default function Login() {
                 <Lock className="login-form__icon" />
                 <input
                   id="password"
+                  name="password"
                   type="password"
+                  autoComplete="current-password"
                   placeholder={t('enter_password')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

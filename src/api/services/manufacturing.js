@@ -114,6 +114,16 @@ export const productionOrdersService = {
   async getSchedule(params = {}) {
     const response = await apiClient.get('/production-orders/schedule', { params });
     return response.data.data || [];
+  },
+
+  async completeSplitOutput(id, data) {
+    const response = await apiClient.post(`/production-orders/${id}/complete-split`, data);
+    return response.data.data;
+  },
+
+  async getSplitOutputs(id) {
+    const response = await apiClient.get(`/production-orders/${id}/split-outputs`);
+    return response.data.data || [];
   }
 };
 
@@ -122,7 +132,7 @@ export const productionOrdersService = {
 // =====================================================
 export const workOrdersService = {
   async list(companyId, params = {}) {
-    const response = await apiClient.get('/work-orders', { params: { limit: 100, ...params } });
+    const response = await apiClient.get('/work-orders', { params: { limit: 100, organization_id: companyId, ...params } });
     return response.data.data || [];
   },
 
@@ -315,6 +325,36 @@ export const manufacturingCategoriesService = {
 
   async delete(id) {
     await apiClient.delete(`/manufacturing-categories/${id}`);
+    return true;
+  }
+};
+
+// =====================================================
+// COST CALCULATIONS SERVICE
+// =====================================================
+export const costCalculationsService = {
+  async list() {
+    const response = await apiClient.get('/cost-calculations');
+    return response.data.data || [];
+  },
+
+  async get(id) {
+    const response = await apiClient.get(`/cost-calculations/${id}`);
+    return response.data.data;
+  },
+
+  async create(data) {
+    const response = await apiClient.post('/cost-calculations', data);
+    return response.data.data;
+  },
+
+  async update(id, data) {
+    const response = await apiClient.put(`/cost-calculations/${id}`, data);
+    return response.data.data;
+  },
+
+  async delete(id) {
+    await apiClient.delete(`/cost-calculations/${id}`);
     return true;
   }
 };

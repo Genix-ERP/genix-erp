@@ -59,6 +59,10 @@ const StagesTab = ({ project }) => {
   const [deleteStage, setDeleteStage] = useState(null);
   const [deleteSubStage, setDeleteSubStage] = useState(null);
 
+  // Quick add sub-stage
+  const [quickAddStageId, setQuickAddStageId] = useState(null);
+  const [quickAddName, setQuickAddName] = useState('');
+
   // Materials
   const [expandedSubStage, setExpandedSubStage] = useState(null); // sub-stage id
   const [subStageMaterials, setSubStageMaterials] = useState({}); // { [subStageId]: Material[] }
@@ -185,6 +189,20 @@ const StagesTab = ({ project }) => {
       if (subs.some(s => s.id === subStageId)) return parseInt(stageId);
     }
     return null;
+  };
+
+  // Quick add sub-stage inline
+  const handleQuickAddSubStage = async (stageId) => {
+    const name = quickAddName.trim();
+    if (!name) return;
+    try {
+      await constructionService.createSubStage(stageId, { name, status: 'not_started' });
+      await reloadSubStages(stageId);
+      setQuickAddStageId(null);
+      setQuickAddName('');
+    } catch (e) {
+      toast.error(t('error_occurred'));
+    }
   };
 
   // ── Stage Modal helpers ─────────────────────────────────────────────
@@ -462,6 +480,9 @@ const StagesTab = ({ project }) => {
                           {stage.notes && <p className="text-xs text-slate-400 mt-2">{stage.notes}</p>}
                         </div>
                         <div className="flex gap-2 ml-4">
+                          <Button variant="ghost" size="sm" title={t('add_sub_stage')} onClick={() => { setQuickAddStageId(stage.id); setQuickAddName(''); }}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(stage)}>
                             <Edit className="w-4 h-4" />
                           </Button>
@@ -471,6 +492,31 @@ const StagesTab = ({ project }) => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Quick add sub-stage inline */}
+                    {quickAddStageId === stage.id && (
+                      <div className="border-t bg-slate-50 px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            autoFocus
+                            value={quickAddName}
+                            onChange={e => setQuickAddName(e.target.value)}
+                            placeholder={t('sub_stage_name_placeholder')}
+                            className="flex-1 h-8 text-sm"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleQuickAddSubStage(stage.id);
+                              if (e.key === 'Escape') { setQuickAddStageId(null); setQuickAddName(''); }
+                            }}
+                          />
+                          <Button size="sm" className="h-8" onClick={() => handleQuickAddSubStage(stage.id)} disabled={!quickAddName.trim()}>
+                            {t('add')}
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => { setQuickAddStageId(null); setQuickAddName(''); }}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Sub-stages — always visible */}
                     {subs.length > 0 && (

@@ -469,8 +469,8 @@ export const constructionService = {
     return response.data.data;
   },
 
-  async bulkCreateEstimateLines(estimateId, lines) {
-    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines });
+  async bulkCreateEstimateLines(estimateId, lines, { replace = false } = {}) {
+    const response = await apiClient.post(`/construction/estimates/${estimateId}/lines/bulk`, { lines, replace });
     return response.data.data;
   },
 
@@ -1023,6 +1023,24 @@ export const constructionService = {
   async getJournalEntriesReport(projectId, params = {}) {
     const response = await apiClient.get(`/construction/projects/${projectId}/reports/journal-entries`, { params });
     return response.data.data;
+  },
+
+  // =====================================================
+  // ACT TYPES (user-manageable)
+  // =====================================================
+
+  async listActTypes() {
+    const response = await apiClient.get('/construction/act-types');
+    return response.data.data;
+  },
+
+  async createActType(data) {
+    const response = await apiClient.post('/construction/act-types', data);
+    return response.data.data;
+  },
+
+  async deleteActType(id) {
+    await apiClient.delete(`/construction/act-types/${id}`);
   },
 };
 
