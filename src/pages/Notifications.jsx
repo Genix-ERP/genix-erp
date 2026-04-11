@@ -102,6 +102,20 @@ export default function Notifications() {
     }
   };
 
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      }
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
+    }
+  };
+
   const getTypeIcon = (type) => {
     switch (type) {
       case "invoice_sent":
@@ -148,6 +162,10 @@ export default function Notifications() {
   };
 
   const getTypeLabel = (type) => {
+    // Try direct translation key first, then fallback to formatted type string
+    const translated = t(type);
+    if (translated && translated !== type) return translated;
+    // Also try known mappings
     const labels = {
       invoice_sent: t('invoice_sent') || 'Invoice Sent',
       payment_confirmed: t('payment_confirmed') || 'Payment Confirmed',
@@ -162,8 +180,14 @@ export default function Notifications() {
       salary_confirmed: t('salary_confirmed') || 'Salary Confirmed',
       sales_order_confirmed: t('sales_order_confirmed') || 'Sales Order Confirmed',
       purchase_order_approved: t('purchase_order_approved') || 'Purchase Order Approved',
+      reconciliation_reminder: t('reconciliation_reminder') || 'Reconciliation Reminder',
+      reconciliation_no_response: t('reconciliation_no_response') || 'Reconciliation No Response',
+      forma19_created: t('forma19_created') || 'Form 19 Created',
+      act_signed: t('act_signed') || 'Act Signed',
+      act_cancelled: t('act_cancelled') || 'Act Cancelled',
+      info: t('info') || 'Information',
     };
-    return labels[type] || type;
+    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -340,7 +364,7 @@ export default function Notifications() {
                           </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-1 items-center">
                           {!notification.is_read && (
                             <Button
                               variant="ghost"
@@ -351,6 +375,14 @@ export default function Notifications() {
                               <CheckCheck className="w-4 h-4" />
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(notification.id)}
+                            className="text-slate-400 hover:text-red-500 h-8 w-8"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
