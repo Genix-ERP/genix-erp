@@ -204,6 +204,26 @@ export const workOrdersService = {
   async removeMaterial(woId, materialId) {
     await apiClient.delete(`/work-orders/${woId}/materials/${materialId}`);
     return true;
+  },
+
+  async getAttachments(id) {
+    const response = await apiClient.get(`/work-orders/${id}/attachments`);
+    return response.data.data;
+  },
+
+  async uploadAttachment(id, file, description = '') {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description) formData.append('description', description);
+    const response = await apiClient.post(`/work-orders/${id}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data;
+  },
+
+  async deleteAttachment(woId, attachmentId) {
+    await apiClient.delete(`/work-orders/${woId}/attachments/${attachmentId}`);
+    return true;
   }
 };
 
