@@ -4604,12 +4604,17 @@ export const translations = {
     "sales_order_confirmed": "Sales Order Confirmed",
     "purchase_order_approved": "Purchase Order Approved",
     "low_stock_warning": "Low Stock Warning",
+    "reconciliation_reminder": "Reconciliation Reminder",
+    "reconciliation_no_response": "Reconciliation No Response",
+    "forma19_created": "Form 19 Created",
+    "act_signed": "Act Signed",
+    "act_cancelled": "Act Cancelled",
+    "info": "Information",
     "view_all": "View all",
     "recent_notifications": "Recent Notifications",
     "notifications_appear_here": "New notifications will appear here",
     "updates": "Updates",
     "new": "New",
-    "notifications_appear_here": "New notifications will appear here",
 
     // Security & Logout
     "change_password": "Change Password",
@@ -11718,6 +11723,12 @@ export const translations = {
     "sales_order_confirmed": "Sotuv buyurtmasi tasdiqlandi",
     "purchase_order_approved": "Xarid buyurtmasi tasdiqlandi",
     "low_stock_warning": "Kam qoldiq ogohlantirishi",
+    "reconciliation_reminder": "Akt sverka eslatmasi",
+    "reconciliation_no_response": "Akt sverka javobsiz",
+    "forma19_created": "Forma 19 yaratildi",
+    "act_signed": "Akt imzolandi",
+    "act_cancelled": "Akt bekor qilindi",
+    "info": "Ma'lumot",
     "view_all": "Hammasini ko'rish",
 
     // Security & Logout
@@ -18329,6 +18340,12 @@ export const translations = {
     "sales_order_confirmed": "Заказ на продажу подтверждён",
     "purchase_order_approved": "Заказ на закупку одобрён",
     "low_stock_warning": "Мало на складе",
+    "reconciliation_reminder": "Напоминание о сверке",
+    "reconciliation_no_response": "Сверка без ответа",
+    "forma19_created": "Форма 19 создана",
+    "act_signed": "Акт подписан",
+    "act_cancelled": "Акт отменён",
+    "info": "Информация",
     "view_all": "Смотреть все",
 
     // Security & Logout

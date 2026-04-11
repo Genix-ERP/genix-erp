@@ -1,6 +1,7 @@
 
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -579,38 +580,54 @@ function LayoutContent({ children, currentPageName }) {
                       </span>
                     )}
                   </Button>
-                  {notifDropdownOpen && (
+                  {notifDropdownOpen && createPortal(
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setNotifDropdownOpen(false)} />
-                      <div className="absolute right-0 top-full mt-2 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
-                          <h3 className="font-semibold text-sm text-slate-800">{t('notifications') || 'Notifications'}</h3>
-                          <div className="flex items-center gap-2">
-                            {unreadCount > 0 && (
-                              <button
-                                onClick={markAllRead}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                              >
-                                {t('mark_all_read') || 'Mark all read'}
-                              </button>
-                            )}
-                          </div>
+                      <div
+                        style={{ position: 'fixed', inset: 0, zIndex: 99998, backgroundColor: 'rgba(0,0,0,0.1)' }}
+                        onClick={() => setNotifDropdownOpen(false)}
+                      />
+                      <div
+                        style={{
+                          position: 'fixed',
+                          top: '64px',
+                          right: '80px',
+                          width: '384px',
+                          maxWidth: 'calc(100vw - 32px)',
+                          zIndex: 99999,
+                          backgroundColor: '#ffffff',
+                          borderRadius: '12px',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc' }}>
+                          <h3 style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', margin: 0 }}>{t('notifications') || 'Notifications'}</h3>
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={markAllRead}
+                              style={{ fontSize: '12px', color: '#2563eb', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
+                              {t('mark_all_read') || 'Mark all read'}
+                            </button>
+                          )}
                         </div>
-                        <div className="max-h-80 overflow-y-auto">
+                        <div style={{ maxHeight: '320px', overflowY: 'auto', backgroundColor: '#ffffff' }}>
                           {recentNotifications.length === 0 ? (
-                            <div className="py-8 text-center text-slate-400">
+                            <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8', backgroundColor: '#ffffff' }}>
                               <Bell className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                              <p className="text-sm">{t('no_notifications') || 'No new notifications'}</p>
+                              <p style={{ fontSize: '14px', margin: 0 }}>{t('no_notifications') || 'No new notifications'}</p>
                             </div>
                           ) : (
                             recentNotifications.map((n) => (
                               <div
                                 key={n.id}
-                                className="px-4 py-3 border-b border-slate-50 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                                className="hover:bg-blue-50"
+                                style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', cursor: 'pointer', transition: 'background-color 0.15s' }}
                               >
-                                <p className="text-sm font-medium text-slate-800">{n.title}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
-                                <p className="text-[10px] text-slate-400 mt-1">
+                                <p style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', margin: 0 }}>{n.title}</p>
+                                <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{n.message}</p>
+                                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
                                   {new Date(n.created_at).toLocaleString()}
                                 </p>
                               </div>
@@ -620,12 +637,14 @@ function LayoutContent({ children, currentPageName }) {
                         <Link
                           to={createPageUrl("Notifications")}
                           onClick={() => setNotifDropdownOpen(false)}
-                          className="block text-center py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border-t border-slate-100 transition-colors"
+                          className="hover:bg-blue-50"
+                          style={{ display: 'block', textAlign: 'center', padding: '10px', fontSize: '14px', fontWeight: 500, color: '#2563eb', borderTop: '1px solid #f1f5f9', backgroundColor: '#ffffff', textDecoration: 'none', transition: 'background-color 0.15s' }}
                         >
                           {t('view_all') || 'View all'}
                         </Link>
                       </div>
-                    </>
+                    </>,
+                    document.body
                   )}
                 </div>
                 {/* Company Switcher next to profile - Odoo style */}
