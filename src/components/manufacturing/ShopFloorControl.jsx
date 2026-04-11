@@ -24,7 +24,7 @@ import {
   Hammer,
   RefreshCw,
 } from 'lucide-react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Paperclip, Upload, FileText, Image, X } from 'lucide-react';
 import { useLanguage } from '@/components/contexts/LanguageContext';
 import { useManufacturing } from '@/components/contexts/ManufacturingContext';
 import { useInventory } from '@/components/contexts/InventoryContext';
@@ -41,7 +41,7 @@ const WORK_ORDER_STATUS = {
   failed: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle },
 };
 
-function KanbanCard({ wo, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials }) {
+function KanbanCard({ wo, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials, onAttachments }) {
   const StatusIcon = WORK_ORDER_STATUS[wo.status]?.icon || Clock;
   const timeSpent = calculateTimeSpent(wo);
   const totalQty = wo.quantity_to_produce || 0;
@@ -119,6 +119,15 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
             <Package className="w-3.5 h-3.5 mr-1" />
             {language === 'uz' ? 'Mat.' : language === 'ru' ? 'Мат.' : 'Mat.'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onAttachments(wo)}
+            className="h-7 px-2 text-xs border-purple-200 text-purple-600 hover:bg-purple-50"
+          >
+            <Paperclip className="w-3.5 h-3.5 mr-1" />
+            {language === 'uz' ? 'Fayllar' : language === 'ru' ? 'Файлы' : 'Files'}
+          </Button>
 
           {(wo.status === 'pending' || wo.status === 'ready') && (
             <Button size="sm" onClick={() => onStart(wo)} className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700 flex-1">
@@ -152,7 +161,7 @@ function KanbanCard({ wo, labels, language, workCenters, productionOrders, curre
   );
 }
 
-function KanbanColumn({ title, count, headerColor, titleColor, countColor, workOrders, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials }) {
+function KanbanColumn({ title, count, headerColor, titleColor, countColor, workOrders, labels, language, workCenters, productionOrders, currentTimer, calculateTimeSpent, onStart, onPause, onComplete, onMaterials, onAttachments }) {
   return (
     <div className="w-72 shrink-0 flex flex-col gap-3 h-full">
       {/* Column header */}
@@ -182,6 +191,7 @@ function KanbanColumn({ title, count, headerColor, titleColor, countColor, workO
               onPause={onPause}
               onComplete={onComplete}
               onMaterials={onMaterials}
+              onAttachments={onAttachments}
             />
           ))
         )}
@@ -224,6 +234,13 @@ export default function ShopFloorControl({ isActive }) {
   const [newMaterial, setNewMaterial] = useState({ product_id: '', quantity: '', unit_cost: '', notes: '' });
   const [productSearch, setProductSearch] = useState('');
   const [productSearchFocused, setProductSearchFocused] = useState(false);
+
+  // Attachments modal state
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [attachmentsWorkOrder, setAttachmentsWorkOrder] = useState(null);
+  const [woAttachments, setWoAttachments] = useState([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // Split output modal state
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -521,6 +538,57 @@ export default function ShopFloorControl({ isActive }) {
     }
   };
 
+  // Attachments handlers
+  const handleOpenAttachments = async (workOrder) => {
+    setAttachmentsWorkOrder(workOrder);
+    setShowAttachmentsModal(true);
+    setAttachmentsLoading(true);
+    try {
+      const data = await workOrdersService.getAttachments(workOrder.id);
+      setWoAttachments(data || []);
+    } catch {
+      setWoAttachments([]);
+    }
+    setAttachmentsLoading(false);
+  };
+
+  const handleUploadAttachment = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !attachmentsWorkOrder) return;
+    setUploadingFile(true);
+    try {
+      await workOrdersService.uploadAttachment(attachmentsWorkOrder.id, file);
+      const data = await workOrdersService.getAttachments(attachmentsWorkOrder.id);
+      setWoAttachments(data || []);
+      toast.success(language === 'uz' ? 'Fayl yuklandi' : 'File uploaded');
+    } catch {
+      toast.error('Failed to upload file');
+    }
+    setUploadingFile(false);
+    e.target.value = '';
+  };
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (!attachmentsWorkOrder) return;
+    try {
+      await workOrdersService.deleteAttachment(attachmentsWorkOrder.id, attachmentId);
+      setWoAttachments(prev => prev.filter(a => a.id !== attachmentId));
+      toast.success('Deleted');
+    } catch {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const getFileIcon = (mimeType) => {
+    if (mimeType?.startsWith('image/')) return Image;
+    return FileText;
+  };
+
+  const getApiBase = () => {
+    const base = import.meta.env.VITE_API_URL || '';
+    return base.replace('/api/v1', '');
+  };
+
   // Statistics
   const stats = useMemo(() => {
     const inProgress = workOrders.filter(wo => wo.status === 'in_progress').length;
@@ -753,6 +821,7 @@ export default function ShopFloorControl({ isActive }) {
                   onPause={handlePauseWorkOrder}
                   onComplete={handleCompleteWorkOrder}
                   onMaterials={handleOpenMaterials}
+                  onAttachments={handleOpenAttachments}
                 />
               ))}
             </div>
@@ -1046,6 +1115,73 @@ export default function ShopFloorControl({ isActive }) {
               {language === 'uz' ? 'Yopish' : language === 'ru' ? 'Закрыть' : 'Close'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attachments Modal */}
+      <Dialog open={showAttachmentsModal} onOpenChange={(open) => { setShowAttachmentsModal(open); if (!open) { setAttachmentsWorkOrder(null); setWoAttachments([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="w-5 h-5" />
+              {language === 'uz' ? 'Fayllar' : language === 'ru' ? 'Файлы' : 'Attachments'}
+              {attachmentsWorkOrder && <span className="text-sm font-normal text-slate-500">— {attachmentsWorkOrder.name}</span>}
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Upload button */}
+          <div className="flex items-center gap-2">
+            <label className="flex-1">
+              <input type="file" className="hidden" onChange={handleUploadAttachment} disabled={uploadingFile} accept="image/*,.pdf,.doc,.docx,.dwg,.dxf" />
+              <div className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${uploadingFile ? 'border-slate-200 bg-slate-50' : 'border-purple-200 hover:border-purple-400 hover:bg-purple-50'}`}>
+                <Upload className="w-5 h-5 text-purple-500" />
+                <span className="text-sm text-purple-600 font-medium">
+                  {uploadingFile
+                    ? (language === 'uz' ? 'Yuklanmoqda...' : 'Uploading...')
+                    : (language === 'uz' ? 'Fayl yuklash (rasm, chizma, PDF)' : language === 'ru' ? 'Загрузить файл (фото, чертёж, PDF)' : 'Upload file (image, drawing, PDF)')}
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* Attachments list */}
+          {attachmentsLoading ? (
+            <div className="text-center py-8 text-slate-400">{language === 'uz' ? 'Yuklanmoqda...' : 'Loading...'}</div>
+          ) : woAttachments.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              {language === 'uz' ? 'Fayllar yo\'q' : language === 'ru' ? 'Файлов нет' : 'No files yet'}
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {woAttachments.map((att) => {
+                const isImage = att.mime_type?.startsWith('image/');
+                const FileIcon = getFileIcon(att.mime_type);
+                const fileUrl = `${getApiBase()}${att.url}`;
+                return (
+                  <div key={att.id} className="border rounded-lg overflow-hidden">
+                    {isImage && (
+                      <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                        <img src={fileUrl} alt={att.original_name} className="w-full max-h-[300px] object-contain bg-slate-50" />
+                      </a>
+                    )}
+                    <div className="flex items-center justify-between p-3 bg-white">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate">
+                          {att.original_name}
+                        </a>
+                        <span className="text-xs text-slate-400 flex-shrink-0">{(att.file_size / 1024).toFixed(0)} KB</span>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteAttachment(att.id)} className="text-red-500 hover:text-red-700 h-7 w-7 p-0 flex-shrink-0">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
