@@ -129,6 +129,9 @@ function LayoutContent({ children, currentPageName }) {
   const [isAIChatOpen, setIsAIChatOpen] = React.useState(false);
   const [isPhoneOpen, setIsPhoneOpen] = React.useState(false);
   const [aiInitialPrompt, setAIInitialPrompt] = React.useState(null);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [notifDropdownOpen, setNotifDropdownOpen] = React.useState(false);
+  const [recentNotifications, setRecentNotifications] = React.useState([]);
   const { user: currentUser, logout, isSiteAdmin, isOwner } = useAuth();
   const { canAccessModule, isAdmin, isLoading: permissionsLoading } = useEmployeePermissions();
 
@@ -153,6 +156,79 @@ function LayoutContent({ children, currentPageName }) {
       delete window.openAIChat;
     };
   }, []);
+
+  // Poll unread notification count every 30s
+  const fetchUnreadCount = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      const res = await fetch('http://localhost:8080/api/v1/notifications/unread-count', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setUnreadCount(json.data?.count || 0);
+      }
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const fetchRecentNotifications = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      const res = await fetch('http://localhost:8080/api/v1/notifications?is_read=false', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setRecentNotifications((json.data || []).slice(0, 8));
+      }
+    } catch (e) { /* silent */ }
+  }, []);
+
+  const markAllRead = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const tenantId = localStorage.getItem('tenantId');
+      const orgId = localStorage.getItem('organizationId');
+      if (!token) return;
+      await fetch('http://localhost:8080/api/v1/notifications/read-all', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Tenant-ID': tenantId || '',
+          'X-Organization-ID': orgId || '',
+        },
+      });
+      setUnreadCount(0);
+      setRecentNotifications([]);
+    } catch (e) { /* silent */ }
+  }, []);
+
+  React.useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  // Fetch recent notifications when dropdown opens
+  React.useEffect(() => {
+    if (notifDropdownOpen) {
+      fetchRecentNotifications();
+    }
+  }, [notifDropdownOpen, fetchRecentNotifications]);
 
   // Get data for dynamic AI insights
   const { items: inventory } = useInventory();
@@ -489,11 +565,69 @@ function LayoutContent({ children, currentPageName }) {
                 >
                   <Phone className="w-4 h-4 md:w-5 md:h-5" />
                 </Button>
-                <Link to={createPageUrl("Notifications")}>
-                  <Button variant="ghost" size="icon" className="relative hover:bg-slate-100 rounded-full transition-all duration-200">
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative hover:bg-slate-100 rounded-full transition-all duration-200"
+                    onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                  >
                     <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                   </Button>
-                </Link>
+                  {notifDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setNotifDropdownOpen(false)} />
+                      <div className="absolute right-0 top-full mt-2 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                          <h3 className="font-semibold text-sm text-slate-800">{t('notifications') || 'Notifications'}</h3>
+                          <div className="flex items-center gap-2">
+                            {unreadCount > 0 && (
+                              <button
+                                onClick={markAllRead}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                {t('mark_all_read') || 'Mark all read'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {recentNotifications.length === 0 ? (
+                            <div className="py-8 text-center text-slate-400">
+                              <Bell className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                              <p className="text-sm">{t('no_notifications') || 'No new notifications'}</p>
+                            </div>
+                          ) : (
+                            recentNotifications.map((n) => (
+                              <div
+                                key={n.id}
+                                className="px-4 py-3 border-b border-slate-50 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                              >
+                                <p className="text-sm font-medium text-slate-800">{n.title}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  {new Date(n.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <Link
+                          to={createPageUrl("Notifications")}
+                          onClick={() => setNotifDropdownOpen(false)}
+                          className="block text-center py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 border-t border-slate-100 transition-colors"
+                        >
+                          {t('view_all') || 'View all'}
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {/* Company Switcher next to profile - Odoo style */}
                 <div className="hidden md:flex items-center gap-1.5 ml-1">
                   <div className="w-px h-6 bg-slate-200"></div>

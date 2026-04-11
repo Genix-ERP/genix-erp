@@ -198,6 +198,8 @@ export function CustomersProvider({ children }) {
                 address: address,
                 created_date: c.created_at || new Date().toISOString(),
                 source_organization_id: c.source_organization_id || null,
+                default_receivable_account_id: c.default_receivable_account_id || '',
+                default_payable_account_id: c.default_payable_account_id || '',
               };
             });
             setCustomers(mappedCustomers);
@@ -331,7 +333,9 @@ export function CustomersProvider({ children }) {
       custom_fields: {
         annual_revenue: customerData.annual_revenue || 0,
         employee_count: customerData.employee_count || 0
-      }
+      },
+      default_receivable_account_id: customerData.default_receivable_account_id || '',
+      default_payable_account_id: customerData.default_payable_account_id || '',
     };
 
     try {
@@ -392,6 +396,13 @@ export function CustomersProvider({ children }) {
 
         if (Object.keys(customFields).length > 0) {
           backendData.custom_fields = customFields;
+        }
+
+        if (customerData.default_receivable_account_id !== undefined) {
+          backendData.default_receivable_account_id = customerData.default_receivable_account_id || '';
+        }
+        if (customerData.default_payable_account_id !== undefined) {
+          backendData.default_payable_account_id = customerData.default_payable_account_id || '';
         }
 
         await contactsService.update(id, backendData);
