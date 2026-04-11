@@ -254,7 +254,7 @@ export default function Login() {
 
             <div style={{ textAlign: 'right', marginTop: -4 }}>
               <Link to="/forgot-password" style={{ fontSize: 13, color: '#0EA5E9', textDecoration: 'none' }}>
-                {t('forgot_password') || "Parolni unutdingizmi?"}
+                {t('set_password') || "Parol o'rnatish"}
               </Link>
             </div>
 

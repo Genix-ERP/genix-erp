@@ -1062,18 +1062,6 @@ Only return the JSON, no other text.`;
                               {t('manage_permissions') || 'Manage Permissions'}
                             </DropdownMenuItem>
                           )}
-                          {e.status !== 'terminated' && e.email && (
-                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'email')}>
-                              <Mail className="mr-2 h-4 w-4" />
-                              {t('send_email') || 'Send email'}
-                            </DropdownMenuItem>
-                          )}
-                          {e.status !== 'terminated' && e.phone && (
-                            <DropdownMenuItem onClick={() => handleSendCredentials(e, 'phone')}>
-                              <Send className="mr-2 h-4 w-4" />
-                              {t('send_sms') || 'Send SMS'}
-                            </DropdownMenuItem>
-                          )}
                           {canDelete(MODULES.HR) && (
                             <DropdownMenuItem
                               onClick={() => handleDeleteClick(e)}
