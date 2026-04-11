@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { LabelWithHelp } from "@/components/ui/field-help";
 import { X } from "lucide-react";
 import { useTranslation } from "@/components/utils/translations";
 import { formatPhoneInput, parsePhoneInput, formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
+import { financeService } from '@/api/services/finance';
 
 export default function CustomerForm({ customer, onSave, onCancel, language = 'en' }) {
   const { t } = useTranslation(language);
@@ -22,6 +23,8 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
     expected_revenue: customer?.expected_revenue || "",
     annual_revenue: customer?.annual_revenue || 0,
     employee_count: customer?.employee_count || 0,
+    default_receivable_account_id: customer?.default_receivable_account_id || "",
+    default_payable_account_id: customer?.default_payable_account_id || "",
     address: customer?.address || {
       street: "",
       city: "",
@@ -31,6 +34,19 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
   });
 
   const [tagInput, setTagInput] = useState("");
+  const [accounts, setAccounts] = useState([]);
+
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const data = await financeService.listAccounts({ limit: 500 });
+        setAccounts(Array.isArray(data) ? data : data?.items || []);
+      } catch (err) {
+        console.error('Failed to load accounts:', err);
+      }
+    };
+    loadAccounts();
+  }, []);
 
   const handleTagKeyDown = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
@@ -167,6 +183,41 @@ export default function CustomerForm({ customer, onSave, onCancel, language = 'e
                   onChange={(e) => handleChange("notes", e.target.value)}
                   rows={3}
                 />
+              </div>
+            </div>
+
+            {/* Accounting */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">{t('accounting') || 'Accounting'}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="default_receivable_account_id" label={t('receivable_account') || 'Receivable Account'} helpText={t('help_receivable_account') || 'Default AR account for this contact. Leave empty to use system default.'} />
+                  <select
+                    id="default_receivable_account_id"
+                    value={formData.default_receivable_account_id}
+                    onChange={(e) => handleChange("default_receivable_account_id", e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">{t('system_default') || 'System Default'}</option>
+                    {accounts.filter(a => a.account_type === 'accounts_receivable' || a.code?.startsWith('1')).map(a => (
+                      <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <LabelWithHelp htmlFor="default_payable_account_id" label={t('payable_account') || 'Payable Account'} helpText={t('help_payable_account') || 'Default AP account for this contact. Leave empty to use system default.'} />
+                  <select
+                    id="default_payable_account_id"
+                    value={formData.default_payable_account_id}
+                    onChange={(e) => handleChange("default_payable_account_id", e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">{t('system_default') || 'System Default'}</option>
+                    {accounts.filter(a => a.account_type === 'accounts_payable' || a.code?.startsWith('2')).map(a => (
+                      <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
