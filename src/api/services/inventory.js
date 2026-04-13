@@ -549,6 +549,32 @@ export const inventoryService = {
   async deleteLot(id) {
     await apiClient.delete(`/inventory/lots/${id}`);
   },
+
+  // ─── Material Reservations ──────────────────────────────────────
+
+  async listReservations(params = {}) {
+    const response = await apiClient.get('/material-reservations', { params });
+    return response.data.data;
+  },
+
+  async createReservation(data) {
+    const response = await apiClient.post('/material-reservations', data);
+    return response.data.data;
+  },
+
+  async approveReservation(id) {
+    const response = await apiClient.put(`/material-reservations/${id}/approve`);
+    return response.data;
+  },
+
+  async rejectReservation(id) {
+    const response = await apiClient.put(`/material-reservations/${id}/reject`);
+    return response.data;
+  },
+
+  async deleteReservation(id) {
+    await apiClient.delete(`/material-reservations/${id}`);
+  },
 };
 
 export default inventoryService;

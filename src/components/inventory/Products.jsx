@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Pencil, Trash2, Eye, DollarSign,
   Tag, Barcode, Box, Boxes, Filter, MoreHorizontal, AlertCircle,
   CheckCircle, XCircle, ShoppingCart, Archive, Upload, Download, History,
-  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown
+  Layers, Printer, HelpCircle, Truck, RefreshCw, Scale, ChevronDown, ShieldCheck
 } from "lucide-react";
 import {
   Tooltip,
@@ -37,6 +37,7 @@ import ProductVariants from "./ProductVariants";
 import Packages from "./Packages";
 import PackageTypes from "./PackageTypes";
 import UnitsOfMeasure from "./UnitsOfMeasure";
+import MaterialReservations from "./MaterialReservations";
 import apiClient from '@/api/client';
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/api\/v1\/?$/, '');
@@ -1203,6 +1204,13 @@ export default function Products() {
             <Scale className="w-4 h-4" />
             {t('units_of_measure')}
           </TabsTrigger>
+          <TabsTrigger
+            value="reserved"
+            className="flex items-center gap-2 px-4 py-2 rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {t('reserved') || 'Zaxiralar'}
+          </TabsTrigger>
         </TabsList>
 
         {/* Products List Tab */}
@@ -1685,6 +1693,9 @@ export default function Products() {
         {/* Units of Measure Tab */}
         <TabsContent value="units" className="mt-0">
           <UnitsOfMeasure />
+        </TabsContent>
+        <TabsContent value="reserved" className="mt-0">
+          <MaterialReservations />
         </TabsContent>
       </Tabs>
 

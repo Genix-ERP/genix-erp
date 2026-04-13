@@ -259,6 +259,13 @@ export const constructionService = {
     return response.data.data;
   },
 
+  // Estimate resources by type (for substage dropdowns)
+  async listEstimateResources(projectId, type) {
+    const params = type ? { type } : {};
+    const response = await apiClient.get(`/construction/projects/${projectId}/estimate-resources`, { params });
+    return response.data.data;
+  },
+
   // =====================================================
   // PROJECT VENDORS (Future)
   // =====================================================

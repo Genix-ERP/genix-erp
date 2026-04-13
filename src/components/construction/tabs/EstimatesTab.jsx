@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,7 +118,12 @@ const EstimatesTab = ({ project, wbsItems = [], buildings = [], scope, subcontra
       }
 
       // Bulk create all lines (replace existing if re-importing to same estimate)
-      await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+      const bulkResult = await constructionService.bulkCreateEstimateLines(estId, lines, { replace: isExisting });
+
+      // Show toast if products were auto-created from resource lines
+      if (bulkResult?.products_created > 0) {
+        toast.success(`${bulkResult.products_created} ta mahsulot avtomatik yaratildi`);
+      }
 
       // Auto-create construction stages from BOP section headers
       if (sourceType === 'vor' && sectionNames?.length > 0) {

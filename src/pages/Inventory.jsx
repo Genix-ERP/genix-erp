@@ -26,6 +26,7 @@ import {
   CalendarClock,
   BarChart3,
   ArrowLeftRight,
+  ShieldCheck,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -47,6 +48,7 @@ import StockOperations from "@/components/inventory/StockOperations";
 import WarehouseLocations from "@/components/inventory/WarehouseLocations";
 import StockReport from "@/components/inventory/StockReport";
 import StockTransfers from "@/components/inventory/StockTransfers";
+// MaterialReservations moved to Products sub-tab
 
 import { useLanguage } from "@/components/contexts/LanguageContext";
 import { useTranslation } from "@/components/utils/translations";

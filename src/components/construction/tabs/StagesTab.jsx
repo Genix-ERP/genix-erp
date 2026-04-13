@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { constructionService } from '@/api/services/construction';
+import inventoryService from '@/api/services/inventory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, X, ChevronDown, ChevronRight, Package, Truck, Users, ShieldCheck } from 'lucide-react';
 import { useCurrencyFormatter } from '@/hooks/useCurrencyFormatter';
 import { formatPriceInput, parsePriceInput } from '@/utils/formatCurrency';
 import { useLanguage } from '@/components/contexts/LanguageContext';
@@ -70,14 +71,43 @@ const StagesTab = ({ project }) => {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [materialSubStageId, setMaterialSubStageId] = useState(null);
   const [materialForm, setMaterialForm] = useState({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
-  const [products, setProducts] = useState([]);
+  const [inventoryProducts, setInventoryProducts] = useState([]);
+  // Estimate resources for equipment/employee tabs
+  const [estimateEquipmentResources, setEstimateEquipmentResources] = useState([]);
+  const [estimateLaborResources, setEstimateLaborResources] = useState([]);
+  // Unified modal tab: 'materials' | 'equipment' | 'employee'
+  const [modalTab, setModalTab] = useState('materials');
+  // Equipment/Employee form (shared)
+  const [equipmentForm, setEquipmentForm] = useState({ name: '', work_unit: 'soat', quantity: '', unit_price: '' });
+  // Sub-stage equipment data
+  const [subStageEquipment, setSubStageEquipment] = useState({});
 
-  // Load project materials for dropdown
+  // Load inventory products + estimate resources for dropdowns
   useEffect(() => {
     if (!project?.id) return;
-    constructionService.listProjectMaterials(project.id)
-      .then(data => setProducts(data || []))
-      .catch(() => setProducts([]));
+    // Load inventory products (deduplicate by product_id, aggregate stock)
+    inventoryService.listInventory({ limit: 500 })
+      .then(d => {
+        const map = {};
+        (d || []).forEach(item => {
+          if (map[item.product_id]) {
+            map[item.product_id].quantity_on_hand += item.quantity_on_hand || 0;
+            map[item.product_id].quantity_available += item.quantity_available || 0;
+            map[item.product_id].quantity_reserved += item.quantity_reserved || 0;
+          } else {
+            map[item.product_id] = { ...item };
+          }
+        });
+        setInventoryProducts(Object.values(map));
+      })
+      .catch(() => setInventoryProducts([]));
+    // Load estimate resources by type for equipment/employee dropdowns
+    constructionService.listEstimateResources(project.id, 'equipment')
+      .then(d => setEstimateEquipmentResources(d || []))
+      .catch(() => setEstimateEquipmentResources([]));
+    constructionService.listEstimateResources(project.id, 'labor')
+      .then(d => setEstimateLaborResources(d || []))
+      .catch(() => setEstimateLaborResources([]));
   }, [project?.id]);
 
   const loadAllSubStages = useCallback(async (stageList) => {
@@ -145,6 +175,8 @@ const StagesTab = ({ project }) => {
   const openAddMaterial = (subStageId) => {
     setMaterialSubStageId(subStageId);
     setMaterialForm({ product_id: '', product_name: '', uom: 'шт', quantity: '', unit_cost: '' });
+    setEquipmentForm({ name: '', work_unit: 'soat', quantity: '', unit_price: '' });
+    setModalTab('materials');
     setShowMaterialModal(true);
   };
 
@@ -158,12 +190,47 @@ const StagesTab = ({ project }) => {
         quantity: parseFloat(materialForm.quantity) || 0,
         unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
       });
+      // If product selected from inventory, create reservation
+      if (materialForm.product_id) {
+        const stageId = findStageForSubStage(materialSubStageId);
+        try {
+          await inventoryService.createReservation({
+            project_id: project.id,
+            stage_id: stageId || 0,
+            substage_id: materialSubStageId,
+            product_id: materialForm.product_id,
+            quantity: parseFloat(materialForm.quantity) || 0,
+            unit_cost: parseFloat(parsePriceInput(materialForm.unit_cost)) || 0,
+          });
+        } catch (reserveErr) {
+          console.error('Reservation creation failed:', reserveErr);
+        }
+      }
       setShowMaterialModal(false);
       await loadSubStageMaterials(materialSubStageId);
-      // Reload sub-stages to update material_count/material_total
       const stageId = findStageForSubStage(materialSubStageId);
       if (stageId) await reloadSubStages(stageId);
-      // Reload stages to update material_total on stage card
+      const data = await constructionService.listStages(project.id);
+      setStages(data || []);
+    } catch (e) {
+      toast.error(t('error_occurred'));
+    }
+  };
+
+  const handleAddEquipment = async () => {
+    if (!equipmentForm.name.trim() || !materialSubStageId) return;
+    try {
+      await constructionService.createSubStageEquipment(materialSubStageId, {
+        name: equipmentForm.name,
+        type: modalTab === 'employee' ? 'employee' : 'equipment',
+        work_unit: equipmentForm.work_unit || 'soat',
+        quantity: parseFloat(equipmentForm.quantity) || 0,
+        unit_price: parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0,
+      });
+      setShowMaterialModal(false);
+      await loadSubStageMaterials(materialSubStageId);
+      const stageId = findStageForSubStage(materialSubStageId);
+      if (stageId) await reloadSubStages(stageId);
       const data = await constructionService.listStages(project.id);
       setStages(data || []);
     } catch (e) {
@@ -707,109 +774,260 @@ const StagesTab = ({ project }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Add Material Modal */}
+      {/* Add Material / Equipment / Employee Modal */}
       <Dialog open={showMaterialModal} onOpenChange={setShowMaterialModal}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t('add')}</DialogTitle>
             <DialogDescription className="sr-only">{t('add')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>{t('product')}</Label>
-              {products.length > 0 ? (
+
+          {/* Tab Switcher */}
+          <div className="flex border-b border-slate-200 -mx-6 px-6">
+            {[
+              { key: 'materials', label: t('rf_materials') || 'Materiallar', icon: Package, color: 'amber' },
+              { key: 'equipment', label: t('rf_equipment') || 'Texnika', icon: Truck, color: 'blue' },
+              { key: 'employee', label: t('rf_employee') || 'Ishchi kuchi', icon: Users, color: 'green' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setModalTab(tab.key)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  modalTab === tab.key
+                    ? `border-${tab.color}-500 text-${tab.color}-600`
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+                style={modalTab === tab.key ? {
+                  borderBottomColor: tab.color === 'amber' ? '#f59e0b' : tab.color === 'blue' ? '#3b82f6' : '#22c55e',
+                  color: tab.color === 'amber' ? '#d97706' : tab.color === 'blue' ? '#2563eb' : '#16a34a',
+                } : {}}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ─── Materials Tab ─── */}
+          {modalTab === 'materials' && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_product') || 'Mahsulot tanlang'}</Label>
                 <Select
-                  value={materialForm.product_name || 'custom'}
+                  value={materialForm.product_id || undefined}
                   onValueChange={(val) => {
-                    if (val === 'custom') {
-                      setMaterialForm(f => ({ ...f, product_id: '', product_name: '', uom: 'шт', unit_cost: '' }));
-                    } else {
-                      const p = products.find(pr => pr.product_name === val);
-                      if (p) {
-                        setMaterialForm(f => ({
-                          ...f,
-                          product_id: p.product_id || '',
-                          product_name: p.product_name,
-                          uom: p.uom || 'шт',
-                          unit_cost: p.unit_cost ? String(p.unit_cost) : '',
-                        }));
-                      }
+                    const p = inventoryProducts.find(ip => ip.product_id === val);
+                    if (p) {
+                      setMaterialForm(f => ({
+                        ...f,
+                        product_id: p.product_id,
+                        product_name: p.product_name,
+                        uom: 'шт',
+                        unit_cost: p.unit_cost ? String(p.unit_cost) : '',
+                      }));
                     }
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder={t('select_product')} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="custom">{t('other')}</SelectItem>
-                    {products.map(p => {
-                      const remaining = (p.approved_quantity || 0) - (p.assigned_quantity || 0);
-                      return (
-                        <SelectItem key={p.product_id || p.id} value={p.product_name}>
-                          {p.product_name}{p.uom ? ` (${p.uom})` : ''}
-                          {p.approved_quantity > 0 && (
-                            <span className="text-slate-400 ml-1">— {remaining.toFixed(1)} {t('remaining')}</span>
-                          )}
-                        </SelectItem>
-                      );
-                    })}
+                  <SelectTrigger><SelectValue placeholder={t('select_product') || 'Mahsulot tanlang'} /></SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {inventoryProducts.map(p => (
+                      <SelectItem key={p.product_id} value={p.product_id}>
+                        {p.product_name} — {t('stock') || 'Zaxira'}: {p.quantity_available ?? p.quantity_on_hand ?? 0}
+                        {p.unit_cost ? ` (${formatCurrency(p.unit_cost)})` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-              ) : (
-                <Input
-                  value={materialForm.product_name}
-                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={t('product_name')}
-                />
+                {materialForm.product_id && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    {t('from_inventory') || 'Inventorydan — zaxira so\'rovi yaratiladi'}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('unit')}</Label>
+                  <Input
+                    value={materialForm.uom}
+                    onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>{t('quantity')}</Label>
+                  <Input
+                    type="number" step="0.0001" min="0"
+                    value={materialForm.quantity}
+                    onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>{t('unit_cost')}</Label>
+                  <Input
+                    value={materialForm.unit_cost}
+                    onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              {materialForm.quantity && materialForm.unit_cost && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-slate-500">{t('total')}</span>
+                  <span className="font-semibold">
+                    {formatCurrency((parseFloat(materialForm.quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}
+                  </span>
+                </div>
               )}
-              {/* Show custom name input if 'custom' selected or products empty */}
-              {products.length > 0 && !products.some(p => p.product_name === materialForm.product_name) && (
-                <Input
-                  className="mt-2"
-                  value={materialForm.product_name}
-                  onChange={e => setMaterialForm(f => ({ ...f, product_name: e.target.value }))}
-                  placeholder={t('product_name')}
-                />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddMaterial} disabled={!materialForm.product_id}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* ─── Equipment Tab (МАШ.-Ч from estimates) ─── */}
+          {modalTab === 'equipment' && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t('select_equipment') || 'Texnika tanlang'}</Label>
+                {estimateEquipmentResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateEquipmentResources.find(res => res.name === val);
+                      if (r) {
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: r.equipment_rate ? String(r.equipment_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_equipment') || 'Texnika tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateEquipmentResources.map(r => (
+                        <SelectItem key={r.id} value={r.name} title={r.name}>
+                          <span className="truncate block max-w-[380px]">{r.name}</span>
+                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_equipment_resources') || 'Smeta resurslarida texnika topilmadi'}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
+              </div>
+              {equipmentForm.quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-blue-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
               )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddEquipment} disabled={!equipmentForm.name.trim()}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+          )}
+
+          {/* ─── Employee Tab (ЧЕЛ.-Ч from estimates) ─── */}
+          {modalTab === 'employee' && (
+            <div className="space-y-4">
               <div>
-                <Label>{t('unit')}</Label>
-                <Input
-                  value={materialForm.uom}
-                  onChange={e => setMaterialForm(f => ({ ...f, uom: e.target.value }))}
-                />
+                <Label>{t('select_employee_resource') || 'Ishchi kuchi tanlang'}</Label>
+                {estimateLaborResources.length > 0 ? (
+                  <Select
+                    value={equipmentForm.name || undefined}
+                    onValueChange={(val) => {
+                      const r = estimateLaborResources.find(res => res.name === val);
+                      if (r) {
+                        setEquipmentForm(f => ({
+                          ...f,
+                          name: r.name,
+                          work_unit: 'soat',
+                          unit_price: r.labor_rate ? String(r.labor_rate) : r.unit_rate ? String(r.unit_rate) : '',
+                        }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder={t('select_employee_resource') || 'Ishchi kuchi tanlang'} /></SelectTrigger>
+                    <SelectContent className="max-h-[300px] max-w-[450px]">
+                      {estimateLaborResources.map(r => (
+                        <SelectItem key={r.id} value={r.name} title={r.name}>
+                          <span className="truncate block max-w-[380px]">{r.name}</span>
+                          <span className="text-xs text-slate-400 ml-1">{r.unit_rate ? formatCurrency(r.unit_rate) : ''}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">{t('no_labor_resources') || 'Smeta resurslarida ishchi kuchi topilmadi'}</p>
+                )}
               </div>
-              <div>
-                <Label>{t('quantity')}</Label>
-                <Input
-                  type="number" step="0.0001" min="0"
-                  value={materialForm.quantity}
-                  onChange={e => setMaterialForm(f => ({ ...f, quantity: e.target.value }))}
-                />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{t('rf_work_unit') || 'Birlik'}</Label>
+                  <Select value={equipmentForm.work_unit} onValueChange={v => setEquipmentForm(f => ({ ...f, work_unit: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soat">{t('rf_hour') || 'Soat'}</SelectItem>
+                      <SelectItem value="kun">{t('rf_day') || 'Kun'}</SelectItem>
+                      <SelectItem value="smena">{t('rf_shift') || 'Smena'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t('quantity') || 'Miqdor'}</Label>
+                  <Input type="number" step="0.01" min="0" value={equipmentForm.quantity}
+                    onChange={e => setEquipmentForm(f => ({ ...f, quantity: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('rf_unit_price') || 'Narxi'}</Label>
+                  <Input value={equipmentForm.unit_price}
+                    onChange={e => setEquipmentForm(f => ({ ...f, unit_price: formatPriceInput(e.target.value) }))} placeholder="0" />
+                </div>
               </div>
-              <div>
-                <Label>{t('unit_cost')}</Label>
-                <Input
-                  value={materialForm.unit_cost}
-                  onChange={e => setMaterialForm(f => ({ ...f, unit_cost: formatPriceInput(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
+              {equipmentForm.quantity && equipmentForm.unit_price && (
+                <div className="flex justify-between items-center pt-2 border-t text-sm">
+                  <span className="text-green-600">{t('total')}: {formatCurrency((parseFloat(equipmentForm.quantity) || 0) * (parseFloat(parsePriceInput(equipmentForm.unit_price)) || 0))}</span>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
+                <Button onClick={handleAddEquipment} disabled={!equipmentForm.name.trim()}>
+                  {t('add')}
+                </Button>
+              </DialogFooter>
             </div>
-            {materialForm.quantity && materialForm.unit_cost && (
-              <div className="flex justify-between items-center pt-2 border-t text-sm">
-                <span className="text-slate-500">{t('total')}</span>
-                <span className="font-semibold">
-                  {formatCurrency((parseFloat(materialForm.quantity) || 0) * (parseFloat(parsePriceInput(materialForm.unit_cost)) || 0))}
-                </span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMaterialModal(false)}>{t('cancel')}</Button>
-            <Button onClick={handleAddMaterial} disabled={!materialForm.product_name.trim()}>
-              {t('add')}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
