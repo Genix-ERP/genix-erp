@@ -954,7 +954,7 @@ export default function Customers() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-white/80 backdrop-blur-sm p-1 md:p-2 rounded-xl border border-slate-200/60 shadow-lg">
+          <TabsList className="flex w-full flex-wrap sm:flex-nowrap bg-white/80 backdrop-blur-sm p-1 md:p-2 rounded-xl border border-slate-200/60 shadow-lg gap-1 h-auto overflow-x-auto">
             <TabsTrigger
               value="customers"
               className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
@@ -991,9 +991,8 @@ export default function Customers() {
               value="website-script"
               className="text-xs md:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-[var(--genix-blue)] data-[state=active]:to-[var(--genix-purple)] data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-200"
             >
-              <Globe className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              <span className="hidden sm:inline">{language === 'uz' ? 'Veb-sayt skripti' : 'Website Script'}</span>
-              <span className="sm:hidden">{language === 'uz' ? 'Skript' : 'Script'}</span>
+              <Globe className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+              <span className="hidden md:inline">{language === 'uz' ? 'Skript' : 'Script'}</span>
             </TabsTrigger>
           </TabsList>
 
